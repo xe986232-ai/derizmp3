@@ -86,22 +86,22 @@ export function renderWave(el: HTMLElement, clipId: number, offSec: number, durS
 }
 
 // ---------- playback ----------
-const volumes = new Map<string, number>();       // dB per track (dari slider volume)
+const volumes = new Map<string, number>();       // persen per track (slider volume: 0-150, 100 = default)
 const gains = new Map<string, GainNode>();
 const active = new Set<{ src: AudioBufferSourceNode; env: GainNode; track: string }>();
-const dbToLin = (db: number) => Math.pow(10, db / 20);
+const pctToLin = (pct: number) => pct / 100;   // 100% = gain 1.0 (tanpa perubahan), 150% = boost x1.5
 
-export function setTrackVolume(track: string, db: number): void {
-  volumes.set(track, db);
+export function setTrackVolume(track: string, pct: number): void {
+  volumes.set(track, pct);
   const g = gains.get(track);
-  if (g) g.gain.setTargetAtTime(dbToLin(db), g.context.currentTime, .02);
+  if (g) g.gain.setTargetAtTime(pctToLin(pct), g.context.currentTime, .02);
 }
 
 function trackGain(ctx: AudioContext, dest: AudioNode, track: string): GainNode {
   let g = gains.get(track);
   if (!g || g.context !== ctx) {
     g = ctx.createGain();
-    g.gain.value = dbToLin(volumes.get(track) ?? -5.5);
+    g.gain.value = pctToLin(volumes.get(track) ?? 100);
     // titik akhir jalur track: semua efek bermuara ke `out`, lalu ke master. Meter level membaca dari sini (setelah fader + efek).
     const out = ctx.createGain();
     out.connect(dest);

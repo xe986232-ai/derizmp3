@@ -77,7 +77,14 @@ const initRec = root => root.querySelectorAll('.trackheader__rec-mode-button').f
     if (!REDUCE) btn.animate([{transform:'scale(.8)'},{transform:'scale(1.15)',offset:.55},{transform:'scale(1)'}],{duration:380,easing:EASE_OUT});
   });
 });
-// Slider volume: warna ungu ikut bergeser
+// Card putih kecil (dipakai bersama knob pan & slider volume): muncul saat digeser, menampilkan nilainya
+const panTip = document.createElement('div');
+panTip.className = 'pan-tip';
+panTip.hidden = true;
+panTip.setAttribute('role', 'status');
+document.body.appendChild(panTip);
+let tipTimer = 0;
+// Slider volume: 0-150%, 100% = default (gain 1.0), di atasnya boost sampai 150%. Warna ungu ikut bergeser
 const initSliders = root => root.querySelectorAll('.slider').forEach(sl => {
   const sync = () => {
     const min = +sl.min, max = +sl.max, v = +sl.value;
@@ -85,19 +92,34 @@ const initSliders = root => root.querySelectorAll('.slider').forEach(sl => {
     sl.style.setProperty('--slider-progress', (f * 100) + '%');
     sl.style.setProperty('--slider-progress-fraction', f);
     sl.setAttribute('aria-valuenow', v);
-    sl.setAttribute('aria-valuetext', 'Vol ' + v.toFixed(1) + ' dB');
+    sl.setAttribute('aria-valuetext', 'Vol ' + Math.round(v) + '%');
   };
-  sl.addEventListener('input', sync);
+  const showTip = ms => {   // card putih persentase tepat di atas thumb slider
+    const min = +sl.min, max = +sl.max, f = (+sl.value - min) / (max - min);
+    panTip.textContent = Math.round(+sl.value) + '%';
+    panTip.hidden = false;
+    const r = sl.getBoundingClientRect(), t = panTip.getBoundingClientRect(), TH = 13;
+    let left = r.left + TH / 2 + f * (r.width - TH) - t.width / 2;
+    left = Math.max(8, Math.min(left, innerWidth - t.width - 8));
+    let top = r.top - t.height - 8;
+    if (top < 4) top = r.bottom + 8;
+    panTip.style.left = left + 'px';
+    panTip.style.top = top + 'px';
+    clearTimeout(tipTimer);
+    if (ms) tipTimer = setTimeout(() => { panTip.hidden = true; }, ms);
+  };
+  let drag = false;
+  sl.addEventListener('pointerdown', () => {
+    drag = true; sync(); showTip();
+    const end = () => { drag = false; panTip.hidden = true; clearTimeout(tipTimer); };
+    addEventListener('pointerup', end, {once: true});
+    addEventListener('pointercancel', end, {once: true});
+  });
+  sl.addEventListener('input', () => { sync(); showTip(drag ? 0 : 900); });   // keyboard: tampil sebentar
   sync();
 });
 
 // Knob pan: putar dengan drag (atas/kanan = naik), panah keyboard, dobel klik = reset
-const panTip = document.createElement('div');
-panTip.className = 'pan-tip';
-panTip.hidden = true;
-panTip.setAttribute('role', 'status');
-document.body.appendChild(panTip);
-let tipTimer = 0;
 const initKnobs = root => root.querySelectorAll('.knob-input').forEach(el => {
   const hideTip = () => { panTip.hidden = true; };
   const showTip = ms => {
