@@ -14,9 +14,6 @@ button{font:inherit;color:inherit;cursor:pointer}
 .soundtrap-icon svg{width:100%;height:100%;fill:currentColor}
 
 /* top bar */
-.topbar{height:48px;flex:none;display:flex;align-items:center;gap:16px;padding:0 14px;background:var(--panel);border-bottom:1px solid var(--line)}
-.topbar b{letter-spacing:.5px}
-.topbar .meta{color:var(--muted)}
 
 /* workspace */
 .workspace{flex:1;overflow:auto;position:relative;display:flex;align-items:flex-start}
@@ -92,7 +89,6 @@ button{font:inherit;color:inherit;cursor:pointer}
   --bevel:inset 0 1px 0 rgba(255,255,255,.07),inset 0 -1px 0 rgba(0,0,0,.25),0 1px 3px rgba(0,0,0,.3);
   --bevel-hover:inset 0 1px 0 rgba(255,255,255,.11),inset 0 -1px 0 rgba(0,0,0,.25),0 6px 16px rgba(0,0,0,.3);
 }
-.topbar{background:#181820}
 .tracklist{background:var(--bg);border-right:0}
 .timeline-controls-header-wrapper{background:var(--bg);border-bottom:1px solid var(--line)}
 .trackheader-container{padding:4px 4px 0;border:0}
@@ -189,7 +185,6 @@ button{font:inherit;color:inherit;cursor:pointer}
 @keyframes itemIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
 @keyframes popIn{0%{opacity:0;transform:scale(.3)}100%{opacity:1;transform:none}}
 @keyframes tipIn{from{opacity:0;transform:translateX(-6px) scale(.88)}to{opacity:1;transform:none}}
-.topbar{animation:dropIn .6s var(--ease-out) both}
 .trackheader-container{animation:slideInL .7s var(--ease-out) .15s both}
 .addtrack{animation:slideInL .7s var(--ease-out) .3s both}
 .beatruler{animation:fadeIn .9s var(--ease-out) .25s both}
