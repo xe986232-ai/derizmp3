@@ -70,10 +70,11 @@ const T_IN = 240, T_OUT = 170, T_PRESS = 130, PRESS_K = 0.35;
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 const easeOutBack = (t: number) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
 let born = new Map<number, number>();                     // id -> waktu mulai muncul
-let ghosts: Array<{n: Note; t0: number}> = [];            // note yang baru dihapus (diputar keluar dulu)
+let ghosts: Array<{n: Note; t0: number; h: boolean}> = [];            // note yang baru dihapus (diputar keluar dulu)
 let lastDrawn = new Map<number, Note>();
+let lastSel = new Set<number>();                          // note yang terpilih pada gambar terakhir (bulatan handle hanya untuk note terpilih)
 let rel: {id: number; t0: number} | null = null;          // bulatan baru dilepas -> kembali ke ukuran normal
-function resetAnim() { born.clear(); ghosts = []; rel = null; lastDrawn = new Map(st.notes.map(n => [n.id, {...n}])); }
+function resetAnim() { born.clear(); ghosts = []; rel = null; lastSel = new Set(selected); lastDrawn = new Map(st.notes.map(n => [n.id, {...n}])); }
 const snapshot = () => JSON.stringify(st.notes);
 // langkah snap = garis grid paling halus yang sedang tampil (ikut zoom), jadi note menempel ke semua garis grid
 const gridStep = () => { let s = LEVELS[0][0]; for (const [st] of LEVELS) if (st * ppb >= 11) s = st; return s; };
@@ -145,10 +146,10 @@ function drawGrid() {
   const now = performance.now(); let animating = false;
   if (!REDUCE) {                                // deteksi note baru / hilang sejak gambar terakhir (mencakup undo, hapus, erase)
     const cur = new Set(st.notes.map(n => n.id));
-    for (const n of st.notes) if (!lastDrawn.has(n.id)) born.set(n.id, now);
-    for (const [id, n] of lastDrawn) if (!cur.has(id)) ghosts.push({n, t0: now});
+    for (const n of st.notes) if (!lastDrawn.has(n.id) || (selected.has(n.id) && !lastSel.has(n.id))) born.set(n.id, now);   // baru dibuat / baru dipilih -> bulatan pop
+    for (const [id, n] of lastDrawn) if (!cur.has(id)) ghosts.push({n, t0: now, h: lastSel.has(id)});
   }
-  lastDrawn = new Map(st.notes.map(n => [n.id, {...n}]));
+  lastDrawn = new Map(st.notes.map(n => [n.id, {...n}])); lastSel = new Set(selected);
   const fs = Math.min(11, rowH - 4);
   c.font = '600 ' + fs + 'px system-ui,sans-serif'; c.textBaseline = 'middle';
   const visible = (n: Note) => {
@@ -157,7 +158,7 @@ function drawGrid() {
   };
   for (const n of st.notes) if (visible(n)) drawNoteBody(c, n, sx, sy, selected.has(n.id));
   for (const n of st.notes) {
-    if (!visible(n)) continue;
+    if (!selected.has(n.id) || !visible(n)) continue;   // bulatan panjang/pendek hanya di note yang dipilih
     let k = 1;
     const b0 = born.get(n.id);
     if (b0 !== undefined) { const t = (now - b0) / T_IN; if (t >= 1) born.delete(n.id); else { k *= easeOutBack(Math.max(0, t)); animating = true; } }
@@ -170,7 +171,7 @@ function drawGrid() {
     if (t >= 1) { ghosts.splice(i, 1); continue; }
     animating = true;
     if (!visible(gh.n)) continue;
-    c.globalAlpha = 1 - t; drawNoteBody(c, gh.n, sx, sy, false); drawHandle(c, gh.n, sx, sy, 1 - easeOut(t)); c.globalAlpha = 1;
+    c.globalAlpha = 1 - t; drawNoteBody(c, gh.n, sx, sy, false); if (gh.h) drawHandle(c, gh.n, sx, sy, 1 - easeOut(t)); c.globalAlpha = 1;
   }
   if (animating) schedule();
   // marquee
@@ -354,6 +355,7 @@ function hit(cx: number, cy: number): {n: Note} | null {
 function hitHandle(cx: number, cy: number): Note | null {
   let best: Note | null = null, bd = 1e9;
   for (const n of st.notes) {
+    if (!selected.has(n.id)) continue;   // hanya note terpilih yang punya bulatan
     const ex = handleCX(n), ey = (P_MAX - n.p + 0.5) * rowH, endX = n.s * ppb + Math.max(3, n.l * ppb);
     if (cx < endX || cx > ex + 16 || Math.abs(cy - ey) > Math.max(rowH / 2, 11)) continue;   // tidak pernah masuk ke badan note
     const d = Math.hypot(cx - ex, cy - ey);
