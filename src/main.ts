@@ -6,7 +6,7 @@ import { initFxRack } from './fx-rack';
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
 import { decodeFile, addBuffer, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
-import { openPianoRoll } from './piano-roll';
+import { openPianoRoll, setPianoRollPlayhead } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const EASE_OUT = 'cubic-bezier(.22,1,.36,1)', EASE_SPRING = 'cubic-bezier(.34,1.56,.64,1)', EASE_INOUT = 'cubic-bezier(.65,0,.35,1)';
@@ -509,19 +509,21 @@ function deletePattern() {
   el.animate([{opacity: 1, transform: 'scale(1)'}, {opacity: 0, transform: 'scale(.9)'}], {duration: 200, easing: EASE_OUT, fill: 'forwards'}).onfinish = () => el.remove();
 }
 // Tombol "Edit": pattern instrumen -> buka piano roll; pattern audio clip (tidak punya nada) -> tetap ganti nama seperti sebelumnya
-let prSeq = 0;
+let prSeq = 0, prStartBar = 0;   // prStartBar: posisi awal pattern yang sedang dibuka di piano roll (dalam bar), supaya playhead-nya relatif
 function editPattern() {
   const el = selPat; if (!el) return;
   if (el.dataset.clip) return renamePattern();
   const lane = el.parentElement, id = lane.dataset.track;
   const nm = document.getElementById('track-name-' + id);
   if (!el.dataset.prId) el.dataset.prId = 'pat' + (++prSeq);   // kunci supaya nada piano roll tersimpan per pattern
+  prStartBar = pl(el) / BAR_W;
   openPianoRoll({
     id: el.dataset.prId,
     track: nm ? nm.textContent : 'Track',
     pattern: el.querySelector('.pattern__title').textContent,
     color: lane.style.getPropertyValue('--track-color') || undefined,
   });
+  renderPlayhead();
 }
 lanesEl.addEventListener('dblclick', e => {   // ganti nama pattern: klik dua kali judulnya
   const t = e.target.closest && e.target.closest('.pattern__title');
@@ -881,7 +883,7 @@ const tc = document.querySelector('.transport-controls');
 const btnPlay = tc.querySelector('.play'), btnMetro = document.getElementById('btnMetro');
 const btnRew = tc.querySelector('.rewind'), btnFwd = tc.querySelector('.forward');
 let posBars = 0, playing = false, playRaf = 0, startPos = 0, startCtx = 0, nextBeat = 0, metroTimer = 0, lastBeat = -1;
-function renderPlayhead() { phEl.style.translate = (posBars * BAR_W) + 'px 0'; }   // dipisah dari transform agar tidak ditimpa animasi masuk
+function renderPlayhead() { phEl.style.translate = (posBars * BAR_W) + 'px 0'; setPianoRollPlayhead((posBars - prStartBar) * 4); }   // dipisah dari transform agar tidak ditimpa animasi masuk
 function syncTransportUI() {
   btnPlay.setAttribute('aria-label', playing ? 'Jeda' : 'Putar');
   btnPlay.querySelector('use').setAttribute('href', playing ? '#pause-icon' : '#play-icon');

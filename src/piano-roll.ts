@@ -43,6 +43,7 @@ let onClose: (() => void) | null = null;
 
 // elemen
 let sc!: HTMLElement, space!: HTMLElement, gc!: HTMLCanvasElement, kc!: HTMLCanvasElement, rc!: HTMLCanvasElement;
+let phDom!: HTMLElement, phBeat = -1;   // playhead: posisi dalam ketukan relatif ke awal pattern (<0 = tersembunyi)
 let btnUndo!: HTMLButtonElement, selBar!: HTMLElement, btnPaste!: HTMLButtonElement;
 
 // state editor
@@ -242,7 +243,17 @@ function placeSelBar() {
   selBarOn = true;
 }
 
-function redraw() { drawGrid(); drawKeys(); drawRuler(); placeSelBar(); }
+// ---------- playhead (garis + kepala di penggaris, ikut posisi playhead timeline) ----------
+function placePlayhead() {
+  if (!phDom) return;
+  const x = phBeat * ppb - sc.scrollLeft;
+  const vis = phBeat >= 0 && phBeat <= total && x >= -5 && x <= sc.clientWidth + 5;
+  phDom.style.visibility = vis ? 'visible' : 'hidden';
+  if (vis) phDom.style.translate = x + 'px 0';
+}
+export function setPianoRollPlayhead(beats: number) { phBeat = beats; if (root && !root.hidden) placePlayhead(); }
+
+function redraw() { drawGrid(); drawKeys(); drawRuler(); placeSelBar(); placePlayhead(); }
 function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; redraw(); }); }
 
 // ---------- ukuran & zoom ----------
@@ -597,6 +608,7 @@ function build(): HTMLElement {
       '<canvas class="pr__ruler" aria-hidden="true"></canvas>' +
       '<canvas class="pr__keys" aria-hidden="true"></canvas>' +
       '<div class="pr__scroll"><div class="pr__space"></div><canvas class="pr__grid" role="img" aria-label="Grid nada"></canvas></div>' +
+      '<div class="pr__phclip" aria-hidden="true"><div class="pr__ph"><svg width="9" height="20" viewBox="0 0 9 20"><path d="M5 0H4C1.79 0 0 1.79 0 4v8.6c0 .86.27 1.69.78 2.38L4.5 20l3.72-5.02A4 4 0 0 0 9 12.6V4c0-2.21-1.79-4-4-4Z" fill="currentColor"/></svg><i></i></div></div>' +
     '</div>';
 
   sc = el.querySelector<HTMLElement>('.pr__scroll')!;
@@ -607,6 +619,7 @@ function build(): HTMLElement {
   btnUndo = el.querySelector<HTMLButtonElement>('[data-act="undo"]')!;
 
   // menu bulat Copy / Delete / Paste yang muncul di dekat note terpilih
+  phDom = el.querySelector<HTMLElement>('.pr__ph')!;
   selBar = el.querySelector<HTMLElement>('.pr__main')!.appendChild(document.createElement('div'));
   selBar.className = 'pat-bar pr__sel'; selBar.hidden = true; selBar.setAttribute('role', 'toolbar'); selBar.setAttribute('aria-label', 'Aksi nada');
   ([['copy', 'Copy', 'Salin nada (Ctrl+C)', copySelected], ['del', 'Delete', 'Hapus nada (Del)', deleteSelected], ['paste', 'Paste', 'Tempel nada (Ctrl+V)', pasteNotes]] as const)
