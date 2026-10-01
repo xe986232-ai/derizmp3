@@ -778,6 +778,10 @@ function openAddMenu(btn) {
     }
   });
 }
+// Icon track "Audio clip": gelombang suara (7 batang, ujung bulat), digambar sendiri dengan SVG supaya tajam di ukuran berapa pun
+const ICON_AUDIO_CLIP =
+  '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">' +
+  '<path d="M3.45 11.5v1M6.3 10.6v2.8M9.15 7.25v9.5M12 10.1v3.8M14.85 8.7v6.65M17.7 10.6v2.8M20.55 11.5v1"/></svg>';
 function addTrack(t) {
   const id = ++trackSeq, cont = TRACK_TPL.cloneNode(true);
   cont.dataset.track = id; cont.classList.add('is-new');
@@ -788,6 +792,7 @@ function addTrack(t) {
   const nm = cont.querySelector('[id^="track-name-"]');
   nm.id = 'track-name-' + id; nm.textContent = name;
   cont.querySelector('.trackheader__track-name-button').title = name;
+  if (t.n === 'Audio clip') cont.querySelector('.trackheader__instrument-button .soundtrap-icon').innerHTML = ICON_AUDIO_CLIP;
   cont.querySelector('input[type=range]').setAttribute('aria-label', 'Volume, ' + name);
   const lane = document.createElement('div');
   lane.className = 'lane'; lane.dataset.track = id; lane.style.setProperty('--track-color', t.c);
