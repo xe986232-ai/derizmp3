@@ -8,8 +8,6 @@ export interface PianoRollOpts {
   track: string;
   pattern: string;
   color?: string;
-  bars?: number;      // panjang pattern dalam bar
-  startBar?: number;  // nomor bar awal pattern di timeline (untuk label penggaris)
 }
 
 interface Note { id: number; p: number; s: number; l: number; }   // p: MIDI, s/l: dalam ketukan
@@ -17,7 +15,7 @@ interface State { notes: Note[]; nextId: number; }
 type Tool = 'draw' | 'select' | 'erase' | 'pan';
 
 const P_MIN = 24, P_MAX = 108, ROWS = P_MAX - P_MIN + 1;   // C1..C8
-const KEY_W = 64, RULER_H = 32, BEATS_PER_BAR = 4;
+const KEY_W = 64, RULER_H = 32, BEATS_PER_BAR = 4, BARS = 8;   // grid selalu 8 bar (nomor 1..8)
 const PPB_MIN = 8, PPB_MAX = 480, ROW_MIN = 10, ROW_MAX = 40;
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const BLACK = new Set([1, 3, 6, 8, 10]);
@@ -51,7 +49,7 @@ let metaEl!: HTMLElement, btnUndo!: HTMLButtonElement, btnDel!: HTMLButtonElemen
 // state editor
 let st: State = {notes: [], nextId: 1};
 let curKey = '';
-let bars = 2, startBar = 1, total = bars * BEATS_PER_BAR;
+const total = BARS * BEATS_PER_BAR;
 let ppb = 64, rowH = 18;
 let tool: Tool = 'draw';
 let snap = 0.25;
@@ -156,7 +154,7 @@ function drawRuler() {
   c.fillStyle = '#1e1e26'; c.fillRect(0, 0, vw, RULER_H);
   c.font = '11px system-ui,sans-serif'; c.textBaseline = 'top';
   eachVLine(sx, vw, (x, beat, li) => {
-    if (li === 0) { c.fillStyle = '#8a8a9a'; c.fillRect(x - 0.5, 4, 1, RULER_H - 4); c.fillStyle = '#e8e8f0'; c.fillText(String(startBar + beat / BEATS_PER_BAR), x + 5, 5); }
+    if (li === 0) { c.fillStyle = '#8a8a9a'; c.fillRect(x - 0.5, 4, 1, RULER_H - 4); if (beat < total) { c.fillStyle = '#e8e8f0'; c.fillText(String(1 + beat / BEATS_PER_BAR), x + 5, 5); } }
     else if (li === 1) { c.fillStyle = '#55556a'; c.fillRect(x - 0.5, RULER_H - 12, 1, 12); if (ppb >= 64) { c.fillStyle = '#8a8a9a'; c.fillText(String(Math.round(beat % BEATS_PER_BAR) + 1), x + 4, 14); } }
     else { c.fillStyle = '#3c3c4c'; c.fillRect(x - 0.5, RULER_H - 6, 1, 6); }
   });
@@ -515,7 +513,6 @@ export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.
   root.style.setProperty('--pr-color', color);
   root.querySelector('.pr__track')!.textContent = opts.track;
   root.querySelector('.pr__pattern')!.textContent = opts.pattern;
-  bars = Math.max(1, Math.round(opts.bars || 2)); startBar = Math.max(1, Math.round(opts.startBar || 1)); total = bars * BEATS_PER_BAR;
 
   root.hidden = false; void root.offsetWidth; root.classList.add('is-open');
   const vw = sc.clientWidth, vh = sc.clientHeight;

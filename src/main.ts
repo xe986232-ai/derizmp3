@@ -521,8 +521,6 @@ function editPattern() {
     track: nm ? nm.textContent : 'Track',
     pattern: el.querySelector('.pattern__title').textContent,
     color: lane.style.getPropertyValue('--track-color') || undefined,
-    bars: Math.max(1, Math.ceil(pw(el) / BAR_W - 0.01)),
-    startBar: Math.floor(pl(el) / BAR_W + 0.01) + 1,
   });
 }
 lanesEl.addEventListener('dblclick', e => {   // ganti nama pattern: klik dua kali judulnya
