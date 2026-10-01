@@ -19,7 +19,6 @@ const KEY_W = 64, RULER_H = 32, BEATS_PER_BAR = 4, BARS = 8;   // grid selalu 8 
 const PPB_MIN = 8, PPB_MAX = 480, ROW_MIN = 10, ROW_MAX = 40;
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const BLACK = new Set([1, 3, 6, 8, 10]);
-const SNAPS: Array<[string, number]> = [['1 bar', 4], ['1/2', 2], ['1/4', 1], ['1/8', 0.5], ['1/16', 0.25], ['1/32', 0.125], ['Off', 0]];
 
 const isBlack = (p: number) => BLACK.has(p % 12);
 const pname = (p: number) => NAMES[p % 12] + (Math.floor(p / 12) - 1);
@@ -52,7 +51,7 @@ let curKey = '';
 const total = BARS * BEATS_PER_BAR;
 let ppb = 64, rowH = 18;
 let tool: Tool = 'draw';
-let snap = 0.25;
+let snapOn = true;   // tombol Snap (lampu indikator): nyala = note menempel ke garis grid yang terlihat
 let color = '#3fbf5f';
 let selected = new Set<number>();
 let undoStack: string[] = [];
@@ -76,9 +75,11 @@ let lastDrawn = new Map<number, Note>();
 let rel: {id: number; t0: number} | null = null;          // bulatan baru dilepas -> kembali ke ukuran normal
 function resetAnim() { born.clear(); ghosts = []; rel = null; lastDrawn = new Map(st.notes.map(n => [n.id, {...n}])); }
 const snapshot = () => JSON.stringify(st.notes);
-const unit = () => (snap > 0 ? snap : 1 / 16);
-const snapRound = (b: number) => (snap > 0 ? Math.round(b / snap) * snap : b);
-const snapFloor = (b: number) => (snap > 0 ? Math.floor(b / snap + 1e-9) * snap : b);
+// langkah snap = garis grid paling halus yang sedang tampil (ikut zoom), jadi note menempel ke semua garis grid
+const gridStep = () => { let s = LEVELS[0][0]; for (const [st] of LEVELS) if (st * ppb >= 11) s = st; return s; };
+const unit = () => (snapOn ? gridStep() : 1 / 16);
+const snapRound = (b: number) => { if (!snapOn) return b; const s = gridStep(); return Math.round(b / s) * s; };
+const snapFloor = (b: number) => { if (!snapOn) return b; const s = gridStep(); return Math.floor(b / s + 1e-9) * s; };
 
 // ---------- gambar ----------
 function fit(c: HTMLCanvasElement, w: number, h: number) {
@@ -515,9 +516,7 @@ function build(): HTMLElement {
         btn('data-tool="erase"', 'Hapus nada (E)', ICON.erase) +
         btn('data-tool="pan"', 'Geser tampilan (H)', ICON.pan) +
       '</div>' +
-      '<label class="pr__snap"><span>Snap</span><select aria-label="Snap">' +
-        SNAPS.map(([n, v]) => '<option value="' + v + '"' + (v === 0.25 ? ' selected' : '') + '>' + n + '</option>').join('') +
-      '</select></label>' +
+      '<button type="button" class="pr__snap" aria-pressed="true" aria-label="Snap ke grid" title="Snap ke grid: nyala / mati"><i class="pr__led" aria-hidden="true"></i><span>Snap</span></button>' +
       '<div class="pr__grp">' +
         btn('data-act="undo"', 'Urungkan (Ctrl+Z)', ICON.undo) +
         btn('data-act="del"', 'Hapus yang dipilih (Del)', ICON.erase) +
@@ -546,7 +545,8 @@ function build(): HTMLElement {
   btnDel = el.querySelector<HTMLButtonElement>('[data-act="del"]')!;
 
   el.querySelectorAll<HTMLElement>('[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool as Tool)));
-  el.querySelector<HTMLSelectElement>('.pr__snap select')!.addEventListener('change', e => { snap = parseFloat((e.target as HTMLSelectElement).value); });
+  const snapBtn = el.querySelector<HTMLButtonElement>('.pr__snap')!;
+  snapBtn.addEventListener('click', () => { snapOn = !snapOn; snapBtn.setAttribute('aria-pressed', String(snapOn)); });
   const acts: Record<string, () => void> = {
     undo, del: deleteSelected,
     'zx+': () => zoomBy(1.4, 1), 'zx-': () => zoomBy(1 / 1.4, 1),
