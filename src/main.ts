@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { openAudioUploadCard } from './audio-upload-card';
 import { initEffectsPanel } from './effects-panel';
+import { initTrackMeters } from './track-meters';
 import { initFxRack } from './fx-rack';
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
@@ -1153,3 +1154,5 @@ document.addEventListener('keydown', e => {   // Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shi
   else if (k === 'y') { e.preventDefault(); histRedo(); }
 });
 histCur = histCapture(); histSync();
+
+initTrackMeters();   // meter level stereo di card track

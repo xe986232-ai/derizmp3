@@ -102,12 +102,41 @@ function trackGain(ctx: AudioContext, dest: AudioNode, track: string): GainNode 
   if (!g || g.context !== ctx) {
     g = ctx.createGain();
     g.gain.value = dbToLin(volumes.get(track) ?? -5.5);
-    g.connect(dest);
+    // titik akhir jalur track: semua efek bermuara ke `out`, lalu ke master. Meter level membaca dari sini (setelah fader + efek).
+    const out = ctx.createGain();
+    out.connect(dest);
+    g.connect(out);
     gains.set(track, g);
-    dests.set(track, dest);
+    dests.set(track, out);
+    makeMeter(ctx, track, out);
     syncFx(track);   // track ini sudah punya kartu efek sebelum pernah diputar
   }
   return g;
+}
+
+// ---------- meter level stereo per track ----------
+interface Meter { ctx: BaseAudioContext; l: AnalyserNode; r: AnalyserNode; bufL: Float32Array<ArrayBuffer>; bufR: Float32Array<ArrayBuffer>; }
+const meters = new Map<string, Meter>();
+
+function makeMeter(ctx: BaseAudioContext, track: string, from: AudioNode): void {
+  const split = ctx.createChannelSplitter(2), l = ctx.createAnalyser(), r = ctx.createAnalyser(), mute = ctx.createGain();
+  l.fftSize = r.fftSize = 1024; l.smoothingTimeConstant = r.smoothingTimeConstant = 0;
+  mute.gain.value = 0; mute.connect(ctx.destination);   // sambungan senyap: beberapa browser baru memproses node yang tersambung ke output
+  from.connect(split); split.connect(l, 0); split.connect(r, 1); l.connect(mute); r.connect(mute);
+  meters.set(track, { ctx, l, r, bufL: new Float32Array(l.fftSize), bufR: new Float32Array(r.fftSize) });
+}
+
+const peakOf = (a: AnalyserNode, buf: Float32Array<ArrayBuffer>): number => {
+  a.getFloatTimeDomainData(buf);
+  let m = 0;
+  for (let i = 0; i < buf.length; i++) { const v = Math.abs(buf[i]); if (v > m) m = v; }
+  return m;
+};
+
+// Level puncak [kiri, kanan] track ini, 0..1 linear (0 = senyap / track belum pernah diputar).
+export function trackLevels(track: string): [number, number] {
+  const m = meters.get(track);
+  return m ? [peakOf(m.l, m.bufL), peakOf(m.r, m.bufR)] : [0, 0];
 }
 
 // ---------- effect per track: equalizer -> reverb ----------

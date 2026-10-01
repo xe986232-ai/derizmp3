@@ -607,3 +607,10 @@ button{font:inherit;color:inherit;cursor:pointer}
   .fx--open .fx__panel{box-shadow:-14px 0 32px rgba(0,0,0,.45)}
 }
 @media (prefers-reduced-motion:reduce){.fx,.fx__clip,.fx__panel,.fx__item,.fx__toggle,.fx__toggle svg{transition:none!important}}
+
+/* ===== meter level stereo di card track (kiri + kanan) ===== */
+.trackheader__content-rows{padding-right:26px}
+.trackmeter{position:absolute;z-index:3;right:9px;top:10px;bottom:10px;display:flex;gap:2px;pointer-events:none}
+.trackmeter__bar{position:relative;display:block;width:4px;height:100%;border-radius:2px;background:rgba(255,255,255,.09);overflow:hidden}
+.trackmeter__bar b{position:absolute;inset:0;border-radius:inherit;clip-path:inset(100% 0 0 0);
+  background:linear-gradient(to top,#2fd36b 0%,#2fd36b 60%,#f2c94c 80%,#ff4d4d 100%)}
