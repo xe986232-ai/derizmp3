@@ -5,7 +5,7 @@ import { initTrackMeters } from './track-meters';
 import { initFxRack } from './fx-rack';
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
-import { decodeFile, addBuffer, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume } from './audio-engine';
+import { decodeFile, addBuffer, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const EASE_OUT = 'cubic-bezier(.22,1,.36,1)', EASE_SPRING = 'cubic-bezier(.34,1.56,.64,1)', EASE_INOUT = 'cubic-bezier(.65,0,.35,1)';
@@ -1025,6 +1025,17 @@ new MutationObserver(ms => {
   if (!waveRaf) waveRaf = requestAnimationFrame(() => { waveRaf = 0; syncWaves(); });
   if (playing) { clearTimeout(resyncT); resyncT = setTimeout(() => { if (playing) scheduleClips(); }, 120); }   // clip digeser/dihapus saat main
 }).observe(lanesEl, {childList: true, subtree: true, attributes: true, attributeFilter: ['style']});
+// switch on/off track (ungu = nyala): mati -> track hening (meter ikut nol), pattern di lane diredupkan
+document.querySelector('.headers-list').addEventListener('click', e => {
+  const sw = e.target.closest && e.target.closest('.trackheader__pwr'), c = sw && sw.closest('.trackheader-container');
+  if (!c) return;
+  const off = sw.getAttribute('aria-checked') === 'true';   // sebelumnya nyala -> sekarang mati
+  sw.setAttribute('aria-checked', String(!off));
+  c.classList.toggle('is-off', off);
+  const lane = document.querySelector('.lane[data-track="' + c.dataset.track + '"]');
+  if (lane) lane.classList.toggle('is-off', off);
+  setTrackMuted(c.dataset.track, off);
+});
 // slider volume track -> volume audio clip (langsung terdengar saat diputar)
 document.querySelector('.headers-list').addEventListener('input', e => {
   const sl = e.target.closest && e.target.closest('input[type=range]'), c = sl && sl.closest('.trackheader-container');

@@ -629,3 +629,15 @@ button{font:inherit;color:inherit;cursor:pointer}
 .trackmeter__bar s{clip-path:inset(100% 0 0 0);filter:brightness(1.25)}
 /* channel mixer ditutup: meter ikut hilang */
 .tracklist--collapsed .trackmeter{opacity:0;visibility:hidden;transition:opacity .12s ease,visibility 0s linear .12s}
+
+/* switch on/off track: vertikal & kecil, ungu = nyala (bulatan di atas), abu = mati (bulatan di bawah) */
+.trackheader__pwr{position:relative;width:10px;height:18px;flex:none;padding:0;margin:0 2px;border:0;border-radius:5px;background:var(--accent);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background-color .25s ease,transform .25s var(--ease-spring)}
+.trackheader__pwr::before{content:"";position:absolute;inset:-6px -3px}
+.trackheader__pwr::after{content:"";position:absolute;left:2px;top:2px;width:6px;height:6px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.35);transition:top .3s var(--ease-spring)}
+.trackheader__pwr[aria-checked="false"]{background:#3a3a48}
+.trackheader__pwr[aria-checked="false"]::after{top:10px}
+.trackheader__pwr:active{transform:scale(.88);transition-duration:.08s}
+.trackheader__pwr:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.trackheader-container.is-off .trackheader__track-name-button{opacity:.5}
+.lane.is-off .pattern{filter:saturate(.25) brightness(.7)}
+@media (prefers-reduced-motion:reduce){.trackheader__pwr,.trackheader__pwr::after{transition:none!important}}

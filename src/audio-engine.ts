@@ -91,6 +91,13 @@ const gains = new Map<string, GainNode>();
 const active = new Set<{ src: AudioBufferSourceNode; env: GainNode; track: string }>();
 const pctToLin = (pct: number) => pct / 100;   // 100% = gain 1.0 (tanpa perubahan), 150% = boost x1.5
 
+const muted = new Set<string>();                  // track yang dimatikan lewat switch on/off di header track
+export function setTrackMuted(track: string, off: boolean): void {
+  if (off) muted.add(track); else muted.delete(track);
+  const o = dests.get(track) as GainNode | undefined;   // `out` track: meter level ikut turun ke nol saat mati
+  if (o) o.gain.setTargetAtTime(off ? 0 : 1, o.context.currentTime, .015);
+}
+
 export function setTrackVolume(track: string, pct: number): void {
   volumes.set(track, pct);
   const g = gains.get(track);
@@ -104,6 +111,7 @@ function trackGain(ctx: AudioContext, dest: AudioNode, track: string): GainNode 
     g.gain.value = pctToLin(volumes.get(track) ?? 100);
     // titik akhir jalur track: semua efek bermuara ke `out`, lalu ke master. Meter level membaca dari sini (setelah fader + efek).
     const out = ctx.createGain();
+    out.gain.value = muted.has(track) ? 0 : 1;
     out.connect(dest);
     g.connect(out);
     gains.set(track, g);
