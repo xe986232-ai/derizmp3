@@ -35,7 +35,7 @@ function applyAudio(track: string): void {
 }
 
 // ---------- knob (struktur & kelas sama dengan knob pan di channel mixer, tapi satu arah: 0 → 1) ----------
-const KNOB_SWEEP = 270, ARC_LEN = 75;   // sapuan 270° = 75 satuan dari keliling 100
+const KNOB_SWEEP = 270, ARC_LEN = 75, DRAG_PX = 90;   // sapuan 270° = 75 satuan dari keliling 100; DRAG_PX = jarak drag (px) untuk menempuh 0 → 1
 const knobSvg = `<svg viewBox="0 0 36 36" aria-hidden="true" class="circular-chart">` +
   `<path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" stroke-dasharray="75, 100" class="circle-bg" style="transform-origin:18px 18px;transform:rotate(225deg)"></path>` +
   `<path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" stroke-dashoffset="0" stroke-dasharray="0 100" class="circle primary-theme" style="transform:rotate(225deg)"></path>` +
@@ -268,7 +268,7 @@ export function initFxRack(): FxRack {
     return { fx, p };
   };
   const setVal = (el: HTMLElement, fx: Fx, p: Param, n: number) => {
-    const v = Math.max(0, Math.min(1, Math.round(n * 100) / 100));
+    const v = Math.max(0, Math.min(1, n));
     fx.v[p.key] = v;
     paintKnob(el, v, p, defOf(fx.type).name);
     if (cur) applyAudio(cur);
@@ -276,7 +276,7 @@ export function initFxRack(): FxRack {
   };
 
   list.addEventListener('pointerdown', e => {
-    const el = (e.target as Element).closest<HTMLElement>('.knob-input'); if (!el) return;
+    const el = (e.target as Element).closest<HTMLElement>('.knob-input'); if (!el || (e.pointerType === 'mouse' && e.button !== 0)) return;
     const c = ctx(el); if (!c) return;
     drag = { el, fx: c.fx, p: c.p, sx: e.clientX, sy: e.clientY, sv: c.fx.v[c.p.key] };
     el.classList.add('is-dragging'); el.setPointerCapture(e.pointerId); e.preventDefault();
@@ -285,11 +285,12 @@ export function initFxRack(): FxRack {
   });
   list.addEventListener('pointermove', e => {
     if (!drag) return;
-    setVal(drag.el, drag.fx, drag.p, drag.sv + ((drag.sy - e.clientY) + (e.clientX - drag.sx)) / 150);
+    setVal(drag.el, drag.fx, drag.p, drag.sv + ((drag.sy - e.clientY) + (e.clientX - drag.sx)) / DRAG_PX);
   });
   const endDrag = () => { if (!drag) return; drag.el.classList.remove('is-dragging'); drag = null; hideTip(); };
   list.addEventListener('pointerup', endDrag);
   list.addEventListener('pointercancel', endDrag);
+  list.addEventListener('lostpointercapture', endDrag);
   list.addEventListener('dblclick', e => {
     const el = (e.target as Element).closest<HTMLElement>('.knob-input'); if (!el) return;
     const c = ctx(el); if (!c) return;
@@ -301,7 +302,7 @@ export function initFxRack(): FxRack {
     if (!up && !down) return;
     const c = ctx(el); if (!c) return;
     e.preventDefault(); e.stopPropagation();   // panah tidak ikut memicu mundur / maju milik DAW
-    setVal(el, c.fx, c.p, c.fx.v[c.p.key] + (up ? 0.02 : -0.02));
+    setVal(el, c.fx, c.p, Math.round((c.fx.v[c.p.key] + (up ? 0.02 : -0.02)) * 100) / 100);
     showTip(el, c.p.fmt(c.fx.v[c.p.key]), 900);
   });
   list.addEventListener('blur', e => { if ((e.target as Element).matches?.('.knob-input') && !drag) hideTip(); }, true);
