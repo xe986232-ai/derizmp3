@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { openAudioUploadCard } from './audio-upload-card';
 import { initEffectsPanel } from './effects-panel';
+import { initFxRack } from './fx-rack';
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
 import { decodeFile, addBuffer, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume } from './audio-engine';
@@ -160,6 +161,7 @@ function removeTrack(cont, lane) {
   stopTrack(actx, cont.dataset.track);
   if (kbdCont === cont) closeKbd();
   if (selTrack && cont.contains(selTrack)) selTrack = null;
+  fxRack.drop(cont.dataset.track);
   if (lane && selPat && lane.contains(selPat)) selectPattern(null);
   if (REDUCE) { if (lane) lane.remove(); cont.remove(); return; }
   const h = cont.offsetHeight, o = {duration:420, easing:EASE_INOUT, fill:'forwards'};
@@ -703,6 +705,7 @@ function selectTrack(cont) {
   if (!th || selTrack === th) return;
   if (selTrack) selTrack.classList.remove('trackheader--selected');
   selTrack = th; th.classList.add('trackheader--selected');
+  fxRack.show(cont.dataset.track);   // panel efek ikut pindah ke track terpilih
   if (kbdEl.classList.contains('is-open')) openKbd(cont);   // keyboard yang sudah terbuka ikut pindah ke track terpilih
 }
 document.querySelector('.headers-list').addEventListener('pointerdown', e => {
@@ -740,7 +743,9 @@ document.querySelector('.headers-list').addEventListener('click', e => {
 });
 document.querySelectorAll('.trackheader__left-content').forEach(b => b.title = 'Tutup panel track');
 // Panel efek (kanan): lebar timeline berubah selama animasi, jadi ruler & toolbar pattern digambar ulang tiap frame
-initEffectsPanel(settled => { paintRuler(settled); patBarPlace(); }, () => { closeMenu(true); closeAddMenu(true); dismissAdd(true); });
+const fxRack = initFxRack();   // isi panel efek: tombol +, card pilihan efek, dan card tiap efek (per track)
+initEffectsPanel(settled => { paintRuler(settled); patBarPlace(); }, () => { closeMenu(true); closeAddMenu(true); dismissAdd(true); fxRack.closePicker(true); });
+fxRack.show(selTrack ? selTrack.closest('.trackheader-container').dataset.track : null);
 // ===== Menu "Tambahkan track" =====
 const INSTRUMENTS = [
   {n:'Drums', c:'#ff9f1c'}, {n:'Audio clip', c:'#14b8a6'}, {n:'Supersaw', c:'#5b3de8'},

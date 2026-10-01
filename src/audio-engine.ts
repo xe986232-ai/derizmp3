@@ -104,8 +104,71 @@ function trackGain(ctx: AudioContext, dest: AudioNode, track: string): GainNode 
     g.gain.value = dbToLin(volumes.get(track) ?? -5.5);
     g.connect(dest);
     gains.set(track, g);
+    dests.set(track, dest);
+    syncReverb(track);   // track ini sudah punya kartu reverb sebelum pernah diputar
   }
   return g;
+}
+
+// ---------- effect: reverb per track ----------
+// Jalur: gain track -> dry -> output, dan gain track -> convolver -> wet -> output. Mix memakai crossfade equal-power.
+export interface ReverbParams { on: boolean; mix: number; size: number }   // mix 0..1, size 0..1 (-> gema 0,4 s .. 5 s)
+const reverbs = new Map<string, ReverbParams>();
+const dests = new Map<string, AudioNode>();
+interface Chain { ctx: BaseAudioContext; dry: GainNode; wet: GainNode; conv: ConvolverNode; decay: number; }
+const chains = new Map<string, Chain>();
+
+export const reverbSeconds = (size: number): number => Math.round((0.4 + Math.max(0, Math.min(1, size)) * 4.6) * 10) / 10;
+
+// impuls respons buatan: derau stereo yang meluruh, makin ke ekor makin redup (low-pass satu kutub)
+function makeImpulse(ctx: BaseAudioContext, seconds: number): AudioBuffer {
+  const sr = ctx.sampleRate, len = Math.max(1, Math.floor(seconds * sr)), pre = Math.floor(.012 * sr);
+  const buf = ctx.createBuffer(2, len, sr);
+  for (let c = 0; c < 2; c++) {
+    const d = buf.getChannelData(c);
+    let lp = 0;
+    let e = 0;
+    for (let i = pre; i < len; i++) {
+      const t = (i - pre) / (len - pre), a = 0.65 - 0.5 * t;
+      lp += a * ((Math.random() * 2 - 1) - lp);
+      d[i] = lp * Math.pow(1 - t, 3);
+      e += d[i] * d[i];
+    }
+    const k = e > 0 ? 1 / Math.sqrt(e) : 0;   // energi impuls dibuat 1, supaya level wet sama untuk ruang kecil maupun besar
+    for (let i = pre; i < len; i++) d[i] *= k;
+  }
+  return buf;
+}
+
+function syncReverb(track: string): void {
+  const g = gains.get(track), dest = dests.get(track), p = reverbs.get(track);
+  if (!g || !dest) return;                       // belum pernah diputar: dipasang saat gain track dibuat
+  const ctx = g.context;
+  let ch = chains.get(track);
+  if (!p) {                                      // kartu reverb dihapus: kembali ke jalur langsung
+    if (ch) { g.disconnect(); ch.dry.disconnect(); ch.wet.disconnect(); ch.conv.disconnect(); g.connect(dest); chains.delete(track); }
+    return;
+  }
+  if (!ch || ch.ctx !== ctx) {
+    const dry = ctx.createGain(), wet = ctx.createGain(), conv = ctx.createConvolver();
+    conv.normalize = false;   // normalisasi dilakukan sendiri di makeImpulse
+    g.disconnect();
+    g.connect(dry); dry.connect(dest);
+    g.connect(conv); conv.connect(wet); wet.connect(dest);
+    ch = { ctx, dry, wet, conv, decay: 0 };
+    chains.set(track, ch);
+  }
+  const decay = reverbSeconds(p.size);
+  if (decay !== ch.decay) { ch.conv.buffer = makeImpulse(ctx, decay); ch.decay = decay; }
+  const m = p.on ? Math.max(0, Math.min(1, p.mix)) : 0, now = ctx.currentTime;
+  ch.dry.gain.setTargetAtTime(Math.cos(m * Math.PI / 2), now, .02);
+  ch.wet.gain.setTargetAtTime(Math.sin(m * Math.PI / 2), now, .02);
+}
+
+// null = track tidak punya reverb
+export function setReverb(track: string, p: ReverbParams | null): void {
+  if (p) reverbs.set(track, { ...p }); else reverbs.delete(track);
+  syncReverb(track);
 }
 
 function release(r: { src: AudioBufferSourceNode; env: GainNode }, now: number): void {

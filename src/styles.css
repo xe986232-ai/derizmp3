@@ -506,11 +506,65 @@ button{font:inherit;color:inherit;cursor:pointer}
 .fx--ready .fx__panel{transition:transform .45s var(--ease-out)}
 .fx__head{display:flex;align-items:center;height:48px;flex:none;padding:0 18px;border-bottom:1px solid var(--line)}
 .fx__title{margin:0;font-size:14px;font-weight:600;letter-spacing:.2px}
-.fx__body{flex:1;min-height:0;overflow:auto;padding:16px}
-.fx__empty{height:100%;min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;color:var(--muted)}
-.fx__empty svg{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;margin-bottom:8px;opacity:.8}
-.fx__empty-title{margin:0;font-size:14px;font-weight:600;color:var(--text)}
-.fx__empty-sub{margin:0;font-size:12.5px;line-height:1.45;max-width:200px}
+
+.fx__body{flex:1;min-height:0;overflow:auto;padding:18px 16px 24px;display:flex;flex-direction:column}
+.fx__top{display:flex;justify-content:center;flex:none;margin-bottom:18px}
+.fx__list{display:flex;flex-direction:column}
+
+/* tombol + : lingkaran putih sempurna */
+.fx__add{width:46px;height:46px;flex:none;padding:0;border:0;border-radius:50%;background:#fff;color:#16161d;display:grid;place-items:center;
+  box-shadow:0 2px 10px rgba(0,0,0,.35);-webkit-tap-highlight-color:transparent;touch-action:manipulation;
+  transition:transform .25s var(--ease-spring),box-shadow .25s ease,opacity .2s ease}
+.fx__add svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;transition:transform .4s var(--ease-spring)}
+.fx__add:hover{transform:scale(1.1);box-shadow:0 4px 16px rgba(0,0,0,.45)}
+.fx__add:hover svg{transform:rotate(90deg)}
+.fx__add:active{transform:scale(.92);transition-duration:.08s}
+.fx__add[aria-expanded="true"] svg{transform:rotate(45deg)}
+.fx__add:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.fx__add:disabled{opacity:.35;cursor:default;transform:none;box-shadow:none}
+
+/* card pilihan efek (putih) */
+.fx-pick{position:fixed;z-index:55;padding:8px;background:#fff;color:#16161d;border-radius:18px;box-shadow:0 14px 40px rgba(0,0,0,.5);transform-origin:top center;animation:menuIn .3s var(--ease-spring) backwards}
+.fx-pick__item{display:flex;align-items:center;gap:12px;width:100%;height:46px;padding:0 12px;border:0;border-radius:12px;background:transparent;color:inherit;font-size:14px;font-weight:600;text-align:left;
+  animation:slideX .3s var(--ease-out) backwards;animation-delay:calc(var(--i,0)*40ms + 60ms);transition:transform .25s var(--ease-spring),background-color .2s ease}
+.fx-pick__item:hover:not(:disabled),.fx-pick__item:focus-visible{background:#efeff4;outline:0}
+.fx-pick__item:active:not(:disabled){transform:scale(.97);transition-duration:.08s}
+.fx-pick__item:disabled{opacity:.4;cursor:default}
+.fx-pick__icon{width:30px;height:30px;border-radius:50%;background:#16161d;color:#fff;display:grid;place-items:center;flex:none}
+
+/* card tiap efek (putih) */
+.fxc{background:#fff;color:#16161d;border-radius:18px;padding:14px 16px 16px;margin-bottom:12px;flex:none;animation:fxCardIn .55s var(--ease-spring) backwards;animation-delay:calc(var(--i,0)*70ms)}
+@keyframes fxCardIn{from{opacity:0;transform:translateY(-14px) scale(.92)}to{opacity:1;transform:none}}
+.fxc__head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.fxc__icon{width:30px;height:30px;border-radius:50%;background:#16161d;color:#fff;display:grid;place-items:center;flex:none}
+.fxc__name{flex:1;min-width:0;margin:0;font-size:14px;font-weight:700}
+.fxc__pwr{position:relative;width:36px;height:22px;flex:none;padding:0;border:0;border-radius:11px;background:var(--accent);transition:background-color .25s ease,transform .25s var(--ease-spring)}
+.fxc__pwr::after{content:"";position:absolute;top:3px;left:17px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .3s var(--ease-spring)}
+.fxc.is-off .fxc__pwr{background:#cfcfd9}
+.fxc.is-off .fxc__pwr::after{left:3px}
+.fxc__pwr:active{transform:scale(.92);transition-duration:.08s}
+.fxc__del{width:26px;height:26px;flex:none;padding:0;border:0;border-radius:50%;background:transparent;color:#7a7a8a;display:grid;place-items:center;
+  transition:transform .25s var(--ease-spring),background-color .2s ease,color .2s ease}
+.fxc__del:hover{background:#efeff4;color:#16161d;transform:scale(1.12)}
+.fxc__del:active{transform:scale(.9);transition-duration:.08s}
+.fxc__pwr:focus-visible,.fxc__del:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.fxc__body{display:flex;flex-direction:column;gap:12px;transition:opacity .25s ease}
+.fxc.is-off .fxc__body{opacity:.4}
+.fxc__row{display:grid;grid-template-columns:1fr auto;align-items:center;row-gap:2px}
+.fxc__label{font-size:12.5px;font-weight:600;color:#55556a}
+.fxc__val{font-size:12.5px;font-variant-numeric:tabular-nums;color:#16161d;font-weight:600}
+.fxs{-webkit-appearance:none;appearance:none;grid-column:1/-1;width:100%;height:20px;margin:0;background:transparent;cursor:pointer;display:block;touch-action:pan-y;--p:50%}
+.fxs::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(90deg,var(--accent) var(--p),#e3e3ec var(--p))}
+.fxs::-moz-range-track{height:4px;border-radius:2px;background:#e3e3ec}
+.fxs::-moz-range-progress{height:4px;border-radius:2px;background:var(--accent)}
+.fxs::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-7px;border-radius:50%;background:#fff;border:2px solid var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.25);transition:transform .22s var(--ease-spring)}
+.fxs::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.25);transition:transform .22s var(--ease-spring)}
+.fxs:hover::-webkit-slider-thumb{transform:scale(1.18)}
+.fxs:active::-webkit-slider-thumb{transform:scale(1.3)}
+.fxs:hover::-moz-range-thumb{transform:scale(1.18)}
+.fxs:active::-moz-range-thumb{transform:scale(1.3)}
+.fxs:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+@media (prefers-reduced-motion:reduce){.fxc,.fx-pick,.fx-pick__item{animation:none!important}.fx__add,.fx__add svg,.fxc__pwr,.fxc__pwr::after,.fxc__del,.fxs::-webkit-slider-thumb{transition:none!important}}
 
 /* isi panel masuk satu per satu dari kanan; keluar cepat tanpa jeda */
 .fx__item{opacity:0;transform:translateX(28px)}

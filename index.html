@@ -76,11 +76,10 @@
     <div class="fx__panel" id="fxBody">
       <header class="fx__head fx__item" style="--i:0"><h2 class="fx__title">Effects</h2></header>
       <div class="fx__body">
-        <div class="fx__empty fx__item" style="--i:1">
-          <svg viewBox="0 0 24 24" width="36" height="36" aria-hidden="true"><path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/></svg>
-          <p class="fx__empty-title">Belum ada efek</p>
-          <p class="fx__empty-sub">Efek untuk track yang dipilih akan muncul di sini.</p>
+        <div class="fx__top fx__item" style="--i:1">
+          <button type="button" class="fx__add" id="fxAdd" aria-haspopup="menu" aria-expanded="false" aria-label="Tambah efek" title="Tambah efek"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
         </div>
+        <div class="fx__list" id="fxList"></div>
       </div>
     </div>
   </div>
