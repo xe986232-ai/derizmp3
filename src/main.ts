@@ -6,6 +6,7 @@ import { initFxRack } from './fx-rack';
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
 import { decodeFile, addBuffer, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
+import { openPianoRoll } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const EASE_OUT = 'cubic-bezier(.22,1,.36,1)', EASE_SPRING = 'cubic-bezier(.34,1.56,.64,1)', EASE_INOUT = 'cubic-bezier(.65,0,.35,1)';
@@ -442,7 +443,7 @@ lanesEl.addEventListener('pointerdown', e => {
 // ===== Toolbar bulat di atas pattern terpilih =====
 const patBar = document.createElement('div');
 patBar.className = 'pat-bar'; patBar.hidden = true; patBar.setAttribute('role', 'toolbar'); patBar.setAttribute('aria-label', 'Aksi pattern');
-[['copy','Copy','Salin pattern'],['del','Delete','Hapus pattern'],['snap','Snap','Snap ke grid'],['edit','Edit','Ubah nama pattern'],['more','More...','Opsi lainnya']]
+[['copy','Copy','Salin pattern'],['del','Delete','Hapus pattern'],['snap','Snap','Snap ke grid'],['edit','Edit','Buka piano roll'],['more','More...','Opsi lainnya']]
   .forEach(([act, txt, label], i) => {
     const b = document.createElement('button');
     b.className = 'pat-btn'; b.type = 'button'; b.dataset.act = act; b.textContent = txt;
@@ -507,7 +508,23 @@ function deletePattern() {
   if (REDUCE) { el.remove(); return; }
   el.animate([{opacity: 1, transform: 'scale(1)'}, {opacity: 0, transform: 'scale(.9)'}], {duration: 200, easing: EASE_OUT, fill: 'forwards'}).onfinish = () => el.remove();
 }
-function editPattern() {   // ubah nama pattern langsung di judulnya
+// Tombol "Edit": pattern instrumen -> buka piano roll; pattern audio clip (tidak punya nada) -> tetap ganti nama seperti sebelumnya
+function editPattern() {
+  const el = selPat; if (!el) return;
+  if (el.dataset.clip) return renamePattern();
+  const lane = el.parentElement, id = lane.dataset.track;
+  const nm = document.getElementById('track-name-' + id);
+  openPianoRoll({
+    track: nm ? nm.textContent : 'Track',
+    pattern: el.querySelector('.pattern__title').textContent,
+    color: lane.style.getPropertyValue('--track-color') || undefined,
+  });
+}
+lanesEl.addEventListener('dblclick', e => {   // ganti nama pattern: klik dua kali judulnya
+  const t = e.target.closest && e.target.closest('.pattern__title');
+  if (t && selPat && selPat.contains(t)) renamePattern();
+});
+function renamePattern() {   // ubah nama pattern langsung di judulnya
   const el = selPat; if (!el) return;
   const t = el.querySelector('.pattern__title'), old = t.textContent;
   t.contentEditable = 'true'; t.spellcheck = false; t.focus();
