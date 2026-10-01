@@ -862,10 +862,6 @@ const btnPlay = tc.querySelector('.play'), btnMetro = document.getElementById('b
 const btnRew = tc.querySelector('.rewind'), btnFwd = tc.querySelector('.forward');
 let posBars = 0, playing = false, playRaf = 0, startPos = 0, startCtx = 0, nextBeat = 0, metroTimer = 0, lastBeat = -1;
 function renderPlayhead() { phEl.style.translate = (posBars * BAR_W) + 'px 0'; }   // dipisah dari transform agar tidak ditimpa animasi masuk
-function followPlayhead(behavior) {
-  const x = posBars * BAR_W, v0 = wsEl.scrollLeft, v1 = v0 + wsEl.clientWidth - tlEl.offsetLeft;
-  if (x > v1 - 24 || x < v0) wsEl.scrollTo({left: Math.max(0, x - 24), behavior: behavior || 'instant'});
-}
 function syncTransportUI() {
   btnPlay.setAttribute('aria-label', playing ? 'Jeda' : 'Putar');
   btnPlay.querySelector('use').setAttribute('href', playing ? '#pause-icon' : '#play-icon');
@@ -875,7 +871,7 @@ function tick() {
   if (!playing) return;
   posBars = startPos + Math.max(0, actx.currentTime - startCtx) / SEC_PER_BAR;
   if (posBars >= BARS) { posBars = BARS; renderPlayhead(); pausePlay(); return; }
-  renderPlayhead(); followPlayhead();
+  renderPlayhead();   // timeline tidak auto-scroll mengikuti playhead
   const b = Math.floor(posBars * 4 + 1e-6);   // titik ketukan di panel metronome + kedip tombol M
   if (b !== lastBeat) { lastBeat = b; metroUI.beat(b % 4); if (metro.on) metroUI.flash(); }
   playRaf = requestAnimationFrame(tick);
@@ -921,7 +917,7 @@ function toStart() {
   wsEl.scrollTo({left: 0, behavior: 'smooth'});
 }
 function seekBy(d) {
-  posBars = Math.max(0, Math.min(BARS, posBars + d)); renderPlayhead(); followPlayhead();
+  posBars = Math.max(0, Math.min(BARS, posBars + d)); renderPlayhead();
   if (playing) scheduleClips();   // lompat saat sedang main: suara ikut pindah
 }
 // ===== Metronome & BPM project =====
