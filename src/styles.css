@@ -608,9 +608,21 @@ button{font:inherit;color:inherit;cursor:pointer}
 }
 @media (prefers-reduced-motion:reduce){.fx,.fx__clip,.fx__panel,.fx__item,.fx__toggle,.fx__toggle svg{transition:none!important}}
 
-/* ===== meter level stereo di card track (kiri + kanan) ===== */
-.trackheader__content-rows{padding-right:26px}
-.trackmeter{position:absolute;z-index:3;right:9px;top:10px;bottom:10px;display:flex;gap:2px;pointer-events:none}
-.trackmeter__bar{position:relative;display:block;width:4px;height:100%;border-radius:2px;background:rgba(255,255,255,.09);overflow:hidden}
-.trackmeter__bar b{position:absolute;inset:0;border-radius:inherit;clip-path:inset(100% 0 0 0);
-  background:linear-gradient(to top,#2fd36b 0%,#2fd36b 60%,#f2c94c 80%,#ff4d4d 100%)}
+/* ===== meter level stereo di card track: LED bersegmen + glow + peak hold (jumlah segmen --n harus sama dengan NSEG di track-meters.ts) ===== */
+.trackheader__content-rows{padding-right:30px}
+.trackmeter{--n:14;--seg:repeating-linear-gradient(to top,#000 0,#000 calc(100% / var(--n) - 1px),transparent calc(100% / var(--n) - 1px),transparent calc(100% / var(--n)));
+  position:absolute;z-index:3;right:8px;top:7px;bottom:7px;display:flex;gap:3px;padding:4px 4px;border-radius:8px;pointer-events:none;
+  background:linear-gradient(180deg,rgba(0,0,0,.34),rgba(0,0,0,.2));box-shadow:inset 0 1px 3px rgba(0,0,0,.55),inset 0 0 0 1px rgba(255,255,255,.05),0 1px 0 rgba(255,255,255,.04);
+  transition:opacity .25s ease .2s,visibility 0s}
+.trackmeter__bar{position:relative;display:block;width:5px;height:100%;filter:drop-shadow(0 0 2.5px rgba(61,240,122,.5))}
+.trackmeter__bar[data-l="2"]{filter:drop-shadow(0 0 3px rgba(255,210,63,.6))}
+.trackmeter__bar[data-l="3"]{filter:drop-shadow(0 0 3.5px rgba(255,61,110,.75))}
+/* segmen redup (tempat kosong) */
+.trackmeter__bar::before{content:"";position:absolute;inset:0;background:rgba(255,255,255,.1);-webkit-mask:var(--seg);mask:var(--seg)}
+/* segmen menyala (level) dan segmen puncak (peak hold): gradien penuh dipotong dengan clip-path */
+.trackmeter__bar b,.trackmeter__bar s{position:absolute;inset:0;-webkit-mask:var(--seg);mask:var(--seg);
+  background:linear-gradient(to top,#19e6a0 0%,#3df07a 42%,#b8f23a 64%,#ffd23f 78%,#ff8a3d 89%,#ff3d6e 100%)}
+.trackmeter__bar b{clip-path:inset(100% 0 0 0)}
+.trackmeter__bar s{clip-path:inset(100% 0 0 0);filter:brightness(1.25)}
+/* channel mixer ditutup: meter ikut hilang */
+.tracklist--collapsed .trackmeter{opacity:0;visibility:hidden;transition:opacity .12s ease,visibility 0s linear .12s}
