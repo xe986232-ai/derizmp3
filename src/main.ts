@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { openAudioUploadCard } from './audio-upload-card';
+import { initEffectsPanel } from './effects-panel';
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
 import { decodeFile, addBuffer, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume } from './audio-engine';
@@ -738,6 +739,8 @@ document.querySelector('.headers-list').addEventListener('click', e => {
   if (e.target.closest('.trackheader__left-content')) setPanel(!panelCollapsed());
 });
 document.querySelectorAll('.trackheader__left-content').forEach(b => b.title = 'Tutup panel track');
+// Panel efek (kanan): lebar timeline berubah selama animasi, jadi ruler & toolbar pattern digambar ulang tiap frame
+initEffectsPanel(settled => { paintRuler(settled); patBarPlace(); }, () => { closeMenu(true); closeAddMenu(true); dismissAdd(true); });
 // ===== Menu "Tambahkan track" =====
 const INSTRUMENTS = [
   {n:'Drums', c:'#ff9f1c'}, {n:'Audio clip', c:'#14b8a6'}, {n:'Supersaw', c:'#5b3de8'},

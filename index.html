@@ -14,6 +14,7 @@
   <symbol id="forward-icon" viewBox="0 0 24 24"><g transform="translate(24 0) scale(-1 1)"><path d="M11.5 6.2v11.6a.7.7 0 0 1-1.1.57L1.9 12.6a.7.7 0 0 1 0-1.16l8.5-5.8a.7.7 0 0 1 1.1.56z"/><path transform="translate(9.5 0)" d="M11.5 6.2v11.6a.7.7 0 0 1-1.1.57L1.9 12.6a.7.7 0 0 1 0-1.16l8.5-5.8a.7.7 0 0 1 1.1.56z"/></g></symbol>
 </svg>
 
+<div class="stage">
 <div class="workspace">
   <!-- Daftar track -->
   <div class="tracklist secondaryactivated">
@@ -66,6 +67,24 @@
       </div>
     </div>
   </div>
+</div>
+
+<!-- Panel efek: menempel di sisi kanan layar, dibuka / ditutup lewat panah di tengah tepi kirinya -->
+<aside class="fx" id="fxPanel" aria-label="Panel efek">
+  <button class="fx__toggle" id="fxToggle" type="button" aria-expanded="true" aria-controls="fxBody" aria-label="Tutup panel efek" title="Tutup panel efek"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+  <div class="fx__clip">
+    <div class="fx__panel" id="fxBody">
+      <header class="fx__head fx__item" style="--i:0"><h2 class="fx__title">Effects</h2></header>
+      <div class="fx__body">
+        <div class="fx__empty fx__item" style="--i:1">
+          <svg viewBox="0 0 24 24" width="36" height="36" aria-hidden="true"><path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/></svg>
+          <p class="fx__empty-title">Belum ada efek</p>
+          <p class="fx__empty-sub">Efek untuk track yang dipilih akan muncul di sini.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</aside>
 </div>
 
 <footer class="transportbar">
