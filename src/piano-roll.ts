@@ -1,100 +1,485 @@
-// Piano roll (tahap 1: tampilan saja, tanpa suara / synth / data nada).
-// Markup persis dari Soundtrap ada di piano-roll.html; file ini hanya membuka, menutup, dan menghidupkan scroll + toolbar.
-import markup from './piano-roll.html?raw';
+// Piano roll: editor nada berbasis canvas (belum ada suara, sesuai tahap ini).
+// Fitur: pasang / geser / ubah panjang / hapus nada, pilih banyak (marquee), snap, undo,
+// zoom horizontal & vertikal (tombol, Ctrl+scroll, Alt+scroll, pinch 2 jari), geser (scroll / tool tangan / 2 jari).
+// Nada disimpan di memori per pattern (kunci `id`), jadi tetap ada saat piano roll ditutup lalu dibuka lagi.
 
-const ROW_H = 17.25;   // tinggi satu baris nada (px)
-const BEAT_W = 88;     // lebar satu ketukan (px)
-const BEATS = 4, BARS = 64;
+export interface PianoRollOpts {
+  id?: string;        // kunci pattern supaya nada tersimpan per pattern
+  track: string;
+  pattern: string;
+  color?: string;
+  bars?: number;      // panjang pattern dalam bar
+  startBar?: number;  // nomor bar awal pattern di timeline (untuk label penggaris)
+}
 
-// Ikon: markup memakai class icon-font Soundtrap yang tidak ada di proyek ini, jadi diisi SVG sederhana.
-const SVG = (d: string) => '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
-const ICONS: Record<string, string> = {
-  'ic-cursor-filled': '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M6 3l13 7-5.5 1.8L17 19l-2.6 1.2-3.5-7.3L6 17z"/></svg>',
-  'ic-edit': SVG('<path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19z"/>'),
-  'ic-delete': SVG('<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>'),
-  'ic-zoom-in': SVG('<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5M11 8v6M8 11h6"/>'),
-  'ic-zoom-out': SVG('<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5M8 11h6"/>'),
+interface Note { id: number; p: number; s: number; l: number; }   // p: MIDI, s/l: dalam ketukan
+interface State { notes: Note[]; nextId: number; }
+type Tool = 'draw' | 'select' | 'erase' | 'pan';
+
+const P_MIN = 24, P_MAX = 108, ROWS = P_MAX - P_MIN + 1;   // C1..C8
+const KEY_W = 64, RULER_H = 32, BEATS_PER_BAR = 4;
+const PPB_MIN = 8, PPB_MAX = 480, ROW_MIN = 10, ROW_MAX = 40;
+const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const BLACK = new Set([1, 3, 6, 8, 10]);
+const SNAPS: Array<[string, number]> = [['1 bar', 4], ['1/2', 2], ['1/4', 1], ['1/8', 0.5], ['1/16', 0.25], ['1/32', 0.125], ['Off', 0]];
+
+const isBlack = (p: number) => BLACK.has(p % 12);
+const pname = (p: number) => NAMES[p % 12] + (Math.floor(p / 12) - 1);
+const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
+
+const ic = (d: string) =>
+  '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+const ICON = {
+  back: ic('<path d="M15 5l-7 7 7 7"/>'),
+  draw: ic('<path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19z"/>'),
+  select: ic('<path d="M5 3l14 7-6 2-2 6z"/>'),
+  erase: ic('<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>'),
+  pan: ic('<path d="M9 11V5a1.5 1.5 0 013 0v5m0-1a1.5 1.5 0 013 0v2m0-1a1.5 1.5 0 013 0v5a6 6 0 01-6 6h-1a6 6 0 01-5-3l-2-4a1.5 1.5 0 012.5-1.5L9 15"/>'),
+  undo: ic('<path d="M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3"/>'),
+  minus: ic('<path d="M5 12h14"/>'),
+  plus: ic('<path d="M12 5v14M5 12h14"/>'),
 };
-const SYMBOLS =
-  '<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">' +
-  '<symbol id="snap-to-grid-icon" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 4v16M12 4v16M20 4v16M4 12h16"/></symbol>' +
-  '<symbol id="snap-to-playhead-icon" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 3v18M7 8l5-5 5 5"/></symbol></svg>';
 
-const MODES = ['movebutton', 'drawbutton', 'velocitybutton', 'erasebutton'] as const;
-const MODE_CLASS: Record<string, string> = {movebutton: 'editmode-move', drawbutton: 'editmode-draw', velocitybutton: 'editmode-velocity', erasebutton: 'editmode-erase'};
-
-export interface PianoRollOpts { track: string; pattern: string; color?: string; }
-
+const states = new Map<string, State>();
 let root: HTMLElement | null = null;
 let onClose: (() => void) | null = null;
 
-function drawRuler(canvas: HTMLCanvasElement, scrollLeft: number) {
-  const w = canvas.parentElement!.clientWidth, h = 48, dpr = window.devicePixelRatio || 1;
-  if (canvas.width !== Math.round(w * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = h * dpr; }
-  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
-  const c = canvas.getContext('2d')!;
-  c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, w, h);
-  const cs = getComputedStyle(root!);
-  c.font = '11px system-ui, sans-serif'; c.textBaseline = 'top';
-  const first = Math.floor(scrollLeft / BEAT_W), last = Math.ceil((scrollLeft + w) / BEAT_W);
-  for (let b = first; b <= last; b++) {
-    const x = Math.round(b * BEAT_W - scrollLeft) + .5, bar = b % BEATS === 0;
-    c.strokeStyle = bar ? cs.getPropertyValue('--muted') : cs.getPropertyValue('--line');
-    c.beginPath(); c.moveTo(x, bar ? 6 : 30); c.lineTo(x, h); c.stroke();
-    if (bar) { c.fillStyle = cs.getPropertyValue('--text'); c.fillText(String(b / BEATS + 1), x + 5, 8); }
+// elemen
+let sc!: HTMLElement, space!: HTMLElement, gc!: HTMLCanvasElement, kc!: HTMLCanvasElement, rc!: HTMLCanvasElement;
+let metaEl!: HTMLElement, btnUndo!: HTMLButtonElement, btnDel!: HTMLButtonElement;
+
+// state editor
+let st: State = {notes: [], nextId: 1};
+let curKey = '';
+let bars = 2, startBar = 1, total = bars * BEATS_PER_BAR;
+let ppb = 64, rowH = 18;
+let tool: Tool = 'draw';
+let snap = 0.25;
+let color = '#3fbf5f';
+let selected = new Set<number>();
+let undoStack: string[] = [];
+let lastLen = 1;
+let hoverP = -1;
+let raf = 0;
+
+const snapshot = () => JSON.stringify(st.notes);
+const unit = () => (snap > 0 ? snap : 1 / 16);
+const snapRound = (b: number) => (snap > 0 ? Math.round(b / snap) * snap : b);
+const snapFloor = (b: number) => (snap > 0 ? Math.floor(b / snap + 1e-9) * snap : b);
+
+// ---------- gambar ----------
+function fit(c: HTMLCanvasElement, w: number, h: number) {
+  const dpr = window.devicePixelRatio || 1;
+  const pw = Math.max(1, Math.round(w * dpr)), ph = Math.max(1, Math.round(h * dpr));
+  if (c.width !== pw || c.height !== ph) { c.width = pw; c.height = ph; }
+  c.style.width = w + 'px'; c.style.height = h + 'px';
+  const ctx = c.getContext('2d')!;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return ctx;
+}
+
+// garis vertikal bertingkat: bar > ketukan > 1/2 > 1/4 > 1/8
+const LEVELS: Array<[number, number]> = [[4, 0.42], [1, 0.2], [0.5, 0.11], [0.25, 0.08], [0.125, 0.06]];
+function eachVLine(sx: number, vw: number, fn: (x: number, beat: number, level: number) => void) {
+  for (let li = 0; li < LEVELS.length; li++) {
+    const step = LEVELS[li][0];
+    if (step * ppb < 11) continue;
+    const prev = li > 0 ? LEVELS[li - 1][0] : 0;
+    const k0 = Math.max(0, Math.floor(sx / (step * ppb))), k1 = Math.min(Math.floor(total / step), Math.ceil((sx + vw) / (step * ppb)));
+    for (let k = k0; k <= k1; k++) {
+      const beat = k * step;
+      if (prev && Math.abs(beat / prev - Math.round(beat / prev)) < 1e-6) continue;   // sudah digambar level di atasnya
+      fn(Math.round(beat * ppb - sx) + 0.5, beat, li);
+    }
   }
+}
+
+function drawGrid() {
+  const vw = sc.clientWidth, vh = sc.clientHeight;
+  const c = fit(gc, vw, vh), sx = sc.scrollLeft, sy = sc.scrollTop;
+  c.fillStyle = '#101016'; c.fillRect(0, 0, vw, vh);
+  const xr = Math.min(vw, total * ppb - sx);
+  const r0 = Math.max(0, Math.floor(sy / rowH)), r1 = Math.min(ROWS - 1, Math.floor((sy + vh) / rowH));
+  if (xr > 0) {
+    for (let r = r0; r <= r1; r++) {
+      const p = P_MAX - r, y = r * rowH - sy;
+      c.fillStyle = isBlack(p) ? '#17171e' : '#1f1f29'; c.fillRect(0, y, xr, rowH);
+      if (p === hoverP) { c.fillStyle = 'rgba(255,255,255,.05)'; c.fillRect(0, y, xr, rowH); }
+      c.fillStyle = p % 12 === 0 ? 'rgba(255,255,255,.22)' : 'rgba(255,255,255,.05)';
+      c.fillRect(0, Math.round(y + rowH) - 1, xr, 1);
+    }
+    eachVLine(sx, vw, (x, _b, li) => { c.fillStyle = 'rgba(255,255,255,' + LEVELS[li][1] + ')'; c.fillRect(x - 0.5, 0, 1, vh); });
+    // garis akhir pattern
+    const ex = Math.round(total * ppb - sx);
+    if (ex >= 0 && ex <= vw) { c.fillStyle = color; c.fillRect(ex - 1, 0, 2, vh); }
+  }
+  // nada
+  const fs = Math.min(11, rowH - 4);
+  c.font = '600 ' + fs + 'px system-ui,sans-serif'; c.textBaseline = 'middle';
+  for (const n of st.notes) {
+    const x = n.s * ppb - sx, w = Math.max(3, n.l * ppb), y = (P_MAX - n.p) * rowH - sy;
+    if (x + w < 0 || x > vw || y + rowH < 0 || y > vh) continue;
+    const sel = selected.has(n.id);
+    c.fillStyle = color; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 3); c.fill();
+    c.fillStyle = 'rgba(0,0,0,.28)'; c.fillRect(x + w - 4, y + 3, 2, rowH - 6);     // pegangan ubah panjang
+    if (sel) { c.fillStyle = 'rgba(255,255,255,.35)'; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 3); c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.stroke(); }
+    if (w > 30 && rowH >= 14) { c.fillStyle = 'rgba(0,0,0,.65)'; c.fillText(pname(n.p), x + 5, y + rowH / 2 + 0.5); }
+  }
+  // marquee
+  if (g && g.kind === 'marquee') {
+    const a = g.x0 - sx, b = g.y0 - sy, w = g.x - g.x0, h = g.y - g.y0;
+    c.fillStyle = 'rgba(166,108,255,.16)'; c.strokeStyle = '#a66cff'; c.lineWidth = 1;
+    c.fillRect(a, b, w, h); c.strokeRect(a + 0.5, b + 0.5, w, h);
+  }
+}
+
+function drawKeys() {
+  const vh = sc.clientHeight, sy = sc.scrollTop;
+  const c = fit(kc, KEY_W, vh);
+  c.fillStyle = '#e9eaf0'; c.fillRect(0, 0, KEY_W, vh);
+  const r0 = Math.max(0, Math.floor(sy / rowH)), r1 = Math.min(ROWS - 1, Math.floor((sy + vh) / rowH));
+  c.font = '600 10px system-ui,sans-serif'; c.textBaseline = 'middle'; c.textAlign = 'right';
+  for (let r = r0; r <= r1; r++) {
+    const p = P_MAX - r, y = r * rowH - sy;
+    if (p === hoverP) { c.fillStyle = color; c.fillRect(0, y, KEY_W, rowH); }
+    c.fillStyle = 'rgba(0,0,0,.18)'; c.fillRect(0, Math.round(y + rowH) - 1, KEY_W, 1);
+    if (isBlack(p)) { c.fillStyle = p === hoverP ? '#0e0e12' : '#1a1a21'; c.fillRect(0, y + 1, KEY_W * 0.62, rowH - 2); }
+    if (p % 12 === 0 || p === hoverP) { c.fillStyle = p === hoverP ? '#fff' : '#555566'; c.fillText(pname(p), KEY_W - 6, y + rowH / 2 + 0.5); }
+  }
+  c.textAlign = 'start';
+  c.fillStyle = '#33333f'; c.fillRect(KEY_W - 1, 0, 1, vh);
+}
+
+function drawRuler() {
+  const vw = sc.clientWidth, sx = sc.scrollLeft;
+  const c = fit(rc, vw, RULER_H);
+  c.fillStyle = '#1e1e26'; c.fillRect(0, 0, vw, RULER_H);
+  c.font = '11px system-ui,sans-serif'; c.textBaseline = 'top';
+  eachVLine(sx, vw, (x, beat, li) => {
+    if (li === 0) { c.fillStyle = '#8a8a9a'; c.fillRect(x - 0.5, 4, 1, RULER_H - 4); c.fillStyle = '#e8e8f0'; c.fillText(String(startBar + beat / BEATS_PER_BAR), x + 5, 5); }
+    else if (li === 1) { c.fillStyle = '#55556a'; c.fillRect(x - 0.5, RULER_H - 12, 1, 12); if (ppb >= 64) { c.fillStyle = '#8a8a9a'; c.fillText(String(Math.round(beat % BEATS_PER_BAR) + 1), x + 4, 14); } }
+    else { c.fillStyle = '#3c3c4c'; c.fillRect(x - 0.5, RULER_H - 6, 1, 6); }
+  });
+  const ex = Math.round(total * ppb - sx);
+  if (ex >= 0 && ex <= vw) { c.fillStyle = color; c.fillRect(ex - 1, 0, 2, RULER_H); }
+  c.fillStyle = '#33333f'; c.fillRect(0, RULER_H - 1, vw, 1);
+}
+
+function redraw() { drawGrid(); drawKeys(); drawRuler(); }
+function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; redraw(); }); }
+
+// ---------- ukuran & zoom ----------
+function applySize() {
+  space.style.width = total * ppb + 'px';
+  space.style.height = ROWS * rowH + 'px';
+}
+function setZoomAt(nppb: number, nrow: number, vx: number, vy: number, beatAt: number, rowAt: number) {
+  ppb = clamp(nppb, PPB_MIN, PPB_MAX); rowH = clamp(nrow, ROW_MIN, ROW_MAX);
+  applySize();
+  sc.scrollLeft = Math.max(0, beatAt * ppb - vx);
+  sc.scrollTop = Math.max(0, rowAt * rowH - vy);
+  schedule();
+}
+function zoomBy(fx: number, fy: number) {
+  const vw = sc.clientWidth, vh = sc.clientHeight;
+  setZoomAt(ppb * fx, rowH * fy, vw / 2, vh / 2, (sc.scrollLeft + vw / 2) / ppb, (sc.scrollTop + vh / 2) / rowH);
+}
+
+// ---------- operasi data ----------
+function pushUndo(s?: string) {
+  undoStack.push(s ?? snapshot());
+  if (undoStack.length > 60) undoStack.shift();
+  updateUI();
+}
+function undo() {
+  const s = undoStack.pop(); if (s === undefined) return;
+  st.notes = JSON.parse(s) as Note[];
+  selected = new Set([...selected].filter(id => st.notes.some(n => n.id === id)));
+  updateUI(); schedule();
+}
+function deleteSelected() {
+  if (!selected.size) return;
+  pushUndo();
+  st.notes = st.notes.filter(n => !selected.has(n.id));
+  selected.clear(); updateUI(); schedule();
+}
+function selectAll() { selected = new Set(st.notes.map(n => n.id)); updateUI(); schedule(); }
+function nudge(dB: number, dP: number) {
+  if (!selected.size) return;
+  const sel = st.notes.filter(n => selected.has(n.id));
+  const minS = Math.min(...sel.map(n => n.s)), maxE = Math.max(...sel.map(n => n.s + n.l));
+  const minP = Math.min(...sel.map(n => n.p)), maxP = Math.max(...sel.map(n => n.p));
+  dB = clamp(dB, -minS, total - maxE); dP = clamp(dP, P_MIN - minP, P_MAX - maxP);
+  if (!dB && !dP) return;
+  pushUndo();
+  for (const n of sel) { n.s += dB; n.p += dP; }
+  schedule();
+}
+
+function updateUI() {
+  if (!root) return;
+  btnUndo.disabled = undoStack.length === 0;
+  btnDel.disabled = selected.size === 0;
+  const k = st.notes.length;
+  metaEl.textContent = k + ' nada' + (selected.size ? ' · ' + selected.size + ' dipilih' : '');
+}
+
+// ---------- interaksi pointer ----------
+interface Gesture {
+  kind: 'new' | 'move' | 'resize' | 'marquee' | 'erase' | 'pan';
+  id: number;                 // pointerId
+  x0: number; y0: number;     // posisi awal (koordinat konten)
+  x: number; y: number;       // posisi sekarang (koordinat konten)
+  snap0: string; pushed: boolean; changed: boolean;
+  anchor?: Note; orig?: Note[]; base?: Set<number>;
+  sl: number; stp: number;    // scroll awal (untuk pan)
+  cx: number; cy: number;     // posisi client awal (untuk pan)
+}
+let g: Gesture | null = null;
+const ptrs = new Map<number, {x: number; y: number}>();
+let pinch: {d0x: number; d0y: number; ppb0: number; row0: number; beat0: number; rowPos0: number} | null = null;
+
+function localXY(e: {clientX: number; clientY: number}) {
+  const r = gc.getBoundingClientRect();
+  return {x: e.clientX - r.left + sc.scrollLeft, y: e.clientY - r.top + sc.scrollTop};
+}
+function hit(cx: number, cy: number): {n: Note; edge: boolean} | null {
+  const row = Math.floor(cy / rowH), p = P_MAX - row;
+  for (let i = st.notes.length - 1; i >= 0; i--) {
+    const n = st.notes[i];
+    if (n.p !== p) continue;
+    const x0 = n.s * ppb, x1 = (n.s + n.l) * ppb;
+    if (cx >= x0 && cx <= x1) return {n, edge: cx > x1 - Math.min(10, (x1 - x0) * 0.4)};
+  }
+  return null;
+}
+function commit() { if (g && !g.pushed) { pushUndo(g.snap0); g.pushed = true; } }
+
+function cancelGesture() {
+  if (g && g.pushed) { st.notes = JSON.parse(g.snap0) as Note[]; undoStack.pop(); }
+  g = null; updateUI(); schedule();
+}
+
+function onDown(e: PointerEvent) {
+  if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
+  ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
+  gc.setPointerCapture(e.pointerId);
+  if (ptrs.size === 2) {                       // pinch: batalkan apa pun yang sedang digambar
+    if (g) cancelGesture();
+    const [a, b] = [...ptrs.values()];
+    const r = gc.getBoundingClientRect();
+    const mx = (a.x + b.x) / 2 - r.left, my = (a.y + b.y) / 2 - r.top;
+    pinch = {d0x: Math.abs(a.x - b.x), d0y: Math.abs(a.y - b.y), ppb0: ppb, row0: rowH, beat0: (sc.scrollLeft + mx) / ppb, rowPos0: (sc.scrollTop + my) / rowH};
+    return;
+  }
+  if (ptrs.size > 2 || pinch) return;
+
+  const {x, y} = localXY(e);
+  const base: Gesture = {kind: 'pan', id: e.pointerId, x0: x, y0: y, x, y, snap0: snapshot(), pushed: false, changed: false, sl: sc.scrollLeft, stp: sc.scrollTop, cx: e.clientX, cy: e.clientY};
+  const t: Tool = e.button === 1 ? 'pan' : tool;
+
+  if (t === 'pan') { g = base; gc.style.cursor = 'grabbing'; return; }
+  const h = hit(x, y);
+
+  if (t === 'erase') {
+    g = {...base, kind: 'erase'};
+    if (h) { commit(); st.notes = st.notes.filter(n => n !== h.n); selected.delete(h.n.id); g.changed = true; updateUI(); schedule(); }
+    return;
+  }
+  if (h) {                                      // klik di nada: pilih + pindah / ubah panjang
+    if (e.shiftKey && t === 'select') {
+      if (selected.has(h.n.id)) selected.delete(h.n.id); else selected.add(h.n.id);
+      updateUI(); schedule(); return;
+    }
+    if (!selected.has(h.n.id)) { if (!e.shiftKey) selected.clear(); selected.add(h.n.id); }
+    g = {...base, kind: h.edge ? 'resize' : 'move', anchor: {...h.n}, orig: st.notes.filter(n => selected.has(n.id)).map(n => ({...n}))};
+    updateUI(); schedule(); return;
+  }
+  if (t === 'select') {                         // area kosong: marquee
+    g = {...base, kind: 'marquee', base: e.shiftKey ? new Set(selected) : new Set()};
+    if (!e.shiftKey) selected.clear();
+    updateUI(); schedule(); return;
+  }
+  // draw di area kosong: buat nada baru (seret ke kanan untuk memanjangkan)
+  selected.clear();
+  const p = P_MAX - Math.floor(y / rowH);
+  if (p < P_MIN || p > P_MAX || x < 0 || x >= total * ppb) { updateUI(); schedule(); return; }
+  const s = clamp(snapFloor(x / ppb), 0, total - unit());
+  const l = Math.min(lastLen, total - s);
+  if (l <= 0) return;
+  const n: Note = {id: st.nextId++, p, s, l};
+  g = {...base, kind: 'new', anchor: n};
+  commit(); st.notes.push(n); selected.add(n.id); g.changed = true;
+  updateUI(); schedule();
+}
+
+function onMove(e: PointerEvent) {
+  if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
+  if (pinch && ptrs.size >= 2) {
+    const [a, b] = [...ptrs.values()];
+    const r = gc.getBoundingClientRect();
+    const mx = (a.x + b.x) / 2 - r.left, my = (a.y + b.y) / 2 - r.top;
+    const dx = Math.abs(a.x - b.x), dy = Math.abs(a.y - b.y);
+    const nppb = pinch.d0x > 40 ? pinch.ppb0 * dx / pinch.d0x : pinch.ppb0;
+    const nrow = pinch.d0y > 40 ? pinch.row0 * dy / pinch.d0y : pinch.row0;
+    setZoomAt(nppb, nrow, mx, my, pinch.beat0, pinch.rowPos0);
+    return;
+  }
+  const {x, y} = localXY(e);
+  if (!g || g.id !== e.pointerId) {            // hover (mouse)
+    const p = P_MAX - Math.floor(y / rowH);
+    const np = p >= P_MIN && p <= P_MAX ? p : -1;
+    if (np !== hoverP) { hoverP = np; schedule(); }
+    const h = hit(x, y);
+    gc.style.cursor = tool === 'pan' ? 'grab' : tool === 'erase' ? (h ? 'pointer' : 'default') : h ? (h.edge ? 'ew-resize' : 'grab') : tool === 'select' ? 'default' : 'crosshair';
+    return;
+  }
+  g.x = x; g.y = y;
+  switch (g.kind) {
+    case 'pan':
+      sc.scrollLeft = g.sl - (e.clientX - g.cx); sc.scrollTop = g.stp - (e.clientY - g.cy); break;
+    case 'new': {
+      const n = g.anchor!;
+      if (Math.abs(x - g.x0) > 3) {
+        const end = clamp(snapRound(x / ppb), n.s + unit(), total);
+        n.l = Math.max(unit(), end - n.s);
+      }
+      schedule(); break;
+    }
+    case 'move': {
+      const a0 = g.orig!.find(o => o.id === g!.anchor!.id)!;
+      let dB = snapRound(a0.s + (x - g.x0) / ppb) - a0.s;
+      let dP = -Math.round((y - g.y0) / rowH);
+      const minS = Math.min(...g.orig!.map(o => o.s)), maxE = Math.max(...g.orig!.map(o => o.s + o.l));
+      const minP = Math.min(...g.orig!.map(o => o.p)), maxP = Math.max(...g.orig!.map(o => o.p));
+      dB = clamp(dB, -minS, total - maxE); dP = clamp(dP, P_MIN - minP, P_MAX - maxP);
+      if (!g.changed && (dB || dP)) { commit(); g.changed = true; }
+      for (const o of g.orig!) { const n = st.notes.find(q => q.id === o.id); if (n) { n.s = o.s + dB; n.p = o.p + dP; } }
+      schedule(); break;
+    }
+    case 'resize': {
+      const a0 = g.anchor!, end0 = a0.s + a0.l;
+      const dL = snapRound(end0 + (x - g.x0) / ppb) - end0;
+      if (!g.changed && dL) { commit(); g.changed = true; }
+      for (const o of g.orig!) {
+        const n = st.notes.find(q => q.id === o.id);
+        if (n) n.l = clamp(o.l + dL, unit(), total - o.s);
+      }
+      schedule(); break;
+    }
+    case 'marquee': {
+      const x0 = Math.min(g.x0, x), x1 = Math.max(g.x0, x), y0 = Math.min(g.y0, y), y1 = Math.max(g.y0, y);
+      const sel = new Set(g.base);
+      for (const n of st.notes) {
+        const nx0 = n.s * ppb, nx1 = (n.s + n.l) * ppb, ny0 = (P_MAX - n.p) * rowH, ny1 = ny0 + rowH;
+        if (nx1 >= x0 && nx0 <= x1 && ny1 >= y0 && ny0 <= y1) sel.add(n.id);
+      }
+      selected = sel; updateUI(); schedule(); break;
+    }
+    case 'erase': {
+      const h = hit(x, y);
+      if (h) { commit(); st.notes = st.notes.filter(n => n !== h.n); selected.delete(h.n.id); g.changed = true; updateUI(); schedule(); }
+      break;
+    }
+  }
+}
+
+function onUp(e: PointerEvent) {
+  ptrs.delete(e.pointerId);
+  if (ptrs.size < 2) pinch = null;
+  if (g && g.id === e.pointerId) {
+    if (g.kind === 'new' || g.kind === 'resize') {
+      const id = g.anchor!.id, n = st.notes.find(q => q.id === id);
+      if (n && n.l >= unit()) lastLen = n.l;
+    }
+    g = null;
+    updateUI(); schedule();
+    gc.style.cursor = tool === 'pan' ? 'grab' : 'crosshair';
+  }
+}
+
+function onWheel(e: WheelEvent) {
+  if (!(e.ctrlKey || e.metaKey || e.altKey)) return;     // scroll biasa dibiarkan native
+  e.preventDefault();
+  const r = gc.getBoundingClientRect(), vx = e.clientX - r.left, vy = e.clientY - r.top;
+  const f = Math.exp(-e.deltaY * (e.ctrlKey ? 0.012 : 0.006));
+  const beat = (sc.scrollLeft + vx) / ppb, rowPos = (sc.scrollTop + vy) / rowH;
+  if (e.altKey) setZoomAt(ppb, rowH * f, vx, vy, beat, rowPos); else setZoomAt(ppb * f, rowH, vx, vy, beat, rowPos);
+}
+
+// ---------- bangun UI ----------
+function setTool(t: Tool) {
+  tool = t;
+  root!.querySelectorAll<HTMLElement>('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
+  gc.style.cursor = t === 'pan' ? 'grab' : t === 'select' ? 'default' : 'crosshair';
 }
 
 function build(): HTMLElement {
   const el = document.createElement('section');
   el.id = 'pianoRoll'; el.className = 'pr'; el.setAttribute('aria-label', 'Piano roll'); el.hidden = true;
+  const btn = (attr: string, label: string, svg: string, extra = '') =>
+    '<button type="button" class="pr__btn ' + extra + '" ' + attr + ' title="' + label + '" aria-label="' + label + '">' + svg + '</button>';
   el.innerHTML =
-    SYMBOLS +
-    '<header class="pr__head"><button type="button" class="pr__back" aria-label="Kembali ke timeline" title="Kembali (Esc)">' +
-      '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>' +
-      '<div class="pr__title"><b class="pr__track"></b><span class="pr__pattern"></span></div></header>' +
-    '<div class="pr__body">' + markup + '</div>';
+    '<header class="pr__head">' +
+      '<button type="button" class="pr__back" aria-label="Kembali ke timeline" title="Kembali (Esc)">' + ICON.back + '</button>' +
+      '<div class="pr__title"><b class="pr__track"></b><span class="pr__pattern"></span></div>' +
+      '<span class="pr__meta"></span>' +
+    '</header>' +
+    '<div class="pr__bar">' +
+      '<div class="pr__grp" role="group" aria-label="Alat">' +
+        btn('data-tool="draw"', 'Gambar nada (B)', ICON.draw, 'on') +
+        btn('data-tool="select"', 'Pilih / pindah (V)', ICON.select) +
+        btn('data-tool="erase"', 'Hapus nada (E)', ICON.erase) +
+        btn('data-tool="pan"', 'Geser tampilan (H)', ICON.pan) +
+      '</div>' +
+      '<label class="pr__snap"><span>Snap</span><select aria-label="Snap">' +
+        SNAPS.map(([n, v]) => '<option value="' + v + '"' + (v === 0.25 ? ' selected' : '') + '>' + n + '</option>').join('') +
+      '</select></label>' +
+      '<div class="pr__grp">' +
+        btn('data-act="undo"', 'Urungkan (Ctrl+Z)', ICON.undo) +
+        btn('data-act="del"', 'Hapus yang dipilih (Del)', ICON.erase) +
+      '</div>' +
+      '<div class="pr__grp"><span class="pr__lbl">Lebar</span>' +
+        btn('data-act="zx-"', 'Perkecil horizontal', ICON.minus) + btn('data-act="zx+"', 'Perbesar horizontal', ICON.plus) +
+      '</div>' +
+      '<div class="pr__grp"><span class="pr__lbl">Tinggi</span>' +
+        btn('data-act="zy-"', 'Perkecil vertikal', ICON.minus) + btn('data-act="zy+"', 'Perbesar vertikal', ICON.plus) +
+      '</div>' +
+    '</div>' +
+    '<div class="pr__main">' +
+      '<div class="pr__corner"></div>' +
+      '<canvas class="pr__ruler" aria-hidden="true"></canvas>' +
+      '<canvas class="pr__keys" aria-hidden="true"></canvas>' +
+      '<div class="pr__scroll"><div class="pr__space"></div><canvas class="pr__grid" role="img" aria-label="Grid nada"></canvas></div>' +
+    '</div>';
 
-  // sampel nada bawaan markup dikosongkan: pattern baru memang masih kosong (hapus baris ini kalau mau melihat contohnya)
-  el.querySelectorAll('.rollnote').forEach(n => n.remove());
+  sc = el.querySelector<HTMLElement>('.pr__scroll')!;
+  space = el.querySelector<HTMLElement>('.pr__space')!;
+  gc = el.querySelector<HTMLCanvasElement>('.pr__grid')!;
+  kc = el.querySelector<HTMLCanvasElement>('.pr__keys')!;
+  rc = el.querySelector<HTMLCanvasElement>('.pr__ruler')!;
+  metaEl = el.querySelector<HTMLElement>('.pr__meta')!;
+  btnUndo = el.querySelector<HTMLButtonElement>('[data-act="undo"]')!;
+  btnDel = el.querySelector<HTMLButtonElement>('[data-act="del"]')!;
 
-  // ikon
-  for (const [cls, svg] of Object.entries(ICONS)) el.querySelectorAll('.' + cls).forEach(s => { s.innerHTML = svg; });
+  el.querySelectorAll<HTMLElement>('[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool as Tool)));
+  el.querySelector<HTMLSelectElement>('.pr__snap select')!.addEventListener('change', e => { snap = parseFloat((e.target as HTMLSelectElement).value); });
+  const acts: Record<string, () => void> = {
+    undo, del: deleteSelected,
+    'zx+': () => zoomBy(1.4, 1), 'zx-': () => zoomBy(1 / 1.4, 1),
+    'zy+': () => zoomBy(1, 1.25), 'zy-': () => zoomBy(1, 1 / 1.25),
+  };
+  el.querySelectorAll<HTMLElement>('[data-act]').forEach(b => b.addEventListener('click', () => acts[b.dataset.act!]()));
 
-  // ukuran dari konstanta (menggantikan angka pixel sampel di markup)
-  const grid = el.querySelector<HTMLElement>('.grid')!;
-  const gridW = BARS * BEATS * BEAT_W;
-  el.style.setProperty('--pr-row', ROW_H + 'px');
-  el.style.setProperty('--pr-beat', BEAT_W + 'px');
-  grid.style.width = gridW + 'px';
-  el.querySelector<HTMLElement>('.keys-and-grid')!.style.width = '';
-  el.querySelector<HTMLElement>('.regionsnotes')!.style.width = gridW + 'px';
-  const fake = el.querySelector<HTMLElement>('.position-scrollbar > div')!; fake.style.width = gridW + 70 + 'px';
-
-  // tombol toolbar: pilih satu mode (gambar / pindah / velositas / hapus)
-  const tb = el.querySelector('.mango-toolbar')!, rn = el.querySelector('.regionsnotes')!;
-  tb.addEventListener('click', e => {
-    const wrap = (e.target as HTMLElement).closest<HTMLElement>('.fatfingerbutton'); if (!wrap) return;
-    const mode = MODES.find(m => wrap.classList.contains(m)); if (!mode) return;
-    tb.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
-    wrap.querySelector('button')!.classList.add('selected');
-    Object.values(MODE_CLASS).forEach(c => rn.classList.remove(c)); rn.classList.add(MODE_CLASS[mode]);
-  });
-  // toggle snap / tangkap playhead
-  el.querySelectorAll<HTMLButtonElement>('.icon-toggle__toggle-button').forEach(b => b.addEventListener('click', () => {
-    const on = b.getAttribute('aria-checked') !== 'true';
-    b.setAttribute('aria-checked', String(on)); b.parentElement!.classList.toggle('on', on);
-  }));
-
-  // scroll: ruler & scrollbar bawah ikut lane
-  const sc = el.querySelector<HTMLElement>('.scrollable')!, bar = el.querySelector<HTMLElement>('.position-scrollbar')!;
-  const cv = el.querySelector<HTMLCanvasElement>('.beatruler canvas')!;
-  let lock = false;
-  const paint = () => drawRuler(cv, sc.scrollLeft);
-  sc.addEventListener('scroll', () => { paint(); if (!lock) { lock = true; bar.scrollLeft = sc.scrollLeft; lock = false; } }, {passive: true});
-  bar.addEventListener('scroll', () => { if (!lock) { lock = true; sc.scrollLeft = bar.scrollLeft; lock = false; } }, {passive: true});
-  window.addEventListener('resize', () => { if (root && !root.hidden) paint(); });
-  (el as any)._paint = paint;
+  gc.addEventListener('pointerdown', onDown);
+  gc.addEventListener('pointermove', onMove);
+  gc.addEventListener('pointerup', onUp);
+  gc.addEventListener('pointercancel', onUp);
+  gc.addEventListener('pointerleave', () => { if (hoverP !== -1 && !g) { hoverP = -1; schedule(); } });
+  gc.addEventListener('wheel', onWheel, {passive: false});
+  gc.addEventListener('contextmenu', e => e.preventDefault());
+  sc.addEventListener('scroll', schedule, {passive: true});
+  new ResizeObserver(() => { if (root && !root.hidden) schedule(); }).observe(sc);
 
   el.querySelector('.pr__back')!.addEventListener('click', closePianoRoll);
   return el;
@@ -102,23 +487,54 @@ function build(): HTMLElement {
 
 export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.querySelector('.stage') as HTMLElement) {
   if (!root) { root = build(); host.appendChild(root); }
-  root.style.setProperty('--pr-color', opts.color || '#3fbf5f');
+  const key = opts.id || opts.track + '/' + opts.pattern;
+  if (key !== curKey) { undoStack = []; selected = new Set(); }
+  curKey = key;
+  st = states.get(key) || {notes: [], nextId: 1};
+  states.set(key, st);
+
+  color = opts.color || '#3fbf5f';
+  root.style.setProperty('--pr-color', color);
   root.querySelector('.pr__track')!.textContent = opts.track;
   root.querySelector('.pr__pattern')!.textContent = opts.pattern;
+  bars = Math.max(1, Math.round(opts.bars || 2)); startBar = Math.max(1, Math.round(opts.startBar || 1)); total = bars * BEATS_PER_BAR;
+
   root.hidden = false; void root.offsetWidth; root.classList.add('is-open');
-  const sc = root.querySelector<HTMLElement>('.scrollable')!;
-  sc.scrollTop = ROW_H * 60 - sc.clientHeight / 2;   // mulai di sekitar G4 / C4
-  sc.scrollLeft = 0;
-  (root as any)._paint();
+  const vw = sc.clientWidth, vh = sc.clientHeight;
+  ppb = clamp(Math.floor(vw / total), 32, 96); rowH = 18;
+  applySize();
+  const mid = st.notes.length ? st.notes.reduce((a, n) => a + n.p, 0) / st.notes.length : 62;   // mulai di sekitar C4
+  sc.scrollLeft = 0; sc.scrollTop = Math.max(0, (P_MAX - mid) * rowH - vh / 2);
+  setTool('draw'); updateUI(); redraw();
 }
 
 export function closePianoRoll() {
   if (!root || root.hidden) return;
-  const r = root; r.classList.remove('is-open');
+  const r = root; r.classList.remove('is-open'); g = null; ptrs.clear(); pinch = null;
   setTimeout(() => { if (!r.classList.contains('is-open')) r.hidden = true; }, 200);
   onClose && onClose();
 }
 export const isPianoRollOpen = () => !!root && !root.hidden && root.classList.contains('is-open');
 export const setPianoRollCloseHandler = (fn: () => void) => { onClose = fn; };
 
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && isPianoRollOpen()) closePianoRoll(); });
+document.addEventListener('keydown', e => {
+  if (!isPianoRollOpen()) return;
+  const t = e.target as HTMLElement | null;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+  const mod = e.ctrlKey || e.metaKey, k = e.key;
+  if (k === 'Escape') { closePianoRoll(); return; }
+  if (mod && k.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+  if (mod && k.toLowerCase() === 'a') { e.preventDefault(); selectAll(); return; }
+  if (k === 'Delete' || k === 'Backspace') { e.preventDefault(); deleteSelected(); return; }
+  if (mod) return;
+  if (k === 'ArrowUp') { e.preventDefault(); nudge(0, e.shiftKey ? 12 : 1); }
+  else if (k === 'ArrowDown') { e.preventDefault(); nudge(0, e.shiftKey ? -12 : -1); }
+  else if (k === 'ArrowLeft') { e.preventDefault(); nudge(-unit(), 0); }
+  else if (k === 'ArrowRight') { e.preventDefault(); nudge(unit(), 0); }
+  else if (k === '=' || k === '+') zoomBy(1.4, 1);
+  else if (k === '-') zoomBy(1 / 1.4, 1);
+  else if (k.toLowerCase() === 'b') setTool('draw');
+  else if (k.toLowerCase() === 'v') setTool('select');
+  else if (k.toLowerCase() === 'e') setTool('erase');
+  else if (k.toLowerCase() === 'h') setTool('pan');
+});

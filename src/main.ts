@@ -509,15 +509,20 @@ function deletePattern() {
   el.animate([{opacity: 1, transform: 'scale(1)'}, {opacity: 0, transform: 'scale(.9)'}], {duration: 200, easing: EASE_OUT, fill: 'forwards'}).onfinish = () => el.remove();
 }
 // Tombol "Edit": pattern instrumen -> buka piano roll; pattern audio clip (tidak punya nada) -> tetap ganti nama seperti sebelumnya
+let prSeq = 0;
 function editPattern() {
   const el = selPat; if (!el) return;
   if (el.dataset.clip) return renamePattern();
   const lane = el.parentElement, id = lane.dataset.track;
   const nm = document.getElementById('track-name-' + id);
+  if (!el.dataset.prId) el.dataset.prId = 'pat' + (++prSeq);   // kunci supaya nada piano roll tersimpan per pattern
   openPianoRoll({
+    id: el.dataset.prId,
     track: nm ? nm.textContent : 'Track',
     pattern: el.querySelector('.pattern__title').textContent,
     color: lane.style.getPropertyValue('--track-color') || undefined,
+    bars: Math.max(1, Math.ceil(pw(el) / BAR_W - 0.01)),
+    startBar: Math.floor(pl(el) / BAR_W + 0.01) + 1,
   });
 }
 lanesEl.addEventListener('dblclick', e => {   // ganti nama pattern: klik dua kali judulnya

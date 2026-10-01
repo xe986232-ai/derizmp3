@@ -645,93 +645,40 @@ button{font:inherit;color:inherit;cursor:pointer}
 button,[role="button"],[role="switch"],[role="slider"],input[type="range"],summary{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role="switch"]:focus:not(:focus-visible),[role="slider"]:focus:not(:focus-visible),input[type="range"]:focus:not(:focus-visible){outline:none}
 
-/* ===== PIANO ROLL (markup Soundtrap di piano-roll.html; semua aturan di-scope ke #pianoRoll) ===== */
-#pianoRoll{position:absolute;inset:0;z-index:30;display:flex;flex-direction:column;background:var(--bg);color:var(--text);
-  --pr-row:17.25px;--pr-beat:88px;--pr-color:#3fbf5f;--pr-white:#1d1d26;--pr-black:#17171e;--pr-keyw:70px;
+/* ===== PIANO ROLL (canvas; logika di src/piano-roll.ts) ===== */
+#pianoRoll{position:absolute;inset:0;z-index:30;display:flex;flex-direction:column;background:var(--bg);color:var(--text);--pr-color:#3fbf5f;
   opacity:0;transform:translateY(14px);transition:opacity .2s ease,transform .24s var(--ease-out)}
 #pianoRoll[hidden]{display:none}
 #pianoRoll.is-open{opacity:1;transform:none}
 .pr__head{flex:none;height:48px;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--bg)}
-.pr__back{width:32px;height:32px;border:0;border-radius:50%;background:var(--card,#25252f);display:grid;place-items:center}
+.pr__back{width:32px;height:32px;flex:none;border:0;border-radius:50%;background:var(--panel2);color:var(--text);display:grid;place-items:center;padding:0}
 .pr__back:hover{background:var(--line)}
+.pr__back svg{width:18px;height:18px}
 .pr__title{display:flex;align-items:baseline;gap:8px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pr__track{font-weight:700}
 .pr__pattern{color:var(--muted)}
-.pr__body{flex:1;min-height:0;position:relative}
-#pianoRoll .piano-roll-center{position:absolute;inset:0;overflow:hidden}
+.pr__meta{margin-left:auto;flex:none;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
 
-/* ruler + kontrol grid (kiri atas) */
-#pianoRoll .piano-roll-timeline-wrapper{position:absolute;top:0;left:0;right:0;height:48px;z-index:6;background:var(--bg);border-bottom:1px solid var(--line)}
-#pianoRoll .piano-roll-beat-ruler{position:absolute;left:var(--pr-keyw);right:0;bottom:0;top:0;width:auto!important;height:48px;animation:none}
-#pianoRoll .beatruler-container{position:relative;height:48px;width:100%;overflow:hidden}
-#pianoRoll .piano-roll-cycle-marker{display:none}
-#pianoRoll .piano-roll-grid-controls-container{position:absolute;left:0;top:0;width:var(--pr-keyw);height:48px}
-#pianoRoll .piano-roll-grid-controls{display:flex;height:100%;align-items:center;justify-content:center;gap:2px}
-#pianoRoll .icon-toggle__toggle-button{width:30px;height:30px;border:0;border-radius:6px;background:transparent;color:var(--muted);display:grid;place-items:center;padding:0}
-#pianoRoll .icon-toggle.on .icon-toggle__toggle-button{color:var(--accent);background:var(--accent-soft)}
-#pianoRoll .icon-toggle .soundtrap-icon{width:16px;height:16px}
+/* baris alat */
+.pr__bar{flex:none;display:flex;align-items:center;gap:10px;padding:6px 12px;background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.pr__bar::-webkit-scrollbar{display:none}
+.pr__grp{flex:none;display:flex;align-items:center;gap:2px;padding:2px;border-radius:10px;background:var(--bg)}
+.pr__lbl{font-size:11px;color:var(--muted);padding:0 2px 0 8px}
+.pr__btn{width:36px;height:36px;border:0;border-radius:8px;background:transparent;color:var(--muted);display:grid;place-items:center;padding:0;
+  transition:background-color .15s ease,color .15s ease,transform .15s var(--ease-out)}
+.pr__btn:hover{background:var(--line);color:var(--text)}
+.pr__btn:active{transform:scale(.92)}
+.pr__btn.on{background:var(--accent);color:#fff}
+.pr__btn:disabled{opacity:.35;pointer-events:none}
+.pr__snap{flex:none;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.pr__snap select{height:36px;padding:0 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit;font-size:13px}
 
-/* lane: keys + grid yang bisa di-scroll */
-#pianoRoll .lane{position:absolute;top:48px;left:0;right:0;bottom:44px;width:auto!important;height:auto;border:0;cursor:default;background:none}
-#pianoRoll .scrollable{position:absolute;inset:0;overflow:auto;overscroll-behavior:contain;transform:none!important}
-#pianoRoll .keys-and-grid{display:flex;width:max-content;min-height:calc(var(--pr-row)*128)}
-#pianoRoll .keys{position:sticky;left:0;z-index:5;flex:none;width:var(--pr-keyw);display:flex;flex-direction:column;background:#e9e9f0;border-right:1px solid var(--line)}
-#pianoRoll .piano-key{display:block;flex:none;width:100%;height:var(--pr-row);margin:0;padding:0 6px 0 0;border:0;border-bottom:1px solid #c9c9d4;border-radius:0;
-  background:#f3f3f6;color:#6b6b7b;font-size:9px;line-height:var(--pr-row);text-align:right}
-#pianoRoll .piano-key.black-key{background:#1b1b22;color:#9a9aab;border-bottom-color:#000;width:68%;position:relative;z-index:1;border-radius:0 3px 3px 0}
-#pianoRoll .piano-key.black-key{margin-top:0}
-#pianoRoll .piano-key.active-key{background:var(--pr-color);color:#fff}
-#pianoRoll .piano-key:not(.C0):not(.C1):not(.C2):not(.C3):not(.C4):not(.C5):not(.C6):not(.C7):not(.C8):not(.C-1):not(.C-2):not(.active-key){color:transparent}
-#pianoRoll .grid{position:relative;flex:none;height:calc(var(--pr-row)*128);cursor:crosshair}
-#pianoRoll .stripes{position:absolute;inset:0;background:repeating-linear-gradient(to bottom,
-    var(--pr-white) calc(var(--pr-row)*0) calc(var(--pr-row)*1),
-    var(--pr-black) calc(var(--pr-row)*1) calc(var(--pr-row)*2),
-    var(--pr-white) calc(var(--pr-row)*2) calc(var(--pr-row)*3),
-    var(--pr-white) calc(var(--pr-row)*3) calc(var(--pr-row)*4),
-    var(--pr-black) calc(var(--pr-row)*4) calc(var(--pr-row)*5),
-    var(--pr-white) calc(var(--pr-row)*5) calc(var(--pr-row)*6),
-    var(--pr-black) calc(var(--pr-row)*6) calc(var(--pr-row)*7),
-    var(--pr-white) calc(var(--pr-row)*7) calc(var(--pr-row)*8),
-    var(--pr-white) calc(var(--pr-row)*8) calc(var(--pr-row)*9),
-    var(--pr-black) calc(var(--pr-row)*9) calc(var(--pr-row)*10),
-    var(--pr-white) calc(var(--pr-row)*10) calc(var(--pr-row)*11),
-    var(--pr-black) calc(var(--pr-row)*11) calc(var(--pr-row)*12));
-  background-size:100% calc(var(--pr-row)*12)}
-#pianoRoll .stripes::after{content:"";position:absolute;inset:0;
-  background:repeating-linear-gradient(to right,rgba(255,255,255,.07) 0 1px,transparent 1px var(--pr-beat))}
-#pianoRoll .grid-lines{display:none}
-#pianoRoll .marquee{position:absolute;inset:0;pointer-events:none}
-#pianoRoll .marquee .hidden{display:none}
-#pianoRoll .regionsnotes{position:absolute;inset:0}
-#pianoRoll .notes{position:absolute;top:0;bottom:0;left:0!important;width:100%!important}
-#pianoRoll .rollnote{position:absolute;height:var(--pr-row);border-radius:3px;background:var(--pr-color);box-shadow:inset 0 0 0 1px rgba(0,0,0,.35)}
-#pianoRoll .rollnote.selected{outline:2px solid #fff;outline-offset:-1px}
-#pianoRoll .rollnote .head,#pianoRoll .rollnote .tail{display:none}
-#pianoRoll .rollnote .vel{position:absolute;left:0;bottom:0;height:3px;background:rgba(255,255,255,.55)}
-
-/* penanda area pattern (strip tipis di atas grid) */
-#pianoRoll .regions{position:absolute;top:0;left:var(--pr-keyw);right:0;height:5px;z-index:4;pointer-events:none;overflow:hidden}
-#pianoRoll .pianorollregion{position:absolute;top:0;height:5px;z-index:auto!important;background:var(--pr-color);opacity:.9;border-radius:0 0 3px 3px}
-#pianoRoll .playhead{position:absolute;top:0;left:var(--pr-keyw);bottom:0;z-index:4;animation:none;color:#e8e8ee;display:none}
-#pianoRoll .playhead-body{height:auto;top:20px;bottom:0}
-
-/* toolbar mengambang */
-#pianoRoll .piano-roll-toolbar{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:8}
-#pianoRoll .mango-toolbar{display:flex;gap:6px;padding:6px;border-radius:999px;background:rgba(37,37,47,.94);border:1px solid var(--line);box-shadow:0 6px 20px rgba(0,0,0,.45)}
-#pianoRoll .mango-icon-button-regular-M{width:40px;height:40px;border:0;border-radius:50%;background:#f3f3f6;color:#16161d;display:grid;place-items:center;padding:0;
-  transition:transform .2s var(--ease-out),background-color .2s ease,color .2s ease}
-#pianoRoll .mango-icon-button-regular-M:hover{transform:scale(1.07)}
-#pianoRoll .mango-icon-button-regular-M:active{transform:scale(.92)}
-#pianoRoll .mango-icon-button-regular-M.selected{background:var(--accent);color:#fff}
-#pianoRoll .toolbar-icon{display:grid;place-items:center;font-weight:700;font-size:13px}
-#pianoRoll .select-all-button{display:none}
-
-/* footer: scrollbar posisi + zoom */
-#pianoRoll .piano-roll-footer{position:absolute;left:0;right:0;bottom:0;height:44px;width:auto!important;z-index:6;background:var(--bg);border-top:1px solid var(--line)}
-#pianoRoll .scroll-zoom-controls{display:flex;align-items:center;height:100%;padding-left:var(--pr-keyw);padding-right:8px;gap:8px}
-#pianoRoll .position-scrollbar{flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;height:100%;display:flex;align-items:center}
-#pianoRoll .position-scrollbar>div{height:1px;flex:none}
-#pianoRoll .zoom-controls{display:flex;gap:4px;flex:none}
-#pianoRoll .mango-icon-button-weak-L{width:32px;height:32px;border:0;border-radius:6px;background:transparent;color:var(--muted);display:grid;place-items:center;padding:0}
-#pianoRoll .mango-icon-button-weak-L:hover{background:var(--line);color:var(--text)}
+/* area utama: penggaris atas, piano kiri, grid (scroll native) */
+.pr__main{flex:1;min-height:0;display:grid;grid-template-columns:64px minmax(0,1fr);grid-template-rows:32px minmax(0,1fr);background:#101016}
+.pr__corner{background:#1e1e26;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.pr__ruler,.pr__keys{display:block;align-self:start;justify-self:start}
+.pr__scroll{position:relative;overflow:auto;display:grid;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#3a3a4a transparent}
+.pr__space{grid-area:1/1;pointer-events:none}
+.pr__grid{grid-area:1/1;position:sticky;top:0;left:0;display:block;align-self:start;justify-self:start;touch-action:none;
+  -webkit-user-select:none;user-select:none}
 @media (prefers-reduced-motion:reduce){#pianoRoll{transition:none}}
