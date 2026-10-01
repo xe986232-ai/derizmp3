@@ -226,7 +226,7 @@ function updateUI() {
 
 // ---------- interaksi pointer ----------
 interface Gesture {
-  kind: 'new' | 'move' | 'resize' | 'marquee' | 'erase' | 'pan';
+  kind: 'new' | 'move' | 'resize' | 'marquee' | 'erase' | 'pan' | 'tapdraw';
   id: number;                 // pointerId
   x0: number; y0: number;     // posisi awal (koordinat konten)
   x: number; y: number;       // posisi sekarang (koordinat konten)
@@ -300,17 +300,29 @@ function onDown(e: PointerEvent) {
     if (!e.shiftKey) selected.clear();
     updateUI(); schedule(); return;
   }
-  // draw di area kosong: buat nada baru (seret ke kanan untuk memanjangkan)
-  selected.clear();
+  // draw di area kosong
+  if (e.pointerType === 'touch') {              // sentuh: tap = pasang nada, geser = scroll (nada dibuat saat jari diangkat)
+    g = {...base, kind: 'tapdraw'};
+    return;
+  }
+  selected.clear();                             // mouse / pen: klik = pasang nada, seret ke kanan = nada panjang
+  const n = addNoteAt(x, y);
+  if (!n) { updateUI(); schedule(); return; }
+  g = {...base, kind: 'new', anchor: n};
+  g.changed = true;
+  updateUI(); schedule();
+}
+
+function addNoteAt(x: number, y: number): Note | null {
   const p = P_MAX - Math.floor(y / rowH);
-  if (p < P_MIN || p > P_MAX || x < 0 || x >= total * ppb) { updateUI(); schedule(); return; }
+  if (p < P_MIN || p > P_MAX || x < 0 || x >= total * ppb) return null;
   const s = clamp(snapFloor(x / ppb), 0, total - unit());
   const l = Math.min(lastLen, total - s);
-  if (l <= 0) return;
+  if (l <= 0) return null;
+  pushUndo();
   const n: Note = {id: st.nextId++, p, s, l};
-  g = {...base, kind: 'new', anchor: n};
-  commit(); st.notes.push(n); selected.add(n.id); g.changed = true;
-  updateUI(); schedule();
+  st.notes.push(n); selected.add(n.id);
+  return n;
 }
 
 function onMove(e: PointerEvent) {
@@ -335,6 +347,7 @@ function onMove(e: PointerEvent) {
     return;
   }
   g.x = x; g.y = y;
+  if (g.kind === 'tapdraw' && Math.hypot(e.clientX - g.cx, e.clientY - g.cy) > 8) g.kind = 'pan';
   switch (g.kind) {
     case 'pan':
       sc.scrollLeft = g.sl - (e.clientX - g.cx); sc.scrollTop = g.stp - (e.clientY - g.cy); break;
@@ -388,6 +401,11 @@ function onUp(e: PointerEvent) {
   ptrs.delete(e.pointerId);
   if (ptrs.size < 2) pinch = null;
   if (g && g.id === e.pointerId) {
+    if (g.kind === 'tapdraw' && e.type === 'pointerup') {
+      selected.clear();
+      const n = addNoteAt(g.x0, g.y0);
+      if (n) lastLen = n.l;
+    }
     if (g.kind === 'new' || g.kind === 'resize') {
       const id = g.anchor!.id, n = st.notes.find(q => q.id === id);
       if (n && n.l >= unit()) lastLen = n.l;
