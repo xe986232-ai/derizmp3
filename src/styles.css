@@ -438,3 +438,68 @@ button{font:inherit;color:inherit;cursor:pointer}
 .hist-btn.is-tap{animation:histTap .45s ease-out}
 @media (max-width:420px){.hist-btn{width:36px;height:36px;font-size:10px}}
 @media (max-width:340px){.hist-btn{width:34px;height:34px;font-size:9.5px}}
+
+/* ===== CARD UPLOAD AUDIO (putih, flat: tanpa bayangan) ===== */
+@keyframes uplBackdropIn{from{opacity:0}to{opacity:1}}
+@keyframes uplBackdropOut{from{opacity:1}to{opacity:0}}
+@keyframes uplCardIn{0%{opacity:0;transform:translateY(28px) scale(.9)}100%{opacity:1;transform:none}}
+@keyframes uplCardOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(14px) scale(.94)}}
+@keyframes uplRise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes uplBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes uplShake{0%,100%{transform:none}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+.upl-backdrop{position:fixed;inset:0;z-index:70;display:grid;place-items:center;
+  padding:max(16px,env(safe-area-inset-top,0px)) 16px max(16px,env(safe-area-inset-bottom,0px));
+  background:rgba(10,10,16,.62);animation:uplBackdropIn .25s ease both}
+.upl-backdrop.is-closing{animation:uplBackdropOut .2s ease forwards;pointer-events:none}
+.upl-card{width:min(380px,100%);max-height:100%;overflow:auto;padding:18px;border-radius:20px;border:1px solid #e3e3ec;background:#fff;color:#16161d;outline:none;
+  animation:uplCardIn .5s var(--ease-spring) both}
+.upl-backdrop.is-closing .upl-card{animation:uplCardOut .2s cubic-bezier(.4,0,1,1) forwards}
+.upl-s{animation:uplRise .45s var(--ease-out) backwards;animation-delay:calc(.12s + var(--i,0) * 70ms)}
+.upl-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.upl-head__text{min-width:0}
+.upl-title{margin:0;font-size:17px;font-weight:600;letter-spacing:-.1px}
+.upl-sub{margin:3px 0 0;font-size:12px;color:#6a6a7c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.upl-x,.upl-file__rm{flex:none;width:32px;height:32px;padding:0;border:0;border-radius:50%;background:#f1f1f5;color:#16161d;display:grid;place-items:center;
+  transition:transform .25s var(--ease-spring),background-color .2s ease}
+.upl-x:hover,.upl-file__rm:hover{background:#e6e6ee;transform:scale(1.08)}
+.upl-x:active,.upl-file__rm:active{transform:scale(.9);transition-duration:.08s}
+.upl-zone{margin-top:16px;padding:24px 16px 16px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;cursor:pointer;
+  border:1.5px dashed #c4c4d2;border-radius:16px;background:#fafafc;
+  transition:border-color .25s ease,background-color .25s ease,transform .3s var(--ease-spring)}
+.upl-zone:hover{border-color:#8f8fa6}
+.upl-zone.is-over{border-color:var(--accent);border-style:solid;background:#f1eefe;transform:scale(1.02)}
+.upl-zone__icon{width:48px;height:48px;border-radius:50%;background:#16161d;color:#fff;display:grid;place-items:center;
+  transition:background-color .25s ease;animation:uplBob 2.2s ease-in-out infinite}
+.upl-zone.is-over .upl-zone__icon{background:var(--accent)}
+.upl-zone__title{font-size:14px;font-weight:600}
+.upl-zone__or{font-size:12px;color:#8a8a9a}
+.upl-pick{height:38px;padding:0 20px;border:0;border-radius:19px;background:#16161d;color:#fff;font-size:14px;font-weight:600;
+  transition:transform .25s var(--ease-spring),background-color .2s ease}
+.upl-pick:hover{background:#2b2b37;transform:scale(1.05)}
+.upl-pick:active{transform:scale(.94);transition-duration:.08s}
+.upl-zone__hint{margin-top:2px;font-size:11.5px;color:#8a8a9a}
+.upl-error{margin:10px 0 0;font-size:12.5px;line-height:1.35;color:#d6293e}
+.upl-error[hidden]{display:none}
+.upl-error.is-shake{animation:uplShake .3s ease}
+.upl-file{display:grid;grid-template-rows:0fr;transition:grid-template-rows .4s var(--ease-out)}
+.upl-file.is-on{grid-template-rows:1fr}
+.upl-file__in{min-height:0;overflow:hidden}
+.upl-file__row{margin-top:12px;display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid #e3e3ec;border-radius:14px;background:#fff;
+  opacity:0;transform:translateY(8px);transition:opacity .3s ease,transform .4s var(--ease-spring)}
+.upl-file.is-on .upl-file__row{opacity:1;transform:none;transition-delay:.08s}
+.upl-file__icon{flex:none;width:36px;height:36px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center}
+.upl-file.is-on .upl-file__icon{animation:popIn .45s var(--ease-spring) .12s backwards}
+.upl-file__meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.upl-file__name{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.upl-file__size{font-size:12px;color:#6a6a7c}
+.upl-actions{margin-top:16px;display:flex;justify-content:flex-end;gap:10px}
+.upl-btn{height:42px;padding:0 22px;border-radius:21px;border:1px solid transparent;font-size:14px;font-weight:600;
+  transition:transform .25s var(--ease-spring),background-color .2s ease,opacity .2s ease,border-color .2s ease}
+.upl-btn:active:not(:disabled){transform:scale(.94);transition-duration:.08s}
+.upl-btn--ghost{background:#fff;border-color:#d6d6e0;color:#16161d}
+.upl-btn--ghost:hover{background:#f4f4f8}
+.upl-btn--solid{background:#16161d;color:#fff}
+.upl-btn--solid:hover:not(:disabled){background:#2b2b37}
+.upl-btn:disabled{opacity:.3;cursor:default}
+.upl-card button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (max-width:420px){.upl-card{padding:16px}.upl-actions .upl-btn{flex:1}}

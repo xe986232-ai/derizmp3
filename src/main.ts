@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { openAudioUploadCard } from './audio-upload-card';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const EASE_OUT = 'cubic-bezier(.22,1,.36,1)', EASE_SPRING = 'cubic-bezier(.34,1.56,.64,1)', EASE_INOUT = 'cubic-bezier(.65,0,.35,1)';
@@ -759,8 +760,11 @@ function openAddMenu(btn) {
   m.addEventListener('click', e => {
     const it = e.target.closest('.add-menu__item');
     if (!it) return;
-    addTrack(INSTRUMENTS[+it.dataset.k]);
+    const ins = INSTRUMENTS[+it.dataset.k];
+    addTrack(ins);
     closeAddMenu();
+    // Audio clip: setelah track dibuat, munculkan card upload audio (menunggu menu selesai menghilang)
+    if (ins.n === 'Audio clip') { const id = trackSeq; setTimeout(() => openAudioUploadCard(id), REDUCE ? 0 : 180); }
   });
 }
 function addTrack(t) {
