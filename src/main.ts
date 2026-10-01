@@ -1,5 +1,7 @@
 // @ts-nocheck
 import { openAudioUploadCard } from './audio-upload-card';
+import { click as metroClick, cancel as metroCancel } from './metronome-audio';
+import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
 import { decodeFile, addBuffer, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume } from './audio-engine';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -816,12 +818,13 @@ window.addEventListener('scroll', closeAddMenu, true);
 
 
 // ===== Transport: play / jeda, ke awal, mundur, maju, siklus, rekam =====
-const BPM = 120, SEC_PER_BAR = 4 * 60 / BPM;          // 120 BPM, 4/4 -> 1 bar = 2 detik
+let BPM = 120, SEC_PER_BAR = 240 / BPM;               // 4/4: 1 bar = 4 ketukan; BPM bisa diubah lewat panel metronome (tombol M)
+const metro = {on: false, countIn: false};
 const phEl = document.getElementById('playhead');
 const tc = document.querySelector('.transport-controls');
-const btnRec = tc.querySelector('.rec'), btnPlay = tc.querySelector('.play');
+const btnPlay = tc.querySelector('.play'), btnMetro = document.getElementById('btnMetro');
 const btnRew = tc.querySelector('.rewind'), btnFwd = tc.querySelector('.forward');
-let posBars = 0, playing = false, recArmed = false, playRaf = 0, startPos = 0, startCtx = 0;
+let posBars = 0, playing = false, playRaf = 0, startPos = 0, startCtx = 0, nextBeat = 0, metroTimer = 0, lastBeat = -1;
 function renderPlayhead() { phEl.style.translate = (posBars * BAR_W) + 'px 0'; }   // dipisah dari transform agar tidak ditimpa animasi masuk
 function followPlayhead(behavior) {
   const x = posBars * BAR_W, v0 = wsEl.scrollLeft, v1 = v0 + wsEl.clientWidth - tlEl.offsetLeft;
@@ -830,8 +833,6 @@ function followPlayhead(behavior) {
 function syncTransportUI() {
   btnPlay.setAttribute('aria-label', playing ? 'Jeda' : 'Putar');
   btnPlay.querySelector('use').setAttribute('href', playing ? '#pause-icon' : '#play-icon');
-  btnRec.setAttribute('aria-checked', String(recArmed));
-  btnRec.classList.toggle('is-recording', recArmed && playing);
 }
 // Posisi playhead dihitung dari jam AudioContext (bukan jam rAF), jadi selalu sinkron dengan suara audio clip
 function tick() {
@@ -839,14 +840,31 @@ function tick() {
   posBars = startPos + Math.max(0, actx.currentTime - startCtx) / SEC_PER_BAR;
   if (posBars >= BARS) { posBars = BARS; renderPlayhead(); pausePlay(); return; }
   renderPlayhead(); followPlayhead();
+  const b = Math.floor(posBars * 4 + 1e-6);   // titik ketukan di panel metronome + kedip tombol M
+  if (b !== lastBeat) { lastBeat = b; metroUI.beat(b % 4); if (metro.on) metroUI.flash(); }
   playRaf = requestAnimationFrame(tick);
 }
-function scheduleClips() {
-  const ctx = audio();
+// Scheduler metronome: tiap 25 ms menjadwalkan klik ketukan yang jatuh dalam 120 ms ke depan (pakai jam AudioContext)
+function metroPump() {
+  if (!playing) return;
+  const ctx = actx, ahead = ctx.currentTime + .12;
+  for (;;) {
+    const t = startCtx + (nextBeat / 4 - startPos) * SEC_PER_BAR;
+    if (t > ahead) break;
+    if (metro.on && t >= ctx.currentTime - .01) metroClick(ctx, t, nextBeat % 4 === 0);
+    nextBeat++;
+  }
+}
+function scheduleClips(countIn) {
+  const ctx = audio(), beat = 60 / BPM, lead = countIn ? 4 * beat : 0;
   document.querySelectorAll('.trackheader-container').forEach(c => {
     const sl = c.querySelector('input[type=range]'); if (sl) setTrackVolume(c.dataset.track, +sl.value);
   });
-  startPos = posBars; startCtx = ctx.currentTime + .05;   // jeda kecil supaya penjadwalan tidak telat
+  startPos = posBars; startCtx = ctx.currentTime + .05 + lead;   // jeda kecil supaya penjadwalan tidak telat (+ 1 bar count-in)
+  metroCancel(ctx);                                                // klik lama (tempo lama) dibatalkan
+  if (countIn) for (let i = 0; i < 4; i++) metroClick(ctx, startCtx - (4 - i) * beat, i === 0);
+  nextBeat = Math.ceil(startPos * 4 - 1e-6); lastBeat = -1;
+  clearInterval(metroTimer); metroTimer = setInterval(metroPump, 25); metroPump();
   const clips = [...lanesEl.querySelectorAll('.pattern[data-clip]')].map(p => ({
     track: p.parentElement.dataset.track, clip: +p.dataset.clip,
     startBar: pl(p) / BAR_W, endBar: (pl(p) + pw(p)) / BAR_W, offsetSec: +p.dataset.off || 0}));
@@ -855,27 +873,54 @@ function scheduleClips() {
 function startPlay() {
   if (playing) return;
   if (posBars >= BARS) posBars = 0;
-  playing = true; scheduleClips();
+  playing = true; scheduleClips(metro.countIn);
   playRaf = requestAnimationFrame(tick); syncTransportUI();
 }
 function pausePlay() {
-  playing = false; cancelAnimationFrame(playRaf); playRaf = 0; stopClips(actx); syncTransportUI();
+  playing = false; cancelAnimationFrame(playRaf); playRaf = 0; stopClips(actx); clearInterval(metroTimer); metroTimer = 0; metroCancel(actx, true); metroUI.beat(-1); syncTransportUI();
 }
 const togglePlay = () => playing ? pausePlay() : startPlay();
 function toStart() {
-  pausePlay(); recArmed = false; posBars = 0; renderPlayhead(); syncTransportUI();
+  pausePlay(); posBars = 0; renderPlayhead(); syncTransportUI();
   wsEl.scrollTo({left: 0, behavior: 'smooth'});
 }
 function seekBy(d) {
   posBars = Math.max(0, Math.min(BARS, posBars + d)); renderPlayhead(); followPlayhead();
   if (playing) scheduleClips();   // lompat saat sedang main: suara ikut pindah
 }
-function toggleRec() {
-  recArmed = !recArmed;
-  if (recArmed && !playing) startPlay(); else syncTransportUI();
+// ===== Metronome & BPM project =====
+// Ganti BPM: 1 bar jadi lebih pendek / panjang. Posisi playhead (dalam bar) tetap; audio clip mempertahankan isi audionya,
+// jadi lebarnya (dalam bar) ikut berubah (dipotong kalau menabrak clip berikutnya, timeline memanjang kalau perlu).
+function setBpm(v) {
+  v = Math.max(BPM_MIN, Math.min(BPM_MAX, Math.round(v)));
+  if (v === BPM) return;
+  const ratio = SEC_PER_BAR / (240 / v);   // panjang bar lama / panjang bar baru
+  BPM = v; SEC_PER_BAR = 240 / v;
+  const clips = [...lanesEl.querySelectorAll('.pattern[data-clip]')];
+  if (clips.length) {
+    const need = Math.max(...clips.map(p => (pl(p) + pw(p) * ratio) / BAR_W));
+    if (need > BARS) growTimeline(Math.min(MAX_BARS, Math.ceil(need) + 1));
+    clips.forEach(p => {
+      const st = pl(p); let hi = W;
+      otherPats(p).forEach(o => { if (pl(o) > st + 1) hi = Math.min(hi, pl(o)); });
+      p.style.width = Math.max(Math.min(pw(p) * ratio, hi - st), Math.min(BAR_W / 2, hi - st)) + 'px';
+    });
+    if (selPat) { handleSide(selPat); patBarPlace(); }
+  }
+  if (playing) scheduleClips();                 // tempo baru langsung terdengar, posisi tidak loncat
+  undoStack = []; redoStack = []; histCur = histCapture(); histSync();   // lebar clip berubah: riwayat undo dimulai ulang
 }
 btnPlay.addEventListener('click', togglePlay);
-btnRec.addEventListener('click', toggleRec);
+const metroUI = initMetronomePanel(btnMetro, {
+  getBpm: () => BPM, setBpm,
+  isOn: () => metro.on,
+  setOn: on => {
+    metro.on = on;
+    if (on && !playing) metroClick(audio(), actx.currentTime + .02, true);   // contoh bunyi saat dinyalakan
+    if (!on) metroCancel(actx);
+  },
+  isCountIn: () => metro.countIn, setCountIn: on => { metro.countIn = on; },
+});
 // mundur / maju: 1 bar per klik, tahan untuk terus bergeser
 function holdSeek(btn, d) {
   let to = 0, iv = 0;
@@ -889,14 +934,14 @@ function holdSeek(btn, d) {
   btn.addEventListener('click', e => { if (e.detail === 0) seekBy(d); });   // aktivasi lewat keyboard (Enter/Space)
 }
 holdSeek(btnRew, -1); holdSeek(btnFwd, 1);
-// pintasan: Space = putar/jeda, Ctrl+Space = rekam, panah kiri/kanan = mundur/maju
+// pintasan: Space = putar/jeda, panah kiri/kanan = mundur/maju
 let spaceHandled = false;
 document.addEventListener('keydown', e => {
   if (e.metaKey || e.altKey || typing(e.target) || (e.target.closest && e.target.closest('[role="slider"]') && e.key !== ' ')) return;
   if (e.key === ' ' || e.code === 'Space') {
     if (e.target.closest && e.target.closest('[role="slider"], input[type="range"]')) return;
     e.preventDefault(); spaceHandled = true;
-    if (!e.repeat) e.ctrlKey ? toggleRec() : togglePlay();
+    if (!e.repeat) togglePlay();
   } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.ctrlKey && !e.shiftKey && !(e.target.matches && e.target.matches('input[type="range"]'))) {
     e.preventDefault(); seekBy(e.key === 'ArrowLeft' ? -1 : 1);
   }
