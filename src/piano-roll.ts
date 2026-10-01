@@ -197,6 +197,7 @@ function drawKeys() {
   c.font = '600 10px system-ui,sans-serif'; c.textBaseline = 'middle'; c.textAlign = 'right';
   for (let r = r0; r <= r1; r++) {
     const p = P_MAX - r, y = r * rowH - sy;
+    if (keyOff.has(p % 12)) { c.fillStyle = '#16161c'; c.fillRect(0, y, KEY_W, rowH); c.fillStyle = 'rgba(255,255,255,.04)'; c.fillRect(0, Math.round(y + rowH) - 1, KEY_W, 1); continue; }   // tuts dimatikan: tidak ditampilkan
     if (p === hoverP) { c.fillStyle = color; c.fillRect(0, y, KEY_W, rowH); }
     c.fillStyle = 'rgba(0,0,0,.18)'; c.fillRect(0, Math.round(y + rowH) - 1, KEY_W, 1);
     if (isBlack(p)) { c.fillStyle = p === hoverP ? '#0e0e12' : '#1a1a21'; c.fillRect(0, y + 1, KEY_W * 0.62, rowH - 2); }
@@ -621,6 +622,7 @@ function setTool(t: Tool) {
 }
 
 // ---------- menu pengaturan (titik tiga): tampilan saja, belum ada logika ----------
+const keyOff = new Set<number>();   // kelas nada (0=C ... 11=B) yang disembunyikan dari keyboard kiri
 const NOTE_KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 function buildSettingsMenu(el: HTMLElement) {
   const more = el.querySelector<HTMLButtonElement>('.pr__more')!;
@@ -638,7 +640,7 @@ function buildSettingsMenu(el: HTMLElement) {
     '<div class="pr__mtitle">Note Key</div>' +
     '<div class="pr__nkeys" role="group" aria-label="Note Key">' +
       NOTE_KEYS.map((k, i) =>
-        '<button type="button" class="pr__nkey' + (k.includes('#') ? ' is-sharp' : '') + '" aria-pressed="true" style="--i:' + i + '" title="Nada ' + k + '">' +
+        '<button type="button" class="pr__nkey' + (k.includes('#') ? ' is-sharp' : '') + '" aria-pressed="true" data-pc="' + i + '" style="--i:' + i + '" title="Tampilkan tuts ' + k + ' di keyboard">' +
         '<i class="pr__led" aria-hidden="true"></i><span>' + k + '</span></button>').join('') +
     '</div>';
   el.appendChild(menu);
@@ -659,7 +661,12 @@ function buildSettingsMenu(el: HTMLElement) {
   more.addEventListener('click', () => setMenu(!menu.classList.contains('is-open')));
   viewBtn.addEventListener('click', () => setSub(!sub.classList.contains('is-open')));
   menu.querySelectorAll<HTMLButtonElement>('.pr__nkey').forEach(b =>
-    b.addEventListener('click', () => b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'))));   // indikator saja
+    b.addEventListener('click', () => {
+      const on = b.getAttribute('aria-pressed') !== 'true', pc = Number(b.dataset.pc);
+      b.setAttribute('aria-pressed', String(on));
+      if (on) keyOff.delete(pc); else keyOff.add(pc);
+      schedule();   // gambar ulang keyboard kiri
+    }));
 
   // klik di luar menu: tutup menu (klik di area canvas tidak ikut menggambar nada)
   document.addEventListener('pointerdown', e => {
