@@ -652,33 +652,36 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
   opacity:0;transform:translateY(14px);transition:opacity .2s ease,transform .24s var(--ease-out)}
 #pianoRoll[hidden]{display:none}
 #pianoRoll.is-open{opacity:1;transform:none}
-.pr__head{flex:none;height:48px;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--bg)}
-.pr__back{width:32px;height:32px;flex:none;border:0;border-radius:50%;background:var(--panel2);color:var(--text);display:grid;place-items:center;padding:0}
-.pr__back:hover{background:var(--line)}
-.pr__back svg{width:18px;height:18px}
-.pr__title{display:flex;align-items:baseline;gap:8px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pr__track{font-weight:700}
-.pr__pattern{color:var(--muted)}
-.pr__meta{margin-left:auto;flex:none;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
-
-/* baris alat */
-.pr__bar{flex:none;display:flex;align-items:center;gap:10px;padding:6px 12px;background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+/* baris menu: card liquid + bevel (sama dengan card efek di mixer track), warna putih */
+.pr__bar{flex:none;display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
 .pr__bar::-webkit-scrollbar{display:none}
-.pr__grp{flex:none;display:flex;align-items:center;gap:2px;padding:2px;border-radius:10px;background:var(--bg)}
-.pr__lbl{font-size:11px;color:var(--muted);padding:0 2px 0 8px}
-.pr__btn{width:36px;height:36px;border:0;border-radius:8px;background:transparent;color:var(--muted);display:grid;place-items:center;padding:0;
-  transition:background-color .15s ease,color .15s ease,transform .15s var(--ease-out)}
-.pr__btn:hover{background:var(--line);color:var(--text)}
-.pr__btn:active{transform:scale(.92)}
-.pr__btn.on{background:var(--accent);color:#fff}
+.pr__grp,.pr__snap{position:relative;flex:none;height:48px;display:flex;align-items:center;gap:2px;padding:0 5px;border:0;border-radius:16px;background-color:var(--card);color:var(--text);box-shadow:var(--bevel);
+  transition:box-shadow .3s ease}
+.pr__grp:hover,.pr__snap:hover{box-shadow:var(--bevel-hover)}
+.pr__grp::before,.pr__snap::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;padding:1px;z-index:2;
+  background:linear-gradient(135deg,rgba(255,255,255,.17),rgba(255,255,255,.035) 32%,rgba(255,255,255,.01) 62%,rgba(255,255,255,.08));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}
+.pr__grp::after,.pr__snap::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:radial-gradient(90% 130% at 0% 0%,rgba(255,255,255,.03),transparent 58%),linear-gradient(180deg,rgba(255,255,255,.012),rgba(255,255,255,0) 55%)}
+.pr__grp>*,.pr__snap>*{position:relative;z-index:3}
+.pr__grp--back{position:sticky;left:0;z-index:5}
+.pr__lbl{font-size:11px;font-weight:600;color:var(--muted);padding:0 4px 0 8px}
+.pr__btn{width:38px;height:38px;border:0;border-radius:12px;background:transparent;color:var(--muted);display:grid;place-items:center;padding:0;cursor:pointer;
+  transition:background-color .2s ease,color .2s ease,box-shadow .2s ease,transform .25s var(--ease-spring)}
+.pr__btn:hover{background:rgba(255,255,255,.08);color:var(--text)}
+.pr__btn:active{transform:scale(.9);transition-duration:.08s}
+.pr__btn:focus-visible,.pr__snap:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.pr__btn.on{background:#f2f2f6;color:#16161d;box-shadow:inset 0 1px 0 #fff,inset 0 -1px 0 rgba(0,0,0,.18),0 2px 8px rgba(0,0,0,.4)}
 .pr__btn:disabled{opacity:.35;pointer-events:none}
-.pr__snap{flex:none;height:36px;display:flex;align-items:center;gap:8px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--muted);font:inherit;font-size:13px;font-weight:600;cursor:pointer;
-  transition:color .15s ease,transform .15s var(--ease-out)}
+.pr__back svg{width:20px;height:20px}
+.pr__back{color:var(--text)}
+.pr__snap{gap:9px;padding:0 16px;font:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;transition:box-shadow .3s ease,color .2s ease,transform .25s var(--ease-spring)}
 .pr__snap:hover{color:var(--text)}
-.pr__snap:active{transform:scale(.95)}
+.pr__snap:active{transform:scale(.95);transition-duration:.08s}
 .pr__snap[aria-pressed="true"]{color:var(--text)}
 .pr__led,.pat-btn[data-act="snap"]::after{display:block;width:8px;height:8px;border-radius:50%;background:#3a3a46;box-shadow:inset 0 1px 1px rgba(0,0,0,.5);transition:background-color .2s ease,box-shadow .2s ease}
-.pr__snap[aria-pressed="true"] .pr__led,.pat-btn[data-act="snap"][aria-pressed="true"]::after{background:#4ade80;box-shadow:0 0 6px 1px rgba(74,222,128,.75),inset 0 -1px 1px rgba(0,0,0,.25)}
+.pr__snap[aria-pressed="true"] .pr__led,.pat-btn[data-act="snap"][aria-pressed="true"]::after{background:#4ade80;box-shadow:0 0 6px 1px rgba(74,222,128,.75),inset 0 -1px 0 rgba(0,0,0,.25)}
 
 /* area utama: penggaris atas, piano kiri, grid (scroll native) */
 .pr__main{flex:1;min-height:0;display:grid;grid-template-columns:64px minmax(0,1fr);grid-template-rows:32px minmax(0,1fr);background:#101016}

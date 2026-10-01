@@ -43,7 +43,7 @@ let onClose: (() => void) | null = null;
 
 // elemen
 let sc!: HTMLElement, space!: HTMLElement, gc!: HTMLCanvasElement, kc!: HTMLCanvasElement, rc!: HTMLCanvasElement;
-let metaEl!: HTMLElement, btnUndo!: HTMLButtonElement, btnDel!: HTMLButtonElement;
+let btnUndo!: HTMLButtonElement, btnDel!: HTMLButtonElement;
 
 // state editor
 let st: State = {notes: [], nextId: 1};
@@ -176,7 +176,7 @@ function drawGrid() {
   // marquee
   if (g && g.kind === 'marquee') {
     const a = g.x0 - sx, b = g.y0 - sy, w = g.x - g.x0, h = g.y - g.y0;
-    c.fillStyle = 'rgba(166,108,255,.16)'; c.strokeStyle = '#a66cff'; c.lineWidth = 1;
+    c.fillStyle = 'rgba(255,255,255,.12)'; c.strokeStyle = '#fff'; c.lineWidth = 1;
     c.fillRect(a, b, w, h); c.strokeRect(a + 0.5, b + 0.5, w, h);
   }
 }
@@ -268,8 +268,6 @@ function updateUI() {
   if (!root) return;
   btnUndo.disabled = undoStack.length === 0;
   btnDel.disabled = selected.size === 0;
-  const k = st.notes.length;
-  metaEl.textContent = k + ' nada' + (selected.size ? ' · ' + selected.size + ' dipilih' : '');
 }
 
 // ---------- interaksi pointer ----------
@@ -504,12 +502,10 @@ function build(): HTMLElement {
   const btn = (attr: string, label: string, svg: string, extra = '') =>
     '<button type="button" class="pr__btn ' + extra + '" ' + attr + ' title="' + label + '" aria-label="' + label + '">' + svg + '</button>';
   el.innerHTML =
-    '<header class="pr__head">' +
-      '<button type="button" class="pr__back" aria-label="Kembali ke timeline" title="Kembali (Esc)">' + ICON.back + '</button>' +
-      '<div class="pr__title"><b class="pr__track"></b><span class="pr__pattern"></span></div>' +
-      '<span class="pr__meta"></span>' +
-    '</header>' +
     '<div class="pr__bar">' +
+      '<div class="pr__grp pr__grp--back">' +
+        '<button type="button" class="pr__btn pr__back" aria-label="Kembali ke timeline" title="Kembali (Esc)">' + ICON.back + '</button>' +
+      '</div>' +
       '<div class="pr__grp" role="group" aria-label="Alat">' +
         btn('data-tool="draw"', 'Gambar nada (B)', ICON.draw, 'on') +
         btn('data-tool="select"', 'Pilih / pindah (V)', ICON.select) +
@@ -540,7 +536,6 @@ function build(): HTMLElement {
   gc = el.querySelector<HTMLCanvasElement>('.pr__grid')!;
   kc = el.querySelector<HTMLCanvasElement>('.pr__keys')!;
   rc = el.querySelector<HTMLCanvasElement>('.pr__ruler')!;
-  metaEl = el.querySelector<HTMLElement>('.pr__meta')!;
   btnUndo = el.querySelector<HTMLButtonElement>('[data-act="undo"]')!;
   btnDel = el.querySelector<HTMLButtonElement>('[data-act="del"]')!;
 
@@ -578,8 +573,7 @@ export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.
 
   color = opts.color || '#3fbf5f';
   root.style.setProperty('--pr-color', color);
-  root.querySelector('.pr__track')!.textContent = opts.track;
-  root.querySelector('.pr__pattern')!.textContent = opts.pattern;
+  root.setAttribute('aria-label', opts.track + ' – ' + opts.pattern);
 
   root.hidden = false; void root.offsetWidth; root.classList.add('is-open');
   const vw = sc.clientWidth, vh = sc.clientHeight;
