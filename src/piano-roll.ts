@@ -333,6 +333,7 @@ interface Gesture {
   sl: number; stp: number;    // scroll awal (untuk pan)
   cx: number; cy: number;     // posisi client awal (untuk pan)
   t0: number;                 // waktu mulai (animasi bulatan)
+  desel?: boolean;            // tap di area kosong saat ada seleksi: hanya lepas seleksi, jangan pasang nada
 }
 let g: Gesture | null = null;
 const ptrs = new Map<number, {x: number; y: number}>();
@@ -418,9 +419,10 @@ function onDown(e: PointerEvent) {
   }
   // draw di area kosong
   if (e.pointerType === 'touch') {              // sentuh: tap = pasang nada, geser = scroll (nada dibuat saat jari diangkat)
-    g = {...base, kind: 'tapdraw'};
+    g = {...base, kind: 'tapdraw', desel: selected.size > 0};
     return;
   }
+  if (selected.size) { selected.clear(); updateUI(); schedule(); return; }   // ada seleksi: klik kosong cuma melepas seleksi dulu
   selected.clear();                             // mouse / pen: klik = pasang nada, seret ke kanan = nada panjang
   const n = addNoteAt(x, y);
   if (!n) { updateUI(); schedule(); return; }
@@ -518,9 +520,12 @@ function onUp(e: PointerEvent) {
   if (ptrs.size < 2) pinch = null;
   if (g && g.id === e.pointerId) {
     if (g.kind === 'tapdraw' && e.type === 'pointerup') {
-      selected.clear();
-      const n = addNoteAt(g.x0, g.y0);
-      if (n) lastLen = n.l;
+      if (g.desel) { selected.clear(); }          // ada seleksi: tap kosong cuma melepas seleksi
+      else {
+        selected.clear();
+        const n = addNoteAt(g.x0, g.y0);
+        if (n) lastLen = n.l;
+      }
     }
     if (g.kind === 'resize') rel = {id: g.anchor!.id, t0: performance.now()};
     if (g.kind === 'new' || g.kind === 'resize') {
