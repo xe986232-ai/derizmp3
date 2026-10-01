@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Web DAW</title>
+<link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="play-icon" viewBox="0 0 24 24"><path d="M8 5.14v13.72a1 1 0 0 0 1.52.85l11-6.86a1 1 0 0 0 0-1.7l-11-6.86A1 1 0 0 0 8 5.14z"/></symbol>
+  <symbol id="pause-icon" viewBox="0 0 24 24"><path d="M7 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM14 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/></symbol>
+  <symbol id="rewind-icon" viewBox="0 0 24 24"><path d="M11.5 6.2v11.6a.7.7 0 0 1-1.1.57L1.9 12.6a.7.7 0 0 1 0-1.16l8.5-5.8a.7.7 0 0 1 1.1.56z"/><path transform="translate(9.5 0)" d="M11.5 6.2v11.6a.7.7 0 0 1-1.1.57L1.9 12.6a.7.7 0 0 1 0-1.16l8.5-5.8a.7.7 0 0 1 1.1.56z"/></symbol>
+  <symbol id="forward-icon" viewBox="0 0 24 24"><g transform="translate(24 0) scale(-1 1)"><path d="M11.5 6.2v11.6a.7.7 0 0 1-1.1.57L1.9 12.6a.7.7 0 0 1 0-1.16l8.5-5.8a.7.7 0 0 1 1.1.56z"/><path transform="translate(9.5 0)" d="M11.5 6.2v11.6a.7.7 0 0 1-1.1.57L1.9 12.6a.7.7 0 0 1 0-1.16l8.5-5.8a.7.7 0 0 1 1.1.56z"/></g></symbol>
+</svg>
+<header class="topbar"><b>WEB DAW</b><span class="meta">120 BPM · 4/4</span></header>
+
+<div class="workspace">
+  <!-- Daftar track -->
+  <div class="tracklist secondaryactivated">
+    <button class="panel-toggle" id="panelToggle" type="button" aria-expanded="true" aria-label="Tutup panel track" title="Tutup panel track"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <section class="headers" aria-label="Daftar Track">
+      <div class="headers-list">
+        <div class="trackheader-container" data-track="1">
+          <div class="trackheader trackheader--selected trackheader--first">
+            <div class="trackheader__border-left"></div>
+            <div class="trackheader-inner">
+              <button title="Tampilkan instrumen" class="trackheader__left-content st-button--naked">
+                <span class="trackheader__instrument-button"><span class="soundtrap-icon"><svg viewBox="0 0 24 24"><path d="M23.648 3.923A1.249 1.249 0 0 0 22.4 2.678H1.6A1.248 1.248 0 0 0 .352 3.931v16.146A1.249 1.249 0 0 0 1.6 21.323h20.8a1.248 1.248 0 0 0 1.248-1.253V3.923Zm-10.089 9.63h1.165v5.272H9.287v-5.271h1.165l-.049-8.379h3.107l.05 8.379ZM2.853 5.176h2.89l.048 8.379h1.165v5.27H2.844l.009-13.649Zm14.202 13.65v-5.271h1.165l-.049-8.379h2.985l-.009 13.65h-4.092Z"/></svg></span></span>
+              </button>
+              <div class="trackheader__content-rows">
+                <div class="trackheader__top-row">
+                  <div class="trackheader__track-name">
+                    <button title="Grand Piano" class="trackheader__track-name-button btn-plain"><span id="track-name-1">Grand Piano</span></button>
+                  </div>
+                  <button title="Opsi track…" aria-haspopup="menu" aria-expanded="false" class="icon-button trackheader__more-options"><span class="soundtrap-icon" style="width:16px;height:16px"><svg viewBox="0 0 24 24"><path d="M12 14.33a2.33 2.33 0 1 0 0-4.66 2.33 2.33 0 0 0 0 4.66Zm-6.991 0a2.33 2.33 0 1 0 0-4.66 2.33 2.33 0 0 0 0 4.66Zm13.982 0a2.33 2.33 0 1 0 0-4.66 2.33 2.33 0 0 0 0 4.66Z"/></svg></span></button>
+                </div>
+                <div class="trackheader__bottom-row">
+                  <div class="trackheader__bottom-row-inner">
+                    <button role="switch" aria-checked="false" aria-label="Mode rekam" class="trackheader__rec-mode-button st-button--naked">S</button>
+                    <div class="trackheader__slider"><div class="slider-container"><div class="slider-input-wrapper"><input type="range" min="-20" max="6" value="-5.5" aria-label="Volume, Grand Piano" aria-valuenow="-5.5" aria-valuetext="Vol -5.5 dB" aria-valuemin="-20" aria-valuemax="6" step="0.1" style="--slider-progress: 56%; --slider-progress-fraction: 0.5576923076923077" aria-disabled="false" class="slider audio-fader-theme slider--thin slider--expand-hit-area with-progress"></div></div></div>
+                    <div class="trackheader__pan"><div class="knob mini"><div class="knob-inner"><div role="slider" aria-label="Pan" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0.5" aria-valuetext="Pan 0" tabindex="0" class="knob-input"><div class="knobwheel"><svg viewBox="0 0 36 36" aria-hidden="true" class="circular-chart"><path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" stroke-dasharray="75, 100" class="circle-bg" style="transform-origin:18px 18px;transform:rotate(225deg)"></path><path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" stroke-dashoffset="100" stroke-dasharray="100" class="circle primary-theme" style="transform:rotate(225deg)"></path><path d="M18 5.142857142857142 a 12.857142857142858 12.857142857142858 0 0 1 0 25.714285714285715 a 12.857142857142858 12.857142857142858 0 0 1 0 -25.714285714285715" fill="var(--background-tinted-press)" stroke="none" class="circle-inner"></path><path d="M18 5.7857142857142865 a 12.214285714285714 12.214285714285714 0 0 1 0 24.428571428571427 a 12.214285714285714 12.214285714285714 0 0 1 0 -24.428571428571427" stroke="var(--background-tinted-base)" fill="none" class="circle-inner-stroke"></path><path d="M 18 7.5 L 18 12" class="knob-pos" style="transform:rotate(0deg)"></path></svg></div></div></div></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div role="separator" class="trackheader-separator"></div>
+          </div>
+        </div>
+      </div>
+      <button class="addtrack"><span class="soundtrap-icon" style="width:14px;height:14px"><svg viewBox="0 0 24 24"><path d="M3.844 13.165h6.99v6.992a1.165 1.165 0 1 0 2.331 0v-6.992h6.992a1.165 1.165 0 1 0 0-2.33h-6.992V3.844a1.165 1.165 0 0 0-2.33 0v6.99H3.844a1.166 1.166 0 0 0 0 2.331Z"/></svg></span><span>Tambahkan track</span></button>
+    </section>
+  </div>
+
+  <!-- Timeline -->
+  <div class="timeline" id="timeline">
+    <div class="timeline-controls-header-wrapper">
+      <div class="beatruler composition-area-beat-ruler" id="ruler">
+        <div class="beatruler-container"><canvas class="axiscanvas" id="axis" aria-label="Timeline ruler"></canvas></div>
+      </div>
+    </div>
+    <div class="lanes" id="lanes">
+      <div class="lane" data-track="1"></div>
+      <div class="playhead" id="playhead">
+        <div class="playhead-head"><svg width="9" height="20" viewBox="0 0 9 20"><path d="M5 0H4C1.79 0 0 1.79 0 4v8.6c0 .86.27 1.69.78 2.38L4.5 20l3.72-5.02A4 4 0 0 0 9 12.6V4c0-2.21-1.79-4-4-4Z"/></svg></div>
+        <div class="playhead-body"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="transportbar">
+<div class="studioheader__transport-controls-mobile"><div role="group" aria-label="Kontrol transport" class="transport-controls"><div class="transport-controls__side transport-controls__side--left"><button data-testid="Rekam [Ctrl+Space]" aria-label="Rekam" role="switch" aria-checked="false" title="Rekam (Ctrl+Space)" class="rec transport-controls__button st-button--naked"><span class="">Rec</span></button><button type="button" class="hist-btn" id="btnRedo" aria-label="Ulangi (Ctrl+Shift+Z)" title="Redo (Ctrl+Shift+Z)" disabled>Redo</button><button data-testid="Mundur [Arrow left]" aria-label="Mundur" title="Mundur (←)" class="rewind transport-controls__button st-button--size-regular st-label-large st-button--naked"><span class="soundtrap-icon soundtrap-icon--svg ic-rewind"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#rewind-icon"></use></svg></span></button></div><button data-testid="Putar/jeda [Space]" aria-label="Putar" title="Putar/jeda (Space)" class="play transport-controls__button st-button--size-regular st-label-large st-inverted-set st-button--naked"><span class="soundtrap-icon soundtrap-icon--svg ic-play"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#play-icon"></use></svg></span></button><div class="transport-controls__side transport-controls__side--right"><button data-testid="Maju cepat [Arrow right]" aria-label="Maju cepat" title="Maju cepat (→)" class="forward transport-controls__button st-button--size-regular st-label-large st-button--naked"><span class="soundtrap-icon soundtrap-icon--svg ic-forward"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#forward-icon"></use></svg></span></button><button type="button" class="hist-btn" id="btnUndo" aria-label="Urungkan (Ctrl+Z)" title="Undo (Ctrl+Z)" disabled>Undo</button></div></div><button class="kbd-toggle transport-controls__button st-button--naked" id="kbdToggle" type="button" aria-controls="kbd" aria-expanded="false" aria-label="Buka keyboard" title="Buka keyboard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg></button></div>
+</footer>
+
+<!-- Keyboard virtual: dibuka / ditutup manual lewat panah di card transport -->
+<section class="kbd" id="kbd" aria-label="Keyboard virtual" aria-hidden="true" inert>
+  <div class="kbd__inner">
+    <div class="kbd__bar">
+      <span class="kbd__title" id="kbdTitle"></span>
+      <div class="kbd__oct" role="group" aria-label="Oktaf">
+        <button class="kbd__btn" id="kbdOctDown" type="button" aria-label="Oktaf turun"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <span class="kbd__octlabel" id="kbdOctLabel">C3</span>
+        <button class="kbd__btn" id="kbdOctUp" type="button" aria-label="Oktaf naik"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+    </div>
+    <div class="keyboardkeyboardcontroller" id="kbdKeys">
+  <div class="scrollable" style="transform: translateX(-1564px);">
+    <div class="keys"><button class="whitekey unhighlighted pitch-A-1 unpressed" aria-label="A" style="left: 0px;"><span class="pitch-label">A</span></button><button class="blackkey unhighlighted pitch-Bb-1 unpressed" aria-label="A sharp B flat" style="left: 46px;"><span class="pitch-label">A#
+Bb</span></button><button class="whitekey unhighlighted pitch-B-1 unpressed" aria-label="B" style="left: 68px;"><span class="pitch-label">B</span></button><button class="whitekey unhighlighted pitch-C0 pitch-visible unpressed" aria-label="C0" style="left: 136px;"><span class="pitch-label">C0</span></button><button class="blackkey unhighlighted pitch-Db0 unpressed" aria-label="C sharp D flat" style="left: 182px;"><span class="pitch-label">C#
+Db</span></button><button class="whitekey unhighlighted pitch-D0 unpressed" aria-label="D" style="left: 204px;"><span class="pitch-label">D</span></button><button class="blackkey unhighlighted pitch-Eb0 unpressed" aria-label="D sharp E flat" style="left: 250px;"><span class="pitch-label">D#
+Eb</span></button><button class="whitekey unhighlighted pitch-E0 unpressed" aria-label="E" style="left: 272px;"><span class="pitch-label">E</span></button><button class="whitekey unhighlighted pitch-F0 unpressed" aria-label="F" style="left: 340px;"><span class="pitch-label">F</span></button><button class="blackkey unhighlighted pitch-Gb0 unpressed" aria-label="F sharp G flat" style="left: 386px;"><span class="pitch-label">F#
+Gb</span></button><button class="whitekey unhighlighted pitch-G0 unpressed" aria-label="G" style="left: 408px;"><span class="pitch-label">G</span></button><button class="blackkey unhighlighted pitch-Ab0 unpressed" aria-label="G sharp A flat" style="left: 454px;"><span class="pitch-label">G#
+Ab</span></button><button class="whitekey unhighlighted pitch-A0 unpressed" aria-label="A" style="left: 476px;"><span class="pitch-label">A</span></button><button class="blackkey unhighlighted pitch-Bb0 unpressed" aria-label="A sharp B flat" style="left: 522px;"><span class="pitch-label">A#
+Bb</span></button><button class="whitekey unhighlighted pitch-B0 unpressed" aria-label="B" style="left: 544px;"><span class="pitch-label">B</span></button><button class="whitekey unhighlighted pitch-C1 pitch-visible unpressed" aria-label="C1" style="left: 612px;"><span class="pitch-label">C1</span></button><button class="blackkey unhighlighted pitch-Db1 unpressed" aria-label="C sharp D flat" style="left: 658px;"><span class="pitch-label">C#
+Db</span></button><button class="whitekey unhighlighted pitch-D1 unpressed" aria-label="D" style="left: 680px;"><span class="pitch-label">D</span></button><button class="blackkey unhighlighted pitch-Eb1 unpressed" aria-label="D sharp E flat" style="left: 726px;"><span class="pitch-label">D#
+Eb</span></button><button class="whitekey unhighlighted pitch-E1 unpressed" aria-label="E" style="left: 748px;"><span class="pitch-label">E</span></button><button class="whitekey unhighlighted pitch-F1 unpressed" aria-label="F" style="left: 816px;"><span class="pitch-label">F</span></button><button class="blackkey unhighlighted pitch-Gb1 unpressed" aria-label="F sharp G flat" style="left: 862px;"><span class="pitch-label">F#
+Gb</span></button><button class="whitekey unhighlighted pitch-G1 unpressed" aria-label="G" style="left: 884px;"><span class="pitch-label">G</span></button><button class="blackkey unhighlighted pitch-Ab1 unpressed" aria-label="G sharp A flat" style="left: 930px;"><span class="pitch-label">G#
+Ab</span></button><button class="whitekey unhighlighted pitch-A1 unpressed" aria-label="A" style="left: 952px;"><span class="pitch-label">A</span></button><button class="blackkey unhighlighted pitch-Bb1 unpressed" aria-label="A sharp B flat" style="left: 998px;"><span class="pitch-label">A#
+Bb</span></button><button class="whitekey unhighlighted pitch-B1 unpressed" aria-label="B" style="left: 1020px;"><span class="pitch-label">B</span></button><button class="whitekey unhighlighted pitch-C2 pitch-visible unpressed" aria-label="C2" style="left: 1088px;"><span class="pitch-label">C2</span></button><button class="blackkey unhighlighted pitch-Db2 unpressed" aria-label="C sharp D flat" style="left: 1134px;"><span class="pitch-label">C#
+Db</span></button><button class="whitekey unhighlighted pitch-D2 unpressed" aria-label="D" style="left: 1156px;"><span class="pitch-label">D</span></button><button class="blackkey unhighlighted pitch-Eb2 unpressed" aria-label="D sharp E flat" style="left: 1202px;"><span class="pitch-label">D#
+Eb</span></button><button class="whitekey unhighlighted pitch-E2 unpressed" aria-label="E" style="left: 1224px;"><span class="pitch-label">E</span></button><button class="whitekey unhighlighted pitch-F2 unpressed" aria-label="F" style="left: 1292px;"><span class="pitch-label">F</span></button><button class="blackkey unhighlighted pitch-Gb2 unpressed" aria-label="F sharp G flat" style="left: 1338px;"><span class="pitch-label">F#
+Gb</span></button><button class="whitekey unhighlighted pitch-G2 unpressed" aria-label="G" style="left: 1360px;"><span class="pitch-label">G</span></button><button class="blackkey unhighlighted pitch-Ab2 unpressed" aria-label="G sharp A flat" style="left: 1406px;"><span class="pitch-label">G#
+Ab</span></button><button class="whitekey unhighlighted pitch-A2 unpressed" aria-label="A" style="left: 1428px;"><span class="pitch-label">A</span></button><button class="blackkey unhighlighted pitch-Bb2 unpressed" aria-label="A sharp B flat" style="left: 1474px;"><span class="pitch-label">A#
+Bb</span></button><button class="whitekey unhighlighted pitch-B2 unpressed" aria-label="B" style="left: 1496px;"><span class="pitch-label">B</span></button><button class="whitekey unhighlighted pitch-C3 pitch-visible unpressed" aria-label="C3" aria-keyshortcuts="z" style="left: 1564px;"><span class="pitch-label">C3</span></button><button class="blackkey unhighlighted pitch-Db3 unpressed" aria-label="C sharp D flat" aria-keyshortcuts="s" style="left: 1610px;"><span class="pitch-label">C#
+Db</span></button><button class="whitekey unhighlighted pitch-D3 unpressed" aria-label="D" aria-keyshortcuts="x" style="left: 1632px;"><span class="pitch-label">D</span></button><button class="blackkey unhighlighted pitch-Eb3 unpressed" aria-label="D sharp E flat" aria-keyshortcuts="d" style="left: 1678px;"><span class="pitch-label">D#
+Eb</span></button><button class="whitekey unhighlighted pitch-E3 unpressed" aria-label="E" aria-keyshortcuts="c" style="left: 1700px;"><span class="pitch-label">E</span></button><button class="whitekey unhighlighted pitch-F3 unpressed" aria-label="F" aria-keyshortcuts="v" style="left: 1768px;"><span class="pitch-label">F</span></button><button class="blackkey unhighlighted pitch-Gb3 unpressed" aria-label="F sharp G flat" aria-keyshortcuts="g" style="left: 1814px;"><span class="pitch-label">F#
+Gb</span></button><button class="whitekey unhighlighted pitch-G3 unpressed" aria-label="G" aria-keyshortcuts="b" style="left: 1836px;"><span class="pitch-label">G</span></button><button class="blackkey unhighlighted pitch-Ab3 unpressed" aria-label="G sharp A flat" aria-keyshortcuts="h" style="left: 1882px;"><span class="pitch-label">G#
+Ab</span></button><button class="whitekey unhighlighted pitch-A3 unpressed" aria-label="A" aria-keyshortcuts="n" style="left: 1904px;"><span class="pitch-label">A</span></button><button class="blackkey unhighlighted pitch-Bb3 unpressed" aria-label="A sharp B flat" aria-keyshortcuts="j" style="left: 1950px;"><span class="pitch-label">A#
+Bb</span></button><button class="whitekey unhighlighted pitch-B3 unpressed" aria-label="B" aria-keyshortcuts="m" style="left: 1972px;"><span class="pitch-label">B</span></button><button class="whitekey unhighlighted pitch-C4 pitch-visible unpressed" aria-label="C4" aria-keyshortcuts="," style="left: 2040px;"><span class="pitch-label">C4</span></button><button class="blackkey unhighlighted pitch-Db4 unpressed" aria-label="C sharp D flat" aria-keyshortcuts="l" style="left: 2086px;"><span class="pitch-label">C#
+Db</span></button><button class="whitekey unhighlighted pitch-D4 unpressed" aria-label="D" aria-keyshortcuts="." style="left: 2108px;"><span class="pitch-label">D</span></button><button class="blackkey unhighlighted pitch-Eb4 unpressed" aria-label="D sharp E flat" aria-keyshortcuts="1" style="left: 2154px;"><span class="pitch-label">D#
+Eb</span></button><button class="whitekey unhighlighted pitch-E4 unpressed" aria-label="E" aria-keyshortcuts="q" style="left: 2176px;"><span class="pitch-label">E</span></button><button class="whitekey unhighlighted pitch-F4 unpressed" aria-label="F" aria-keyshortcuts="w" style="left: 2244px;"><span class="pitch-label">F</span></button><button class="blackkey unhighlighted pitch-Gb4 unpressed" aria-label="F sharp G flat" aria-keyshortcuts="3" style="left: 2290px;"><span class="pitch-label">F#
+Gb</span></button><button class="whitekey unhighlighted pitch-G4 unpressed" aria-label="G" aria-keyshortcuts="e" style="left: 2312px;"><span class="pitch-label">G</span></button><button class="blackkey unhighlighted pitch-Ab4 unpressed" aria-label="G sharp A flat" aria-keyshortcuts="4" style="left: 2358px;"><span class="pitch-label">G#
+Ab</span></button><button class="whitekey unhighlighted pitch-A4 unpressed" aria-label="A" aria-keyshortcuts="r" style="left: 2380px;"><span class="pitch-label">A</span></button><button class="blackkey unhighlighted pitch-Bb4 unpressed" aria-label="A sharp B flat" aria-keyshortcuts="5" style="left: 2426px;"><span class="pitch-label">A#
+Bb</span></button><button class="whitekey unhighlighted pitch-B4 unpressed" aria-label="B" aria-keyshortcuts="t" style="left: 2448px;"><span class="pitch-label">B</span></button><button class="whitekey unhighlighted pitch-C5 pitch-visible unpressed" aria-label="C5" aria-keyshortcuts="y" style="left: 2516px;"><span class="pitch-label">C5</span></button><button class="blackkey unhighlighted pitch-Db5 unpressed" aria-label="C sharp D flat" aria-keyshortcuts="7" style="left: 2562px;"><span class="pitch-label">C#
+Db</span></button><button class="whitekey unhighlighted pitch-D5 unpressed" aria-label="D" aria-keyshortcuts="u" style="left: 2584px;"><span class="pitch-label">D</span></button><button class="blackkey unhighlighted pitch-Eb5 unpressed" aria-label="D sharp E flat" aria-keyshortcuts="8" style="left: 2630px;"><span class="pitch-label">D#
+Eb</span></button><button class="whitekey unhighlighted pitch-E5 unpressed" aria-label="E" aria-keyshortcuts="i" style="left: 2652px;"><span class="pitch-label">E</span></button><button class="whitekey unhighlighted pitch-F5 unpressed" aria-label="F" aria-keyshortcuts="o" style="left: 2720px;"><span class="pitch-label">F</span></button><button class="blackkey unhighlighted pitch-Gb5 unpressed" aria-label="F sharp G flat" aria-keyshortcuts="0" style="left: 2766px;"><span class="pitch-label">F#
+Gb</span></button><button class="whitekey unhighlighted pitch-G5 unpressed" aria-label="G" aria-keyshortcuts="p" style="left: 2788px;"><span class="pitch-label">G</span></button><button class="blackkey unhighlighted pitch-Ab5 unpressed" aria-label="G sharp A flat" style="left: 2834px;"><span class="pitch-label">G#
+Ab</span></button><button class="whitekey unhighlighted pitch-A5 unpressed" aria-label="A" style="left: 2856px;"><span class="pitch-label">A</span></button><button class="blackkey unhighlighted pitch-Bb5 unpressed" aria-label="A sharp B flat" style="left: 2902px;"><span class="pitch-label">A#
+Bb</span></button><button class="whitekey unhighlighted pitch-B5 unpressed" aria-label="B" style="left: 2924px;"><span class="pitch-label">B</span></button><button class="whitekey unhighlighted pitch-C6 pitch-visible unpressed" aria-label="C6" style="left: 2992px;"><span class="pitch-label">C6</span></button><button class="blackkey unhighlighted pitch-Db6 unpressed" aria-label="C sharp D flat" style="left: 3038px;"><span class="pitch-label">C#
+Db</span></button><button class="whitekey unhighlighted pitch-D6 unpressed" aria-label="D" style="left: 3060px;"><span class="pitch-label">D</span></button><button class="blackkey unhighlighted pitch-Eb6 unpressed" aria-label="D sharp E flat" style="left: 3106px;"><span class="pitch-label">D#
+Eb</span></button><button class="whitekey unhighlighted pitch-E6 unpressed" aria-label="E" style="left: 3128px;"><span class="pitch-label">E</span></button><button class="whitekey unhighlighted pitch-F6 unpressed" aria-label="F" style="left: 3196px;"><span class="pitch-label">F</span></button><button class="blackkey unhighlighted pitch-Gb6 unpressed" aria-label="F sharp G flat" style="left: 3242px;"><span class="pitch-label">F#
+Gb</span></button><button class="whitekey unhighlighted pitch-G6 unpressed" aria-label="G" style="left: 3264px;"><span class="pitch-label">G</span></button><button class="blackkey unhighlighted pitch-Ab6 unpressed" aria-label="G sharp A flat" style="left: 3310px;"><span class="pitch-label">G#
+Ab</span></button><button class="whitekey unhighlighted pitch-A6 unpressed" aria-label="A" style="left: 3332px;"><span class="pitch-label">A</span></button><button class="blackkey unhighlighted pitch-Bb6 unpressed" aria-label="A sharp B flat" style="left: 3378px;"><span class="pitch-label">A#
+Bb</span></button><button class="whitekey unhighlighted pitch-B6 unpressed" aria-label="B" style="left: 3400px;"><span class="pitch-label">B</span></button><button class="whitekey unhighlighted pitch-C7 pitch-visible unpressed" aria-label="C7" style="left: 3468px;"><span class="pitch-label">C7</span></button></div>
+  </div>
+  <div class="keyrings"><div class="keyring white" style="left: 0px;">Z</div><div class="keyring white" style="left: 68px;">X</div><div class="keyring white" style="left: 136px;">C</div><div class="keyring white" style="left: 204px;">V</div><div class="keyring white" style="left: 272px;">B</div><div class="keyring white" style="left: 340px;">N</div><div class="keyring white" style="left: 408px;">M</div><div class="keyring white" style="left: 476px;">,</div><div class="keyring white" style="left: 544px;">.</div><div class="keyring white" style="left: 612px;">Q</div><div class="keyring white" style="left: 680px;">W</div><div class="keyring white" style="left: 748px;">E</div><div class="keyring white" style="left: 816px;">R</div><div class="keyring white" style="left: 884px;">T</div><div class="keyring white" style="left: 952px;">Y</div><div class="keyring white" style="left: 1020px;">U</div><div class="keyring white" style="left: 1088px;">I</div><div class="keyring white" style="left: 1156px;">O</div><div class="keyring white" style="left: 1224px;">P</div><div class="keyring black" style="left: 46px;">S</div><div class="keyring black" style="left: 114px;">D</div><div class="keyring black hidden" style="left: 182px;">F</div><div class="keyring black" style="left: 250px;">G</div><div class="keyring black" style="left: 318px;">H</div><div class="keyring black" style="left: 386px;">J</div><div class="keyring black hidden" style="left: 454px;">K</div><div class="keyring black" style="left: 522px;">L</div><div class="keyring black" style="left: 590px;">1</div><div class="keyring black hidden" style="left: 658px;">2</div><div class="keyring black" style="left: 726px;">3</div><div class="keyring black" style="left: 794px;">4</div><div class="keyring black" style="left: 862px;">5</div><div class="keyring black hidden" style="left: 930px;">6</div><div class="keyring black" style="left: 998px;">7</div><div class="keyring black" style="left: 1066px;">8</div><div class="keyring black hidden" style="left: 1134px;">9</div><div class="keyring black" style="left: 1202px;">0</div></div>
+</div>
+  </div>
+</section>
+
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
