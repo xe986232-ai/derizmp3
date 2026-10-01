@@ -33,6 +33,7 @@ const ICON = {
   erase: ic('<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>'),
   pan: ic('<path d="M9 11V5a1.5 1.5 0 013 0v5m0-1a1.5 1.5 0 013 0v2m0-1a1.5 1.5 0 013 0v5a6 6 0 01-6 6h-1a6 6 0 01-5-3l-2-4a1.5 1.5 0 012.5-1.5L9 15"/>'),
   undo: ic('<path d="M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3"/>'),
+  redo: ic('<path d="M15 14l5-5-5-5M20 9H10a6 6 0 000 12h3"/>'),
   minus: ic('<path d="M5 12h14"/>'),
   plus: ic('<path d="M12 5v14M5 12h14"/>'),
 };
@@ -44,7 +45,7 @@ let onClose: (() => void) | null = null;
 // elemen
 let sc!: HTMLElement, space!: HTMLElement, gc!: HTMLCanvasElement, kc!: HTMLCanvasElement, rc!: HTMLCanvasElement;
 let phDom!: HTMLElement, phBeat = -1;   // playhead: posisi dalam ketukan relatif ke awal pattern (<0 = tersembunyi)
-let btnUndo!: HTMLButtonElement, selBar!: HTMLElement, btnPaste!: HTMLButtonElement;
+let btnUndo!: HTMLButtonElement, btnRedo!: HTMLButtonElement, selBar!: HTMLElement, btnPaste!: HTMLButtonElement;
 
 // state editor
 let st: State = {notes: [], nextId: 1};
@@ -56,6 +57,7 @@ let snapOn = true;   // tombol Snap (lampu indikator): nyala = note menempel ke 
 let color = '#3fbf5f';
 let selected = new Set<number>();
 let undoStack: string[] = [];
+let redoStack: string[] = [];
 let lastLen = 1;
 let hoverP = -1;
 let raf = 0;
@@ -305,10 +307,19 @@ function zoomBy(fx: number, fy: number) {
 function pushUndo(s?: string) {
   undoStack.push(s ?? snapshot());
   if (undoStack.length > 60) undoStack.shift();
+  redoStack = [];
   updateUI();
 }
 function undo() {
   const s = undoStack.pop(); if (s === undefined) return;
+  redoStack.push(snapshot());
+  st.notes = JSON.parse(s) as Note[];
+  selected = new Set([...selected].filter(id => st.notes.some(n => n.id === id)));
+  updateUI(); schedule();
+}
+function redo() {
+  const s = redoStack.pop(); if (s === undefined) return;
+  undoStack.push(snapshot());
   st.notes = JSON.parse(s) as Note[];
   selected = new Set([...selected].filter(id => st.notes.some(n => n.id === id)));
   updateUI(); schedule();
@@ -358,6 +369,7 @@ function nudge(dB: number, dP: number) {
 function updateUI() {
   if (!root) return;
   btnUndo.disabled = undoStack.length === 0;
+  btnRedo.disabled = redoStack.length === 0;
   if (btnPaste) btnPaste.disabled = clip.length === 0;
 }
 
@@ -614,21 +626,10 @@ function build(): HTMLElement {
       '<div class="pr__grp pr__grp--back">' +
         '<button type="button" class="pr__btn pr__back" aria-label="Kembali ke timeline" title="Kembali (Esc)">' + ICON.back + '</button>' +
       '</div>' +
-      '<div class="pr__grp" role="group" aria-label="Alat">' +
-        btn('data-tool="draw"', 'Gambar nada (B)', ICON.draw, 'on') +
-        btn('data-tool="select"', 'Pilih / pindah (V)', ICON.select) +
-        btn('data-tool="erase"', 'Hapus nada (E)', ICON.erase) +
-        btn('data-tool="pan"', 'Geser tampilan (H)', ICON.pan) +
-      '</div>' +
       '<button type="button" class="pr__snap" aria-pressed="true" aria-label="Snap ke grid" title="Snap ke grid: nyala / mati"><i class="pr__led" aria-hidden="true"></i><span>Snap</span></button>' +
       '<div class="pr__grp">' +
         btn('data-act="undo"', 'Urungkan (Ctrl+Z)', ICON.undo) +
-      '</div>' +
-      '<div class="pr__grp"><span class="pr__lbl">Lebar</span>' +
-        btn('data-act="zx-"', 'Perkecil horizontal', ICON.minus) + btn('data-act="zx+"', 'Perbesar horizontal', ICON.plus) +
-      '</div>' +
-      '<div class="pr__grp"><span class="pr__lbl">Tinggi</span>' +
-        btn('data-act="zy-"', 'Perkecil vertikal', ICON.minus) + btn('data-act="zy+"', 'Perbesar vertikal', ICON.plus) +
+        btn('data-act="redo"', 'Ulangi (Ctrl+Shift+Z / Ctrl+Y)', ICON.redo) +
       '</div>' +
     '</div>' +
     '<div class="pr__main">' +
@@ -645,6 +646,7 @@ function build(): HTMLElement {
   kc = el.querySelector<HTMLCanvasElement>('.pr__keys')!;
   rc = el.querySelector<HTMLCanvasElement>('.pr__ruler')!;
   btnUndo = el.querySelector<HTMLButtonElement>('[data-act="undo"]')!;
+  btnRedo = el.querySelector<HTMLButtonElement>('[data-act="redo"]')!;
 
   // menu bulat Copy / Delete / Paste yang muncul di dekat note terpilih
   phDom = el.querySelector<HTMLElement>('.pr__ph')!;
@@ -661,13 +663,10 @@ function build(): HTMLElement {
   btnPaste = selBar.querySelector<HTMLButtonElement>('[data-sel="paste"]')!;
   btnPaste.disabled = clip.length === 0;
 
-  el.querySelectorAll<HTMLElement>('[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool as Tool)));
   const snapBtn = el.querySelector<HTMLButtonElement>('.pr__snap')!;
   snapBtn.addEventListener('click', () => { snapOn = !snapOn; snapBtn.setAttribute('aria-pressed', String(snapOn)); });
   const acts: Record<string, () => void> = {
-    undo,
-    'zx+': () => zoomBy(1.4, 1), 'zx-': () => zoomBy(1 / 1.4, 1),
-    'zy+': () => zoomBy(1, 1.25), 'zy-': () => zoomBy(1, 1 / 1.25),
+    undo, redo,
   };
   el.querySelectorAll<HTMLElement>('[data-act]').forEach(b => b.addEventListener('click', () => acts[b.dataset.act!]()));
 
@@ -688,7 +687,7 @@ function build(): HTMLElement {
 export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.querySelector('.stage') as HTMLElement) {
   if (!root) { root = build(); host.appendChild(root); }
   const key = opts.id || opts.track + '/' + opts.pattern;
-  if (key !== curKey) { undoStack = []; selected = new Set(); }
+  if (key !== curKey) { undoStack = []; redoStack = []; selected = new Set(); }
   curKey = key;
   st = states.get(key) || {notes: [], nextId: 1};
   states.set(key, st);
@@ -722,7 +721,8 @@ document.addEventListener('keydown', e => {
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
   const mod = e.ctrlKey || e.metaKey, k = e.key;
   if (k === 'Escape') { closePianoRoll(); return; }
-  if (mod && k.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+  if (mod && k.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+  if (mod && k.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
   if (mod && k.toLowerCase() === 'a') { e.preventDefault(); selectAll(); return; }
   if (mod && k.toLowerCase() === 'c') { e.preventDefault(); copySelected(); return; }
   if (mod && k.toLowerCase() === 'v') { e.preventDefault(); pasteNotes(); return; }
@@ -734,8 +734,4 @@ document.addEventListener('keydown', e => {
   else if (k === 'ArrowRight') { e.preventDefault(); nudge(unit(), 0); }
   else if (k === '=' || k === '+') zoomBy(1.4, 1);
   else if (k === '-') zoomBy(1 / 1.4, 1);
-  else if (k.toLowerCase() === 'b') setTool('draw');
-  else if (k.toLowerCase() === 'v') setTool('select');
-  else if (k.toLowerCase() === 'e') setTool('erase');
-  else if (k.toLowerCase() === 'h') setTool('pan');
 });
