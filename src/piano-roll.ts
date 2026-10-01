@@ -734,4 +734,8 @@ document.addEventListener('keydown', e => {
   else if (k === 'ArrowRight') { e.preventDefault(); nudge(unit(), 0); }
   else if (k === '=' || k === '+') zoomBy(1.4, 1);
   else if (k === '-') zoomBy(1 / 1.4, 1);
+  else if (k.toLowerCase() === 'b') setTool('draw');
+  else if (k.toLowerCase() === 'v') setTool('select');
+  else if (k.toLowerCase() === 'e') setTool('erase');
+  else if (k.toLowerCase() === 'h') setTool('pan');
 });
