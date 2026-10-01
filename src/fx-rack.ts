@@ -1,4 +1,4 @@
-// Isi panel efek: tombol "+" bulat putih di atas, card putih untuk memilih efek, dan satu card per efek di bawahnya.
+// Isi panel efek: tombol "+" bulat putih di atas, card gelap (gaya card track) untuk memilih efek, dan satu card per efek di bawahnya.
 // Efek disimpan per track (kunci = id track); panel selalu menampilkan efek milik track yang sedang dipilih.
 // Saat ini baru ada Reverb. Efek baru cukup ditambah ke EFFECTS (ikon, nama, parameter) dan ke applyAudio().
 
@@ -7,18 +7,17 @@ import { setReverb, reverbSeconds } from './audio-engine';
 type FxType = 'reverb';
 interface Fx { id: number; type: FxType; on: boolean; v: Record<string, number>; }
 interface Param { key: string; label: string; def: number; fmt: (v: number) => string; }
-interface EffectDef { type: FxType; name: string; icon: string; params: Param[]; }
+interface EffectDef { type: FxType; name: string; params: Param[]; }
 
 const svg = (inner: string, size = 20) =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
 
-const ICON_REVERB = svg('<circle cx="5.5" cy="12" r="1.6" fill="currentColor" stroke="none"/><path d="M10 8.6a5 5 0 0 1 0 6.8M13.8 5.8a9.2 9.2 0 0 1 0 12.4M17.6 3.2a13 13 0 0 1 0 17.6"/>');
 const ICON_POWER = svg('<path d="M12 3v8M7.4 6.6a7 7 0 1 0 9.2 0"/>', 15);
 const ICON_CLOSE = svg('<path d="M6 6l12 12M18 6L6 18"/>', 15);
 
 const EFFECTS: EffectDef[] = [
   {
-    type: 'reverb', name: 'Reverb', icon: ICON_REVERB,
+    type: 'reverb', name: 'Reverb',
     params: [
       { key: 'mix', label: 'Mix', def: 0.3, fmt: v => Math.round(v * 100) + '%' },
       { key: 'size', label: 'Size', def: 0.4, fmt: v => reverbSeconds(v).toFixed(1) + ' s' }
@@ -45,7 +44,7 @@ function cardHtml(fx: Fx, i: number): string {
       `<input class="fxs" type="range" min="0" max="100" step="1" value="${Math.round(v * 100)}" data-k="${p.key}" aria-label="${d.name} ${p.label}"></label>`;
   }).join('');
   return `<section class="fxc${fx.on ? '' : ' is-off'}" data-fx="${fx.id}" style="--i:${i}" aria-label="${d.name}">` +
-    `<header class="fxc__head"><span class="fxc__icon">${d.icon}</span><h3 class="fxc__name">${d.name}</h3>` +
+    `<header class="fxc__head"><h3 class="fxc__name">${d.name}</h3>` +
     `<button type="button" class="fxc__pwr" role="switch" aria-checked="${fx.on}" aria-label="${d.name} nyala / mati" title="Nyala / mati"></button>` +
     `<button type="button" class="fxc__del" aria-label="Hapus ${d.name}" title="Hapus efek">${ICON_CLOSE}</button></header>` +
     `<div class="fxc__body">${rows}</div></section>`;
@@ -102,7 +101,7 @@ export function initFxRack(): FxRack {
     el.innerHTML = EFFECTS.map((d, k) => {
       const used = have.has(d.type);
       return `<button type="button" role="menuitem" class="fx-pick__item" data-type="${d.type}" style="--i:${k}"${used ? ' disabled title="Sudah ditambahkan"' : ''}>` +
-        `<span class="fx-pick__icon">${d.icon}</span><span>${d.name}</span></button>`;
+        `<span>${d.name}</span></button>`;
     }).join('');
     document.body.appendChild(el);
     const r = addBtn.getBoundingClientRect(), w = Math.min(220, innerWidth - 16), h = el.offsetHeight;
