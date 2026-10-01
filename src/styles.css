@@ -303,6 +303,8 @@ button{font:inherit;color:inherit;cursor:pointer}
 .pat-btn[data-act="snap"]{position:relative}
 .pat-btn[data-act="snap"]::after{content:"";position:absolute;top:7px;left:50%;margin-left:-4px}
 .pat-bar.is-open .pat-btn{animation:cardIn .26s ease-out backwards;animation-delay:calc(var(--i,0) * 35ms)}
+.pr__sel{z-index:12}
+.pr__sel .pat-btn:disabled{opacity:.4;pointer-events:none;box-shadow:none}
 .pat-bar.is-shake{animation:patShake .3s ease}
 @keyframes patShake{0%,100%{transform:none}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 .pattern__title[contenteditable="true"]{user-select:text;-webkit-user-select:text;cursor:text;outline:none;text-overflow:clip;
@@ -684,7 +686,7 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .pr__snap[aria-pressed="true"] .pr__led,.pat-btn[data-act="snap"][aria-pressed="true"]::after{background:#4ade80;box-shadow:0 0 6px 1px rgba(74,222,128,.75),inset 0 -1px 0 rgba(0,0,0,.25)}
 
 /* area utama: penggaris atas, piano kiri, grid (scroll native) */
-.pr__main{flex:1;min-height:0;display:grid;grid-template-columns:64px minmax(0,1fr);grid-template-rows:32px minmax(0,1fr);background:#101016}
+.pr__main{position:relative;flex:1;min-height:0;display:grid;grid-template-columns:64px minmax(0,1fr);grid-template-rows:32px minmax(0,1fr);background:#101016}
 .pr__corner{background:#1e1e26;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
 .pr__ruler,.pr__keys{display:block;align-self:start;justify-self:start}
 .pr__scroll{position:relative;overflow:auto;display:grid;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#3a3a4a transparent}

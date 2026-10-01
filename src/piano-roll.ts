@@ -43,7 +43,7 @@ let onClose: (() => void) | null = null;
 
 // elemen
 let sc!: HTMLElement, space!: HTMLElement, gc!: HTMLCanvasElement, kc!: HTMLCanvasElement, rc!: HTMLCanvasElement;
-let btnUndo!: HTMLButtonElement, btnDel!: HTMLButtonElement;
+let btnUndo!: HTMLButtonElement, selBar!: HTMLElement, btnPaste!: HTMLButtonElement;
 
 // state editor
 let st: State = {notes: [], nextId: 1};
@@ -213,7 +213,35 @@ function drawRuler() {
   c.fillStyle = '#33333f'; c.fillRect(0, RULER_H - 1, vw, 1);
 }
 
-function redraw() { drawGrid(); drawKeys(); drawRuler(); }
+// ---------- menu bulat di atas / bawah note terpilih (gaya sama dengan menu pattern di timeline) ----------
+let selBarOn = false;
+function flashBtn(act: string) {
+  const b = selBar.querySelector<HTMLElement>('[data-sel="' + act + '"]'); if (!b || REDUCE) return;
+  b.animate([{transform: 'scale(1)'}, {transform: 'scale(1.18)'}, {transform: 'scale(1)'}], {duration: 240, easing: 'ease-out'});
+}
+function shakeSelBar() { selBar.classList.remove('is-shake'); void selBar.offsetWidth; selBar.classList.add('is-shake'); }
+function placeSelBar() {
+  if (!selBar) return;
+  const dragging = !!g && g.kind !== 'pan' && g.kind !== 'tapdraw';   // saat menyeret / seleksi kotak, menu disembunyikan dulu
+  const sel = selected.size && !dragging ? st.notes.filter(n => selected.has(n.id)) : [];
+  if (!sel.length) { selBar.hidden = true; selBarOn = false; return; }
+  const vw = sc.clientWidth, vh = sc.clientHeight, sx = sc.scrollLeft, sy = sc.scrollTop;
+  const x0 = Math.min(...sel.map(n => n.s)) * ppb - sx, x1 = Math.max(...sel.map(n => n.s + n.l)) * ppb - sx;
+  const y0 = (P_MAX - Math.max(...sel.map(n => n.p))) * rowH - sy, y1 = (P_MAX - Math.min(...sel.map(n => n.p)) + 1) * rowH - sy;
+  if (x1 < 0 || x0 > vw || y1 < 0 || y0 > vh) { selBar.hidden = true; selBarOn = false; return; }   // seluruh pilihan di luar layar
+  const wasHidden = selBar.hidden; selBar.hidden = false;
+  const bw = selBar.offsetWidth, bh = selBar.offsetHeight || 46;
+  const ix0 = Math.max(x0, 0), ix1 = Math.min(x1, vw);
+  const left = clamp((ix0 + ix1) / 2 - bw / 2, 6, Math.max(6, vw - bw - 6));
+  let top = y0 - bh - 8;                                   // di atas note; kalau tidak muat, pindah ke bawah
+  if (top < 4) top = y1 + 8;
+  top = clamp(top, 4, Math.max(4, vh - bh - 4));
+  selBar.style.left = KEY_W + left + 'px'; selBar.style.top = RULER_H + top + 'px';
+  if (wasHidden || !selBarOn) { selBar.classList.remove('is-open'); void selBar.offsetWidth; if (!REDUCE) selBar.classList.add('is-open'); }
+  selBarOn = true;
+}
+
+function redraw() { drawGrid(); drawKeys(); drawRuler(); placeSelBar(); }
 function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; redraw(); }); }
 
 // ---------- ukuran & zoom ----------
@@ -251,6 +279,29 @@ function deleteSelected() {
   st.notes = st.notes.filter(n => !selected.has(n.id));
   selected.clear(); updateUI(); schedule();
 }
+// salin / tempel nada (clipboard dibagi antar pattern; posisi disimpan relatif ke nada paling kiri)
+let clip: Array<{p: number; s: number; l: number}> = [];
+function copySelected() {
+  if (!selected.size) return;
+  const sel = st.notes.filter(n => selected.has(n.id)), s0 = Math.min(...sel.map(n => n.s));
+  clip = sel.map(n => ({p: n.p, s: n.s - s0, l: n.l}));
+  updateUI(); flashBtn('copy');
+}
+function pasteNotes() {
+  if (!clip.length) return;
+  const span = Math.max(...clip.map(c => c.s + c.l));
+  if (span > total) return shakeSelBar();
+  const sel = st.notes.filter(n => selected.has(n.id));
+  // ada pilihan: tempel tepat di kanan pilihan; tidak ada: di awal area yang terlihat
+  let at = sel.length ? snapRound(Math.max(...sel.map(n => n.s + n.l))) : snapFloor(sc.scrollLeft / ppb);
+  if (at + span > total + 1e-9) { if (sel.length) return shakeSelBar(); at = total - span; }
+  pushUndo();
+  const made = clip.map(c => ({id: st.nextId++, p: c.p, s: at + c.s, l: c.l}));
+  st.notes.push(...made);
+  selected = new Set(made.map(n => n.id));
+  updateUI(); schedule();
+  sc.scrollLeft = clamp(sc.scrollLeft, Math.max(0, (at + span) * ppb - sc.clientWidth + 60), at * ppb);   // pastikan hasil tempel terlihat
+}
 function selectAll() { selected = new Set(st.notes.map(n => n.id)); updateUI(); schedule(); }
 function nudge(dB: number, dP: number) {
   if (!selected.size) return;
@@ -267,7 +318,7 @@ function nudge(dB: number, dP: number) {
 function updateUI() {
   if (!root) return;
   btnUndo.disabled = undoStack.length === 0;
-  btnDel.disabled = selected.size === 0;
+  if (btnPaste) btnPaste.disabled = clip.length === 0;
 }
 
 // ---------- interaksi pointer ----------
@@ -515,7 +566,6 @@ function build(): HTMLElement {
       '<button type="button" class="pr__snap" aria-pressed="true" aria-label="Snap ke grid" title="Snap ke grid: nyala / mati"><i class="pr__led" aria-hidden="true"></i><span>Snap</span></button>' +
       '<div class="pr__grp">' +
         btn('data-act="undo"', 'Urungkan (Ctrl+Z)', ICON.undo) +
-        btn('data-act="del"', 'Hapus yang dipilih (Del)', ICON.erase) +
       '</div>' +
       '<div class="pr__grp"><span class="pr__lbl">Lebar</span>' +
         btn('data-act="zx-"', 'Perkecil horizontal', ICON.minus) + btn('data-act="zx+"', 'Perbesar horizontal', ICON.plus) +
@@ -537,13 +587,26 @@ function build(): HTMLElement {
   kc = el.querySelector<HTMLCanvasElement>('.pr__keys')!;
   rc = el.querySelector<HTMLCanvasElement>('.pr__ruler')!;
   btnUndo = el.querySelector<HTMLButtonElement>('[data-act="undo"]')!;
-  btnDel = el.querySelector<HTMLButtonElement>('[data-act="del"]')!;
+
+  // menu bulat Copy / Delete / Paste yang muncul di dekat note terpilih
+  selBar = el.querySelector<HTMLElement>('.pr__main')!.appendChild(document.createElement('div'));
+  selBar.className = 'pat-bar pr__sel'; selBar.hidden = true; selBar.setAttribute('role', 'toolbar'); selBar.setAttribute('aria-label', 'Aksi nada');
+  ([['copy', 'Copy', 'Salin nada (Ctrl+C)', copySelected], ['del', 'Delete', 'Hapus nada (Del)', deleteSelected], ['paste', 'Paste', 'Tempel nada (Ctrl+V)', pasteNotes]] as const)
+    .forEach(([act, txt, label, fn], i) => {
+      const b = document.createElement('button');
+      b.className = 'pat-btn'; b.type = 'button'; b.dataset.sel = act; b.textContent = txt;
+      b.setAttribute('aria-label', label); b.title = label; b.style.setProperty('--i', String(i));
+      b.addEventListener('click', fn);
+      selBar.appendChild(b);
+    });
+  btnPaste = selBar.querySelector<HTMLButtonElement>('[data-sel="paste"]')!;
+  btnPaste.disabled = clip.length === 0;
 
   el.querySelectorAll<HTMLElement>('[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool as Tool)));
   const snapBtn = el.querySelector<HTMLButtonElement>('.pr__snap')!;
   snapBtn.addEventListener('click', () => { snapOn = !snapOn; snapBtn.setAttribute('aria-pressed', String(snapOn)); });
   const acts: Record<string, () => void> = {
-    undo, del: deleteSelected,
+    undo,
     'zx+': () => zoomBy(1.4, 1), 'zx-': () => zoomBy(1 / 1.4, 1),
     'zy+': () => zoomBy(1, 1.25), 'zy-': () => zoomBy(1, 1 / 1.25),
   };
@@ -581,7 +644,7 @@ export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.
   applySize();
   const mid = st.notes.length ? st.notes.reduce((a, n) => a + n.p, 0) / st.notes.length : 62;   // mulai di sekitar C4
   sc.scrollLeft = 0; sc.scrollTop = Math.max(0, (P_MAX - mid) * rowH - vh / 2);
-  resetAnim();
+  resetAnim(); selBarOn = false; selBar.hidden = true;
   setTool('draw'); updateUI(); redraw();
 }
 
@@ -602,6 +665,8 @@ document.addEventListener('keydown', e => {
   if (k === 'Escape') { closePianoRoll(); return; }
   if (mod && k.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
   if (mod && k.toLowerCase() === 'a') { e.preventDefault(); selectAll(); return; }
+  if (mod && k.toLowerCase() === 'c') { e.preventDefault(); copySelected(); return; }
+  if (mod && k.toLowerCase() === 'v') { e.preventDefault(); pasteNotes(); return; }
   if (k === 'Delete' || k === 'Backspace') { e.preventDefault(); deleteSelected(); return; }
   if (mod) return;
   if (k === 'ArrowUp') { e.preventDefault(); nudge(0, e.shiftKey ? 12 : 1); }
