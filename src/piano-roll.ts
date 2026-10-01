@@ -28,6 +28,7 @@ const ic = (d: string) =>
   '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
 const ICON = {
   close: ic('<path d="M6 6l12 12M18 6L6 18"/>'),
+  chev: ic('<path d="M9 6l6 6-6 6"/>'),
   more: ic('<circle cx="5" cy="12" r="1.9" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.9" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.9" fill="currentColor" stroke="none"/>'),
   draw: ic('<path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19z"/>'),
   select: ic('<path d="M5 3l14 7-6 2-2 6z"/>'),
@@ -42,6 +43,8 @@ const ICON = {
 const states = new Map<string, State>();
 let root: HTMLElement | null = null;
 let onClose: (() => void) | null = null;
+let closeMenu: () => void = () => {};
+let menuOpen: () => boolean = () => false;
 
 // elemen
 let sc!: HTMLElement, space!: HTMLElement, gc!: HTMLCanvasElement, kc!: HTMLCanvasElement, rc!: HTMLCanvasElement;
@@ -617,6 +620,60 @@ function setTool(t: Tool) {
   gc.style.cursor = t === 'pan' ? 'grab' : t === 'select' ? 'default' : 'crosshair';
 }
 
+// ---------- menu pengaturan (titik tiga): tampilan saja, belum ada logika ----------
+const NOTE_KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+function buildSettingsMenu(el: HTMLElement) {
+  const more = el.querySelector<HTMLButtonElement>('.pr__more')!;
+  const menu = document.createElement('div');
+  menu.className = 'pr__menu'; menu.setAttribute('role', 'menu'); menu.setAttribute('aria-label', 'Pengaturan piano roll');
+  menu.innerHTML =
+    '<div class="pr__mwrap">' +
+      '<button type="button" class="pr__mitem pr__mitem--view" role="menuitem" aria-haspopup="true" aria-expanded="false"><span>View</span>' + ICON.chev + '</button>' +
+      '<div class="pr__sub" role="menu" aria-label="View">' +
+        '<button type="button" class="pr__mitem" role="menuitem"><span>Color</span></button>' +
+        '<button type="button" class="pr__mitem" role="menuitem"><span>Style</span></button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="pr__msep"></div>' +
+    '<div class="pr__mtitle">Note Key</div>' +
+    '<div class="pr__nkeys" role="group" aria-label="Note Key">' +
+      NOTE_KEYS.map((k, i) =>
+        '<button type="button" class="pr__nkey' + (k.includes('#') ? ' is-sharp' : '') + '" aria-pressed="true" style="--i:' + i + '" title="Nada ' + k + '">' +
+        '<i class="pr__led" aria-hidden="true"></i><span>' + k + '</span></button>').join('') +
+    '</div>';
+  el.appendChild(menu);
+
+  const viewBtn = menu.querySelector<HTMLButtonElement>('.pr__mitem--view')!;
+  const sub = menu.querySelector<HTMLElement>('.pr__sub')!;
+  const setSub = (on: boolean) => { viewBtn.setAttribute('aria-expanded', String(on)); sub.classList.toggle('is-open', on); };
+  const setMenu = (on: boolean) => {
+    if (on) {
+      const r = more.getBoundingClientRect(), er = el.getBoundingClientRect();
+      menu.style.left = Math.max(8, r.left - er.left) + 'px';
+      menu.style.top = (r.bottom - er.top + 8) + 'px';
+    } else setSub(false);
+    menu.classList.toggle('is-open', on);
+    more.setAttribute('aria-expanded', String(on));
+  };
+  more.setAttribute('aria-haspopup', 'menu'); more.setAttribute('aria-expanded', 'false');
+  more.addEventListener('click', () => setMenu(!menu.classList.contains('is-open')));
+  viewBtn.addEventListener('click', () => setSub(!sub.classList.contains('is-open')));
+  menu.querySelectorAll<HTMLButtonElement>('.pr__nkey').forEach(b =>
+    b.addEventListener('click', () => b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'))));   // indikator saja
+
+  // klik di luar menu: tutup menu (klik di area canvas tidak ikut menggambar nada)
+  document.addEventListener('pointerdown', e => {
+    if (!menu.classList.contains('is-open')) return;
+    const t = e.target as Node;
+    if (menu.contains(t) || more.contains(t)) return;
+    setMenu(false);
+    if (el.querySelector('.pr__main')!.contains(t)) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+
+  closeMenu = () => setMenu(false);
+  menuOpen = () => menu.classList.contains('is-open');
+}
+
 function build(): HTMLElement {
   const el = document.createElement('section');
   el.id = 'pianoRoll'; el.className = 'pr'; el.setAttribute('aria-label', 'Piano roll'); el.hidden = true;
@@ -683,6 +740,7 @@ function build(): HTMLElement {
   new ResizeObserver(() => { if (root && !root.hidden) schedule(); }).observe(sc);
 
   el.querySelector('.pr__back')!.addEventListener('click', closePianoRoll);
+  buildSettingsMenu(el);
   return el;
 }
 
@@ -710,6 +768,7 @@ export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.
 
 export function closePianoRoll() {
   if (!root || root.hidden) return;
+  closeMenu();
   const r = root; r.classList.remove('is-open'); g = null; ptrs.clear(); pinch = null;
   setTimeout(() => { if (!r.classList.contains('is-open')) r.hidden = true; }, 200);
   onClose && onClose();
@@ -722,7 +781,7 @@ document.addEventListener('keydown', e => {
   const t = e.target as HTMLElement | null;
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
   const mod = e.ctrlKey || e.metaKey, k = e.key;
-  if (k === 'Escape') { closePianoRoll(); return; }
+  if (k === 'Escape') { if (menuOpen()) closeMenu(); else closePianoRoll(); return; }
   if (mod && k.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
   if (mod && k.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
   if (mod && k.toLowerCase() === 'a') { e.preventDefault(); selectAll(); return; }
