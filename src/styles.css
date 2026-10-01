@@ -450,3 +450,10 @@ button{font:inherit;color:inherit;cursor:pointer}
 .upl-btn:hover svg{transform:translateY(-2px)}
 .upl-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .upl-btn.is-shake{animation:uplShake .3s ease}
+
+/* ===== AUDIO CLIP ===== */
+.pattern__wave{position:absolute;left:0;right:0;top:18px;bottom:0;overflow:hidden;border-radius:0 0 8px 8px;pointer-events:none}
+.pattern__wave svg{display:block;width:100%;height:100%}
+.pattern__wave path{fill:rgba(255,255,255,.72)}
+.daw-toast{position:fixed;left:50%;bottom:24px;translate:-50% 0;z-index:200;padding:10px 16px;border-radius:10px;background:#1d1f27;color:#fff;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.1);pointer-events:none;animation:fadeIn .2s ease}
+.daw-toast[hidden]{display:none}

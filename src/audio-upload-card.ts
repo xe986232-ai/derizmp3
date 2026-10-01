@@ -21,7 +21,7 @@ const isAudio = (f: File) => f.type.startsWith('audio/') || AUDIO_EXT.test(f.nam
 
 const ICON_UP = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 16V5M7 10l5-5 5 5M5 19h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-export function openAudioUploadCard(trackId: number, anchor: UploadAnchor): void {
+export function openAudioUploadCard(trackId: number, anchor: UploadAnchor, onPick?: (file: File) => void): void {
   if (current) return;
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const prevFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -64,6 +64,7 @@ export function openAudioUploadCard(trackId: number, anchor: UploadAnchor): void
     }
     trackAudioFiles.set(trackId, f);
     close();
+    onPick?.(f);
   });
   // pintasan DAW (Space, panah, dll.) tidak boleh ikut jalan saat card terbuka; Esc menutup
   card.addEventListener('keydown', e => {

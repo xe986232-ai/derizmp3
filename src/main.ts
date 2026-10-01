@@ -1,12 +1,14 @@
 // @ts-nocheck
 import { openAudioUploadCard } from './audio-upload-card';
+import { decodeFile, addBuffer, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume } from './audio-engine';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const EASE_OUT = 'cubic-bezier(.22,1,.36,1)', EASE_SPRING = 'cubic-bezier(.34,1.56,.64,1)', EASE_INOUT = 'cubic-bezier(.65,0,.35,1)';
 const TRACK_TPL = document.querySelector('.trackheader-container').cloneNode(true);
 TRACK_TPL.querySelector('.trackheader').classList.remove('trackheader--selected');   // track baru tidak otomatis terpilih dari template
 // Gambar penggaris bar/ketukan (bisa di-zoom)
-const BARS = 32, H = 48;
+let BARS = 32;   // bertambah otomatis kalau audio yang di-upload lebih panjang dari timeline
+const MAX_BARS = 300, H = 48;
 const BAR_MIN = 24, BAR_MAX = 3840, BAR_DEFAULT = 80;   // maks 4800%: sampai level 1/64 ketukan kelihatan jelas
 const wsEl = document.querySelector('.workspace'), tlEl = document.getElementById('timeline');
 let BAR_W = BAR_DEFAULT, W = BARS * BAR_W;
@@ -152,6 +154,7 @@ function closeMenu(instant) {
   if (b) b.setAttribute('aria-expanded', 'false');
 }
 function removeTrack(cont, lane) {
+  stopTrack(actx, cont.dataset.track);
   if (kbdCont === cont) closeKbd();
   if (selTrack && cont.contains(selTrack)) selTrack = null;
   if (lane && selPat && lane.contains(selPat)) selectPattern(null);
@@ -272,7 +275,7 @@ function slot(lane, x) {
   for (const p of pats) if (p.s >= start && p.s < end) end = p.s;
   return end - start >= BAR_W / 2 ? {start, width: end - start} : null;
 }
-function createPattern(lane, sl) {
+function createPattern(lane, sl, ci) {   // ci = {clip, off}: pattern ini adalah audio clip
   const cont = document.querySelector('.trackheader-container[data-track="' + lane.dataset.track + '"]');
   const col = cont && cont.style.getPropertyValue('--track-color');
   if (col) lane.style.setProperty('--track-color', col);
@@ -283,6 +286,7 @@ function createPattern(lane, sl) {
   el.style.width = sl.width + 'px';
   el.innerHTML = '<div class="pattern__head"><span class="pattern__title"></span></div><div class="pattern__handle" aria-label="Panjangkan pattern"></div>';
   el.querySelector('.pattern__title').textContent = nm ? nm.textContent : 'Track';
+  if (ci) { el.dataset.clip = ci.clip; el.dataset.off = ci.off; }
   lane.appendChild(el);
   return el;
 }
@@ -450,6 +454,7 @@ wsEl.addEventListener('scroll', () => { patBarPlace(); closePatMenu(); }, {passi
 window.addEventListener('resize', patBarPlace);
 
 function shakeBar() { patBar.classList.remove('is-shake'); void patBar.offsetWidth; patBar.classList.add('is-shake'); }
+const clipOf = (el, addSec) => el.dataset.clip ? {clip: +el.dataset.clip, off: (+el.dataset.off || 0) + addSec} : null;
 const otherPats = el => [...el.parentElement.querySelectorAll('.pattern')].filter(p => p !== el);
 function freeRightOf(el) {   // batas kanan terdekat sebelum pattern lain / ujung timeline
   const end = pl(el) + pw(el); let hi = W;
@@ -463,7 +468,7 @@ function copyPattern() {
   let start = pl(el) + w;
   for (const p of spans) if (p.e > start && p.s < start + w) start = p.e;   // geser ke ruang kosong terdekat di kanan
   if (start + w > W + .5) return shakeBar();
-  const n = createPattern(lane, {start, width: w});
+  const n = createPattern(lane, {start, width: w}, clipOf(el, 0));
   n.querySelector('.pattern__title').textContent = el.querySelector('.pattern__title').textContent;
   patAnchor = null; selectPattern(n);
   n.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'smooth'});
@@ -501,7 +506,7 @@ function splitPattern() {
   let cut = snapOn ? Math.round((s0 + w / 2) / st) * st : s0 + w / 2;
   if (cut - s0 < st || s0 + w - cut < st) cut = s0 + w / 2;
   if (cut - s0 < 4 || s0 + w - cut < 4) return shakeBar();
-  const n = createPattern(el.parentElement, {start: cut, width: s0 + w - cut});
+  const n = createPattern(el.parentElement, {start: cut, width: s0 + w - cut}, clipOf(el, (cut - s0) / BAR_W * SEC_PER_BAR));
   n.querySelector('.pattern__title').textContent = el.querySelector('.pattern__title').textContent;
   el.style.width = (cut - s0) + 'px'; handleSide(el);
 }
@@ -767,7 +772,7 @@ function openAddMenu(btn) {
     if (ins.n === 'Audio clip') {
       const id = trackSeq, top = parseFloat(m.style.top), left = parseFloat(m.style.left), width = parseFloat(m.style.width);
       const fromBottom = m.style.transformOrigin === 'left bottom', bottom = top + m.offsetHeight;
-      setTimeout(() => openAudioUploadCard(id, {left, top, bottom, width, fromBottom}), REDUCE ? 0 : 180);
+      setTimeout(() => openAudioUploadCard(id, {left, top, bottom, width, fromBottom}, f => importAudio(id, f)), REDUCE ? 0 : 180);
     }
   });
 }
@@ -816,7 +821,7 @@ const phEl = document.getElementById('playhead');
 const tc = document.querySelector('.transport-controls');
 const btnRec = tc.querySelector('.rec'), btnPlay = tc.querySelector('.play');
 const btnRew = tc.querySelector('.rewind'), btnFwd = tc.querySelector('.forward');
-let posBars = 0, playing = false, recArmed = false, lastT = 0, playRaf = 0;
+let posBars = 0, playing = false, recArmed = false, playRaf = 0, startPos = 0, startCtx = 0;
 function renderPlayhead() { phEl.style.translate = (posBars * BAR_W) + 'px 0'; }   // dipisah dari transform agar tidak ditimpa animasi masuk
 function followPlayhead(behavior) {
   const x = posBars * BAR_W, v0 = wsEl.scrollLeft, v1 = v0 + wsEl.clientWidth - tlEl.offsetLeft;
@@ -828,22 +833,33 @@ function syncTransportUI() {
   btnRec.setAttribute('aria-checked', String(recArmed));
   btnRec.classList.toggle('is-recording', recArmed && playing);
 }
-function tick(now) {
+// Posisi playhead dihitung dari jam AudioContext (bukan jam rAF), jadi selalu sinkron dengan suara audio clip
+function tick() {
   if (!playing) return;
-  const dt = Math.min(0.25, (now - lastT) / 1000); lastT = now;
-  posBars += dt / SEC_PER_BAR;
+  posBars = startPos + Math.max(0, actx.currentTime - startCtx) / SEC_PER_BAR;
   if (posBars >= BARS) { posBars = BARS; renderPlayhead(); pausePlay(); return; }
   renderPlayhead(); followPlayhead();
   playRaf = requestAnimationFrame(tick);
 }
+function scheduleClips() {
+  const ctx = audio();
+  document.querySelectorAll('.trackheader-container').forEach(c => {
+    const sl = c.querySelector('input[type=range]'); if (sl) setTrackVolume(c.dataset.track, +sl.value);
+  });
+  startPos = posBars; startCtx = ctx.currentTime + .05;   // jeda kecil supaya penjadwalan tidak telat
+  const clips = [...lanesEl.querySelectorAll('.pattern[data-clip]')].map(p => ({
+    track: p.parentElement.dataset.track, clip: +p.dataset.clip,
+    startBar: pl(p) / BAR_W, endBar: (pl(p) + pw(p)) / BAR_W, offsetSec: +p.dataset.off || 0}));
+  playClips(ctx, master, clips, posBars, SEC_PER_BAR, startCtx);
+}
 function startPlay() {
   if (playing) return;
   if (posBars >= BARS) posBars = 0;
-  playing = true; lastT = performance.now();
+  playing = true; scheduleClips();
   playRaf = requestAnimationFrame(tick); syncTransportUI();
 }
 function pausePlay() {
-  playing = false; cancelAnimationFrame(playRaf); playRaf = 0; syncTransportUI();
+  playing = false; cancelAnimationFrame(playRaf); playRaf = 0; stopClips(actx); syncTransportUI();
 }
 const togglePlay = () => playing ? pausePlay() : startPlay();
 function toStart() {
@@ -852,6 +868,7 @@ function toStart() {
 }
 function seekBy(d) {
   posBars = Math.max(0, Math.min(BARS, posBars + d)); renderPlayhead(); followPlayhead();
+  if (playing) scheduleClips();   // lompat saat sedang main: suara ikut pindah
 }
 function toggleRec() {
   recArmed = !recArmed;
@@ -888,6 +905,54 @@ document.addEventListener('keyup', e => {   // cegah Space ikut "mengklik" tombo
   if ((e.key === ' ' || e.code === 'Space') && spaceHandled) { e.preventDefault(); spaceHandled = false; }
 });
 renderPlayhead(); syncTransportUI();
+
+// ===== Audio clip: upload -> decode -> masuk timeline -> bersuara =====
+let toastEl = null, toastT = 0;
+function toast(msg, ms = 3200) {
+  if (!toastEl) { toastEl = document.createElement('div'); toastEl.className = 'daw-toast'; toastEl.setAttribute('role', 'status'); document.body.appendChild(toastEl); }
+  toastEl.textContent = msg; toastEl.hidden = false;
+  clearTimeout(toastT); if (ms) toastT = setTimeout(() => { toastEl.hidden = true; }, ms);
+}
+function growTimeline(n) {   // timeline memanjang supaya audio panjang (lagu) muat utuh
+  BARS = n; sizeRuler(); paintRuler(true);
+}
+async function importAudio(trackId, file) {
+  const ctx = audio(), laneSel = '.lane[data-track="' + trackId + '"]';
+  toast('Memuat audio…', 0);
+  let buf;
+  try { buf = await decodeFile(ctx, file); }
+  catch (err) { console.error(err); toast('File audio tidak bisa dibaca / format tidak didukung'); return; }
+  const lane = lanesEl.querySelector(laneSel);
+  if (!lane) { toast('', 1); return; }   // track sudah dihapus selama decode
+  const durBars = buf.duration / SEC_PER_BAR;
+  if (durBars > BARS) growTimeline(Math.min(MAX_BARS, Math.ceil(durBars) + 1));
+  const width = Math.max(BAR_W / 2, Math.min(durBars * BAR_W, W));
+  const el = createPattern(lane, {start: 0, width}, {clip: addBuffer(buf), off: 0});
+  el.querySelector('.pattern__title').textContent = file.name.replace(/\.[^.]+$/, '').slice(0, 40) || 'Audio';
+  wsEl.scrollTo({left: 0, behavior: 'smooth'});
+  toast(durBars > MAX_BARS ? 'Audio dipotong: timeline maksimum ' + MAX_BARS + ' bar' : 'Audio ditambahkan ke timeline');
+}
+// waveform digambar ulang hanya kalau jendela audio berubah (panjang / offset), bukan saat zoom
+function syncWaves() {
+  lanesEl.querySelectorAll('.pattern[data-clip]').forEach(p => {
+    const off = +p.dataset.off || 0, dur = pw(p) / BAR_W * SEC_PER_BAR, key = off.toFixed(3) + '|' + dur.toFixed(3);
+    if (p.dataset.wk !== key) { p.dataset.wk = key; renderWave(p, +p.dataset.clip, off, dur); }
+  });
+}
+let waveRaf = 0, resyncT = 0;
+new MutationObserver(ms => {
+  const hit = ms.some(m => m.type === 'childList'
+    ? [...m.addedNodes, ...m.removedNodes].some(n => n.nodeType === 1 && n.classList.contains('pattern'))
+    : m.target.classList && m.target.classList.contains('pattern'));
+  if (!hit) return;
+  if (!waveRaf) waveRaf = requestAnimationFrame(() => { waveRaf = 0; syncWaves(); });
+  if (playing) { clearTimeout(resyncT); resyncT = setTimeout(() => { if (playing) scheduleClips(); }, 120); }   // clip digeser/dihapus saat main
+}).observe(lanesEl, {childList: true, subtree: true, attributes: true, attributeFilter: ['style']});
+// slider volume track -> volume audio clip (langsung terdengar saat diputar)
+document.querySelector('.headers-list').addEventListener('input', e => {
+  const sl = e.target.closest && e.target.closest('input[type=range]'), c = sl && sl.closest('.trackheader-container');
+  if (c) setTrackVolume(c.dataset.track, +sl.value);
+});
 
 // ===== Zoom timeline =====
 const LOGR = Math.log(BAR_MAX / BAR_MIN);
@@ -969,7 +1034,7 @@ function histCapture() {
   const ids = [], pats = {};
   lanesEl.querySelectorAll('.lane').forEach(l => {
     ids.push(l.dataset.track);
-    pats[l.dataset.track] = [...l.querySelectorAll('.pattern')].map(p => ({s: r4(pl(p) / BAR_W), w: r4(pw(p) / BAR_W), t: p.querySelector('.pattern__title').textContent}))
+    pats[l.dataset.track] = [...l.querySelectorAll('.pattern')].map(p => ({s: r4(pl(p) / BAR_W), w: r4(pw(p) / BAR_W), t: p.querySelector('.pattern__title').textContent, c: p.dataset.clip || '', o: r4(+p.dataset.off || 0)}))
       .sort((a, b) => a.s - b.s || a.w - b.w || (a.t < b.t ? -1 : a.t > b.t ? 1 : 0));
   });
   return {ids: ids.join(','), pats};
@@ -998,11 +1063,11 @@ function histApply(st) {
     const want = (st.pats[l.dataset.track] || []).map(x => ({...x, used: false}));
     [...l.querySelectorAll('.pattern')].forEach(p => {   // pattern yang sudah cocok dibiarkan, hanya yang berbeda diganti
       const s = r4(pl(p) / BAR_W), w = r4(pw(p) / BAR_W), t = p.querySelector('.pattern__title').textContent;
-      const m = want.find(x => !x.used && x.s === s && x.w === w && x.t === t);
+      const m = want.find(x => !x.used && x.s === s && x.w === w && x.t === t && x.c === (p.dataset.clip || '') && x.o === r4(+p.dataset.off || 0));
       if (m) m.used = true; else p.remove();
     });
     want.filter(x => !x.used).forEach(x => {
-      const n = createPattern(l, {start: x.s * BAR_W, width: x.w * BAR_W});
+      const n = createPattern(l, {start: x.s * BAR_W, width: x.w * BAR_W}, x.c ? {clip: +x.c, off: x.o} : null);
       n.querySelector('.pattern__title').textContent = x.t;
     });
   });
