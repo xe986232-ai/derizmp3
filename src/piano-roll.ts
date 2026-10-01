@@ -61,6 +61,20 @@ let hoverP = -1;
 let raf = 0;
 
 const handleR = () => clamp(rowH * 0.3, 4, 7);   // jari-jari bulatan handle
+const HANDLE_GAP = 3;                            // jarak ujung note ke tepi luar bulatan (bulatan sepenuhnya di luar note)
+const handleCX = (n: Note) => (n.s + n.l) * ppb + Math.max(0, 3 - n.l * ppb) + handleR() + HANDLE_GAP;   // titik tengah bulatan (koordinat konten)
+const EDGE_PAD = 44;                             // ruang ekstra di kanan grid supaya bulatan note di ujung tetap kelihatan & bisa dipegang
+
+// animasi bulatan: muncul (pop) saat note dibuat, hilang saat note dihapus, membesar sedikit saat ditarik
+const REDUCE = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const T_IN = 240, T_OUT = 170, T_PRESS = 130, PRESS_K = 0.35;
+const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
+const easeOutBack = (t: number) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+let born = new Map<number, number>();                     // id -> waktu mulai muncul
+let ghosts: Array<{n: Note; t0: number}> = [];            // note yang baru dihapus (diputar keluar dulu)
+let lastDrawn = new Map<number, Note>();
+let rel: {id: number; t0: number} | null = null;          // bulatan baru dilepas -> kembali ke ukuran normal
+function resetAnim() { born.clear(); ghosts = []; rel = null; lastDrawn = new Map(st.notes.map(n => [n.id, {...n}])); }
 const snapshot = () => JSON.stringify(st.notes);
 const unit = () => (snap > 0 ? snap : 1 / 16);
 const snapRound = (b: number) => (snap > 0 ? Math.round(b / snap) * snap : b);
@@ -93,6 +107,20 @@ function eachVLine(sx: number, vw: number, fn: (x: number, beat: number, level: 
   }
 }
 
+function drawNoteBody(c: CanvasRenderingContext2D, n: Note, sx: number, sy: number, sel: boolean) {
+  const x = n.s * ppb - sx, w = Math.max(3, n.l * ppb), y = (P_MAX - n.p) * rowH - sy;
+  c.fillStyle = color; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 3); c.fill();
+  if (sel) { c.fillStyle = 'rgba(255,255,255,.35)'; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 3); c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.stroke(); }
+  if (w > 30 && rowH >= 14) { c.fillStyle = 'rgba(0,0,0,.65)'; c.fillText(pname(n.p), x + 5, y + rowH / 2 + 0.5); }
+}
+// bulatan putih di LUAR ujung kanan note (tidak menyentuh badan note); k = skala animasi
+function drawHandle(c: CanvasRenderingContext2D, n: Note, sx: number, sy: number, k: number) {
+  const r = handleR() * k; if (r < 0.4) return;
+  const cx = handleCX(n) - sx, cy = (P_MAX - n.p + 0.5) * rowH - sy;
+  c.fillStyle = 'rgba(0,0,0,.4)'; c.beginPath(); c.arc(cx, cy + 0.5, r + k, 0, Math.PI * 2); c.fill();
+  c.fillStyle = '#fff'; c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.fill();
+}
+
 function drawGrid() {
   const vw = sc.clientWidth, vh = sc.clientHeight;
   const c = fit(gc, vw, vh), sx = sc.scrollLeft, sy = sc.scrollTop;
@@ -113,19 +141,37 @@ function drawGrid() {
     if (ex >= 0 && ex <= vw) { c.fillStyle = color; c.fillRect(ex - 1, 0, 2, vh); }
   }
   // nada
-  const fs = Math.min(11, rowH - 4), hr = handleR();
-  c.font = '600 ' + fs + 'px system-ui,sans-serif'; c.textBaseline = 'middle';
-  for (const n of st.notes) {
-    const x = n.s * ppb - sx, w = Math.max(3, n.l * ppb), y = (P_MAX - n.p) * rowH - sy;
-    if (x + w + hr < 0 || x > vw || y + rowH < 0 || y > vh) continue;
-    const sel = selected.has(n.id);
-    c.fillStyle = color; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 3); c.fill();
-    if (sel) { c.fillStyle = 'rgba(255,255,255,.35)'; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 3); c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.stroke(); }
-    if (w > 30 && rowH >= 14) { c.fillStyle = 'rgba(0,0,0,.65)'; c.fillText(pname(n.p), x + 5, y + rowH / 2 + 0.5); }
-    // handle ubah panjang: bulatan putih di ujung kanan
-    c.fillStyle = 'rgba(0,0,0,.4)'; c.beginPath(); c.arc(x + w, y + rowH / 2 + 0.5, hr + 1, 0, Math.PI * 2); c.fill();
-    c.fillStyle = '#fff'; c.beginPath(); c.arc(x + w, y + rowH / 2, hr, 0, Math.PI * 2); c.fill();
+  const now = performance.now(); let animating = false;
+  if (!REDUCE) {                                // deteksi note baru / hilang sejak gambar terakhir (mencakup undo, hapus, erase)
+    const cur = new Set(st.notes.map(n => n.id));
+    for (const n of st.notes) if (!lastDrawn.has(n.id)) born.set(n.id, now);
+    for (const [id, n] of lastDrawn) if (!cur.has(id)) ghosts.push({n, t0: now});
   }
+  lastDrawn = new Map(st.notes.map(n => [n.id, {...n}]));
+  const fs = Math.min(11, rowH - 4);
+  c.font = '600 ' + fs + 'px system-ui,sans-serif'; c.textBaseline = 'middle';
+  const visible = (n: Note) => {
+    const x = n.s * ppb - sx, w = Math.max(3, n.l * ppb), y = (P_MAX - n.p) * rowH - sy;
+    return !(x + w + 2 * handleR() + 8 < 0 || x > vw || y + rowH < 0 || y > vh);
+  };
+  for (const n of st.notes) if (visible(n)) drawNoteBody(c, n, sx, sy, selected.has(n.id));
+  for (const n of st.notes) {
+    if (!visible(n)) continue;
+    let k = 1;
+    const b0 = born.get(n.id);
+    if (b0 !== undefined) { const t = (now - b0) / T_IN; if (t >= 1) born.delete(n.id); else { k *= easeOutBack(Math.max(0, t)); animating = true; } }
+    if (g && g.kind === 'resize' && g.anchor && g.anchor.id === n.id) { const t = Math.min(1, (now - g.t0) / T_PRESS); k *= 1 + PRESS_K * easeOut(t); if (t < 1) animating = true; }
+    else if (rel && rel.id === n.id) { const t = (now - rel.t0) / T_PRESS; if (t >= 1) rel = null; else { k *= 1 + PRESS_K * (1 - easeOut(t)); animating = true; } }
+    drawHandle(c, n, sx, sy, k);
+  }
+  for (let i = ghosts.length - 1; i >= 0; i--) {   // note yang dihapus: memudar, bulatan mengecil
+    const gh = ghosts[i], t = (now - gh.t0) / T_OUT;
+    if (t >= 1) { ghosts.splice(i, 1); continue; }
+    animating = true;
+    if (!visible(gh.n)) continue;
+    c.globalAlpha = 1 - t; drawNoteBody(c, gh.n, sx, sy, false); drawHandle(c, gh.n, sx, sy, 1 - easeOut(t)); c.globalAlpha = 1;
+  }
+  if (animating) schedule();
   // marquee
   if (g && g.kind === 'marquee') {
     const a = g.x0 - sx, b = g.y0 - sy, w = g.x - g.x0, h = g.y - g.y0;
@@ -171,7 +217,7 @@ function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; red
 
 // ---------- ukuran & zoom ----------
 function applySize() {
-  space.style.width = total * ppb + 'px';
+  space.style.width = total * ppb + EDGE_PAD + 'px';
   space.style.height = ROWS * rowH + 'px';
 }
 function setZoomAt(nppb: number, nrow: number, vx: number, vy: number, beatAt: number, rowAt: number) {
@@ -235,6 +281,7 @@ interface Gesture {
   anchor?: Note; orig?: Note[]; base?: Set<number>;
   sl: number; stp: number;    // scroll awal (untuk pan)
   cx: number; cy: number;     // posisi client awal (untuk pan)
+  t0: number;                 // waktu mulai (animasi bulatan)
 }
 let g: Gesture | null = null;
 const ptrs = new Map<number, {x: number; y: number}>();
@@ -257,8 +304,8 @@ function hit(cx: number, cy: number): {n: Note} | null {
 function hitHandle(cx: number, cy: number): Note | null {
   let best: Note | null = null, bd = 1e9;
   for (const n of st.notes) {
-    const ex = (n.s + n.l) * ppb, ey = (P_MAX - n.p + 0.5) * rowH, w = n.l * ppb;
-    if (cx < ex - Math.min(12, w * 0.5) || cx > ex + 14 || Math.abs(cy - ey) > Math.max(rowH / 2, 11)) continue;
+    const ex = handleCX(n), ey = (P_MAX - n.p + 0.5) * rowH, endX = n.s * ppb + Math.max(3, n.l * ppb);
+    if (cx < endX || cx > ex + 16 || Math.abs(cy - ey) > Math.max(rowH / 2, 11)) continue;   // tidak pernah masuk ke badan note
     const d = Math.hypot(cx - ex, cy - ey);
     if (d < bd) { bd = d; best = n; }
   }
@@ -286,7 +333,7 @@ function onDown(e: PointerEvent) {
   if (ptrs.size > 2 || pinch) return;
 
   const {x, y} = localXY(e);
-  const base: Gesture = {kind: 'pan', id: e.pointerId, x0: x, y0: y, x, y, snap0: snapshot(), pushed: false, changed: false, sl: sc.scrollLeft, stp: sc.scrollTop, cx: e.clientX, cy: e.clientY};
+  const base: Gesture = {kind: 'pan', id: e.pointerId, x0: x, y0: y, x, y, snap0: snapshot(), pushed: false, changed: false, sl: sc.scrollLeft, stp: sc.scrollTop, cx: e.clientX, cy: e.clientY, t0: performance.now()};
   const t: Tool = e.button === 1 ? 'pan' : tool;
 
   if (t === 'pan') { g = base; gc.style.cursor = 'grabbing'; return; }
@@ -423,6 +470,7 @@ function onUp(e: PointerEvent) {
       const n = addNoteAt(g.x0, g.y0);
       if (n) lastLen = n.l;
     }
+    if (g.kind === 'resize') rel = {id: g.anchor!.id, t0: performance.now()};
     if (g.kind === 'new' || g.kind === 'resize') {
       const id = g.anchor!.id, n = st.notes.find(q => q.id === id);
       if (n && n.l >= unit()) lastLen = n.l;
@@ -539,6 +587,7 @@ export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.
   applySize();
   const mid = st.notes.length ? st.notes.reduce((a, n) => a + n.p, 0) / st.notes.length : 62;   // mulai di sekitar C4
   sc.scrollLeft = 0; sc.scrollTop = Math.max(0, (P_MAX - mid) * rowH - vh / 2);
+  resetAnim();
   setTool('draw'); updateUI(); redraw();
 }
 
