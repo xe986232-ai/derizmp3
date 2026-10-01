@@ -27,7 +27,8 @@ const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 const ic = (d: string) =>
   '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
 const ICON = {
-  back: ic('<path d="M15 5l-7 7 7 7"/>'),
+  close: ic('<path d="M6 6l12 12M18 6L6 18"/>'),
+  more: ic('<circle cx="5" cy="12" r="1.9" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.9" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.9" fill="currentColor" stroke="none"/>'),
   draw: ic('<path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19z"/>'),
   select: ic('<path d="M5 3l14 7-6 2-2 6z"/>'),
   erase: ic('<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>'),
@@ -623,13 +624,14 @@ function build(): HTMLElement {
     '<button type="button" class="pr__btn ' + extra + '" ' + attr + ' title="' + label + '" aria-label="' + label + '">' + svg + '</button>';
   el.innerHTML =
     '<div class="pr__bar">' +
-      '<div class="pr__grp pr__grp--back">' +
-        '<button type="button" class="pr__btn pr__back" aria-label="Kembali ke timeline" title="Kembali (Esc)">' + ICON.back + '</button>' +
-      '</div>' +
+      '<button type="button" class="pr__btn pr__more" aria-label="Menu lainnya" title="Lainnya">' + ICON.more + '</button>' +
       '<button type="button" class="pr__snap" aria-pressed="true" aria-label="Snap ke grid" title="Snap ke grid: nyala / mati"><i class="pr__led" aria-hidden="true"></i><span>Snap</span></button>' +
       '<div class="pr__grp">' +
         btn('data-act="undo"', 'Urungkan (Ctrl+Z)', ICON.undo) +
         btn('data-act="redo"', 'Ulangi (Ctrl+Shift+Z / Ctrl+Y)', ICON.redo) +
+      '</div>' +
+      '<div class="pr__grp pr__grp--close">' +
+        '<button type="button" class="pr__btn pr__back" aria-label="Tutup piano roll" title="Tutup (Esc)">' + ICON.close + '</button>' +
       '</div>' +
     '</div>' +
     '<div class="pr__main">' +

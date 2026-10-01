@@ -661,8 +661,8 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .pr__bar{flex:none;display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
 .pr__bar::-webkit-scrollbar{display:none}
 .pr__grp,.pr__snap{position:relative;flex:none;height:48px;display:flex;align-items:center;gap:2px;padding:0 5px;border:0;border-radius:16px;background-color:var(--card);color:var(--text);box-shadow:var(--bevel);
-  transition:box-shadow .3s ease}
-.pr__grp:hover,.pr__snap:hover{box-shadow:var(--bevel-hover)}
+  transition:box-shadow .3s ease,transform .3s var(--ease-spring)}
+.pr__grp:hover,.pr__snap:hover{box-shadow:var(--bevel-hover);transform:translateY(-1px)}
 .pr__grp::before,.pr__snap::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;padding:1px;z-index:2;
   background:linear-gradient(135deg,rgba(255,255,255,.17),rgba(255,255,255,.035) 32%,rgba(255,255,255,.01) 62%,rgba(255,255,255,.08));
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
@@ -670,7 +670,7 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .pr__grp::after,.pr__snap::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
   background:radial-gradient(90% 130% at 0% 0%,rgba(255,255,255,.03),transparent 58%),linear-gradient(180deg,rgba(255,255,255,.012),rgba(255,255,255,0) 55%)}
 .pr__grp>*,.pr__snap>*{position:relative;z-index:3}
-.pr__grp--back{position:sticky;left:0;z-index:5}
+.pr__grp--close{position:sticky;right:0;margin-left:auto;z-index:5}
 .pr__lbl{font-size:11px;font-weight:600;color:var(--muted);padding:0 4px 0 8px}
 .pr__btn{width:38px;height:38px;border:0;border-radius:12px;background:transparent;color:var(--muted);display:grid;place-items:center;padding:0;cursor:pointer;
   transition:background-color .2s ease,color .2s ease,box-shadow .2s ease,transform .25s var(--ease-spring)}
@@ -687,6 +687,34 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .pr__snap[aria-pressed="true"]{color:var(--text)}
 .pr__led,.pat-btn[data-act="snap"]::after{display:block;width:8px;height:8px;border-radius:50%;background:#3a3a46;box-shadow:inset 0 1px 1px rgba(0,0,0,.5);transition:background-color .2s ease,box-shadow .2s ease}
 .pr__snap[aria-pressed="true"] .pr__led,.pat-btn[data-act="snap"][aria-pressed="true"]::after{background:#4ade80;box-shadow:0 0 6px 1px rgba(74,222,128,.75),inset 0 -1px 0 rgba(0,0,0,.25)}
+
+/* tombol titik tiga (tanpa card) + tombol tutup (X) di kanan + animasi toolbar */
+.pr__more{width:44px;height:44px;border-radius:14px;color:var(--text)}
+.pr__more svg circle{transform-box:fill-box;transform-origin:center;transition:transform .3s var(--ease-spring)}
+.pr__more:hover svg circle:nth-child(1){animation:pr-dot .55s var(--ease-spring) 0s}
+.pr__more:hover svg circle:nth-child(2){animation:pr-dot .55s var(--ease-spring) .07s}
+.pr__more:hover svg circle:nth-child(3){animation:pr-dot .55s var(--ease-spring) .14s}
+.pr__more:active svg circle{transform:scale(1.5)}
+.pr__back svg,.pr__btn[data-act] svg{transition:transform .35s var(--ease-spring)}
+.pr__back:hover{background:rgba(255,90,90,.16);color:#ff8f8f}
+.pr__back:hover svg{transform:rotate(90deg) scale(1.08)}
+.pr__back:active svg{transform:rotate(180deg) scale(.85)}
+.pr__btn[data-act="undo"]:hover svg{transform:translateX(-2px) rotate(-14deg)}
+.pr__btn[data-act="redo"]:hover svg{transform:translateX(2px) rotate(14deg)}
+.pr__btn[data-act]:active svg{transform:scale(.85)}
+.pr__snap[aria-pressed="true"] .pr__led{animation:pr-led 2.2s ease-in-out infinite}
+.pr__snap:active .pr__led{transform:scale(1.7)}
+.pr__led{transition:background-color .2s ease,box-shadow .2s ease,transform .3s var(--ease-spring)}
+/* muncul berurutan saat piano roll dibuka */
+.pr.is-open .pr__bar>*{animation:pr-pop .5s var(--ease-spring) backwards}
+.pr.is-open .pr__bar>:nth-child(1){animation-delay:.04s}
+.pr.is-open .pr__bar>:nth-child(2){animation-delay:.1s}
+.pr.is-open .pr__bar>:nth-child(3){animation-delay:.16s}
+.pr.is-open .pr__bar>:nth-child(4){animation-delay:.22s}
+@keyframes pr-pop{from{opacity:0;transform:translateY(-10px) scale(.8)}to{opacity:1;transform:none}}
+@keyframes pr-dot{0%,100%{transform:translateY(0)}40%{transform:translateY(-5px) scale(1.25)}70%{transform:translateY(1px)}}
+@keyframes pr-led{0%,100%{box-shadow:0 0 5px 1px rgba(74,222,128,.55),inset 0 -1px 0 rgba(0,0,0,.25)}50%{box-shadow:0 0 10px 3px rgba(74,222,128,.9),inset 0 -1px 0 rgba(0,0,0,.25)}}
+@media (prefers-reduced-motion:reduce){.pr__bar>*,.pr__more svg circle,.pr__led{animation:none!important}.pr__back svg,.pr__btn[data-act] svg{transition:none}}
 
 /* area utama: penggaris atas, piano kiri, grid (scroll native) */
 .pr__main{position:relative;flex:1;min-height:0;display:grid;grid-template-columns:64px minmax(0,1fr);grid-template-rows:32px minmax(0,1fr);background:#101016}
