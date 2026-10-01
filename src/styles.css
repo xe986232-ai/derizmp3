@@ -639,3 +639,8 @@ button{font:inherit;color:inherit;cursor:pointer}
 .trackheader-container.is-off .trackheader__track-name-button{opacity:.5}
 .lane.is-off .pattern{filter:saturate(.25) brightness(.7)}
 @media (prefers-reduced-motion:reduce){.trackheader__pwr{transition:none!important}}
+
+/* hilangkan highlight biru bawaan browser saat klik / tap button, slider & knob */
+*{-webkit-tap-highlight-color:transparent}
+button,[role="button"],[role="switch"],[role="slider"],input[type="range"],summary{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role="switch"]:focus:not(:focus-visible),[role="slider"]:focus:not(:focus-visible),input[type="range"]:focus:not(:focus-visible){outline:none}
