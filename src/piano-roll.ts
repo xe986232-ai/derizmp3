@@ -441,7 +441,7 @@ function addNoteAt(x: number, y: number): Note | null {
   if (l <= 0) return null;
   pushUndo();
   const n: Note = {id: st.nextId++, p, s, l};
-  st.notes.push(n); selected.add(n.id);
+  st.notes.push(n);   // note baru tidak langsung terpilih; baru terpilih kalau diklik lagi
   return n;
 }
 
