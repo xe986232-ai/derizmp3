@@ -764,7 +764,11 @@ function openAddMenu(btn) {
     addTrack(ins);
     closeAddMenu();
     // Audio clip: setelah track dibuat, munculkan card upload audio (menunggu menu selesai menghilang)
-    if (ins.n === 'Audio clip') { const id = trackSeq; setTimeout(() => openAudioUploadCard(id), REDUCE ? 0 : 180); }
+    if (ins.n === 'Audio clip') {
+      const id = trackSeq, top = parseFloat(m.style.top), left = parseFloat(m.style.left), width = parseFloat(m.style.width);
+      const fromBottom = m.style.transformOrigin === 'left bottom', bottom = top + m.offsetHeight;
+      setTimeout(() => openAudioUploadCard(id, {left, top, bottom, width, fromBottom}), REDUCE ? 0 : 180);
+    }
   });
 }
 function addTrack(t) {
