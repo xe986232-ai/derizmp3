@@ -197,11 +197,10 @@ function drawKeys() {
   c.font = '600 10px system-ui,sans-serif'; c.textBaseline = 'middle'; c.textAlign = 'right';
   for (let r = r0; r <= r1; r++) {
     const p = P_MAX - r, y = r * rowH - sy;
-    if (keyOff.has(p % 12)) { c.fillStyle = '#16161c'; c.fillRect(0, y, KEY_W, rowH); c.fillStyle = 'rgba(255,255,255,.04)'; c.fillRect(0, Math.round(y + rowH) - 1, KEY_W, 1); continue; }   // tuts dimatikan: tidak ditampilkan
     if (p === hoverP) { c.fillStyle = color; c.fillRect(0, y, KEY_W, rowH); }
     c.fillStyle = 'rgba(0,0,0,.18)'; c.fillRect(0, Math.round(y + rowH) - 1, KEY_W, 1);
-    if (isBlack(p)) { c.fillStyle = p === hoverP ? '#0e0e12' : '#1a1a21'; c.fillRect(0, y + 1, KEY_W * 0.62, rowH - 2); }
-    if (p % 12 === 0 || p === hoverP) { c.fillStyle = p === hoverP ? '#fff' : '#555566'; c.fillText(pname(p), KEY_W - 6, y + rowH / 2 + 0.5); }
+    if (isBlack(p)) { c.fillStyle = p === hoverP ? '#0e0e12' : '#1a1a21'; c.fillRect(0, y + 1, KEY_W * (showNoteNames ? 0.5 : 0.62), rowH - 2); }   // nama nada tampil: tuts hitam dipendekkan supaya label tidak tertutup
+    if (p % 12 === 0 || p === hoverP || (showNoteNames && rowH >= 11)) { c.fillStyle = p === hoverP ? '#fff' : '#555566'; c.fillText(pname(p), KEY_W - 6, y + rowH / 2 + 0.5); }
   }
   c.textAlign = 'start';
   c.fillStyle = '#33333f'; c.fillRect(KEY_W - 1, 0, 1, vh);
@@ -622,8 +621,7 @@ function setTool(t: Tool) {
 }
 
 // ---------- menu pengaturan (titik tiga): tampilan saja, belum ada logika ----------
-const keyOff = new Set<number>();   // kelas nada (0=C ... 11=B) yang disembunyikan dari keyboard kiri
-const NOTE_KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+let showNoteNames = false;   // Note Key: tampilkan nama semua nada (C, C#, D, D#, ...) di keyboard kiri; mati = hanya C
 function buildSettingsMenu(el: HTMLElement) {
   const more = el.querySelector<HTMLButtonElement>('.pr__more')!;
   const menu = document.createElement('div');
@@ -637,12 +635,7 @@ function buildSettingsMenu(el: HTMLElement) {
       '</div>' +
     '</div>' +
     '<div class="pr__msep"></div>' +
-    '<div class="pr__mtitle">Note Key</div>' +
-    '<div class="pr__nkeys" role="group" aria-label="Note Key">' +
-      NOTE_KEYS.map((k, i) =>
-        '<button type="button" class="pr__nkey' + (k.includes('#') ? ' is-sharp' : '') + '" aria-pressed="true" data-pc="' + i + '" style="--i:' + i + '" title="Tampilkan tuts ' + k + ' di keyboard">' +
-        '<i class="pr__led" aria-hidden="true"></i><span>' + k + '</span></button>').join('') +
-    '</div>';
+    '<button type="button" class="pr__mitem pr__mtoggle" role="menuitemcheckbox" aria-checked="false"><span>Note Key</span><i class="pr__sw" aria-hidden="true"></i></button>';
   el.appendChild(menu);
 
   const viewBtn = menu.querySelector<HTMLButtonElement>('.pr__mitem--view')!;
@@ -660,13 +653,12 @@ function buildSettingsMenu(el: HTMLElement) {
   more.setAttribute('aria-haspopup', 'menu'); more.setAttribute('aria-expanded', 'false');
   more.addEventListener('click', () => setMenu(!menu.classList.contains('is-open')));
   viewBtn.addEventListener('click', () => setSub(!sub.classList.contains('is-open')));
-  menu.querySelectorAll<HTMLButtonElement>('.pr__nkey').forEach(b =>
-    b.addEventListener('click', () => {
-      const on = b.getAttribute('aria-pressed') !== 'true', pc = Number(b.dataset.pc);
-      b.setAttribute('aria-pressed', String(on));
-      if (on) keyOff.delete(pc); else keyOff.add(pc);
-      schedule();   // gambar ulang keyboard kiri
-    }));
+  const keyBtn = menu.querySelector<HTMLButtonElement>('.pr__mtoggle')!;
+  keyBtn.addEventListener('click', () => {
+    showNoteNames = !showNoteNames;
+    keyBtn.setAttribute('aria-checked', String(showNoteNames));
+    schedule();   // gambar ulang keyboard kiri
+  });
 
   // klik di luar menu: tutup menu (klik di area canvas tidak ikut menggambar nada)
   document.addEventListener('pointerdown', e => {
