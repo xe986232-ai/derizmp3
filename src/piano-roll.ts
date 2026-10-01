@@ -334,6 +334,7 @@ interface Gesture {
   cx: number; cy: number;     // posisi client awal (untuk pan)
   t0: number;                 // waktu mulai (animasi bulatan)
   desel?: boolean;            // tap di area kosong saat ada seleksi: hanya lepas seleksi, jangan pasang nada
+  touch?: boolean; moved?: boolean; timer?: number;   // tahan di area kosong (timer) lalu seret = blok / marquee
 }
 let g: Gesture | null = null;
 const ptrs = new Map<number, {x: number; y: number}>();
@@ -367,6 +368,7 @@ function hitHandle(cx: number, cy: number): Note | null {
 function commit() { if (g && !g.pushed) { pushUndo(g.snap0); g.pushed = true; } }
 
 function cancelGesture() {
+  if (g) clearTimeout(g.timer);
   if (g && g.pushed) { st.notes = JSON.parse(g.snap0) as Note[]; undoStack.pop(); }
   g = null; updateUI(); schedule();
 }
@@ -417,17 +419,17 @@ function onDown(e: PointerEvent) {
     if (!e.shiftKey) selected.clear();
     updateUI(); schedule(); return;
   }
-  // draw di area kosong
-  if (e.pointerType === 'touch') {              // sentuh: tap = pasang nada, geser = scroll (nada dibuat saat jari diangkat)
-    g = {...base, kind: 'tapdraw', desel: selected.size > 0};
-    return;
-  }
-  if (selected.size) { selected.clear(); updateUI(); schedule(); return; }   // ada seleksi: klik kosong cuma melepas seleksi dulu
-  selected.clear();                             // mouse / pen: klik = pasang nada, seret ke kanan = nada panjang
-  const n = addNoteAt(x, y);
-  if (!n) { updateUI(); schedule(); return; }
-  g = {...base, kind: 'new', anchor: n};
-  g.changed = true;
+  // draw di area kosong: tap/klik = pasang nada; seret = nada panjang (mouse) / scroll (sentuh); TAHAN lalu seret = blok nada (marquee)
+  const touch = e.pointerType === 'touch', desel = selected.size > 0;
+  if (desel && !touch) { selected.clear(); updateUI(); schedule(); }   // ada seleksi: klik kosong cuma melepas seleksi dulu
+  g = {...base, kind: 'tapdraw', desel, touch};
+  g.timer = window.setTimeout(holdMarquee, HOLD_MS);
+}
+const HOLD_MS = 320;
+function holdMarquee() {
+  if (!g || g.kind !== 'tapdraw' || g.moved) return;
+  g.timer = undefined; g.kind = 'marquee'; g.base = new Set(); selected.clear();
+  if (navigator.vibrate) navigator.vibrate(12);
   updateUI(); schedule();
 }
 
@@ -465,7 +467,15 @@ function onMove(e: PointerEvent) {
     return;
   }
   g.x = x; g.y = y;
-  if (g.kind === 'tapdraw' && Math.hypot(e.clientX - g.cx, e.clientY - g.cy) > 8) g.kind = 'pan';
+  if (g.kind === 'tapdraw' && !g.moved && Math.hypot(e.clientX - g.cx, e.clientY - g.cy) > (g.touch ? 8 : 5)) {
+    g.moved = true; clearTimeout(g.timer); g.timer = undefined;       // gerak sebelum ditahan: bukan blok
+    if (g.touch) g.kind = 'pan';                                      // sentuh: scroll
+    else if (!g.desel) {                                              // mouse / pen: pasang nada, seret ke kanan = nada panjang
+      selected.clear();
+      const n = addNoteAt(g.x0, g.y0);
+      if (n) { g.kind = 'new'; g.anchor = n; g.changed = true; updateUI(); schedule(); }
+    }
+  }
   switch (g.kind) {
     case 'pan':
       sc.scrollLeft = g.sl - (e.clientX - g.cx); sc.scrollTop = g.stp - (e.clientY - g.cy); break;
@@ -519,7 +529,8 @@ function onUp(e: PointerEvent) {
   ptrs.delete(e.pointerId);
   if (ptrs.size < 2) pinch = null;
   if (g && g.id === e.pointerId) {
-    if (g.kind === 'tapdraw' && e.type === 'pointerup') {
+    clearTimeout(g.timer);
+    if (g.kind === 'tapdraw' && !g.moved && e.type === 'pointerup') {
       if (g.desel) { selected.clear(); }          // ada seleksi: tap kosong cuma melepas seleksi
       else {
         selected.clear();
