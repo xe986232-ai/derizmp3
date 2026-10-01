@@ -1,6 +1,6 @@
 // Piano roll: editor nada berbasis canvas (belum ada suara, sesuai tahap ini).
 // Fitur: pasang / geser / ubah panjang / hapus nada, pilih banyak (marquee), snap, undo,
-// geser (scroll / 2 jari).
+// zoom horizontal & vertikal (tombol, Ctrl+scroll, Alt+scroll, pinch 2 jari), geser (scroll / tool tangan / 2 jari).
 // Nada disimpan di memori per pattern (kunci `id`), jadi tetap ada saat piano roll ditutup lalu dibuka lagi.
 
 export interface PianoRollOpts {
@@ -286,10 +286,21 @@ export function trimPianoRollNotes(id: string, toBeat: number) {   // buang / po
 function redraw() { drawGrid(); drawKeys(); drawRuler(); placeSelBar(); placePlayhead(); notifyChange(); }
 function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; redraw(); }); }
 
-// ---------- ukuran ----------
+// ---------- ukuran & zoom ----------
 function applySize() {
   space.style.width = total * ppb + EDGE_PAD + 'px';
   space.style.height = ROWS * rowH + 'px';
+}
+function setZoomAt(nppb: number, nrow: number, vx: number, vy: number, beatAt: number, rowAt: number) {
+  ppb = clamp(nppb, PPB_MIN, PPB_MAX); rowH = clamp(nrow, ROW_MIN, ROW_MAX);
+  applySize();
+  sc.scrollLeft = Math.max(0, beatAt * ppb - vx);
+  sc.scrollTop = Math.max(0, rowAt * rowH - vy);
+  schedule();
+}
+function zoomBy(fx: number, fy: number) {
+  const vw = sc.clientWidth, vh = sc.clientHeight;
+  setZoomAt(ppb * fx, rowH * fy, vw / 2, vh / 2, (sc.scrollLeft + vw / 2) / ppb, (sc.scrollTop + vh / 2) / rowH);
 }
 
 // ---------- operasi data ----------
@@ -488,6 +499,13 @@ function addNoteAt(x: number, y: number): Note | null {
 function onMove(e: PointerEvent) {
   if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
   if (pinch && ptrs.size >= 2) {
+    const [a, b] = [...ptrs.values()];
+    const r = gc.getBoundingClientRect();
+    const mx = (a.x + b.x) / 2 - r.left, my = (a.y + b.y) / 2 - r.top;
+    const dx = Math.abs(a.x - b.x), dy = Math.abs(a.y - b.y);
+    const nppb = pinch.d0x > 40 ? pinch.ppb0 * dx / pinch.d0x : pinch.ppb0;
+    const nrow = pinch.d0y > 40 ? pinch.row0 * dy / pinch.d0y : pinch.row0;
+    setZoomAt(nppb, nrow, mx, my, pinch.beat0, pinch.rowPos0);
     return;
   }
   const {x, y} = localXY(e);
@@ -582,6 +600,14 @@ function onUp(e: PointerEvent) {
   }
 }
 
+function onWheel(e: WheelEvent) {
+  if (!(e.ctrlKey || e.metaKey || e.altKey)) return;     // scroll biasa dibiarkan native
+  e.preventDefault();
+  const r = gc.getBoundingClientRect(), vx = e.clientX - r.left, vy = e.clientY - r.top;
+  const f = Math.exp(-e.deltaY * (e.ctrlKey ? 0.012 : 0.006));
+  const beat = (sc.scrollLeft + vx) / ppb, rowPos = (sc.scrollTop + vy) / rowH;
+  if (e.altKey) setZoomAt(ppb, rowH * f, vx, vy, beat, rowPos); else setZoomAt(ppb * f, rowH, vx, vy, beat, rowPos);
+}
 
 // ---------- bangun UI ----------
 function setTool(t: Tool) {
@@ -649,6 +675,7 @@ function build(): HTMLElement {
   gc.addEventListener('pointerup', onUp);
   gc.addEventListener('pointercancel', onUp);
   gc.addEventListener('pointerleave', () => { if (hoverP !== -1 && !g) { hoverP = -1; schedule(); } });
+  gc.addEventListener('wheel', onWheel, {passive: false});
   gc.addEventListener('contextmenu', e => e.preventDefault());
   sc.addEventListener('scroll', schedule, {passive: true});
   new ResizeObserver(() => { if (root && !root.hidden) schedule(); }).observe(sc);
@@ -705,4 +732,6 @@ document.addEventListener('keydown', e => {
   else if (k === 'ArrowDown') { e.preventDefault(); nudge(0, e.shiftKey ? -12 : -1); }
   else if (k === 'ArrowLeft') { e.preventDefault(); nudge(-unit(), 0); }
   else if (k === 'ArrowRight') { e.preventDefault(); nudge(unit(), 0); }
+  else if (k === '=' || k === '+') zoomBy(1.4, 1);
+  else if (k === '-') zoomBy(1 / 1.4, 1);
 });
