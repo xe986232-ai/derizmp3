@@ -3,11 +3,11 @@
 // Efek disimpan per track (kunci = id track); panel selalu menampilkan efek milik track yang sedang dipilih.
 // Saat ini baru ada Reverb. Efek baru cukup ditambah ke EFFECTS (ikon, nama, parameter) dan ke applyAudio().
 
-import { setReverb, reverbSeconds } from './audio-engine';
+import { setReverb, setEq, reverbSeconds, eqDb } from './audio-engine';
 
-type FxType = 'reverb';
+type FxType = 'reverb' | 'eq';
 interface Fx { id: number; type: FxType; on: boolean; min: boolean; v: Record<string, number>; }
-interface Param { key: string; label: string; def: number; fmt: (v: number) => string; }
+interface Param { key: string; label: string; def: number; fmt: (v: number) => string; bipolar?: boolean; }   // bipolar: arc dari tengah (seperti knob pan)
 interface EffectDef { type: FxType; name: string; params: Param[]; }
 
 const svg = (inner: string, size = 20) =>
@@ -15,12 +15,22 @@ const svg = (inner: string, size = 20) =>
 
 const ICON_MORE = svg('<circle cx="5" cy="12" r="1.9" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.9" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.9" fill="currentColor" stroke="none"/>', 18);
 
+const fmtDb = (v: number): string => { const d = Math.round(eqDb(v) * 10) / 10; return (d > 0 ? '+' : '') + d.toFixed(1) + ' dB'; };
+
 const EFFECTS: EffectDef[] = [
   {
     type: 'reverb', name: 'Reverb',
     params: [
       { key: 'mix', label: 'Mix', def: 0.3, fmt: v => Math.round(v * 100) + '%' },
       { key: 'size', label: 'Size', def: 0.4, fmt: v => reverbSeconds(v).toFixed(1) + ' s' }
+    ]
+  },
+  {
+    type: 'eq', name: 'Equalizer',
+    params: [
+      { key: 'low', label: 'Low', def: 0.5, bipolar: true, fmt: fmtDb },
+      { key: 'mid', label: 'Mid', def: 0.5, bipolar: true, fmt: fmtDb },
+      { key: 'high', label: 'High', def: 0.5, bipolar: true, fmt: fmtDb }
     ]
   }
 ];
@@ -30,8 +40,10 @@ const racks = new Map<string, Fx[]>();   // id track -> efek miliknya
 let cur: string | null = null, seq = 0;
 
 function applyAudio(track: string): void {
-  const r = (racks.get(track) ?? []).find(f => f.type === 'reverb');
+  const rack = racks.get(track) ?? [];
+  const r = rack.find(f => f.type === 'reverb'), e = rack.find(f => f.type === 'eq');
   setReverb(track, r ? { on: r.on, mix: r.v.mix, size: r.v.size } : null);
+  setEq(track, e ? { on: e.on, low: e.v.low, mid: e.v.mid, high: e.v.high } : null);
 }
 
 // ---------- knob (struktur & kelas sama dengan knob pan di channel mixer, tapi satu arah: 0 → 1) ----------
@@ -45,7 +57,11 @@ const knobSvg = `<svg viewBox="0 0 36 36" aria-hidden="true" class="circular-cha
 
 function paintKnob(el: HTMLElement, v: number, p: Param, name: string): void {
   (el.querySelector('.knob-pos') as SVGElement).style.transform = `rotate(${-KNOB_SWEEP / 2 + v * KNOB_SWEEP}deg)`;
-  el.querySelector('.circle')!.setAttribute('stroke-dasharray', `${(v * ARC_LEN).toFixed(2)} 100`);
+  const arc = el.querySelector('.circle')!;
+  if (p.bipolar) {   // arc dari tengah: ke kiri atau ke kanan, seperti knob pan
+    const a = Math.min(v, 0.5) * ARC_LEN, b = Math.max(v, 0.5) * ARC_LEN;
+    arc.setAttribute('stroke-dasharray', `0 ${a.toFixed(2)} ${(b - a).toFixed(2)} 100`);
+  } else arc.setAttribute('stroke-dasharray', `${(v * ARC_LEN).toFixed(2)} 100`);
   el.setAttribute('aria-valuenow', v.toFixed(3));
   el.setAttribute('aria-valuetext', `${name} ${p.label} ${p.fmt(v)}`);
 }
@@ -349,7 +365,7 @@ export function initFxRack(): FxRack {
     },
     drop(track) {
       racks.delete(track);
-      setReverb(track, null);
+      setReverb(track, null); setEq(track, null);
       if (cur === track) { closePicker(true); closeMenu(true); hideTip(); cur = null; addBtn.disabled = true; list.replaceChildren(); layout(false); }
     },
     closePicker
