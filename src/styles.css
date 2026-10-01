@@ -630,14 +630,12 @@ button{font:inherit;color:inherit;cursor:pointer}
 /* channel mixer ditutup: meter ikut hilang */
 .tracklist--collapsed .trackmeter{opacity:0;visibility:hidden;transition:opacity .12s ease,visibility 0s linear .12s}
 
-/* switch on/off track: vertikal & kecil, ungu = nyala (bulatan di atas), abu = mati (bulatan di bawah) */
-.trackheader__pwr{position:relative;width:10px;height:18px;flex:none;padding:0;margin:0 2px;border:0;border-radius:5px;background:var(--accent);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background-color .25s ease,transform .25s var(--ease-spring)}
-.trackheader__pwr::before{content:"";position:absolute;inset:-6px -3px}
-.trackheader__pwr::after{content:"";position:absolute;left:2px;top:2px;width:6px;height:6px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.35);transition:top .3s var(--ease-spring)}
-.trackheader__pwr[aria-checked="false"]{background:#3a3a48}
-.trackheader__pwr[aria-checked="false"]::after{top:10px}
-.trackheader__pwr:active{transform:scale(.88);transition-duration:.08s}
-.trackheader__pwr:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* indikator on/off track: lampu LED kecil, ungu menyala = nyala, abu redup = mati (klik untuk ganti) */
+.trackheader__pwr{position:relative;width:8px;height:8px;flex:none;padding:0;margin:0 4px;border:0;border-radius:50%;background:var(--accent);box-shadow:0 0 6px 1px color-mix(in srgb,var(--accent) 70%,transparent),inset 0 0 0 1px rgba(255,255,255,.25);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background-color .25s ease,box-shadow .25s ease,transform .25s var(--ease-spring)}
+.trackheader__pwr::before{content:"";position:absolute;inset:-8px}
+.trackheader__pwr[aria-checked="false"]{background:#3a3a48;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.trackheader__pwr:active{transform:scale(.7);transition-duration:.08s}
+.trackheader__pwr:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .trackheader-container.is-off .trackheader__track-name-button{opacity:.5}
 .lane.is-off .pattern{filter:saturate(.25) brightness(.7)}
-@media (prefers-reduced-motion:reduce){.trackheader__pwr,.trackheader__pwr::after{transition:none!important}}
+@media (prefers-reduced-motion:reduce){.trackheader__pwr{transition:none!important}}
