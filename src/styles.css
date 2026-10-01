@@ -538,40 +538,49 @@ button{font:inherit;color:inherit;cursor:pointer}
 .fx-pick__item:disabled{opacity:.4;cursor:default}
 
 /* card tiap efek: gelap, sama dengan card track terpilih */
-.fxc{position:relative;background-color:var(--card);color:var(--text);border-radius:16px;box-shadow:var(--bevel);padding:14px 16px 16px;margin-bottom:12px;flex:none;
+.fxc{position:relative;background-color:var(--card);color:var(--text);border-radius:16px;box-shadow:var(--bevel);padding:12px 12px 12px 16px;margin-bottom:12px;flex:none;
   animation:fxCardIn .55s var(--ease-spring) backwards;animation-delay:calc(var(--i,0)*70ms);transition:box-shadow .3s ease}
 .fxc:hover{box-shadow:var(--bevel-hover)}
-.fxc__head,.fxc__body{position:relative;z-index:3}
+.fxc__head,.fxc__collapse{position:relative;z-index:3}
 @keyframes fxCardIn{from{opacity:0;transform:translateY(-14px) scale(.92)}to{opacity:1;transform:none}}
-.fxc__head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
-.fxc__name{flex:1;min-width:0;margin:0;font-size:14px;font-weight:600;color:var(--text)}
-.fxc__pwr{position:relative;width:36px;height:22px;flex:none;padding:0;border:0;border-radius:11px;background:var(--accent);transition:background-color .25s ease,transform .25s var(--ease-spring)}
-.fxc__pwr::after{content:"";position:absolute;top:3px;left:17px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .3s var(--ease-spring)}
+.fxc__head{display:flex;align-items:center;gap:8px;min-height:30px}
+.fxc__name{flex:1;min-width:0;margin:0;font-size:14px;font-weight:600}
+/* klik nama = minimize / maximize */
+.fxc__title{display:block;width:100%;padding:6px 0;border:0;background:none;color:var(--text);font:inherit;text-align:left;cursor:pointer;border-radius:8px;
+  -webkit-tap-highlight-color:transparent;transition:opacity .2s ease}
+.fxc__title:hover{opacity:.75}
+.fxc__title:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* switch on/off: vertikal & kecil (bulatan di atas = nyala, di bawah = mati) */
+.fxc__pwr{position:relative;width:12px;height:22px;flex:none;padding:0;margin:0 2px;border:0;border-radius:6px;background:var(--accent);transition:background-color .25s ease,transform .25s var(--ease-spring)}
+.fxc__pwr::before{content:"";position:absolute;inset:-7px -9px}
+.fxc__pwr::after{content:"";position:absolute;left:2px;top:2px;width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.35);transition:top .3s var(--ease-spring)}
 .fxc.is-off .fxc__pwr{background:#3a3a48}
-.fxc.is-off .fxc__pwr::after{left:3px}
-.fxc__pwr:active{transform:scale(.92);transition-duration:.08s}
-.fxc__del{width:26px;height:26px;flex:none;padding:0;border:0;border-radius:50%;background:transparent;color:var(--muted);display:grid;place-items:center;
+.fxc.is-off .fxc__pwr::after{top:12px}
+.fxc__pwr:active{transform:scale(.88);transition-duration:.08s}
+/* titik tiga */
+.fxc__more{width:28px;height:28px;flex:none;padding:0;border:0;border-radius:50%;background:transparent;color:var(--muted);display:grid;place-items:center;
   transition:transform .25s var(--ease-spring),background-color .2s ease,color .2s ease}
-.fxc__del:hover{background:rgba(255,255,255,.1);color:var(--text);transform:scale(1.12)}
-.fxc__del:active{transform:scale(.9);transition-duration:.08s}
-.fxc__pwr:focus-visible,.fxc__del:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.fxc__body{display:flex;flex-direction:column;gap:12px;transition:opacity .25s ease}
+.fxc__more:hover,.fxc__more[aria-expanded="true"]{background:rgba(255,255,255,.1);color:var(--text)}
+.fxc__more:active{transform:scale(.9);transition-duration:.08s}
+.fxc__pwr:focus-visible,.fxc__more:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.fx-menu{min-width:140px;transform-origin:top right}
+/* isi card: bisa di-minimize (animasi tinggi) */
+.fxc__collapse{display:grid;grid-template-rows:1fr;transition:grid-template-rows .4s var(--ease-inout)}
+.fxc__body{min-height:0;overflow:hidden;padding-right:4px;transition:opacity .25s ease,visibility 0s}
+.fxc.is-min .fxc__collapse{grid-template-rows:0fr}
+.fxc.is-min .fxc__body{opacity:0;visibility:hidden;transition:opacity .2s ease,visibility 0s linear .4s}
 .fxc.is-off .fxc__body{opacity:.4}
-.fxc__row{display:grid;grid-template-columns:1fr auto;align-items:center;row-gap:2px}
+.fxc.is-off.is-min .fxc__body{opacity:0}
+/* knob besar, gaya sama dengan knob pan di channel mixer */
+.fxc__knobs{display:flex;justify-content:space-evenly;align-items:flex-start;gap:12px;padding:14px 0 6px}
+.fxc__cell{display:flex;flex-direction:column;align-items:center;gap:10px}
+.fxk{width:72px;height:72px}
+.fxk .circular-chart .circle-bg{stroke-width:3}
+.fxk .circular-chart .knob-pos{stroke-width:3}
 .fxc__label{font-size:12.5px;font-weight:500;color:var(--muted)}
-.fxc__val{font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--text);font-weight:600}
-.fxs{-webkit-appearance:none;appearance:none;grid-column:1/-1;width:100%;height:20px;margin:0;background:transparent;cursor:pointer;display:block;touch-action:pan-y;--p:50%}
-.fxs::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(90deg,var(--accent) var(--p),rgba(255,255,255,.14) var(--p))}
-.fxs::-moz-range-track{height:4px;border-radius:2px;background:rgba(255,255,255,.14)}
-.fxs::-moz-range-progress{height:4px;border-radius:2px;background:var(--accent)}
-.fxs::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;background:#fff;border:2px solid var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.4);transition:transform .22s var(--ease-spring)}
-.fxs::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.4);transition:transform .22s var(--ease-spring)}
-.fxs:hover::-webkit-slider-thumb{transform:scale(1.18)}
-.fxs:active::-webkit-slider-thumb{transform:scale(1.3)}
-.fxs:hover::-moz-range-thumb{transform:scale(1.18)}
-.fxs:active::-moz-range-thumb{transform:scale(1.3)}
-.fxs:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
-@media (prefers-reduced-motion:reduce){.fxc,.fx-pick,.fx-pick__item{animation:none!important}.fx__add,.fx__add svg,.fxc__pwr,.fxc__pwr::after,.fxc__del,.fxs::-webkit-slider-thumb{transition:none!important}}
+/* tombol + pindah ke bawah setelah ada efek */
+.fx__body.has-fx .fx__top{order:2;margin:6px 0 0}
+@media (prefers-reduced-motion:reduce){.fxc,.fx-pick,.fx-pick__item{animation:none!important}.fx__add,.fx__add svg,.fxc__pwr,.fxc__pwr::after,.fxc__more,.fxc__collapse,.fxc__body{transition:none!important}}
 
 /* isi panel masuk satu per satu dari kanan; keluar cepat tanpa jeda */
 .fx__item{opacity:0;transform:translateX(28px)}

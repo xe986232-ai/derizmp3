@@ -1,19 +1,19 @@
-// Isi panel efek: tombol "+" bulat putih di atas, card gelap (gaya card track) untuk memilih efek, dan satu card per efek di bawahnya.
+// Isi panel efek: tombol "+" bulat putih (di atas saat kosong, pindah ke bawah setelah ada efek), card gelap (gaya card track)
+// untuk memilih efek, dan satu card per efek. Parameter diatur dengan knob seperti knob pan di channel mixer.
 // Efek disimpan per track (kunci = id track); panel selalu menampilkan efek milik track yang sedang dipilih.
 // Saat ini baru ada Reverb. Efek baru cukup ditambah ke EFFECTS (ikon, nama, parameter) dan ke applyAudio().
 
 import { setReverb, reverbSeconds } from './audio-engine';
 
 type FxType = 'reverb';
-interface Fx { id: number; type: FxType; on: boolean; v: Record<string, number>; }
+interface Fx { id: number; type: FxType; on: boolean; min: boolean; v: Record<string, number>; }
 interface Param { key: string; label: string; def: number; fmt: (v: number) => string; }
 interface EffectDef { type: FxType; name: string; params: Param[]; }
 
 const svg = (inner: string, size = 20) =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
 
-const ICON_POWER = svg('<path d="M12 3v8M7.4 6.6a7 7 0 1 0 9.2 0"/>', 15);
-const ICON_CLOSE = svg('<path d="M6 6l12 12M18 6L6 18"/>', 15);
+const ICON_MORE = svg('<circle cx="5" cy="12" r="1.9" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.9" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.9" fill="currentColor" stroke="none"/>', 18);
 
 const EFFECTS: EffectDef[] = [
   {
@@ -34,20 +34,33 @@ function applyAudio(track: string): void {
   setReverb(track, r ? { on: r.on, mix: r.v.mix, size: r.v.size } : null);
 }
 
-const fillOf = (inp: HTMLInputElement) => inp.style.setProperty('--p', ((+inp.value - +inp.min) / (+inp.max - +inp.min) * 100) + '%');
+// ---------- knob (struktur & kelas sama dengan knob pan di channel mixer, tapi satu arah: 0 → 1) ----------
+const KNOB_SWEEP = 270, ARC_LEN = 75;   // sapuan 270° = 75 satuan dari keliling 100
+const knobSvg = `<svg viewBox="0 0 36 36" aria-hidden="true" class="circular-chart">` +
+  `<path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" stroke-dasharray="75, 100" class="circle-bg" style="transform-origin:18px 18px;transform:rotate(225deg)"></path>` +
+  `<path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" stroke-dashoffset="0" stroke-dasharray="0 100" class="circle primary-theme" style="transform:rotate(225deg)"></path>` +
+  `<path d="M18 5.142857142857142 a 12.857142857142858 12.857142857142858 0 0 1 0 25.714285714285715 a 12.857142857142858 12.857142857142858 0 0 1 0 -25.714285714285715" fill="var(--background-tinted-press)" stroke="none" class="circle-inner"></path>` +
+  `<path d="M18 5.7857142857142865 a 12.214285714285714 12.214285714285714 0 0 1 0 24.428571428571427 a 12.214285714285714 12.214285714285714 0 0 1 0 -24.428571428571427" stroke="var(--background-tinted-base)" fill="none" class="circle-inner-stroke"></path>` +
+  `<path d="M 18 7.5 L 18 12" class="knob-pos" style="transform:rotate(-135deg)"></path></svg>`;
+
+function paintKnob(el: HTMLElement, v: number, p: Param, name: string): void {
+  (el.querySelector('.knob-pos') as SVGElement).style.transform = `rotate(${-KNOB_SWEEP / 2 + v * KNOB_SWEEP}deg)`;
+  el.querySelector('.circle')!.setAttribute('stroke-dasharray', `${(v * ARC_LEN).toFixed(2)} 100`);
+  el.setAttribute('aria-valuenow', v.toFixed(3));
+  el.setAttribute('aria-valuetext', `${name} ${p.label} ${p.fmt(v)}`);
+}
 
 function cardHtml(fx: Fx, i: number): string {
   const d = defOf(fx.type);
-  const rows = d.params.map(p => {
-    const v = fx.v[p.key];
-    return `<label class="fxc__row"><span class="fxc__label">${p.label}</span><output class="fxc__val">${p.fmt(v)}</output>` +
-      `<input class="fxs" type="range" min="0" max="100" step="1" value="${Math.round(v * 100)}" data-k="${p.key}" aria-label="${d.name} ${p.label}"></label>`;
-  }).join('');
-  return `<section class="fxc${fx.on ? '' : ' is-off'}" data-fx="${fx.id}" style="--i:${i}" aria-label="${d.name}">` +
-    `<header class="fxc__head"><h3 class="fxc__name">${d.name}</h3>` +
+  const cells = d.params.map(p =>
+    `<div class="fxc__cell"><div class="knob fxk"><div class="knob-inner">` +
+    `<div role="slider" tabindex="0" class="knob-input" data-k="${p.key}" aria-label="${d.name} ${p.label}" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${fx.v[p.key]}">` +
+    `<div class="knobwheel">${knobSvg}</div></div></div></div><span class="fxc__label">${p.label}</span></div>`).join('');
+  return `<section class="fxc${fx.on ? '' : ' is-off'}${fx.min ? ' is-min' : ''}" data-fx="${fx.id}" style="--i:${i}" aria-label="${d.name}">` +
+    `<header class="fxc__head"><h3 class="fxc__name"><button type="button" class="fxc__title" aria-expanded="${!fx.min}" title="Klik untuk minimize / maximize">${d.name}</button></h3>` +
     `<button type="button" class="fxc__pwr" role="switch" aria-checked="${fx.on}" aria-label="${d.name} nyala / mati" title="Nyala / mati"></button>` +
-    `<button type="button" class="fxc__del" aria-label="Hapus ${d.name}" title="Hapus efek">${ICON_CLOSE}</button></header>` +
-    `<div class="fxc__body">${rows}</div></section>`;
+    `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi ${d.name}" title="Opsi">${ICON_MORE}</button></header>` +
+    `<div class="fxc__collapse"><div class="fxc__body"><div class="fxc__knobs">${cells}</div></div></div></section>`;
 }
 
 export interface FxRack {
@@ -59,6 +72,8 @@ export interface FxRack {
 export function initFxRack(): FxRack {
   const addBtn = document.getElementById('fxAdd') as HTMLButtonElement;
   const list = document.getElementById('fxList')!;
+  const bodyEl = addBtn.closest('.fx__body') as HTMLElement;
+  const topEl = addBtn.closest('.fx__top') as HTMLElement;
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const fxs = () => (cur ? racks.get(cur) ?? [] : []);
@@ -67,7 +82,33 @@ export function initFxRack(): FxRack {
     return fxs().find(f => String(f.id) === id);
   };
 
-  // ---------- card pilihan efek (putih), muncul di bawah tombol + ----------
+  // Tombol "+": di atas saat belum ada efek, pindah ke bawah daftar setelah ada efek (dengan animasi geser halus)
+  function layout(animate: boolean): void {
+    const has = fxs().length > 0;
+    if (bodyEl.classList.contains('has-fx') === has) return;
+    const first = topEl.getBoundingClientRect().top;
+    bodyEl.classList.toggle('has-fx', has);
+    if (!animate || reduce) return;
+    const dy = first - topEl.getBoundingClientRect().top;
+    if (Math.abs(dy) > 1) topEl.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: 480, easing: 'cubic-bezier(.34,1.3,.64,1)' });
+  }
+
+  // ---------- tooltip putih saat knob diputar (kelas & gaya sama dengan tooltip knob pan) ----------
+  const tip = document.createElement('div');
+  tip.className = 'pan-tip'; tip.hidden = true; tip.setAttribute('role', 'status');
+  document.body.appendChild(tip);
+  let tipTimer = 0;
+  const hideTip = () => { tip.hidden = true; };
+  const showTip = (knob: HTMLElement, text: string, ms = 0) => {
+    tip.textContent = text; tip.hidden = false;
+    const r = knob.getBoundingClientRect(), w = tip.getBoundingClientRect();
+    tip.style.left = Math.max(8, Math.min(r.left + r.width / 2 - w.width / 2, innerWidth - w.width - 8)) + 'px';
+    tip.style.top = (r.top - w.height - 8 < 8 ? r.bottom + 8 : r.top - w.height - 8) + 'px';
+    clearTimeout(tipTimer);
+    if (ms) tipTimer = window.setTimeout(hideTip, ms);
+  };
+
+  // ---------- card pilihan efek, muncul di dekat tombol + ----------
   let pick: HTMLElement | null = null;
 
   const closePicker = (instant = false) => {
@@ -93,6 +134,7 @@ export function initFxRack(): FxRack {
 
   const openPicker = () => {
     if (pick || !cur) return;
+    closeMenu(true);
     const have = new Set(fxs().map(f => f.type));
     const el = document.createElement('div');
     el.className = 'fx-pick';
@@ -107,7 +149,10 @@ export function initFxRack(): FxRack {
     const r = addBtn.getBoundingClientRect(), w = Math.min(220, innerWidth - 16), h = el.offsetHeight;
     el.style.width = w + 'px';
     el.style.left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, innerWidth - w - 8)) + 'px';
-    el.style.top = Math.max(8, Math.min(r.bottom + 10, innerHeight - h - 8)) + 'px';
+    // buka ke bawah tombol; kalau tidak muat (tombol sekarang di bagian bawah), buka ke atas
+    const below = r.bottom + 10, above = r.top - 10 - h;
+    el.style.top = Math.max(8, below + h > innerHeight - 8 && above >= 8 ? above : Math.min(below, innerHeight - h - 8)) + 'px';
+    el.style.transformOrigin = below + h > innerHeight - 8 && above >= 8 ? 'bottom center' : 'top center';
     pick = el;
     addBtn.setAttribute('aria-expanded', 'true');
     el.addEventListener('click', e => {
@@ -128,49 +173,144 @@ export function initFxRack(): FxRack {
 
   addBtn.addEventListener('click', () => { pick ? closePicker() : openPicker(); });
 
+  // ---------- menu titik tiga (Delete) ----------
+  let menu: HTMLElement | null = null, menuBtn: HTMLButtonElement | null = null;
+
+  function closeMenu(instant = false): void {
+    const el = menu; if (!el) return;
+    menu = null;
+    menuBtn?.setAttribute('aria-expanded', 'false'); menuBtn = null;
+    document.removeEventListener('pointerdown', onMenuOutside, true);
+    document.removeEventListener('keydown', onMenuKey, true);
+    window.removeEventListener('resize', onMenuResize);
+    window.removeEventListener('scroll', onMenuResize, true);
+    if (instant || reduce) { el.remove(); return; }
+    el.style.pointerEvents = 'none';
+    el.animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(.9) translateY(-4px)' }],
+      { duration: 150, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }).onfinish = () => el.remove();
+  }
+  const onMenuOutside = (e: PointerEvent) => { const t = e.target as Node; if (!menu?.contains(t) && !menuBtn?.contains(t)) closeMenu(); };
+  const onMenuResize = () => closeMenu(true);
+  const onMenuKey = (e: KeyboardEvent) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault(); e.stopPropagation();
+    const b = menuBtn; closeMenu(); b?.focus({ preventScroll: true });
+  };
+
+  function openMenu(btn: HTMLButtonElement, card: HTMLElement): void {
+    closePicker(true); closeMenu(true);
+    const el = document.createElement('div');
+    el.className = 'track-menu fx-menu';
+    el.setAttribute('role', 'menu');
+    el.innerHTML = '<button type="button" role="menuitem" class="track-menu__item track-menu__item--danger">Delete</button>';
+    document.body.appendChild(el);
+    const r = btn.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
+    el.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + 'px';
+    el.style.top = Math.max(8, Math.min(r.bottom + 6, innerHeight - h - 8)) + 'px';
+    el.style.transformOrigin = 'top right';
+    menu = el; menuBtn = btn;
+    btn.setAttribute('aria-expanded', 'true');
+    el.querySelector('button')!.addEventListener('click', () => { closeMenu(true); removeEffect(card); });
+    el.addEventListener('keydown', e => e.stopPropagation());
+    el.addEventListener('keyup', e => e.stopPropagation());
+    document.addEventListener('pointerdown', onMenuOutside, true);
+    document.addEventListener('keydown', onMenuKey, true);
+    window.addEventListener('resize', onMenuResize);
+    window.addEventListener('scroll', onMenuResize, true);
+    el.querySelector<HTMLButtonElement>('button')!.focus({ preventScroll: true });
+  }
+
   // ---------- kartu efek ----------
+  const paintAll = (card: HTMLElement, fx: Fx) => {
+    const d = defOf(fx.type);
+    card.querySelectorAll<HTMLElement>('.knob-input').forEach(k => {
+      const p = d.params.find(x => x.key === k.dataset.k)!;
+      paintKnob(k, fx.v[p.key], p, d.name);
+    });
+  };
+
   function addEffect(type: FxType): void {
     if (!cur) return;
     const d = defOf(type), v: Record<string, number> = {};
     d.params.forEach(p => { v[p.key] = p.def; });
-    const fx: Fx = { id: ++seq, type, on: true, v };
+    const fx: Fx = { id: ++seq, type, on: true, min: false, v };
     racks.set(cur, [...fxs(), fx]);
     applyAudio(cur);
     list.insertAdjacentHTML('beforeend', cardHtml(fx, 0));
     const card = list.lastElementChild as HTMLElement;
-    card.querySelectorAll<HTMLInputElement>('.fxs').forEach(fillOf);
+    paintAll(card, fx);
+    layout(true);
     card.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
   }
 
   function removeEffect(card: HTMLElement): void {
     const fx = find(card); if (!fx || !cur) return;
+    hideTip();
     racks.set(cur, fxs().filter(f => f !== fx));
     applyAudio(cur);
     if (pick) closePicker(true);
-    if (reduce) { card.remove(); return; }
+    const done = () => { card.remove(); layout(true); };
+    if (reduce) { done(); return; }
     const h = card.offsetHeight, mb = parseFloat(getComputedStyle(card).marginBottom) || 0;
     card.style.overflow = 'hidden'; card.style.pointerEvents = 'none';
     card.animate([
       { height: h + 'px', marginBottom: mb + 'px', opacity: 1, transform: 'translateX(0) scale(1)' },
       { opacity: 0, transform: 'translateX(36px) scale(.94)', offset: .5 },
       { height: '0px', marginBottom: '0px', opacity: 0, transform: 'translateX(36px) scale(.94)' }
-    ], { duration: 380, easing: 'cubic-bezier(.65,0,.35,1)', fill: 'forwards' }).onfinish = () => card.remove();
+    ], { duration: 380, easing: 'cubic-bezier(.65,0,.35,1)', fill: 'forwards' }).onfinish = done;
   }
 
-  list.addEventListener('input', e => {
-    const inp = e.target as HTMLInputElement;
-    if (!inp.matches?.('.fxs')) return;
-    const fx = find(inp); if (!fx || !cur) return;
-    const p = defOf(fx.type).params.find(x => x.key === inp.dataset.k)!;
-    fx.v[p.key] = +inp.value / 100;
-    fillOf(inp);
-    inp.parentElement!.querySelector('.fxc__val')!.textContent = p.fmt(fx.v[p.key]);
-    applyAudio(cur);
+  // ---------- knob: drag (atas/kanan = naik), panah keyboard, dobel klik = reset ke nilai awal ----------
+  let drag: { el: HTMLElement; fx: Fx; p: Param; sx: number; sy: number; sv: number } | null = null;
+  const ctx = (el: HTMLElement) => {
+    const fx = find(el); if (!fx) return null;
+    const p = defOf(fx.type).params.find(x => x.key === el.dataset.k)!;
+    return { fx, p };
+  };
+  const setVal = (el: HTMLElement, fx: Fx, p: Param, n: number) => {
+    const v = Math.max(0, Math.min(1, Math.round(n * 100) / 100));
+    fx.v[p.key] = v;
+    paintKnob(el, v, p, defOf(fx.type).name);
+    if (cur) applyAudio(cur);
+    if (!tip.hidden) showTip(el, p.fmt(v));
+  };
+
+  list.addEventListener('pointerdown', e => {
+    const el = (e.target as Element).closest<HTMLElement>('.knob-input'); if (!el) return;
+    const c = ctx(el); if (!c) return;
+    drag = { el, fx: c.fx, p: c.p, sx: e.clientX, sy: e.clientY, sv: c.fx.v[c.p.key] };
+    el.classList.add('is-dragging'); el.setPointerCapture(e.pointerId); e.preventDefault();
+    el.focus({ preventScroll: true });
+    showTip(el, c.p.fmt(c.fx.v[c.p.key]));
   });
+  list.addEventListener('pointermove', e => {
+    if (!drag) return;
+    setVal(drag.el, drag.fx, drag.p, drag.sv + ((drag.sy - e.clientY) + (e.clientX - drag.sx)) / 150);
+  });
+  const endDrag = () => { if (!drag) return; drag.el.classList.remove('is-dragging'); drag = null; hideTip(); };
+  list.addEventListener('pointerup', endDrag);
+  list.addEventListener('pointercancel', endDrag);
+  list.addEventListener('dblclick', e => {
+    const el = (e.target as Element).closest<HTMLElement>('.knob-input'); if (!el) return;
+    const c = ctx(el); if (!c) return;
+    showTip(el, c.p.fmt(c.p.def), 900); setVal(el, c.fx, c.p, c.p.def);
+  });
+  list.addEventListener('keydown', e => {
+    const el = (e.target as Element).closest<HTMLElement>('.knob-input'); if (!el) return;
+    const up = e.key === 'ArrowUp' || e.key === 'ArrowRight', down = e.key === 'ArrowDown' || e.key === 'ArrowLeft';
+    if (!up && !down) return;
+    const c = ctx(el); if (!c) return;
+    e.preventDefault(); e.stopPropagation();   // panah tidak ikut memicu mundur / maju milik DAW
+    setVal(el, c.fx, c.p, c.fx.v[c.p.key] + (up ? 0.02 : -0.02));
+    showTip(el, c.p.fmt(c.fx.v[c.p.key]), 900);
+  });
+  list.addEventListener('blur', e => { if ((e.target as Element).matches?.('.knob-input') && !drag) hideTip(); }, true);
+
   list.addEventListener('click', e => {
     const t = e.target as Element, card = t.closest<HTMLElement>('.fxc');
     if (!card) return;
-    if (t.closest('.fxc__del')) { removeEffect(card); return; }
+    const more = t.closest<HTMLButtonElement>('.fxc__more');
+    if (more) { menu && menuBtn === more ? closeMenu() : openMenu(more, card); return; }
     const pwr = t.closest<HTMLButtonElement>('.fxc__pwr');
     if (pwr) {
       const fx = find(card); if (!fx || !cur) return;
@@ -178,6 +318,15 @@ export function initFxRack(): FxRack {
       card.classList.toggle('is-off', !fx.on);
       pwr.setAttribute('aria-checked', String(fx.on));
       applyAudio(cur);
+      return;
+    }
+    const title = t.closest<HTMLButtonElement>('.fxc__title');   // klik nama efek: minimize / maximize
+    if (title) {
+      const fx = find(card); if (!fx) return;
+      fx.min = !fx.min;
+      hideTip();
+      card.classList.toggle('is-min', fx.min);
+      title.setAttribute('aria-expanded', String(!fx.min));
     }
   });
   // Space / Enter pada tombol di panel ini jangan ikut memicu play / pause milik DAW
@@ -187,19 +336,20 @@ export function initFxRack(): FxRack {
 
   return {
     show(track) {
-      closePicker(true);
+      closePicker(true); closeMenu(true); hideTip(); drag = null;
       cur = track;
       addBtn.disabled = !track;
       list.replaceChildren();
-      if (!track) return;
+      if (!track) { layout(false); return; }
       applyAudio(track);
       list.innerHTML = fxs().map((f, i) => cardHtml(f, i)).join('');
-      list.querySelectorAll<HTMLInputElement>('.fxs').forEach(fillOf);
+      list.querySelectorAll<HTMLElement>('.fxc').forEach(c => { const f = find(c); if (f) paintAll(c, f); });
+      layout(false);
     },
     drop(track) {
       racks.delete(track);
       setReverb(track, null);
-      if (cur === track) { closePicker(true); cur = null; addBtn.disabled = true; list.replaceChildren(); }
+      if (cur === track) { closePicker(true); closeMenu(true); hideTip(); cur = null; addBtn.disabled = true; list.replaceChildren(); layout(false); }
     },
     closePicker
   };
