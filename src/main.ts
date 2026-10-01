@@ -6,7 +6,7 @@ import { initFxRack } from './fx-rack';
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
 import { decodeFile, addBuffer, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
-import { openPianoRoll, setPianoRollPlayhead } from './piano-roll';
+import { openPianoRoll, setPianoRollPlayhead, setPianoRollChangeHandler, getPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, PR_BEATS } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const EASE_OUT = 'cubic-bezier(.22,1,.36,1)', EASE_SPRING = 'cubic-bezier(.34,1.56,.64,1)', EASE_INOUT = 'cubic-bezier(.65,0,.35,1)';
@@ -304,6 +304,19 @@ function slot(lane, x) {
   for (const p of pats) if (p.s >= start && p.s < end) end = p.s;
   return end - start >= BAR_W / 2 ? {start, width: end - start} : null;
 }
+// Isi note ditampilkan mini di dalam pattern (seperti piano roll kecil): x = ketukan dari awal pattern, y = nada (dipusatkan sesuai rentang nada)
+function renderPatNotes(el) {
+  const id = el.dataset.prId; if (!id) return;
+  const notes = getPianoRollNotes(id);
+  let box = el.querySelector('.pattern__notes');
+  if (!notes.length) { if (box) box.remove(); return; }
+  if (!box) { box = document.createElement('div'); box.className = 'pattern__notes'; el.insertBefore(box, el.querySelector('.pattern__handle')); }
+  let lo = 127, hi = 0; notes.forEach(n => { lo = Math.min(lo, n.p); hi = Math.max(hi, n.p); });
+  const rows = Math.max(hi - lo + 1, 8), top = (rows - (hi - lo + 1)) / 2;   // minimal 8 baris supaya 1-2 nada tidak jadi balok raksasa
+  box.innerHTML = '<svg viewBox="0 0 ' + PR_BEATS + ' ' + rows + '" preserveAspectRatio="none" aria-hidden="true">' +
+    notes.map(n => '<rect x="' + n.s + '" y="' + (top + hi - n.p + 0.1) + '" width="' + Math.max(n.l, 0.12) + '" height="0.8"/>').join('') + '</svg>';
+}
+setPianoRollChangeHandler(id => { const el = lanesEl.querySelector('.pattern[data-pr-id="' + id + '"]'); if (el) renderPatNotes(el); });
 function createPattern(lane, sl, ci) {   // ci = {clip, off}: pattern ini adalah audio clip
   const cont = document.querySelector('.trackheader-container[data-track="' + lane.dataset.track + '"]');
   const col = cont && cont.style.getPropertyValue('--track-color');
@@ -499,6 +512,7 @@ function copyPattern() {
   if (start + w > W + .5) return shakeBar();
   const n = createPattern(lane, {start, width: w}, clipOf(el, 0));
   n.querySelector('.pattern__title').textContent = el.querySelector('.pattern__title').textContent;
+  if (el.dataset.prId) { n.dataset.prId = 'pat' + (++prSeq); copyPianoRollNotes(el.dataset.prId, n.dataset.prId); renderPatNotes(n); }   // salinan ikut membawa nada
   patAnchor = null; selectPattern(n);
   n.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'smooth'});
 }
@@ -558,6 +572,11 @@ function splitPattern() {
   if (cut - s0 < 4 || s0 + w - cut < 4) return shakeBar();
   const n = createPattern(el.parentElement, {start: cut, width: s0 + w - cut}, clipOf(el, (cut - s0) / BAR_W * SEC_PER_BAR));
   n.querySelector('.pattern__title').textContent = el.querySelector('.pattern__title').textContent;
+  if (el.dataset.prId) {   // nada ikut terbagi: kiri dipotong di titik bagi, kanan mulai dari titik itu
+    const cb = (cut - s0) / BAR_W * 4;
+    n.dataset.prId = 'pat' + (++prSeq); copyPianoRollNotes(el.dataset.prId, n.dataset.prId, cb); trimPianoRollNotes(el.dataset.prId, cb);
+    renderPatNotes(el); renderPatNotes(n);
+  }
   el.style.width = (cut - s0) + 'px'; handleSide(el);
 }
 function doubleLength() {

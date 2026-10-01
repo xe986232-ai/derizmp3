@@ -253,7 +253,35 @@ function placePlayhead() {
 }
 export function setPianoRollPlayhead(beats: number) { phBeat = beats; if (root && !root.hidden) placePlayhead(); }
 
-function redraw() { drawGrid(); drawKeys(); drawRuler(); placeSelBar(); placePlayhead(); }
+// ---------- sinkron ke timeline: isi note ditampilkan mini di dalam pattern ----------
+let onChange: ((id: string) => void) | null = null, notified = '';
+export const setPianoRollChangeHandler = (fn: (id: string) => void) => { onChange = fn; };
+function notifyChange() {
+  if (!onChange || !curKey) return;
+  const sn = curKey + snapshot();
+  if (sn !== notified) { notified = sn; onChange(curKey); }
+}
+export const PR_BEATS = total;   // lebar grid piano roll (ketukan)
+export function getPianoRollNotes(id: string): Array<{p: number; s: number; l: number}> {
+  const x = states.get(id);
+  return x ? x.notes.map(n => ({p: n.p, s: n.s, l: n.l})) : [];
+}
+// salin nada dari satu pattern ke pattern lain (rentang ketukan [fromBeat, toBeat), digeser supaya mulai dari 0)
+export function copyPianoRollNotes(from: string, to: string, fromBeat = 0, toBeat = Infinity) {
+  const src = states.get(from); if (!src) return;
+  const dst: State = {notes: [], nextId: 1};
+  for (const n of src.notes) {
+    const a = Math.max(n.s, fromBeat), b = Math.min(n.s + n.l, toBeat);
+    if (b > a + 1e-9) dst.notes.push({id: dst.nextId++, p: n.p, s: a - fromBeat, l: b - a});
+  }
+  states.set(to, dst);
+}
+export function trimPianoRollNotes(id: string, toBeat: number) {   // buang / potong nada yang melewati toBeat
+  const x = states.get(id); if (!x) return;
+  x.notes = x.notes.filter(n => n.s < toBeat - 1e-9).map(n => ({...n, l: Math.min(n.l, toBeat - n.s)}));
+}
+
+function redraw() { drawGrid(); drawKeys(); drawRuler(); placeSelBar(); placePlayhead(); notifyChange(); }
 function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; redraw(); }); }
 
 // ---------- ukuran & zoom ----------
