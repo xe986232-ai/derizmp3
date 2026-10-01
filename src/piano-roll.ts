@@ -60,6 +60,7 @@ let lastLen = 1;
 let hoverP = -1;
 let raf = 0;
 
+const handleR = () => clamp(rowH * 0.3, 4, 7);   // jari-jari bulatan handle
 const snapshot = () => JSON.stringify(st.notes);
 const unit = () => (snap > 0 ? snap : 1 / 16);
 const snapRound = (b: number) => (snap > 0 ? Math.round(b / snap) * snap : b);
@@ -112,16 +113,18 @@ function drawGrid() {
     if (ex >= 0 && ex <= vw) { c.fillStyle = color; c.fillRect(ex - 1, 0, 2, vh); }
   }
   // nada
-  const fs = Math.min(11, rowH - 4);
+  const fs = Math.min(11, rowH - 4), hr = handleR();
   c.font = '600 ' + fs + 'px system-ui,sans-serif'; c.textBaseline = 'middle';
   for (const n of st.notes) {
     const x = n.s * ppb - sx, w = Math.max(3, n.l * ppb), y = (P_MAX - n.p) * rowH - sy;
-    if (x + w < 0 || x > vw || y + rowH < 0 || y > vh) continue;
+    if (x + w + hr < 0 || x > vw || y + rowH < 0 || y > vh) continue;
     const sel = selected.has(n.id);
     c.fillStyle = color; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 3); c.fill();
-    c.fillStyle = 'rgba(0,0,0,.28)'; c.fillRect(x + w - 4, y + 3, 2, rowH - 6);     // pegangan ubah panjang
     if (sel) { c.fillStyle = 'rgba(255,255,255,.35)'; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 3); c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.stroke(); }
     if (w > 30 && rowH >= 14) { c.fillStyle = 'rgba(0,0,0,.65)'; c.fillText(pname(n.p), x + 5, y + rowH / 2 + 0.5); }
+    // handle ubah panjang: bulatan putih di ujung kanan
+    c.fillStyle = 'rgba(0,0,0,.4)'; c.beginPath(); c.arc(x + w, y + rowH / 2 + 0.5, hr + 1, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#fff'; c.beginPath(); c.arc(x + w, y + rowH / 2, hr, 0, Math.PI * 2); c.fill();
   }
   // marquee
   if (g && g.kind === 'marquee') {
@@ -241,15 +244,25 @@ function localXY(e: {clientX: number; clientY: number}) {
   const r = gc.getBoundingClientRect();
   return {x: e.clientX - r.left + sc.scrollLeft, y: e.clientY - r.top + sc.scrollTop};
 }
-function hit(cx: number, cy: number): {n: Note; edge: boolean} | null {
+function hit(cx: number, cy: number): {n: Note} | null {
   const row = Math.floor(cy / rowH), p = P_MAX - row;
   for (let i = st.notes.length - 1; i >= 0; i--) {
     const n = st.notes[i];
     if (n.p !== p) continue;
     const x0 = n.s * ppb, x1 = (n.s + n.l) * ppb;
-    if (cx >= x0 && cx <= x1) return {n, edge: cx > x1 - Math.min(10, (x1 - x0) * 0.4)};
+    if (cx >= x0 && cx <= x1) return {n};
   }
   return null;
+}
+function hitHandle(cx: number, cy: number): Note | null {
+  let best: Note | null = null, bd = 1e9;
+  for (const n of st.notes) {
+    const ex = (n.s + n.l) * ppb, ey = (P_MAX - n.p + 0.5) * rowH, w = n.l * ppb;
+    if (cx < ex - Math.min(12, w * 0.5) || cx > ex + 14 || Math.abs(cy - ey) > Math.max(rowH / 2, 11)) continue;
+    const d = Math.hypot(cx - ex, cy - ey);
+    if (d < bd) { bd = d; best = n; }
+  }
+  return best;
 }
 function commit() { if (g && !g.pushed) { pushUndo(g.snap0); g.pushed = true; } }
 
@@ -284,13 +297,19 @@ function onDown(e: PointerEvent) {
     if (h) { commit(); st.notes = st.notes.filter(n => n !== h.n); selected.delete(h.n.id); g.changed = true; updateUI(); schedule(); }
     return;
   }
-  if (h) {                                      // klik di nada: pilih + pindah / ubah panjang
+  const hh = hitHandle(x, y);
+  if (hh) {                                     // tarik bulatan putih: ubah panjang
+    if (!selected.has(hh.id)) selected = new Set([hh.id]);
+    g = {...base, kind: 'resize', anchor: {...hh}, orig: st.notes.filter(n => selected.has(n.id)).map(n => ({...n}))};
+    updateUI(); schedule(); return;
+  }
+  if (h) {                                      // klik di nada: pilih + pindah
     if (e.shiftKey && t === 'select') {
       if (selected.has(h.n.id)) selected.delete(h.n.id); else selected.add(h.n.id);
       updateUI(); schedule(); return;
     }
     if (!selected.has(h.n.id)) { if (!e.shiftKey) selected.clear(); selected.add(h.n.id); }
-    g = {...base, kind: h.edge ? 'resize' : 'move', anchor: {...h.n}, orig: st.notes.filter(n => selected.has(n.id)).map(n => ({...n}))};
+    g = {...base, kind: 'move', anchor: {...h.n}, orig: st.notes.filter(n => selected.has(n.id)).map(n => ({...n}))};
     updateUI(); schedule(); return;
   }
   if (t === 'select') {                         // area kosong: marquee
@@ -340,8 +359,8 @@ function onMove(e: PointerEvent) {
     const p = P_MAX - Math.floor(y / rowH);
     const np = p >= P_MIN && p <= P_MAX ? p : -1;
     if (np !== hoverP) { hoverP = np; schedule(); }
-    const h = hit(x, y);
-    gc.style.cursor = tool === 'pan' ? 'grab' : tool === 'erase' ? (h ? 'pointer' : 'default') : h ? (h.edge ? 'ew-resize' : 'grab') : tool === 'select' ? 'default' : 'crosshair';
+    const h = hit(x, y), onHandle = (tool === 'draw' || tool === 'select') && !!hitHandle(x, y);
+    gc.style.cursor = tool === 'pan' ? 'grab' : tool === 'erase' ? (h ? 'pointer' : 'default') : onHandle ? 'ew-resize' : h ? 'grab' : tool === 'select' ? 'default' : 'crosshair';
     return;
   }
   g.x = x; g.y = y;
