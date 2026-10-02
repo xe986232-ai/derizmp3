@@ -6,6 +6,7 @@ import { initTrackMeters } from './track-meters';
 import { initTrackReorder } from './track-reorder';
 import { initFxRack } from './fx-rack';
 import { initRecordJelly } from './record-jelly';
+import { initPatternJelly } from './pattern-jelly';
 import { initLandscape } from './landscape';
 import { initMenuPanel, setProjectIO } from './menu-panel';
 import { hasSynth, startVoice, releaseVoice, playNote, stopAllSynth } from './synth-engine';
@@ -403,6 +404,7 @@ lanesEl.addEventListener('pointerdown', e => {
   const sx = e.clientX; let moved = false;
   el.setPointerCapture(e.pointerId);
   const move = ev => {
+    if (document.documentElement.classList.contains('is-pat-jelly')) return;   // pattern sedang diangkat (Record Mode jelly): jangan geser yang asli
     const dx = ev.clientX - sx;
     if (!moved) {
       if (Math.abs(dx) < 4) return;
@@ -879,6 +881,7 @@ function selectTrack(cont) {
   fxRack.show(cont.dataset.track);   // panel efek ikut pindah ke track terpilih
   if (kbdEl.classList.contains('is-open')) openKbd(cont);   // keyboard yang sudah terbuka ikut pindah ke track terpilih
 }
+initPatternJelly(lanesEl);   // Record Mode: card pattern (kotak ungu di timeline) tahan -> bisa dibawa bebas + jelly
 initRecordJelly(document.querySelector('.headers-list'), document.querySelector('.workspace'));   // Record Mode: card track terpilih bisa digoyang (drag + kenyal + rotasi)
 initTrackReorder(document.querySelector('.headers-list'), lanesEl, document.querySelector('.workspace'), () => { patBarPlace(); });   // tahan + geser icon channel mixer: pindah urutan track (card + lane), semua mode
 document.querySelector('.headers-list').addEventListener('pointerdown', e => {

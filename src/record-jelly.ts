@@ -4,16 +4,16 @@
 // Cara pakai: klik + TAHAN card (350ms) -> card terangkat jadi overlay (dipindah ke <body>), lalu bebas dibawa ke mana saja.
 // Hanya aktif saat html[data-rec="on"] dan hanya untuk track yang sedang dipilih.
 
-const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+export const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // spring: k = kekakuan, c = redaman (c kecil -> lebih kenyal / goyang lebih lama)
-const POS_DRAG = { k: 260, c: 21 };    // saat dipegang: ikut pointer, sedikit lag
-const POS_FREE = { k: 150, c: 9 };     // saat dilepas: balik ke asal sambil memantul
-const ROT = { k: 210, c: 10 };         // rotasi: berayun
-const HOLD_MS = 350;                   // tahan segini lama -> card "terangkat" jadi overlay, lalu bebas dibawa ke mana saja
-const HOLD_SLOP = 10;                  // geser lebih dari ini sebelum waktunya = batal (bukan tahan)
-const MAX_TILT = 28;                   // derajat
-const LIFT = 1.06;                     // card membesar saat terangkat
+export const POS_DRAG = { k: 260, c: 21 };    // saat dipegang: ikut pointer, sedikit lag
+export const POS_FREE = { k: 150, c: 9 };     // saat dilepas: balik ke asal sambil memantul
+export const ROT = { k: 210, c: 10 };         // rotasi: berayun
+export const HOLD_MS = 350;                   // tahan segini lama -> card "terangkat" jadi overlay, lalu bebas dibawa ke mana saja
+export const HOLD_SLOP = 10;                  // geser lebih dari ini sebelum waktunya = batal (bukan tahan)
+export const MAX_TILT = 28;                   // derajat
+export const LIFT = 1.06;                     // card membesar saat terangkat
 
 // elemen yang tidak boleh memulai drag (punya interaksi sendiri)
 const NO_DRAG = 'input, [role="slider"], .knob, .trackheader__pwr, .trackheader__rec-mode-button, .trackheader__more-options, [contenteditable="true"], .trackheader-separator';
