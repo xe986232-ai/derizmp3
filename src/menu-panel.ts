@@ -79,6 +79,12 @@ export function initMenuPanel(): MenuPanel {
               '<button type="button" class="mp__segbtn" role="radio" data-wf="black"><i class="mp__sw mp__sw--black"></i>Black</button>' +
             '</div>' +
           '</div>' +
+          '<div class="mp__card mp__item mp__set" style="--i:2">' +
+            '<div class="mp__row">' +
+              '<span class="mp__row__t"><b>Record Mode</b><small>Track terpilih fokus, track lain di-blur</small></span>' +
+              '<button type="button" class="mp__switch" role="switch" aria-checked="false" aria-label="Record Mode" data-rec><i></i></button>' +
+            '</div>' +
+          '</div>' +
         '</section>' +
       '</div>' +
     '</div>';
@@ -96,6 +102,21 @@ export function initMenuPanel(): MenuPanel {
   let wfSaved = 'default';
   try { wfSaved = localStorage.getItem(WF_KEY) || 'default'; } catch { /* abaikan */ }
   setWf(wfSaved, false);
+
+  // ===== Pengaturan: Record Mode (atribut data-rec di <html>; main.ts mendengarkan event 'recmodechange') =====
+  const REC_KEY = 'derizmp3.recMode';
+  const recBtn = panel.querySelector('[data-rec]') as HTMLButtonElement;
+  const setRec = (on: boolean, save: boolean): void => {
+    document.documentElement.dataset.rec = on ? 'on' : 'off';
+    recBtn.classList.toggle('is-on', on);
+    recBtn.setAttribute('aria-checked', String(on));
+    if (save) { try { localStorage.setItem(REC_KEY, on ? '1' : '0'); } catch { /* penyimpanan diblokir: tetap berlaku sampai halaman ditutup */ } }
+    document.dispatchEvent(new CustomEvent('recmodechange'));
+  };
+  recBtn.addEventListener('click', () => setRec(recBtn.getAttribute('aria-checked') !== 'true', true));
+  let recSaved = false;
+  try { recSaved = localStorage.getItem(REC_KEY) === '1'; } catch { /* abaikan */ }
+  setRec(recSaved, false);
 
   // ===== Halaman kategori (home / project / settings) =====
   const TITLES: Record<string, string> = {home: 'Menu', project: 'Project', settings: 'Pengaturan'};

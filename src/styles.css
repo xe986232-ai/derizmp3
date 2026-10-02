@@ -307,6 +307,12 @@ button{font:inherit;color:inherit;cursor:pointer}
 .pr__sel{z-index:12}
 .pr__sel .pat-btn:disabled{opacity:.4;pointer-events:none;box-shadow:none}
 .pat-bar.is-shake{animation:patShake .3s ease}
+
+/* ===== RECORD MODE: track terpilih fokus, track lain di timeline di-blur (seperti seleksi pesan di WhatsApp iPhone) ===== */
+.lane{transition:filter .35s var(--ease-out)}
+html[data-rec="on"] .lane.is-rec-dim{filter:blur(6px) brightness(.75)}
+html[data-rec="on"] .pat-bar{display:none}   /* menu bulat di atas pattern disembunyikan saat Record Mode */
+@media (prefers-reduced-motion:reduce){.lane,.mp__switch,.mp__switch i{transition:none}}
 @keyframes patShake{0%,100%{transform:none}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 .pattern__title[contenteditable="true"]{user-select:text;-webkit-user-select:text;cursor:text;outline:none;text-overflow:clip;
   background:rgba(0,0,0,.28);border-radius:4px;padding:0 4px;margin:0 -4px}
@@ -1101,6 +1107,17 @@ body:has(.pr.is-open) .menu-btn{opacity:0;pointer-events:none;transform:scale(.8
 .mp__sw{flex:none;width:14px;height:14px;border-radius:50%;border:1px solid rgba(255,255,255,.35)}
 .mp__sw--default{background:#fff}
 .mp__sw--black{background:#000}
+.mp__row{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.mp__row__t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.mp__row__t b{font-size:14px;font-weight:600}
+.mp__row__t small{font-size:12px;color:var(--muted)}
+.mp__switch{flex:none;position:relative;width:46px;height:28px;padding:0;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.08);cursor:pointer;transition:background-color .25s ease,border-color .25s ease}
+.mp__switch i{position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:#f3f3f6;box-shadow:0 2px 6px rgba(0,0,0,.4);transition:transform .3s var(--ease-spring),width .2s ease}
+.mp__switch.is-on{background:var(--accent);border-color:var(--accent)}
+.mp__switch.is-on i{transform:translateX(18px)}
+.mp__switch:active i{width:26px}
+.mp__switch.is-on:active i{transform:translateX(14px)}
+.mp__switch:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .mp__back[hidden]{display:none}
 .mp__back:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 

@@ -480,9 +480,10 @@ lanesEl.appendChild(patBar);
 
 let patAnchor = null;   // posisi klik di pattern (dalam bar); null = tengah bagian yang terlihat
 const patObs = new MutationObserver(() => patBarPlace());   // ikut bergerak saat pattern digeser / di-resize / di-zoom
+const recOn = () => document.documentElement.dataset.rec === 'on';   // Pengaturan > Record Mode
 function patBarShow(el) {
   patObs.disconnect(); closePatMenu();
-  if (!el) { patBar.hidden = true; return; }
+  if (!el || recOn()) { patBar.hidden = true; return; }   // Record Mode: menu bulat tidak muncul
   patObs.observe(el, {attributes: true, attributeFilter: ['style']});
   patBar.hidden = false; patBarPlace(); patBarPop();
 }
@@ -843,11 +844,21 @@ initRec(document); initSliders(document); initKnobs(document); initMore(document
 
 // ===== Pilih track: klik card atau lane-nya (tidak membuka keyboard), efek glass hanya di track yang dipilih =====
 let selTrack = document.querySelector('.trackheader--selected');
+// Record Mode: semua lane di timeline di-blur kecuali lane track yang dipilih
+function syncRecFocus() {
+  const on = recOn(), cur = selTrack && selTrack.closest('.trackheader-container');
+  const id = cur ? cur.dataset.track : null;
+  lanesEl.querySelectorAll('.lane').forEach(l => l.classList.toggle('is-rec-dim', on && id != null && l.dataset.track !== id));
+}
+document.addEventListener('recmodechange', () => { patBarShow(selPat); syncRecFocus(); });
+new MutationObserver(syncRecFocus).observe(lanesEl, {childList: true});   // track baru / dihapus ikut disesuaikan
+syncRecFocus();
 function selectTrack(cont) {
   const th = cont && cont.querySelector('.trackheader');
   if (!th || selTrack === th) return;
   if (selTrack) selTrack.classList.remove('trackheader--selected');
   selTrack = th; th.classList.add('trackheader--selected');
+  syncRecFocus();
   fxRack.show(cont.dataset.track);   // panel efek ikut pindah ke track terpilih
   if (kbdEl.classList.contains('is-open')) openKbd(cont);   // keyboard yang sudah terbuka ikut pindah ke track terpilih
 }
