@@ -9,8 +9,8 @@ import { setReverb, setEq, reverbSeconds, eqDb } from './audio-engine';
 import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } from './synth-engine';
 
 type FxType = 'reverb' | 'eq' | 'supersaw';
-interface Fx { id: number; type: FxType; on: boolean; min: boolean; v: Record<string, number>; }
-interface Param { key: string; label: string; def: number; fmt: (v: number) => string; bipolar?: boolean; slider?: boolean; }   // bipolar: arc dari tengah (seperti knob pan); slider: slider vertikal, bukan knob
+interface Fx { id: number; type: FxType; on: boolean; min: boolean; tab?: number; v: Record<string, number>; }
+interface Param { key: string; label: string; def: number; fmt: (v: number) => string; bipolar?: boolean; slider?: boolean; tab?: string; }   // tab: nama kategori (plugin dengan tab)   // bipolar: arc dari tengah (seperti knob pan); slider: slider vertikal, bukan knob
 interface EffectDef { type: FxType; name: string; params: Param[]; synth?: boolean; }   // synth: plugin instrumen (otomatis ada di track synth)
 
 const svg = (inner: string, size = 20) =>
@@ -43,14 +43,15 @@ const EFFECTS: EffectDef[] = [
   {
     type: 'supersaw', name: 'Supersaw', synth: true,
     params: [
-      { key: 'detune', label: 'Detune', def: 0.45, fmt: v => Math.round(detuneCents(v)) + ' ct' },
-      { key: 'mix', label: 'Mix', def: 0.6, fmt: pct },
-      { key: 'cutoff', label: 'Cutoff', def: 0.78, fmt: v => fmtHz(cutoffHz(v)) },
-      { key: 'reso', label: 'Reso', def: 0.15, slider: true, fmt: pct },
-      { key: 'attack', label: 'Atk', def: 0.05, slider: true, fmt: v => fmtSec(attackSec(v)) },
-      { key: 'decay', label: 'Dec', def: 0.4, slider: true, fmt: v => fmtSec(decaySec(v)) },
-      { key: 'sustain', label: 'Sus', def: 0.7, slider: true, fmt: pct },
-      { key: 'release', label: 'Rel', def: 0.35, slider: true, fmt: v => fmtSec(releaseSec(v)) }
+      { key: 'detune', label: 'Detune', tab: 'OSC', def: 0.45, fmt: v => Math.round(detuneCents(v)) + ' ct' },
+      { key: 'mix', label: 'Mix', tab: 'OSC', def: 0.6, fmt: pct },
+      { key: 'level', label: 'Level', tab: 'OSC', def: 0.8, slider: true, fmt: pct },
+      { key: 'cutoff', label: 'Cutoff', tab: 'FILTER', def: 0.78, fmt: v => fmtHz(cutoffHz(v)) },
+      { key: 'reso', label: 'Reso', tab: 'FILTER', def: 0.15, slider: true, fmt: pct },
+      { key: 'attack', label: 'Atk', tab: 'ENV', def: 0.05, slider: true, fmt: v => fmtSec(attackSec(v)) },
+      { key: 'decay', label: 'Dec', tab: 'ENV', def: 0.4, slider: true, fmt: v => fmtSec(decaySec(v)) },
+      { key: 'sustain', label: 'Sus', tab: 'ENV', def: 0.7, slider: true, fmt: pct },
+      { key: 'release', label: 'Rel', tab: 'ENV', def: 0.35, slider: true, fmt: v => fmtSec(releaseSec(v)) }
     ]
   }
 ];
@@ -64,7 +65,7 @@ function applyAudio(track: string): void {
   const r = rack.find(f => f.type === 'reverb'), e = rack.find(f => f.type === 'eq'), s = rack.find(f => f.type === 'supersaw');
   setReverb(track, r ? { on: r.on, mix: r.v.mix, size: r.v.size } : null);
   setEq(track, e ? { on: e.on, low: e.v.low, mid: e.v.mid, high: e.v.high } : null);
-  setSupersaw(track, s ? { on: s.on, detune: s.v.detune, mix: s.v.mix, cutoff: s.v.cutoff, reso: s.v.reso, attack: s.v.attack, decay: s.v.decay, sustain: s.v.sustain, release: s.v.release } : null);
+  setSupersaw(track, s ? { on: s.on, detune: s.v.detune, mix: s.v.mix, level: s.v.level, cutoff: s.v.cutoff, reso: s.v.reso, attack: s.v.attack, decay: s.v.decay, sustain: s.v.sustain, release: s.v.release } : null);
 }
 
 // ---------- knob (struktur & kelas sama dengan knob pan di channel mixer, tapi satu arah: 0 → 1) ----------
@@ -96,20 +97,30 @@ function paintSlider(el: HTMLElement, v: number, p: Param, name: string): void {
 const paintCtl = (el: HTMLElement, v: number, p: Param, name: string): void => (p.slider ? paintSlider : paintKnob)(el, v, p, name);
 const CTL = '.knob-input, .vsl';   // knob atau slider vertikal
 
-function cardHtml(fx: Fx, i: number): string {
-  const d = defOf(fx.type);
-  const sliders = d.params.filter(p => p.slider).map(p =>
-    `<div class="fxc__cell"><div role="slider" tabindex="0" class="vsl" data-k="${p.key}" aria-orientation="vertical" aria-label="${d.name} ${p.label}" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${fx.v[p.key]}">` +
-    `<span class="vsl__fill"></span><span class="vsl__thumb"></span></div><span class="fxc__label">${p.label}</span></div>`).join('');
-  const cells = d.params.filter(p => !p.slider).map(p =>
-    `<div class="fxc__cell"><div class="knob fxk"><div class="knob-inner">` +
+const cellHtml = (d: EffectDef, fx: Fx, p: Param): string => p.slider
+  ? `<div class="fxc__cell"><div role="slider" tabindex="0" class="vsl" data-k="${p.key}" aria-orientation="vertical" aria-label="${d.name} ${p.label}" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${fx.v[p.key]}">` +
+    `<span class="vsl__fill"></span><span class="vsl__thumb"></span></div><span class="fxc__label">${p.label}</span></div>`
+  : `<div class="fxc__cell"><div class="knob fxk"><div class="knob-inner">` +
     `<div role="slider" tabindex="0" class="knob-input" data-k="${p.key}" aria-label="${d.name} ${p.label}" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${fx.v[p.key]}">` +
-    `<div class="knobwheel">${knobSvg}</div></div></div></div><span class="fxc__label">${p.label}</span></div>`).join('');
-  return `<section class="fxc${fx.on ? '' : ' is-off'}${fx.min ? ' is-min' : ''}" data-fx="${fx.id}" style="--i:${i}" aria-label="${d.name}">` +
-    `<header class="fxc__head"><h3 class="fxc__name"><button type="button" class="fxc__title" aria-expanded="${!fx.min}" title="Klik untuk minimize / maximize">${d.name}</button></h3>` +
+    `<div class="knobwheel">${knobSvg}</div></div></div></div><span class="fxc__label">${p.label}</span></div>`;
+
+const tabNames = (d: EffectDef): string[] => [...new Set(d.params.map(p => p.tab).filter((t): t is string => !!t))];
+
+function cardHtml(fx: Fx, i: number): string {
+  const d = defOf(fx.type), tabs = tabNames(d), cur = Math.min(fx.tab ?? 0, Math.max(0, tabs.length - 1));
+  // plugin dengan kategori: tab di baris judul (tinggi card tetap sama dengan Reverb / EQ), tiap tab punya panel kontrolnya sendiri
+  const tabBar = tabs.length
+    ? `<div class="fxc__tabs" role="tablist" aria-label="Kategori ${d.name}">` +
+      tabs.map((t, k) => `<button type="button" role="tab" class="fxc__tab" data-tab="${k}" aria-selected="${k === cur}">${t}</button>`).join('') + `</div>`
+    : '';
+  const body = tabs.length
+    ? tabs.map((t, k) => `<div class="fxc__knobs fxc__panel" role="tabpanel" data-tab="${k}"${k === cur ? '' : ' hidden'}>${d.params.filter(p => p.tab === t).map(p => cellHtml(d, fx, p)).join('')}</div>`).join('')
+    : `<div class="fxc__knobs">${d.params.map(p => cellHtml(d, fx, p)).join('')}</div>`;
+  return `<section class="fxc${fx.on ? '' : ' is-off'}${fx.min ? ' is-min' : ''}${tabs.length ? ' has-tabs' : ''}" data-fx="${fx.id}" style="--i:${i}" aria-label="${d.name}">` +
+    `<header class="fxc__head"><h3 class="fxc__name"><button type="button" class="fxc__title" aria-expanded="${!fx.min}" title="Klik untuk minimize / maximize">${d.name}</button></h3>${tabBar}` +
     `<button type="button" class="fxc__pwr" role="switch" aria-checked="${fx.on}" aria-label="${d.name} nyala / mati" title="Nyala / mati"></button>` +
     (d.synth ? '' : `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi ${d.name}" title="Opsi">${ICON_MORE}</button>`) + `</header>` +
-    `<div class="fxc__collapse"><div class="fxc__body"><div class="fxc__knobs">${cells}</div>${sliders ? `<div class="fxc__sliders">${sliders}</div>` : ''}</div></div></section>`;
+    `<div class="fxc__collapse"><div class="fxc__body">${body}</div></div></section>`;
 }
 
 export interface FxRack {
@@ -382,6 +393,15 @@ export function initFxRack(): FxRack {
     if (!card) return;
     const more = t.closest<HTMLButtonElement>('.fxc__more');
     if (more) { menu && menuBtn === more ? closeMenu() : openMenu(more, card); return; }
+    const tabBtn = t.closest<HTMLButtonElement>('.fxc__tab');   // ganti kategori plugin
+    if (tabBtn) {
+      const fx = find(card); if (!fx) return;
+      fx.tab = +tabBtn.dataset.tab!;
+      hideTip();
+      card.querySelectorAll<HTMLElement>('.fxc__tab').forEach(b => b.setAttribute('aria-selected', String(b === tabBtn)));
+      card.querySelectorAll<HTMLElement>('.fxc__panel').forEach(pn => { pn.hidden = pn.dataset.tab !== tabBtn.dataset.tab; });
+      return;
+    }
     const pwr = t.closest<HTMLButtonElement>('.fxc__pwr');
     if (pwr) {
       const fx = find(card); if (!fx || !cur) return;

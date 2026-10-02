@@ -587,15 +587,24 @@ button{font:inherit;color:inherit;cursor:pointer}
 .fxk .circular-chart .circle-bg{stroke-width:3}
 .fxk .circular-chart .knob-pos{stroke-width:3}
 .fxc__label{font-size:12.5px;font-weight:500;color:var(--muted)}
-/* plugin synth: baris slider vertikal di bawah knob (datar: warna solid, garis tipis) */
-.fxc__sliders{display:flex;justify-content:space-evenly;align-items:flex-start;gap:4px;margin-top:10px;padding:14px 0 6px;border-top:1px solid var(--line)}
-.vsl{position:relative;width:30px;height:92px;cursor:ns-resize;outline:none;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;--v:0}
+/* plugin synth: slider vertikal sejajar knob (tinggi sama dengan knob, jadi tinggi card sama dengan Reverb / EQ); datar: warna solid, garis tipis */
+.vsl{position:relative;width:30px;height:72px;cursor:ns-resize;outline:none;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;--v:0}
 .vsl::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:4px;margin-left:-2px;border-radius:2px;background:#3a3a48}
 .vsl__fill{position:absolute;left:50%;bottom:0;width:4px;margin-left:-2px;border-radius:2px;background:var(--accent);height:calc(7px + var(--v) * (100% - 14px))}
 .vsl__thumb{position:absolute;left:50%;bottom:calc(var(--v) * (100% - 14px));width:22px;height:14px;margin-left:-11px;border-radius:5px;background:#fff}
 .vsl:focus-visible .vsl__thumb{outline:2px solid var(--accent);outline-offset:2px}
 .vsl.is-dragging .vsl__thumb{background:#e4dcff}
-.fxc.is-off .fxc__sliders{opacity:.4}
+/* kategori plugin (OSC / FILTER / ENV): tab kecil di baris judul */
+.fxc.has-tabs .fxc__head{gap:4px}
+.fxc.has-tabs .fxc__name{flex:none}
+.fxc.has-tabs .fxc__title{width:auto;padding-right:10px;white-space:nowrap}
+.fxc__tabs{display:flex;flex:1;min-width:0;justify-content:flex-end;gap:0}
+.fxc__tab{height:24px;padding:0 5px;border:0;border-bottom:2px solid transparent;border-radius:0;background:none;color:var(--muted);font:600 10.5px/1 inherit;font-family:inherit;letter-spacing:.3px;cursor:pointer;transition:color .2s ease,border-color .2s ease}
+.fxc__tab:hover{color:var(--text)}
+.fxc__tab[aria-selected="true"]{color:var(--text);border-bottom-color:var(--accent)}
+.fxc__tab:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.fxc.is-min .fxc__tabs{opacity:0;pointer-events:none}
+.fxc__panel[hidden]{display:none}
 /* tombol + pindah ke bawah setelah ada efek */
 .fx__body.has-fx .fx__top{order:2;margin:6px 0 0}
 @media (prefers-reduced-motion:reduce){.fxc,.fx-pick,.fx-pick__item{animation:none!important}.fx__add,.fx__add svg,.fxc__pwr,.fxc__pwr::after,.fxc__more,.fxc__collapse,.fxc__body{transition:none!important}}

@@ -6,7 +6,7 @@ import { trackInput } from './audio-engine';
 
 export interface SupersawParams {
   on: boolean;
-  detune: number; mix: number; cutoff: number; reso: number;
+  detune: number; mix: number; level: number; cutoff: number; reso: number;
   attack: number; decay: number; sustain: number; release: number;
 }
 
@@ -17,6 +17,7 @@ const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 const expMap = (v: number, min: number, max: number): number => min * Math.pow(max / min, clamp01(v));
 
 export const detuneCents = (v: number): number => clamp01(v) * 60;          // sebaran detune terjauh, dalam cent
+export const levelMul = (v: number): number => clamp01(v) * clamp01(v) * 1.6;   // 0.8 ≈ 1.0 (level standar)
 export const cutoffHz = (v: number): number => expMap(v, 80, 18000);
 export const resoQ = (v: number): number => 0.6 + clamp01(v) * clamp01(v) * 14;
 export const attackSec = (v: number): number => expMap(v, 0.002, 2);
@@ -33,7 +34,7 @@ const sideGain = (mix: number): number => 0.15 + 0.85 * clamp01(mix);
 export interface Voice {
   track: string; ctx: AudioContext;
   oscs: OscillatorNode[]; gains: GainNode[]; filter: BiquadFilterNode; env: GainNode;
-  t0: number; a: number; d: number; s: number; r: number;
+  t0: number; peak: number; a: number; d: number; s: number; r: number;
   released: boolean;
 }
 const live = new Set<Voice>();
@@ -46,8 +47,9 @@ export function startVoice(ctx: AudioContext, dest: AudioNode, track: string, mi
   filter.type = 'lowpass'; filter.frequency.value = cutoffHz(p.cutoff); filter.Q.value = resoQ(p.reso);
   const a = attackSec(p.attack), d = decaySec(p.decay), s = clamp01(p.sustain), r = releaseSec(p.release);
   env.gain.setValueAtTime(0, t0);
-  env.gain.linearRampToValueAtTime(VOICE_GAIN, t0 + a);
-  env.gain.setTargetAtTime(VOICE_GAIN * s, t0 + a, d / 3);
+  const peak = VOICE_GAIN * levelMul(p.level);
+  env.gain.linearRampToValueAtTime(peak, t0 + a);
+  env.gain.setTargetAtTime(peak * s, t0 + a, d / 3);
   filter.connect(env); env.connect(trackInput(ctx, dest, track));
   const oscs: OscillatorNode[] = [], gains: GainNode[] = [];
   for (let i = 0; i < OFFSETS.length; i++) {
@@ -59,7 +61,7 @@ export function startVoice(ctx: AudioContext, dest: AudioNode, track: string, mi
     o.start(t0);
     oscs.push(o); gains.push(g);
   }
-  const v: Voice = { track, ctx, oscs, gains, filter, env, t0, a, d: Math.max(d, 0.005), s, r, released: false };
+  const v: Voice = { track, ctx, oscs, gains, filter, env, t0, peak, a, d: Math.max(d, 0.005), s, r, released: false };
   oscs[0].onended = () => {
     oscs.forEach(o => o.disconnect()); gains.forEach(g => g.disconnect()); filter.disconnect(); env.disconnect();
     live.delete(v);
@@ -75,7 +77,7 @@ export function releaseVoice(v: Voice | null, at: number): void {
   const t = Math.max(at, v.t0), dt = t - v.t0;
   const lvl = dt < v.a ? dt / v.a : v.s + (1 - v.s) * Math.exp(-(dt - v.a) / (v.d / 3));
   v.env.gain.cancelScheduledValues(t);
-  v.env.gain.setValueAtTime(VOICE_GAIN * lvl, t);
+  v.env.gain.setValueAtTime(v.peak * lvl, t);
   v.env.gain.setTargetAtTime(0, t, v.r / 3);
   const end = t + v.r * 2 + 0.05;
   v.oscs.forEach(o => { try { o.stop(end); } catch { /* sudah berhenti */ } });
