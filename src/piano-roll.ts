@@ -289,14 +289,46 @@ function placeSelBar() {
 }
 
 // ---------- playhead (garis + kepala di penggaris, ikut posisi playhead timeline) ----------
+// Saat lagu main, playhead digerakkan animasi CSS (jalan di compositor / GPU), BUKAN per frame lewat JavaScript: kalau main thread
+// sibuk (banyak nada dibunyikan sekaligus) gerakan playhead tetap mulus. JS hanya membuat ulang animasi saat zoom / geser berubah.
+let phMo: {beat0: number; perSec: number; t0: number} | null = null, phAnim: Animation | null = null, phSig = '', phTimer = 0;
+const phVis = (v: boolean) => { phDom.style.visibility = v ? 'visible' : 'hidden'; };
+function phStop() { if (phAnim) { phAnim.onfinish = null; phAnim.cancel(); phAnim = null; } window.clearTimeout(phTimer); phTimer = 0; }
 function placePlayhead() {
   if (!phDom) return;
-  const x = phBeat * ppb - curL();
+  const L = curL();
+  if (phMo) {
+    const sig = ppb + '|' + L;
+    if (sig === phSig) return;                       // animasi sudah benar untuk zoom / posisi geser ini
+    phSig = sig; phStop();
+    const m = phMo, now = performance.now(), waitMs = Math.max(0, m.t0 - now);
+    const b0 = waitMs > 0 ? m.beat0 : m.beat0 + (now - m.t0) / 1000 * m.perSec;   // posisi (ketukan) saat ini dari jam transport
+    if (b0 > total) { phVis(false); return; }
+    if (b0 < 0) {                                    // playhead masih di sebelum pattern ini: muncul begitu masuk
+      phVis(false);
+      phTimer = window.setTimeout(() => { phSig = ''; placePlayhead(); }, waitMs + (-b0 / m.perSec) * 1000 + 1);
+      return;
+    }
+    const x0 = b0 * ppb - L, x1 = total * ppb - L, durMs = (total - b0) / m.perSec * 1000;
+    phVis(true); phDom.style.translate = x0 + 'px 0';
+    if (durMs <= 0) return;
+    phAnim = phDom.animate([{translate: x0 + 'px 0'}, {translate: x1 + 'px 0'}], {duration: durMs, delay: waitMs, easing: 'linear', fill: 'none'});
+    phAnim.onfinish = () => { phAnim = null; phVis(false); };
+    return;
+  }
+  phStop();
+  const x = phBeat * ppb - L;
   const vis = phBeat >= 0 && phBeat <= total && x >= -5 && x <= sc.clientWidth + 5;
-  phDom.style.visibility = vis ? 'visible' : 'hidden';
+  phVis(vis);
   if (vis) phDom.style.translate = x + 'px 0';
 }
-export function setPianoRollPlayhead(beats: number) { phBeat = beats; if (root && !root.hidden) placePlayhead(); }
+// motion (opsional): playhead sedang berjalan dari `beats` dengan kecepatan perSec ketukan/detik, mulai setelah `delay` detik (count-in)
+export function setPianoRollPlayhead(beats: number, motion?: {perSec: number; delay: number}) {
+  phBeat = beats;
+  phMo = motion ? {beat0: beats, perSec: motion.perSec, t0: performance.now() + motion.delay * 1000} : null;
+  phSig = '';
+  if (root && !root.hidden) placePlayhead();
+}
 
 // ---------- sinkron ke timeline: isi note ditampilkan mini di dalam pattern ----------
 let onChange: ((id: string) => void) | null = null, notified = '';
@@ -956,14 +988,14 @@ export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.
   const mid = st.notes.length ? st.notes.reduce((a, n) => a + n.p, 0) / st.notes.length : 62;   // mulai di sekitar C4
   sc.scrollLeft = 0; sc.scrollTop = Math.max(0, (P_MAX - mid) * rowH - vh / 2);
   resetAnim(); selBarOn = false; selBar.hidden = true;
-  keysSig = rulerSig = ''; zoomPend = null; zoomFrame = false; window.clearTimeout(zoomEndT); gc.style.transform = ''; drawn.ppb = 0; gridDirty = true;
+  phSig = ''; keysSig = rulerSig = ''; zoomPend = null; zoomFrame = false; window.clearTimeout(zoomEndT); gc.style.transform = ''; drawn.ppb = 0; gridDirty = true;
   setTool('draw'); updateUI(); redraw();
 }
 
 export function closePianoRoll() {
   if (!root || root.hidden) return;
   closeMenu();
-  const r = root; r.classList.remove('is-open'); g = null; ptrs.clear(); pinch = null; window.clearTimeout(zoomEndT); zoomPend = null; gc.style.transform = '';
+  const r = root; r.classList.remove('is-open'); g = null; ptrs.clear(); pinch = null; phStop(); phSig = ''; window.clearTimeout(zoomEndT); zoomPend = null; gc.style.transform = '';
   setTimeout(() => { if (!r.classList.contains('is-open')) r.hidden = true; }, 200);
   onClose && onClose();
 }

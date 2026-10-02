@@ -38,10 +38,17 @@ export interface Voice {
   released: boolean;
 }
 const live = new Set<Voice>();
+const MAX_VOICES = 28;
 
 export function startVoice(ctx: AudioContext, dest: AudioNode, track: string, midi: number, when: number): Voice | null {
   const p = params.get(track);
   if (!p || !p.on) return null;
+  while (live.size >= MAX_VOICES) {   // terlalu banyak voice sekaligus membebani thread audio (7 saw per voice): curi voice yang sudah dilepas / paling lama
+    let victim: Voice | null = null;
+    for (const x of live) if (!victim || (x.released && !victim.released) || (x.released === victim.released && x.t0 < victim.t0)) victim = x;
+    if (!victim) break;
+    kill(victim, ctx.currentTime); live.delete(victim);
+  }
   const t0 = Math.max(when, ctx.currentTime), f = 440 * Math.pow(2, (midi - 69) / 12);
   const env = ctx.createGain(), filter = ctx.createBiquadFilter();
   filter.type = 'lowpass'; filter.frequency.value = cutoffHz(p.cutoff); filter.Q.value = resoQ(p.reso);

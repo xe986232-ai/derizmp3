@@ -921,7 +921,23 @@ const tc = document.querySelector('.transport-controls');
 const btnPlay = tc.querySelector('.play'), btnMetro = document.getElementById('btnMetro');
 const btnRew = tc.querySelector('.rewind'), btnFwd = tc.querySelector('.forward');
 let posBars = 0, playing = false, playRaf = 0, startPos = 0, startCtx = 0, nextBeat = 0, metroTimer = 0, lastBeat = -1;
-function renderPlayhead() { phEl.style.translate = (posBars * BAR_W) + 'px 0'; setPianoRollPlayhead((posBars - prStartBar) * 4); }   // dipisah dari transform agar tidak ditimpa animasi masuk
+// Playhead (timeline + piano roll) saat main digerakkan animasi CSS di compositor (tidak lewat JS per frame), jadi tetap mulus
+// walau main thread sibuk membunyikan banyak nada. Animasi dibuat dari jam audio (startPos / startCtx) dan dibuat ulang saat
+// play / seek / ganti tempo (scheduleClips), zoom timeline (BAR_W berubah), atau piano roll dibuka.
+let phAnim = null, phAnimBarW = 0, phHeld = false;
+function stopPhAnim() { if (phAnim) { phAnim.cancel(); phAnim = null; } }
+function startPhAnim() {
+  stopPhAnim(); phHeld = false;
+  const now = actx.currentTime, wait = Math.max(0, startCtx - now);
+  const pos = startPos + Math.max(0, now - startCtx) / SEC_PER_BAR, left = BARS - pos;
+  phAnimBarW = BAR_W;
+  phEl.style.translate = (pos * BAR_W) + 'px 0';
+  setPianoRollPlayhead((pos - prStartBar) * 4, left > 0 ? {perSec: 4 / SEC_PER_BAR, delay: wait} : undefined);
+  if (left <= 0) return;
+  phAnim = phEl.animate([{translate: (pos * BAR_W) + 'px 0'}, {translate: (BARS * BAR_W) + 'px 0'}], {duration: left * SEC_PER_BAR * 1000, delay: wait * 1000, easing: 'linear', fill: 'none'});
+}
+function renderStatic() { stopPhAnim(); phEl.style.translate = (posBars * BAR_W) + 'px 0'; setPianoRollPlayhead((posBars - prStartBar) * 4); }   // dipisah dari transform agar tidak ditimpa animasi masuk
+function renderPlayhead() { if (playing && !phHeld) startPhAnim(); else renderStatic(); }
 function syncTransportUI() {
   btnPlay.setAttribute('aria-label', playing ? 'Jeda' : 'Putar');
   btnPlay.querySelector('use').setAttribute('href', playing ? '#pause-icon' : '#play-icon');
@@ -930,8 +946,8 @@ function syncTransportUI() {
 function tick() {
   if (!playing) return;
   posBars = startPos + Math.max(0, actx.currentTime - startCtx) / SEC_PER_BAR;
-  if (posBars >= BARS) { posBars = BARS; renderPlayhead(); pausePlay(); return; }
-  renderPlayhead();   // timeline tidak auto-scroll mengikuti playhead
+  if (posBars >= BARS) { posBars = BARS; pausePlay(); return; }
+  if (!phHeld && BAR_W !== phAnimBarW) startPhAnim();   // zoom timeline: lebar bar berubah -> buat ulang animasi (timeline tidak auto-scroll mengikuti playhead)
   const b = Math.floor(posBars * 4 + 1e-6);   // titik ketukan di panel metronome + kedip tombol M
   if (b !== lastBeat) { lastBeat = b; metroUI.beat(b % 4); if (metro.on) metroUI.flash(); }
   playRaf = requestAnimationFrame(tick);
@@ -939,8 +955,13 @@ function tick() {
 // Scheduler metronome: tiap 25 ms menjadwalkan klik ketukan yang jatuh dalam 120 ms ke depan (pakai jam AudioContext)
 // Nada synth dari piano roll: antrean terurut waktu, dijadwalkan bersama klik metronome (lookahead yang sama)
 let synthQ = [], synthI = 0;
+// Membuat voice (Supersaw: ~25 node per nada) memakan main thread. Lookahead dibuat lebih panjang dan kerja per pump dibatasi ~3 ms:
+// nada yang masih jauh ditunda ke pump berikutnya (25 ms lagi), jadi banyak nada sekaligus tidak menahan satu frame pun.
+const SYNTH_AHEAD = .35;
 function synthPump(ctx, ahead) {
+  const t0 = performance.now();
   while (synthI < synthQ.length && synthQ[synthI].when <= ahead) {
+    if (synthQ[synthI].when > ctx.currentTime + .1 && performance.now() - t0 > 3) break;
     const n = synthQ[synthI++];
     if (n.deriz) fxRack.derizPlay(n.track, n.p, n.when, n.dur, n.glides); else playNote(ctx, master, n.track, n.p, n.when, n.dur, n.glides);
   }
@@ -975,7 +996,7 @@ function buildSynthQueue() {
 function metroPump() {
   if (!playing) return;
   const ctx = actx, ahead = ctx.currentTime + .12;
-  synthPump(ctx, ahead);
+  synthPump(ctx, ctx.currentTime + SYNTH_AHEAD);
   for (;;) {
     const t = startCtx + (nextBeat / 4 - startPos) * SEC_PER_BAR;
     if (t > ahead) break;
@@ -1006,7 +1027,8 @@ function scheduleClips(countIn) {
   const clips = clipPlacements();
   schedSig = placementSig();
   playClips(ctx, master, clips, posBars, SEC_PER_BAR, startCtx);
-  stopAllSynth(ctx); fxRack.derizStop(); buildSynthQueue(); synthPump(ctx, ctx.currentTime + .12);
+  stopAllSynth(ctx); fxRack.derizStop(); buildSynthQueue(); synthPump(ctx, ctx.currentTime + SYNTH_AHEAD);
+  startPhAnim();
 }
 function startPlay() {
   if (playing) return;
@@ -1016,7 +1038,8 @@ function startPlay() {
   playRaf = requestAnimationFrame(tick); syncTransportUI();
 }
 function pausePlay() {
-  playing = false; cancelAnimationFrame(playRaf); playRaf = 0; stopClips(actx); stopAllSynth(actx); fxRack.derizStop(); synthQ = []; clearInterval(metroTimer); metroTimer = 0; metroCancel(actx, true); metroUI.beat(-1); syncTransportUI();
+  if (playing) posBars = Math.min(BARS, startPos + Math.max(0, actx.currentTime - startCtx) / SEC_PER_BAR);   // posisi terakhir dari jam audio (playhead bergerak lewat animasi, bukan lewat tick)
+  playing = false; cancelAnimationFrame(playRaf); playRaf = 0; stopClips(actx); stopAllSynth(actx); fxRack.derizStop(); synthQ = []; clearInterval(metroTimer); metroTimer = 0; metroCancel(actx, true); metroUI.beat(-1); syncTransportUI(); phHeld = false; renderStatic();
 }
 const togglePlay = () => playing ? pausePlay() : startPlay();
 function toStart() {
@@ -1036,8 +1059,9 @@ function showPlayhead() {   // geser timeline kalau playhead keluar dari layar
 }
 // Tap / seret penggaris piano roll: playhead pindah ke posisi itu (relatif awal pattern yang dibuka)
 setPianoRollSeekHandler((beats, final) => {
-  posBars = Math.max(0, Math.min(BARS, prStartBar + beats / 4)); renderPlayhead();
-  if (!final) return;
+  posBars = Math.max(0, Math.min(BARS, prStartBar + beats / 4));
+  if (!final) { if (playing) phHeld = true; renderStatic(); return; }   // saat diseret: tahan playhead di jari (animasi berhenti), suara pindah saat dilepas
+  phHeld = false; renderPlayhead();
   if (playing) scheduleClips();   // sedang main: suara ikut pindah (hanya saat jari dilepas)
   else startMark = posBars;       // berhenti: posisi baru jadi titik start
 });

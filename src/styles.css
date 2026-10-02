@@ -78,7 +78,7 @@ button{font:inherit;color:inherit;cursor:pointer}
     linear-gradient(90deg,rgba(255,255,255,var(--fine-a,0)) 1px,transparent 1px);
   background-size:var(--bar) 100%,calc(var(--bar) / 4) 100%,calc(var(--bar) / 16) 100%,calc(var(--bar) / 32) 100%,calc(var(--bar) / 64) 100%}
 .lane.alt{background-color:rgba(255,255,255,.02)}
-.playhead{position:absolute;top:-20px;left:-4px;z-index:4;pointer-events:none;color:#ff5a6e;transform:translateX(0)}
+.playhead{position:absolute;top:-20px;left:-4px;z-index:4;pointer-events:none;color:#ff5a6e;transform:translateX(0);will-change:translate}
 .playhead-body{position:absolute;left:4px;top:20px;bottom:0;width:1px;background:currentColor;height:100vh}
 .playhead-head svg{display:block;fill:currentColor}
 /* ===== Soundtrap look ===== */
