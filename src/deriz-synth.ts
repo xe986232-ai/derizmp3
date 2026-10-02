@@ -272,19 +272,9 @@ class DerizSampler extends AudioWorkletProcessor {
 registerProcessor('deriz-sampler', DerizSampler);
 `;
 
-// antarmuka yang sama untuk kedua mesin (klasik = DerizSynth, natural = DerizNatural di deriz-natural.ts)
-export interface Sampler {
-  routeTo(dest: AudioNode): void;
-  setBuffer(buf: AudioBuffer): void;
-  noteOn(id: number, semis: number, start: number, speed: number, pitch: number, vol: number): void;
-  noteOff(id: number): void;
-  params(speed: number, pitch: number, vol: number): void;
-  dispose(): void;
-}
-
 const loaded = new WeakSet<BaseAudioContext>();
 
-export class DerizSynth implements Sampler {
+export class DerizSynth {
   private sent: AudioBuffer | null = null;
   private target: AudioNode | null = null;
   private constructor(readonly ctx: AudioContext, readonly node: AudioWorkletNode) {}
