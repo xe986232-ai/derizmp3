@@ -73,13 +73,20 @@ export function initMenuPanel(): MenuPanel {
         // kategori Pengaturan
         '<section class="mp__page" data-page="settings" aria-label="Pengaturan" hidden>' +
           '<div class="mp__card mp__item mp__set" style="--i:1">' +
+            '<div class="mp__sub"><span>Theme</span></div>' +
+            '<div class="mp__seg" role="radiogroup" aria-label="Theme">' +
+              '<button type="button" class="mp__segbtn" role="radio" data-theme="default"><i class="mp__sw mp__sw--tdefault"></i>Default</button>' +
+              '<button type="button" class="mp__segbtn" role="radio" data-theme="jembut"><i class="mp__sw mp__sw--tjembut"></i>Jembut</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="mp__card mp__item mp__set" style="--i:2">' +
             '<div class="mp__sub"><span>Waveform &amp; bar color</span></div>' +
             '<div class="mp__seg" role="radiogroup" aria-label="Waveform & bar color">' +
               '<button type="button" class="mp__segbtn" role="radio" data-wf="default"><i class="mp__sw mp__sw--default"></i>Default</button>' +
               '<button type="button" class="mp__segbtn" role="radio" data-wf="black"><i class="mp__sw mp__sw--black"></i>Black</button>' +
             '</div>' +
           '</div>' +
-          '<div class="mp__card mp__item mp__set" style="--i:2">' +
+          '<div class="mp__card mp__item mp__set" style="--i:3">' +
             '<div class="mp__row">' +
               '<span class="mp__row__t"><b>Record Mode</b><small>Track terpilih fokus, track lain di-blur</small></span>' +
               '<button type="button" class="mp__switch" role="switch" aria-checked="false" aria-label="Record Mode" data-rec><i></i></button>' +
@@ -88,6 +95,20 @@ export function initMenuPanel(): MenuPanel {
         '</section>' +
       '</div>' +
     '</div>';
+
+  // ===== Pengaturan: Theme (atribut data-theme di <html>; gaya tiap theme ada di styles.css) =====
+  const THEME_KEY = 'derizmp3.theme';
+  const themeBtns = [...panel.querySelectorAll<HTMLButtonElement>('[data-theme]')];
+  const setTheme = (v: string, save: boolean): void => {
+    const val = v === 'jembut' ? 'jembut' : 'default';
+    document.documentElement.dataset.theme = val;
+    themeBtns.forEach(b => { const on = b.dataset.theme === val; b.classList.toggle('is-on', on); b.setAttribute('aria-checked', String(on)); });
+    if (save) { try { localStorage.setItem(THEME_KEY, val); } catch { /* penyimpanan diblokir: tetap berlaku sampai halaman ditutup */ } }
+  };
+  themeBtns.forEach(b => b.addEventListener('click', () => setTheme(b.dataset.theme as string, true)));
+  let themeSaved = 'default';
+  try { themeSaved = localStorage.getItem(THEME_KEY) || 'default'; } catch { /* abaikan */ }
+  setTheme(themeSaved, false);
 
   // ===== Pengaturan: Waveform & bar color (disimpan di browser, diterapkan lewat atribut data-wf di <html>) =====
   const WF_KEY = 'derizmp3.wfColor';

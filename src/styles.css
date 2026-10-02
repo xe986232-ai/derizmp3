@@ -321,6 +321,13 @@ html.is-jelly .tracklist{overflow:visible}                      /* card boleh ke
 .trackheader-container.is-jelly{z-index:60}
 .trackheader.is-jelly{cursor:grabbing;user-select:none;-webkit-user-select:none;box-shadow:var(--bevel),0 18px 38px rgba(0,0,0,.5)}
 @media (prefers-reduced-motion:reduce){.lane,.mp__switch,.mp__switch i{transition:none}}
+/* Theme "Jembut": garis grid di timeline jadi gelap (hitam, lebih gelap dari warna timeline), bukan putih. Tipisnya mengikuti zoom seperti biasa (alpha dikali 5 karena garis hitam di atas latar gelap perlu lebih pekat) */
+html[data-theme="jembut"] .lane{background-image:
+    linear-gradient(90deg,rgba(0,0,0,.55) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,0,0,calc(var(--beat-a,.07) * 5)) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,0,0,calc(var(--sub-a,0) * 5)) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,0,0,calc(var(--mid-a,0) * 5)) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,0,0,calc(var(--fine-a,0) * 5)) 1px,transparent 1px)}
 @keyframes patShake{0%,100%{transform:none}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 .pattern__title[contenteditable="true"]{user-select:text;-webkit-user-select:text;cursor:text;outline:none;text-overflow:clip;
   background:rgba(0,0,0,.28);border-radius:4px;padding:0 4px;margin:0 -4px}
@@ -1125,6 +1132,8 @@ body:has(.pr.is-open) .menu-btn{opacity:0;pointer-events:none;transform:scale(.8
 .mp__sw{flex:none;width:14px;height:14px;border-radius:50%;border:1px solid rgba(255,255,255,.35)}
 .mp__sw--default{background:#fff}
 .mp__sw--black{background:#000}
+.mp__sw--tdefault{background:linear-gradient(135deg,#25252f 50%,#5b3de8 50%)}   /* contoh warna tiap theme */
+.mp__sw--tjembut{background:linear-gradient(135deg,#13131a 50%,#000 50%)}
 .mp__row{display:flex;align-items:center;justify-content:space-between;gap:14px}
 .mp__row__t{display:flex;flex-direction:column;gap:2px;min-width:0}
 .mp__row__t b{font-size:14px;font-weight:600}
