@@ -12,7 +12,7 @@ import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } f
 
 type FxType = 'reverb' | 'eq' | 'supersaw' | 'deriz';
 // DERIZ: audio yang di-upload ke canvas plugin (buffer disimpan untuk tahap berikutnya; peaks + max khusus untuk menggambar waveform)
-interface DerizData { name: string; dur: number; buf: AudioBuffer; peaks: Float32Array; max: number; start: number; }   // start: posisi garis start, 0..1 dari durasi
+interface DerizData { name: string; dur: number; buf: AudioBuffer; peaks: Float32Array; max: number; start: number; cols?: { n: number; a: Float32Array }; }   // cols: cache min/max per kolom pixel device (dihitung ulang hanya kalau lebar canvas berubah)   // start: posisi garis start, 0..1 dari durasi
 interface Fx { id: number; type: FxType; on: boolean; min: boolean; tab?: number; v: Record<string, number>; deriz?: DerizData; tok?: number; }
 interface Param { key: string; label: string; def: number; fmt: (v: number) => string; bipolar?: boolean; slider?: boolean; tab?: string; }   // tab: nama kategori (plugin dengan tab)   // bipolar: arc dari tengah (seperti knob pan); slider: slider vertikal, bukan knob
 interface EffectDef { type: FxType; name: string; params: Param[]; synth?: boolean; }   // synth: plugin instrumen (otomatis ada di track synth)
@@ -141,30 +141,65 @@ function updateDerizUi(card: HTMLElement, fx: Fx): void {
   dur.textContent = z ? fmtDur(z.dur) : '';
 }
 
+// Min/max per kolom pixel device, dihitung dari SAMPLE ASLI (bukan dari peaks 1200 bucket) supaya tajam di lebar / dpr berapa pun.
+// Semua channel digabung. Kalau sample lebih sedikit dari kolom (one-shot pendek di canvas lebar), nilainya diinterpolasi linear
+// antar sample supaya tidak ada lubang datar. Hasil: [min0, max0, min1, max1, ...]
+function columnPeaks(buf: AudioBuffer, cols: number): Float32Array {
+  const out = new Float32Array(cols * 2), len = buf.length, spp = len / cols;
+  for (let b = 0; b < cols; b++) { out[b * 2] = Infinity; out[b * 2 + 1] = -Infinity; }
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const d = buf.getChannelData(c);
+    for (let b = 0; b < cols; b++) {
+      let lo = out[b * 2], hi = out[b * 2 + 1];
+      if (spp >= 1) {
+        const s0 = Math.floor(b * spp), s1 = Math.min(len, Math.max(s0 + 1, Math.floor((b + 1) * spp)));
+        for (let i = s0; i < s1; i++) { const v = d[i]; if (v < lo) lo = v; if (v > hi) hi = v; }
+      } else {
+        const pos = b * spp, i0 = Math.min(len - 1, Math.floor(pos)), f = pos - i0, v = d[i0] * (1 - f) + d[Math.min(len - 1, i0 + 1)] * f;
+        if (v < lo) lo = v; if (v > hi) hi = v;
+      }
+      out[b * 2] = lo; out[b * 2 + 1] = hi;
+    }
+  }
+  return out;
+}
+
 function paintDeriz(card: HTMLElement, fx: Fx): void {
   const cv = card.querySelector<HTMLCanvasElement>('.deriz__canvas');
   if (!cv) return;
   const w = cv.clientWidth, h = cv.clientHeight;
   if (!w || !h) return;
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
-  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const W = Math.round(w * dpr), H = Math.round(h * dpr);
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
   const g = cv.getContext('2d')!;
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  g.clearRect(0, 0, w, h);
-  const mid = h / 2;
+  g.setTransform(1, 0, 0, 1, 0, 0);   // gambar langsung dalam pixel device (1 kolom = 1 pixel device)
+  g.clearRect(0, 0, W, H);
+  const mid = H / 2;
   g.fillStyle = 'rgba(255,255,255,.1)';
-  g.fillRect(0, Math.round(mid) - .5, w, 1);   // garis tengah (juga tampil saat canvas masih kosong)
+  g.fillRect(0, Math.round(mid) - Math.max(1, Math.round(dpr)) / 2, W, Math.max(1, Math.round(dpr)));   // garis tengah (juga tampil saat canvas masih kosong)
   const z = fx.deriz;
   if (!z) return;
-  const n = z.peaks.length / 2, k = (mid - 4) / Math.max(z.max, 0.05), iw = Math.max(1, w - DERIZ_PAD * 2);   // normalisasi: puncak tertinggi hampir memenuhi tinggi canvas
-  g.fillStyle = getComputedStyle(cv).getPropertyValue('--accent').trim() || '#a66cff';
-  for (let x = 0; x < iw; x++) {
-    const lo = Math.min(n - 1, Math.floor(x * n / iw)), hi = Math.min(n, Math.max(lo + 1, Math.floor((x + 1) * n / iw)));
-    let mn = 0, mx = 0;
-    for (let b = lo; b < hi; b++) { if (z.peaks[b * 2] < mn) mn = z.peaks[b * 2]; if (z.peaks[b * 2 + 1] > mx) mx = z.peaks[b * 2 + 1]; }
-    const y0 = mid - mx * k, y1 = mid - mn * k;
-    g.fillRect(DERIZ_PAD + x, y0, 1, Math.max(1, y1 - y0));
+  const pad = Math.round(DERIZ_PAD * dpr), cols = Math.max(1, W - pad * 2);
+  if (!z.cols || z.cols.n !== cols) z.cols = { n: cols, a: columnPeaks(z.buf, cols) };
+  const a = z.cols.a, k = (mid - 4 * dpr) / Math.max(z.max, 0.05);   // normalisasi: puncak tertinggi hampir memenuhi tinggi canvas
+  const top = new Float32Array(cols), bot = new Float32Array(cols), minH = Math.max(2, 2 * dpr);
+  for (let x = 0; x < cols; x++) {
+    let y0 = mid - a[x * 2 + 1] * k, y1 = mid - a[x * 2] * k;   // sample positif ke atas
+    if (y1 - y0 < minH) { y0 = mid - minH / 2; y1 = mid + minH / 2; }   // bagian senyap tetap kelihatan sebagai garis tipis
+    top[x] = y0; bot[x] = y1;
   }
+  // satu polygon tersambung (bukan bar terpisah): kolom bersebelahan selalu nyambung, bentuknya meruncing mulus
+  g.fillStyle = getComputedStyle(cv).getPropertyValue('--accent').trim() || '#a66cff';
+  g.beginPath();
+  g.moveTo(pad, top[0]);
+  for (let x = 0; x < cols; x++) g.lineTo(pad + x + .5, top[x]);
+  g.lineTo(pad + cols, top[cols - 1]);
+  g.lineTo(pad + cols, bot[cols - 1]);
+  for (let x = cols - 1; x >= 0; x--) g.lineTo(pad + x + .5, bot[x]);
+  g.lineTo(pad, bot[0]);
+  g.closePath();
+  g.fill();
 }
 
 const tabNames = (d: EffectDef): string[] => [...new Set(d.params.map(p => p.tab).filter((t): t is string => !!t))];
