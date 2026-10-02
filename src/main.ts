@@ -1134,6 +1134,39 @@ setPianoRollSeekHandler((beats, final) => {
   if (playing) scheduleClips();   // sedang main: suara ikut pindah (hanya saat jari dilepas)
   else startMark = posBars;       // berhenti: posisi baru jadi titik start
 });
+// Tap / seret penggaris timeline utama (sama seperti penggaris piano roll): playhead langsung pindah ke posisi jari, di mana pun.
+// Saat diseret sambil main, playhead ditahan di jari; suara pindah saat jari dilepas. Dekat tepi layar, timeline ikut menggulir.
+const rulerHd = document.querySelector('.timeline-controls-header-wrapper');
+let rSeekId = -1, rSeekX = 0, rScrollRaf = 0;
+function rulerSeek(clientX, final) {
+  posBars = Math.max(0, Math.min(BARS, (clientX - tlEl.getBoundingClientRect().left) / BAR_W));
+  if (!final) { if (playing) phHeld = true; renderStatic(); return; }
+  phHeld = false; renderPlayhead();
+  if (playing) scheduleClips();   // sedang main: suara ikut pindah
+  else startMark = posBars;       // berhenti: posisi baru jadi titik start
+}
+function rulerEdgeScroll() {
+  rScrollRaf = 0;
+  if (rSeekId === -1) return;
+  const r = wsEl.getBoundingClientRect(), l = r.left + tlEl.offsetLeft + 40, rt = r.right - 40;
+  const v = rSeekX < l ? rSeekX - l : rSeekX > rt ? rSeekX - rt : 0;
+  if (v) { wsEl.scrollBy({left: Math.max(-24, Math.min(24, v * .4)), behavior: 'instant'}); rulerSeek(rSeekX, false); }
+  rScrollRaf = requestAnimationFrame(rulerEdgeScroll);
+}
+rulerHd.addEventListener('pointerdown', e => {
+  if (rSeekId !== -1 || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  rSeekId = e.pointerId; rSeekX = e.clientX; rulerHd.setPointerCapture(e.pointerId);
+  rulerSeek(e.clientX, false);
+  if (!rScrollRaf) rScrollRaf = requestAnimationFrame(rulerEdgeScroll);
+});
+rulerHd.addEventListener('pointermove', e => { if (e.pointerId === rSeekId) { rSeekX = e.clientX; rulerSeek(e.clientX, false); } });
+const rulerEnd = e => {
+  if (e.pointerId !== rSeekId) return;
+  rSeekId = -1; cancelAnimationFrame(rScrollRaf); rScrollRaf = 0;
+  rulerSeek(e.clientX, true);
+};
+rulerHd.addEventListener('pointerup', rulerEnd);
+rulerHd.addEventListener('pointercancel', rulerEnd);
 function rewind() {
   const to = posBars > startMark + 1e-6 ? startMark : 0;
   startMark = to;

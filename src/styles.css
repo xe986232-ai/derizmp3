@@ -1107,3 +1107,6 @@ body:has(.pr.is-open) .menu-btn{opacity:0;pointer-events:none;transform:scale(.8
 .derizov .deriz__knobs .fxc__label,.derizov .deriz__vol .fxc__label{font-size:9px;letter-spacing:.1em}
 
 .derizov .deriz__kb{margin-top:0;--kh:46px;--bh:28px}
+
+/* Penggaris timeline utama: tap / seret = pindahkan playhead (seperti penggaris piano roll) */
+.timeline-controls-header-wrapper{touch-action:none;cursor:pointer;-webkit-user-select:none;user-select:none}
