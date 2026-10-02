@@ -4,16 +4,17 @@
 // Selain efek (Reverb, Equalizer) ada plugin instrumen (Supersaw): kartunya otomatis muncul di paling atas saat track synth dibuat,
 // memakai knob + slider vertikal, dan tidak bisa dihapus / tidak muncul di daftar pilihan efek.
 // Efek / plugin baru cukup ditambah ke EFFECTS (nama, parameter) dan ke applyAudio().
-// DERIZ: plugin dengan canvas audio (waveform) + upload file; tahap ini baru menampilkan audio, belum memproses suara.
+// DERIZ: plugin dengan canvas audio (spektrogram, zoom) + upload file; tahap ini baru menampilkan audio, belum memproses suara.
 
-import { setReverb, setEq, reverbSeconds, eqDb, decodeStandalone, bucketPeaks } from './audio-engine';
+import { setReverb, setEq, reverbSeconds, eqDb, decodeStandalone } from './audio-engine';
 import { isAudio, ACCEPT as AUDIO_ACCEPT } from './audio-upload-card';
 import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } from './synth-engine';
 
 type FxType = 'reverb' | 'eq' | 'supersaw' | 'deriz';
 // DERIZ: audio yang di-upload ke canvas plugin (buffer disimpan untuk tahap berikutnya; peaks + max khusus untuk menggambar waveform)
-interface DerizData { name: string; dur: number; buf: AudioBuffer; peaks: Float32Array; max: number; start: number; zoom: number; view: number; mip: Mip[]; cols?: { n: number; zoom: number; view: number; a: Float32Array }; }   // zoom >= 1: jendela yang terlihat = [view, view + 1/zoom] dari durasi; mip: puncak berjenjang supaya zoom / geser tetap ringan di file panjang
-interface Mip { bs: number; a: Float32Array }   // cols: cache min/max per kolom pixel device (dihitung ulang hanya kalau lebar canvas berubah)   // start: posisi garis start, 0..1 dari durasi
+interface DerizData { name: string; dur: number; buf: AudioBuffer; start: number; zoom: number; view: number; spec: Spec | null; busy?: number; }   // start: posisi garis start, 0..1 dari durasi; zoom >= 1: jendela terlihat = [view, view + 1/zoom] dari durasi; spec: spektrogram (null selagi dianalisis, busy = persen)
+// Spektrogram: frames x ROWS nilai dB (0..255 = -100..0 dBFS), baris 0 = frekuensi terendah (skala log); lut = palet warna yang disesuaikan dengan level puncak
+interface Spec { frames: number; hop: number; fmin: number; fmax: number; d: Uint8Array; lut: Uint32Array }   // cols: cache min/max per kolom pixel device (dihitung ulang hanya kalau lebar canvas berubah)   // start: posisi garis start, 0..1 dari durasi
 interface Fx { id: number; type: FxType; on: boolean; min: boolean; tab?: number; v: Record<string, number>; deriz?: DerizData; tok?: number; }
 interface Param { key: string; label: string; def: number; fmt: (v: number) => string; bipolar?: boolean; slider?: boolean; tab?: string; }   // tab: nama kategori (plugin dengan tab)   // bipolar: arc dari tengah (seperti knob pan); slider: slider vertikal, bukan knob
 interface EffectDef { type: FxType; name: string; params: Param[]; synth?: boolean; }   // synth: plugin instrumen (otomatis ada di track synth)
@@ -115,7 +116,7 @@ const ICON_UP = svg('<path d="M12 16V5M7 10l5-5 5 5M5 19h14"/>', 16);
 const esc = (t: string): string => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 const fmtDur = (s: number): string => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
 const fmtPos = (s: number): string => { const q = Math.round(Math.max(0, s) * 10), m = Math.floor(q / 600), r = (q % 600) / 10; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1); };   // m:ss.d
-const posText = (z: DerizData | undefined): string => (z ? 'Start ' + fmtPos(z.start * z.dur) : 'Belum ada audio');
+const posText = (z: DerizData | undefined): string => (z ? (z.busy !== undefined ? 'Menganalisis ' + z.busy + '%' : 'Start ' + fmtPos(z.start * z.dur)) : 'Belum ada audio');
 const zoomText = (z: DerizData | undefined): string => (z ? (z.zoom < 10 ? String(Math.round(z.zoom * 10) / 10) : String(Math.round(z.zoom))) : '1') + '×';
 const visS = (z: DerizData): number => (z.start - z.view) * z.zoom;   // posisi garis start dalam jendela yang terlihat (bisa di luar 0..1 saat di-zoom)
 const DERIZ_PAD = 6;   // jarak kiri/kanan canvas: garis start di 0 / 1 dan ujung waveform sejajar, pegangan tidak terpotong
@@ -124,7 +125,7 @@ const DERIZ_PAD = 6;   // jarak kiri/kanan canvas: garis start di 0 / 1 dan ujun
 function derizHtml(fx: Fx): string {
   const z = fx.deriz;
   return `<div class="fxc__knobs deriz"><div class="fxc__cell deriz__cell">` +
-    `<div class="deriz__stage${z ? ' has-audio' : ''}${z && z.zoom > 1.001 ? ' is-zoomed' : ''}" style="--s:${z ? visS(z).toFixed(4) : 0}"><canvas class="deriz__canvas" role="img" aria-label="Waveform audio DERIZ"></canvas>` +
+    `<div class="deriz__stage${z ? ' has-audio' : ''}${z && z.zoom > 1.001 ? ' is-zoomed' : ''}" style="--s:${z ? visS(z).toFixed(4) : 0}"><canvas class="deriz__canvas" role="img" aria-label="Spektrogram audio DERIZ"></canvas>` +
     `<div class="deriz__start" role="slider" tabindex="0" aria-label="Garis start" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${z ? z.start.toFixed(4) : 0}" aria-valuetext="${posText(z)}"></div>` +
     `<div class="deriz__zoom" role="group" aria-label="Zoom waveform"><button type="button" class="deriz__zb" data-z="out" aria-label="Perkecil" title="Perkecil">&minus;</button><button type="button" class="deriz__zv" aria-label="Reset zoom" title="Reset zoom">${zoomText(z)}</button><button type="button" class="deriz__zb" data-z="in" aria-label="Perbesar" title="Perbesar">+</button></div>` +
     `<div class="deriz__nav" aria-hidden="true"><i class="deriz__thumb"${z ? ` style="left:${(z.view * 100).toFixed(3)}%;width:${(100 / z.zoom).toFixed(3)}%"` : ''}></i></div>` +
@@ -155,62 +156,88 @@ function updateDerizUi(card: HTMLElement, fx: Fx): void {
   dur.textContent = z ? fmtDur(z.dur) : '';
 }
 
-// Puncak berjenjang (blok 32 / 256 / 2048 sample, semua channel digabung), dibuat sekali saat upload.
-function buildMip(buf: AudioBuffer): Mip[] {
-  const len = buf.length, bs = 32, n = Math.ceil(len / bs), a = new Float32Array(n * 2);
-  for (let b = 0; b < n; b++) { a[b * 2] = Infinity; a[b * 2 + 1] = -Infinity; }
-  for (let c = 0; c < buf.numberOfChannels; c++) {
-    const d = buf.getChannelData(c);
-    for (let b = 0; b < n; b++) {
-      let lo = a[b * 2], hi = a[b * 2 + 1];
-      for (let i = b * bs, e = Math.min(len, i + bs); i < e; i++) { const v = d[i]; if (v < lo) lo = v; if (v > hi) hi = v; }
-      a[b * 2] = lo; a[b * 2 + 1] = hi;
-    }
+// ---------- spektrogram: STFT (jendela Hann, FFT radix-2; dua frame nyata dikemas satu FFT kompleks), frekuensi skala log ----------
+const SPEC_ROWS = 288, SPEC_FMIN = 30, SPEC_RANGE = 72;   // jumlah baris, frekuensi terendah (Hz), rentang dB yang diwarnai di bawah puncak
+const PALETTE: [number, number[]][] = [[0, [2, 4, 10]], [.3, [8, 40, 70]], [.6, [40, 170, 205]], [.85, [190, 240, 255]], [1, [255, 255, 255]]];   // hitam -> biru -> cyan -> putih
+
+function makeLut(topV: number): Uint32Array {
+  const lut = new Uint32Array(256), top = topV / 2.55 - 100;
+  for (let v = 0; v < 256; v++) {
+    const t = Math.pow(Math.max(0, Math.min(1, (v / 2.55 - 100 - (top - SPEC_RANGE)) / SPEC_RANGE)), 1.15);
+    let k = 1; while (k < PALETTE.length - 1 && PALETTE[k][0] < t) k++;
+    const [t0, c0] = PALETTE[k - 1], [t1, c1] = PALETTE[k], u = Math.max(0, Math.min(1, (t - t0) / (t1 - t0)));
+    const ch = (i: number): number => Math.round(c0[i] + (c1[i] - c0[i]) * u);
+    lut[v] = (255 << 24) | (ch(2) << 16) | (ch(1) << 8) | ch(0);   // RGBA little-endian
   }
-  const out: Mip[] = [{ bs, a }];
-  for (let k = 0; k < 2; k++) {
-    const pv = out[out.length - 1], pn = pv.a.length / 2, nn = Math.ceil(pn / 8), na = new Float32Array(nn * 2);
-    for (let b = 0; b < nn; b++) {
-      let lo = Infinity, hi = -Infinity;
-      for (let j = b * 8, e = Math.min(pn, j + 8); j < e; j++) { if (pv.a[j * 2] < lo) lo = pv.a[j * 2]; if (pv.a[j * 2 + 1] > hi) hi = pv.a[j * 2 + 1]; }
-      na[b * 2] = lo; na[b * 2 + 1] = hi;
-    }
-    out.push({ bs: pv.bs * 8, a: na });
-  }
-  return out;
+  return lut;
 }
 
-// Min/max per kolom pixel device untuk JENDELA yang terlihat (zoom + view). Banyak sample per pixel: pakai level mip yang pas.
-// Sedikit sample per pixel: scan sample asli; kurang dari 1 sample per pixel: interpolasi linear (tanpa lubang). Hasil: [min0, max0, ...]
-function columnPeaks(z: DerizData, cols: number): Float32Array {
-  const buf = z.buf, len = buf.length, s0 = z.view * len, spp = len / z.zoom / cols, out = new Float32Array(cols * 2);
-  let lvl: Mip | undefined; for (const m of z.mip) if (m.bs * 2 <= spp) lvl = m;
-  if (lvl) {
-    const n = lvl.a.length / 2, bs = lvl.bs;
-    for (let b = 0; b < cols; b++) {
-      const i0 = Math.min(n - 1, Math.floor((s0 + b * spp) / bs)), i1 = Math.min(n, Math.max(i0 + 1, Math.floor((s0 + (b + 1) * spp) / bs)));
-      let lo = Infinity, hi = -Infinity;
-      for (let i = i0; i < i1; i++) { if (lvl.a[i * 2] < lo) lo = lvl.a[i * 2]; if (lvl.a[i * 2 + 1] > hi) hi = lvl.a[i * 2 + 1]; }
-      out[b * 2] = lo; out[b * 2 + 1] = hi;
-    }
-    return out;
+// Analisis di latar (diselingi yield supaya UI tidak macet). alive() false = dibatalkan -> null.
+async function computeSpec(buf: AudioBuffer, onProgress: (pct: number) => void, alive: () => boolean): Promise<Spec | null> {
+  const len = buf.length, sr = buf.sampleRate, hop = Math.max(256, Math.ceil(len / 12000)), frames = Math.floor(len / hop) + 1;
+  const N = frames <= 4000 ? 4096 : 2048, half = N / 2, R = SPEC_ROWS;
+  const fmax = Math.min(20000, sr / 2 * 0.99), binHz = sr / N;
+  // tabel FFT + jendela Hann
+  const rev = new Uint16Array(N), cs = new Float32Array(half), sn = new Float32Array(half), win = new Float32Array(N);
+  const bits = Math.log2(N);
+  for (let i = 0; i < N; i++) { let r = 0; for (let b = 0; b < bits; b++) if (i & (1 << b)) r |= 1 << (bits - 1 - b); rev[i] = r; win[i] = .5 - .5 * Math.cos(2 * Math.PI * i / N); }
+  for (let k = 0; k < half; k++) { cs[k] = Math.cos(2 * Math.PI * k / N); sn[k] = Math.sin(2 * Math.PI * k / N); }
+  // pemetaan baris (log) -> bin: rentang sempit diinterpolasi, rentang lebar diambil nilai maksimumnya
+  const ratio = fmax / SPEC_FMIN, posOf = (r: number): number => SPEC_FMIN * Math.pow(ratio, r / (R - 1)) / binHz;
+  const rLo = new Int32Array(R), rHi = new Int32Array(R), rFr = new Float32Array(R);
+  for (let r = 0; r < R; r++) {
+    const e0 = posOf(r - .5), e1 = posOf(r + .5), c = posOf(r);
+    if (e1 - e0 < 1) { rLo[r] = Math.min(half - 1, Math.floor(c)); rFr[r] = c - rLo[r]; rHi[r] = -1; }
+    else { rLo[r] = Math.max(0, Math.floor(e0)); rHi[r] = Math.min(half, Math.ceil(e1)); }
   }
-  for (let b = 0; b < cols; b++) { out[b * 2] = Infinity; out[b * 2 + 1] = -Infinity; }
-  for (let c = 0; c < buf.numberOfChannels; c++) {
-    const d = buf.getChannelData(c);
-    for (let b = 0; b < cols; b++) {
-      let lo = out[b * 2], hi = out[b * 2 + 1];
-      if (spp >= 1) {
-        const a0 = Math.min(len - 1, Math.floor(s0 + b * spp)), a1 = Math.min(len, Math.max(a0 + 1, Math.floor(s0 + (b + 1) * spp)));
-        for (let i = a0; i < a1; i++) { const v = d[i]; if (v < lo) lo = v; if (v > hi) hi = v; }
-      } else {
-        const pos = s0 + b * spp, i0 = Math.max(0, Math.min(len - 1, Math.floor(pos))), f = pos - i0, v = d[i0] * (1 - f) + d[Math.min(len - 1, i0 + 1)] * f;
-        if (v < lo) lo = v; if (v > hi) hi = v;
+  const d = new Uint8Array(frames * R), hist = new Float64Array(256), re = new Float32Array(N), im = new Float32Array(N);
+  const m1 = new Float32Array(half + 1), m2 = new Float32Array(half + 1), norm = 1 / ((N / 4) * (N / 4)), nch = buf.numberOfChannels;
+  const chans: Float32Array[] = []; for (let c = 0; c < nch; c++) chans.push(buf.getChannelData(c));
+  const fill = (f: number, out: Float32Array): void => {
+    const st = f * hop - half;
+    for (let n = 0; n < N; n++) {
+      const i = st + n; let v = 0;
+      if (i >= 0 && i < len) { for (let c = 0; c < nch; c++) v += chans[c][i]; v /= nch; }
+      out[n] = v * win[n];
+    }
+  };
+  const x1 = new Float32Array(N), x2 = new Float32Array(N);
+  const rows = (m: Float32Array, f: number): void => {
+    for (let r = 0; r < R; r++) {
+      let v: number;
+      if (rHi[r] < 0) v = m[rLo[r]] * (1 - rFr[r]) + m[rLo[r] + 1] * rFr[r];
+      else { v = 0; for (let i = rLo[r]; i < rHi[r]; i++) if (m[i] > v) v = m[i]; }
+      const q = Math.max(0, Math.min(255, Math.round((10 * Math.log10(v * norm + 1e-12) + 100) * 2.55)));
+      d[f * R + r] = q; hist[q]++;
+    }
+  };
+  let t0 = performance.now();
+  for (let f = 0; f < frames; f += 2) {
+    const two = f + 1 < frames;
+    fill(f, x1); if (two) fill(f + 1, x2); else x2.fill(0);
+    for (let i = 0; i < N; i++) { re[rev[i]] = x1[i]; im[rev[i]] = x2[i]; }
+    for (let size = 2; size <= N; size <<= 1) {
+      const h = size >> 1, step = N / size;
+      for (let i = 0; i < N; i += size) for (let j = 0, k = 0; j < h; j++, k += step) {
+        const a = i + j, b = a + h, tr = re[b] * cs[k] + im[b] * sn[k], ti = im[b] * cs[k] - re[b] * sn[k];
+        re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
       }
-      out[b * 2] = lo; out[b * 2 + 1] = hi;
+    }
+    for (let k = 0; k <= half; k++) {   // pisahkan dua spektrum nyata dari satu FFT kompleks
+      const kk = (N - k) % N, ar = (re[k] + re[kk]) / 2, ai = (im[k] - im[kk]) / 2, br = (im[k] + im[kk]) / 2, bi = -(re[k] - re[kk]) / 2;
+      m1[k] = ar * ar + ai * ai; m2[k] = br * br + bi * bi;
+    }
+    rows(m1, f); if (two) rows(m2, f + 1);
+    if (performance.now() - t0 > 12) {
+      onProgress(Math.min(99, Math.round(100 * f / frames)));
+      await new Promise<void>(r => setTimeout(r, 0));
+      if (!alive()) return null;
+      t0 = performance.now();
     }
   }
-  return out;
+  let acc = 0, top = 255; const lim = frames * R * 0.0005;   // puncak = persentil 99,95 supaya satu klik keras tidak meredupkan semuanya
+  for (; top > 0; top--) { acc += hist[top]; if (acc >= lim) break; }
+  return { frames, hop, fmin: SPEC_FMIN, fmax, d, lut: makeLut(top) };
 }
 
 function paintDeriz(card: HTMLElement, fx: Fx): void {
@@ -222,42 +249,44 @@ function paintDeriz(card: HTMLElement, fx: Fx): void {
   const W = Math.round(w * dpr), H = Math.round(h * dpr);
   if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
   const g = cv.getContext('2d')!;
-  g.setTransform(1, 0, 0, 1, 0, 0);   // gambar langsung dalam pixel device (1 kolom = 1 pixel device)
+  g.setTransform(1, 0, 0, 1, 0, 0);
   g.clearRect(0, 0, W, H);
-  const mid = H / 2;
-  const gl = Math.max(1, Math.round(dpr));
-  g.fillStyle = 'rgba(255,255,255,.05)';   // grid layar ala scope: 8 kolom waktu + garis +/-50% (juga tampil saat canvas masih kosong)
-  for (let i = 1; i < 8; i++) g.fillRect(Math.round(W * i / 8), 0, gl, H);
-  g.fillRect(0, Math.round(H * .25), W, gl); g.fillRect(0, Math.round(H * .75), W, gl);
-  const cl = g.createLinearGradient(0, 0, W, 0);   // garis tengah memudar di kedua ujung
-  cl.addColorStop(0, 'rgba(255,255,255,0)'); cl.addColorStop(.5, 'rgba(255,255,255,.26)'); cl.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = cl; g.fillRect(0, Math.round(mid - gl / 2), W, gl);
-  const z = fx.deriz;
-  if (!z) return;
-  const pad = Math.round(DERIZ_PAD * dpr), cols = Math.max(1, W - pad * 2);
-  if (!z.cols || z.cols.n !== cols || z.cols.zoom !== z.zoom || z.cols.view !== z.view) z.cols = { n: cols, zoom: z.zoom, view: z.view, a: columnPeaks(z, cols) };
-  const a = z.cols.a, k = (mid - 4 * dpr) / Math.max(z.max, 0.05);   // normalisasi: puncak tertinggi hampir memenuhi tinggi canvas
-  const top = new Float32Array(cols), bot = new Float32Array(cols), minH = Math.max(2, 2 * dpr);
-  for (let x = 0; x < cols; x++) {
-    let y0 = mid - a[x * 2 + 1] * k, y1 = mid - a[x * 2] * k;   // sample positif ke atas
-    if (y1 - y0 < minH) { y0 = mid - minH / 2; y1 = mid + minH / 2; }   // bagian senyap tetap kelihatan sebagai garis tipis
-    top[x] = y0; bot[x] = y1;
+  const gl = Math.max(1, Math.round(dpr)), z = fx.deriz, sp = z?.spec;
+  if (!z || !sp) {   // belum ada audio / masih dianalisis: grid layar kosong
+    g.fillStyle = 'rgba(255,255,255,.05)';
+    for (let i = 1; i < 8; i++) g.fillRect(Math.round(W * i / 8), 0, gl, H);
+    g.fillRect(0, Math.round(H * .25), W, gl); g.fillRect(0, Math.round(H * .75), W, gl);
+    const cl = g.createLinearGradient(0, 0, W, 0);
+    cl.addColorStop(0, 'rgba(255,255,255,0)'); cl.addColorStop(.5, 'rgba(255,255,255,.26)'); cl.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = cl; g.fillRect(0, Math.round(H / 2 - gl / 2), W, gl);
+    return;
   }
-  // satu polygon tersambung (bukan bar terpisah): kolom bersebelahan selalu nyambung, bentuknya meruncing mulus
-  const acc = getComputedStyle(cv).getPropertyValue('--accent').trim() || '#a66cff';
-  const gr = g.createLinearGradient(0, 0, 0, H);   // tepi berwarna aksen, inti terang: kesan gelombang bercahaya
-  gr.addColorStop(0, acc); gr.addColorStop(.5, '#f4eeff'); gr.addColorStop(1, acc);
-  g.fillStyle = gr; g.shadowColor = acc; g.shadowBlur = 9 * dpr;
-  g.beginPath();
-  g.moveTo(pad, top[0]);
-  for (let x = 0; x < cols; x++) g.lineTo(pad + x + .5, top[x]);
-  g.lineTo(pad + cols, top[cols - 1]);
-  g.lineTo(pad + cols, bot[cols - 1]);
-  for (let x = cols - 1; x >= 0; x--) g.lineTo(pad + x + .5, bot[x]);
-  g.lineTo(pad, bot[0]);
-  g.closePath();
-  g.fill();
-  g.shadowBlur = 0;
+  const pad = Math.round(DERIZ_PAD * dpr), cols = Math.max(1, W - pad * 2), R = SPEC_ROWS, d = sp.d, lut = sp.lut;
+  const img = g.createImageData(cols, H), px = new Uint32Array(img.data.buffer);
+  const s0 = z.view * z.buf.length, span = z.buf.length / z.zoom, vec = new Float32Array(R);
+  const rA = new Int32Array(H), rT = new Float32Array(H);   // baris layar -> baris spektrogram (0 = frekuensi terendah, di bawah)
+  for (let y = 0; y < H; y++) { const rp = Math.max(0, Math.min(R - 1, (1 - (y + .5) / H) * (R - 1))); rA[y] = Math.min(R - 2, Math.floor(rp)); rT[y] = rp - rA[y]; }
+  for (let x = 0; x < cols; x++) {
+    const p0 = (s0 + x / cols * span) / sp.hop, p1 = (s0 + (x + 1) / cols * span) / sp.hop;
+    if (p1 - p0 > 1) {   // zoom out: banyak frame per kolom -> ambil yang paling keras (transien tidak hilang)
+      const a = Math.max(0, Math.min(sp.frames - 1, Math.floor(p0))), b = Math.max(a, Math.min(sp.frames - 1, Math.ceil(p1)));
+      vec.fill(0);
+      for (let f = a; f <= b; f++) for (let r = 0, o = f * R; r < R; r++) if (d[o + r] > vec[r]) vec[r] = d[o + r];
+    } else {   // zoom in: interpolasi linear antar dua frame
+      const p = Math.max(0, Math.min(sp.frames - 1, (p0 + p1) / 2)), fa = Math.min(sp.frames - 1, Math.floor(p)), fb = Math.min(sp.frames - 1, fa + 1), ft = p - fa;
+      for (let r = 0; r < R; r++) vec[r] = d[fa * R + r] * (1 - ft) + d[fb * R + r] * ft;
+    }
+    for (let y = 0; y < H; y++) { const a = rA[y], v = vec[a] * (1 - rT[y]) + vec[a + 1] * rT[y]; px[y * cols + x] = lut[v | 0]; }
+  }
+  g.putImageData(img, pad, 0);
+  // sumbu frekuensi (100 Hz, 1 kHz, 10 kHz)
+  g.font = `${Math.round(9 * dpr)}px system-ui, sans-serif`; g.textBaseline = 'bottom';
+  for (const [f, label] of [[100, '100'], [1000, '1k'], [10000, '10k']] as [number, string][]) {
+    if (f <= sp.fmin || f >= sp.fmax) continue;
+    const y = Math.round((1 - Math.log(f / sp.fmin) / Math.log(sp.fmax / sp.fmin)) * H);
+    g.fillStyle = 'rgba(255,255,255,.14)'; g.fillRect(pad, y, cols, gl);
+    g.fillStyle = 'rgba(255,255,255,.55)'; g.fillText(label, pad + 4 * dpr, y - 2 * dpr);
+  }
 }
 
 const tabNames = (d: EffectDef): string[] => [...new Set(d.params.map(p => p.tab).filter((t): t is string => !!t))];
@@ -565,10 +594,9 @@ export function initFxRack(): FxRack {
     const my = fx.tok = (fx.tok ?? 0) + 1;   // upload yang lebih baru membatalkan yang lama
     stage.classList.add('is-loading'); name.textContent = 'Memuat…';
     try {
-      const buf = await decodeStandalone(file), peaks = bucketPeaks(buf, 1200);
-      let max = 0; for (let i = 0; i < peaks.length; i++) max = Math.max(max, Math.abs(peaks[i]));
+      const buf = await decodeStandalone(file);
       if (my !== fx.tok) return;
-      fx.deriz = { name: file.name, dur: buf.duration, buf, peaks, max, start: 0, zoom: 1, view: 0, mip: buildMip(buf) };
+      fx.deriz = { name: file.name, dur: buf.duration, buf, start: 0, zoom: 1, view: 0, spec: null, busy: 0 };
     } catch (err) {
       console.error(err);
       if (my === fx.tok) warn('File tidak bisa dibaca');
@@ -577,6 +605,13 @@ export function initFxRack(): FxRack {
     const live = list.querySelector<HTMLElement>(`.fxc[data-fx="${fx.id}"]`);   // kartu bisa saja sudah dihapus / track diganti selama decode
     if (!live) return;
     updateDerizUi(live, fx); paintDeriz(live, fx);
+    // analisis spektrogram di latar; label menampilkan persennya, hasilnya digambar begitu selesai
+    const z = fx.deriz, cardOf = (): HTMLElement | null => list.querySelector<HTMLElement>(`.fxc[data-fx="${fx.id}"]`);
+    if (!z) return;
+    const spec = await computeSpec(z.buf, pct => { z.busy = pct; const c = cardOf(); if (c && fx.deriz === z) c.querySelector('.deriz__pos')!.textContent = posText(z); }, () => fx.deriz === z && fx.tok === my);
+    if (!spec || fx.deriz !== z) return;
+    z.spec = spec; z.busy = undefined;
+    const c2 = cardOf(); if (c2) { updateDerizUi(c2, fx); paintDeriz(c2, fx); }
   }
   list.addEventListener('change', e => {
     const inp = e.target as HTMLInputElement;
@@ -657,7 +692,7 @@ export function initFxRack(): FxRack {
   });
 
   // ---------- DERIZ: zoom canvas. Tombol + / - / reset, Ctrl+scroll (juga cubit di trackpad), cubit dua jari, bar navigasi di bawah untuk geser ----------
-  const maxZoom = (z: DerizData): number => Math.max(1, Math.min(2000, z.dur / 0.003));   // jendela terkecil kira-kira 3 ms
+  const maxZoom = (z: DerizData): number => (z.spec ? Math.max(1, Math.min(2000, z.spec.frames / 10)) : 1);   // jendela terkecil kira-kira 10 frame analisis (lebih kecil dari itu tidak ada detail baru)
   const setView = (card: HTMLElement, fx: Fx, zoom: number, ga: number, wa: number): void => {   // ga: titik global yang dijaga tetap di posisi jendela wa (0..1)
     const z = fx.deriz; if (!z) return;
     z.zoom = Math.max(1, Math.min(maxZoom(z), zoom));
