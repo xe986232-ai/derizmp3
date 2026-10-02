@@ -114,7 +114,6 @@ const cellHtml = (d: EffectDef, fx: Fx, p: Param): string => p.slider
 // ---------- DERIZ: canvas audio ----------
 const ICON_UP = svg('<path d="M12 16V5M7 10l5-5 5 5M5 19h14"/>', 16);
 const ICON_POP = svg('<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/>', 16);   // buka DERIZ di tengah layar
-const ICON_L = svg('<path d="M15 5l-7 7 7 7"/>', 16), ICON_R = svg('<path d="M9 5l7 7-7 7"/>', 16);
 const ICON_X = svg('<path d="M6 6l12 12M18 6L6 18"/>', 16);
 const esc = (t: string): string => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 const fmtDur = (s: number): string => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
@@ -136,10 +135,7 @@ function derizHtml(fx: Fx): string {
     `<div class="fxc__label deriz__meta"><span class="deriz__pos">${posText(z)}</span>` +
     `<span class="deriz__dur"${z ? '' : ' hidden'}>${z ? fmtDur(z.dur) : ''}</span>` +
     `<button type="button" class="deriz__swap"${z ? '' : ' hidden'}>Ganti</button></div>` +
-    `<div class="deriz__kb"><div class="deriz__kbbar"><span class="deriz__kbt">Keyboard &middot; C4 = nada asli</span><div class="kbd__oct" role="group" aria-label="Oktaf">` +
-    `<button type="button" class="kbd__btn deriz__oct" data-o="-1" aria-label="Oktaf turun">${ICON_L}</button><span class="kbd__octlabel deriz__octl">C3</span>` +
-    `<button type="button" class="kbd__btn deriz__oct" data-o="1" aria-label="Oktaf naik">${ICON_R}</button></div></div>` +
-    `<div class="keyboardkeyboardcontroller deriz__keys"><div class="keys"></div></div></div>` +
+    `<div class="deriz__kb"><div class="keyboardkeyboardcontroller deriz__keys"><div class="keys"></div></div></div>` +
     `<input type="file" class="deriz__file" accept="${AUDIO_ACCEPT}" hidden></div></div>`;
 }
 
@@ -416,34 +412,26 @@ export function initFxRack(host: () => AudioHost): FxRack {
   onRoots('click', e => { if ((e.target as Element).closest('.fxc-ph__btn')) closeOverlay(); });
 
   // ---------- DERIZ: keyboard di bawah plugin (gaya keyboard bawah). Sampler: audio yang di-upload dimainkan dengan pitch sesuai tuts, mulai dari garis start; C4 = nada asli ----------
-  const KW = 40, KBW = 28, KROOT = 60, WPC = [0, 2, 4, 5, 7, 9, 11], BLK = [0, 1, 3, 4, 5];   // BLK: indeks tuts putih (C D F G A) yang punya tuts hitam di kanannya
-  const KMAP: Record<string, number> = { z: 0, s: 1, x: 2, d: 3, c: 4, v: 5, g: 6, b: 7, h: 8, n: 9, j: 10, m: 11, ',': 12, l: 13, '.': 14, q: 16, w: 17, '3': 18, e: 19, '4': 20, r: 21, '5': 22, t: 23, y: 24 };
-  let kbOct = 3, kbN = 0;
+  const KROOT = 60, KBASE = 48, KOCT = 3, NW = 7 * KOCT, WPC = [0, 2, 4, 5, 7, 9, 11], BLK = [0, 1, 3, 4, 5];   // tetap 3 oktaf: C3 sampai B5 (21 tuts putih), tanpa ganti oktaf; BLK: tuts putih (C D F G A) yang punya tuts hitam di kanannya
+  const KMAP: Record<string, number> = { z: 0, s: 1, x: 2, d: 3, c: 4, v: 5, g: 6, b: 7, h: 8, n: 9, j: 10, m: 11, ',': 12, l: 13, '.': 14, '1': 15, q: 16, w: 17, '3': 18, e: 19, '4': 20, r: 21, '5': 22, t: 23, y: 24, '7': 25, u: 26, '8': 27, i: 28, o: 29, '0': 30, p: 31 };
   const kbVoices = new Map<number, { src: AudioBufferSourceNode; g: GainNode; ctx: AudioContext }>();
   const kbPtr = new Map<number, number>(), kbKeysDown = new Map<string, number>();
   const kbCard = (): HTMLElement | null => ovOpen?.card ?? null;
   const kbKeyEl = (m: number): HTMLElement | null => kbCard()?.querySelector<HTMLElement>(`.deriz__keys [data-midi="${m}"]`) ?? null;
   function buildKb(card: HTMLElement): void {
-    const wrap = card.querySelector<HTMLElement>('.deriz__keys'), keys = wrap?.querySelector<HTMLElement>('.keys'); if (!wrap || !keys) return;
-    kbReleaseAll();
-    const nW = Math.max(7, Math.min(28, Math.floor(wrap.clientWidth / KW))); kbN = nW;
-    const maxOct = Math.max(0, Math.floor((127 - 12 - (Math.floor((nW - 1) / 7) * 12 + 11)) / 12));
-    kbOct = Math.max(0, Math.min(kbOct, maxOct));
-    const base = 12 + 12 * kbOct, W = nW * KW;
-    wrap.style.width = W - 2 + 'px';
+    const keys = card.querySelector<HTMLElement>('.deriz__keys .keys'); if (!keys || keys.childElementCount) return;
+    const w = 100 / NW;   // lebar satu tuts putih (%): keyboard selalu pas selebar kartu
     let h = '';
-    for (let i = 0; i < nW; i++) {
-      const m = base + Math.floor(i / 7) * 12 + WPC[i % 7], pc = i % 7;
-      h += `<button type="button" tabindex="-1" class="whitekey unhighlighted${pc === 0 ? ' pitch-visible' : ''} unpressed" data-midi="${m}" aria-label="${m}" style="left:${i * KW}px"><span class="pitch-label">C${Math.floor(m / 12) - 1}</span></button>`;
+    for (let i = 0; i < NW; i++) {
+      const m = KBASE + Math.floor(i / 7) * 12 + WPC[i % 7];
+      h += `<button type="button" tabindex="-1" class="whitekey unhighlighted${i % 7 === 0 ? ' pitch-visible' : ''} unpressed" data-midi="${m}" aria-label="${m}" style="left:${(i * w).toFixed(4)}%;width:calc(${w.toFixed(4)}% - 1px)"><span class="pitch-label">C${Math.floor(m / 12) - 1}</span></button>`;
     }
-    for (let i = 0; i < nW - 1; i++) {
+    for (let i = 0; i < NW - 1; i++) {
       if (!BLK.includes(i % 7)) continue;
-      const m = base + Math.floor(i / 7) * 12 + WPC[i % 7] + 1;
-      h += `<button type="button" tabindex="-1" class="blackkey unhighlighted unpressed" data-midi="${m}" aria-label="${m}" style="left:${(i + 1) * KW - KBW / 2 - 1}px"></button>`;
+      const m = KBASE + Math.floor(i / 7) * 12 + WPC[i % 7] + 1;
+      h += `<button type="button" tabindex="-1" class="blackkey unhighlighted unpressed" data-midi="${m}" aria-label="${m}" style="left:calc(${((i + 1) * w).toFixed(4)}% - ${(w * 0.31).toFixed(4)}%);width:${(w * 0.62).toFixed(4)}%"></button>`;
     }
     keys.innerHTML = h;
-    card.querySelector('.deriz__octl')!.textContent = 'C' + kbOct;
-    card.querySelectorAll<HTMLButtonElement>('.deriz__oct').forEach(b => { b.disabled = (+b.dataset.o! < 0 && kbOct <= 0) || (+b.dataset.o! > 0 && kbOct >= maxOct); });
   }
   function kbOn(m: number): void {
     const fx = ovOpen ? find(ovOpen.card) : undefined, z = fx?.deriz;
@@ -484,21 +472,16 @@ export function initFxRack(host: () => AudioHost): FxRack {
   });
   const kbUp = (e: PointerEvent): void => { const m = kbPtr.get(e.pointerId); if (m !== undefined) { kbPtr.delete(e.pointerId); kbRelease(m); } };
   ov.addEventListener('pointerup', kbUp); ov.addEventListener('pointercancel', kbUp);
-  ov.addEventListener('click', e => {
-    const b = (e.target as Element).closest<HTMLButtonElement>('.deriz__oct'); if (!b || b.disabled) return;
-    kbOct += +b.dataset.o!; if (ovOpen) buildKb(ovOpen.card);
-  });
   // tombol komputer (susunan sama dengan keyboard bawah); selama overlay terbuka, keyboard bawah tidak ikut bunyi
   document.addEventListener('keydown', e => {
     if (!ovOpen || e.ctrlKey || e.metaKey || e.altKey || (e.target as Element)?.matches?.('textarea, input:not([type="range"])')) return;
     const k = e.key.toLowerCase(); if (!(k in KMAP)) return;
     e.preventDefault(); e.stopPropagation();
     if (e.repeat || kbKeysDown.has(k)) return;
-    const m = 12 + 12 * kbOct + KMAP[k]; kbKeysDown.set(k, m); kbPress(m);
+    const m = KBASE + KMAP[k]; kbKeysDown.set(k, m); kbPress(m);
   }, true);
   document.addEventListener('keyup', e => { const k = e.key.toLowerCase(), m = kbKeysDown.get(k); if (m !== undefined) { kbKeysDown.delete(k); kbRelease(m); } });
   window.addEventListener('blur', kbReleaseAll);
-  window.addEventListener('resize', () => { if (ovOpen) { const w = ovOpen.card.querySelector<HTMLElement>('.deriz__keys'); if (w && Math.max(7, Math.min(28, Math.floor((w.parentElement!.clientWidth) / KW))) !== kbN) buildKb(ovOpen.card); } });
 
   // Tombol "+": di atas saat belum ada efek, pindah ke bawah daftar setelah ada efek (dengan animasi geser halus)
   function layout(animate: boolean): void {
