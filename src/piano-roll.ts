@@ -131,7 +131,9 @@ function drawHandle(c: CanvasRenderingContext2D, n: Note, sx: number, sy: number
   c.fillStyle = '#fff'; c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.fill();
 }
 
-function drawGrid(zoomOnly = false) {   // zoomOnly: frame ini hanya zoom, note tidak berubah -> lewati deteksi note baru / hilang
+let drawn = {ppb: 0, rowH: 0, sx: 0, sy: 0};   // parameter yang dipakai gambar grid terakhir (dasar transform CSS saat pinch)
+function drawGrid(zoomOnly = false) {
+  const tg = performance.now();   // zoomOnly: frame ini hanya zoom, note tidak berubah -> lewati deteksi note baru / hilang
   const vw = sc.clientWidth, vh = sc.clientHeight;
   const c = fit(gc, vw, vh, 2), sx = sc.scrollLeft, sy = sc.scrollTop;
   c.fillStyle = '#101016'; c.fillRect(0, 0, vw, vh);
@@ -182,6 +184,7 @@ function drawGrid(zoomOnly = false) {   // zoomOnly: frame ini hanya zoom, note 
     c.globalAlpha = 1 - t; drawNoteBody(c, gh.n, sx, sy, false); if (gh.h) drawHandle(c, gh.n, sx, sy, 1 - easeOut(t)); c.globalAlpha = 1;
   }
   if (animating) schedule();
+  drawn = {ppb, rowH, sx, sy}; hudGrid = performance.now() - tg;
   // marquee
   if (g && g.kind === 'marquee') {
     const a = g.x0 - sx, b = g.y0 - sy, w = g.x - g.x0, h = g.y - g.y0;
@@ -192,7 +195,7 @@ function drawGrid(zoomOnly = false) {   // zoomOnly: frame ini hanya zoom, note 
 
 let keysSig = '', rulerSig = '';   // tanda masukan gambar terakhir: kalau sama, tidak digambar ulang (mis. pinch horizontal tidak menyentuh keys)
 function drawKeys() {
-  const vh = sc.clientHeight, sy = sc.scrollTop;
+  const vh = sc.clientHeight, sy = curT();
   const sig = sy + '|' + rowH + '|' + vh + '|' + hoverP + '|' + showNoteNames + '|' + color + '|' + (window.devicePixelRatio || 1);
   if (sig === keysSig) return; keysSig = sig;
   const c = fit(kc, KEY_W, vh);
@@ -211,7 +214,7 @@ function drawKeys() {
 }
 
 function drawRuler() {
-  const vw = sc.clientWidth, sx = sc.scrollLeft;
+  const vw = sc.clientWidth, sx = curL();
   const sig = sx + '|' + ppb + '|' + vw + '|' + color + '|' + (window.devicePixelRatio || 1);
   if (sig === rulerSig) return; rulerSig = sig;
   const c = fit(rc, vw, RULER_H);
@@ -302,12 +305,50 @@ function flushZoom() {
   const z = zoomPend; zoomPend = null;
   applySize(); sc.scrollLeft = z.l; sc.scrollTop = z.t;
 }
+// Saat zoom, grid TIDAK digambar ulang: gambar terakhir hanya diskalakan GPU lewat CSS transform (hampir gratis).
+// Begitu zoom berhenti ZOOM_IDLE ms (atau jari lepas), layout ditulis sekali dan grid digambar ulang tajam.
+const ZOOM_IDLE = 120;
+let zoomEndT = 0, hudGrid = 0, hudMode = 'full';
+function previewZoom() {
+  const z = zoomPend!, d = drawn;
+  if (!d.ppb) return;
+  const kx = ppb / d.ppb, ky = rowH / d.rowH;
+  gc.style.transform = 'translate(' + (d.sx * kx - z.l) + 'px,' + (d.sy * ky - z.t) + 'px) scale(' + kx + ',' + ky + ')';
+}
+function commitZoom() {
+  zoomEndT = 0;
+  if (!zoomPend) return;
+  if (pinch) { zoomEndT = window.setTimeout(commitZoom, ZOOM_IDLE); return; }   // jari masih menempel
+  gc.style.transform = '';
+  flushZoom(); zoomFrame = true; schedule();
+}
 function redraw() {
+  const t0 = performance.now();
+  if (zoomPend) {
+    hudMode = 'preview';
+    previewZoom(); drawKeys(); drawRuler(); placePlayhead();
+    if (selBar && !selBar.hidden) { selBar.hidden = true; selBarOn = false; }
+    window.clearTimeout(zoomEndT); zoomEndT = window.setTimeout(commitZoom, ZOOM_IDLE);
+    hudTick(t0); return;
+  }
+  hudMode = 'full';
   flushZoom();
   const zo = zoomFrame; zoomFrame = false;
   drawGrid(zo); drawKeys(); drawRuler(); placeSelBar(); placePlayhead();
   // notifyChange membuat JSON seluruh note: di frame zoom ditunda (note tidak berubah), supaya tidak ikut membebani gesture
   if (zo) { window.clearTimeout(notifyT); notifyT = window.setTimeout(notifyChange, 250); } else notifyChange();
+  hudTick(t0);
+}
+
+// ---------- penghitung FPS sementara (hapus blok ini + elemen .pr__hud kalau sudah tidak perlu) ----------
+let hudEl: HTMLElement | null = null; const hudT: number[] = []; let hudJs = 0;
+function hudTick(t0: number) {
+  const now = performance.now(); hudJs = now - t0;
+  hudT.push(now); if (hudT.length > 30) hudT.shift();
+  if (!hudEl) return;
+  let fps = 0;
+  if (hudT.length > 1) { const span = hudT[hudT.length - 1] - hudT[0]; fps = span > 0 ? (hudT.length - 1) * 1000 / span : 0; }
+  hudEl.textContent = 'FPS ' + Math.round(fps) + ' · js ' + hudJs.toFixed(1) + 'ms · grid ' + hudGrid.toFixed(1) + 'ms · ' + hudMode;
 }
 let notifyT = 0;
 function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; redraw(); }); }
@@ -325,6 +366,7 @@ function setZoomAt(nppb: number, nrow: number, vx: number, vy: number, beatAt: n
 function zoomBy(fx: number, fy: number) {
   const vw = sc.clientWidth, vh = sc.clientHeight;
   setZoomAt(ppb * fx, rowH * fy, vw / 2, vh / 2, (curL() + vw / 2) / ppb, (curT() + vh / 2) / rowH);
+  commitZoom();   // tombol / keyboard: satu langkah, tidak perlu preview
 }
 
 // ---------- operasi data ----------
@@ -416,7 +458,7 @@ const ptrs = new Map<number, {x: number; y: number}>();
 let pinch: {d0x: number; d0y: number; ppb0: number; row0: number; beat0: number; rowPos0: number} | null = null;
 
 function localXY(e: {clientX: number; clientY: number}) {
-  const r = gc.getBoundingClientRect();
+  const r = sc.getBoundingClientRect();
   return {x: e.clientX - r.left + sc.scrollLeft, y: e.clientY - r.top + sc.scrollTop};
 }
 function hit(cx: number, cy: number): {n: Note} | null {
@@ -455,7 +497,7 @@ function onDown(e: PointerEvent) {
   if (ptrs.size === 2) {                       // pinch: batalkan apa pun yang sedang digambar
     if (g) cancelGesture();
     const [a, b] = [...ptrs.values()];
-    const r = gc.getBoundingClientRect();
+    const r = sc.getBoundingClientRect();
     const mx = (a.x + b.x) / 2 - r.left, my = (a.y + b.y) / 2 - r.top;
     pinch = {d0x: Math.abs(a.x - b.x), d0y: Math.abs(a.y - b.y), ppb0: ppb, row0: rowH, beat0: (curL() + mx) / ppb, rowPos0: (curT() + my) / rowH};
     return;
@@ -524,7 +566,7 @@ function onMove(e: PointerEvent) {
   if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
   if (pinch && ptrs.size >= 2) {
     const [a, b] = [...ptrs.values()];
-    const r = gc.getBoundingClientRect();
+    const r = sc.getBoundingClientRect();
     const mx = (a.x + b.x) / 2 - r.left, my = (a.y + b.y) / 2 - r.top;
     const dx = Math.abs(a.x - b.x), dy = Math.abs(a.y - b.y);
     const nppb = pinch.d0x > 40 ? pinch.ppb0 * dx / pinch.d0x : pinch.ppb0;
@@ -602,7 +644,7 @@ function onMove(e: PointerEvent) {
 
 function onUp(e: PointerEvent) {
   ptrs.delete(e.pointerId);
-  if (ptrs.size < 2) pinch = null;
+  if (ptrs.size < 2) { const was = !!pinch; pinch = null; if (was && zoomPend) { window.clearTimeout(zoomEndT); commitZoom(); } }
   if (g && g.id === e.pointerId) {
     clearTimeout(g.timer);
     if (g.kind === 'tapdraw' && !g.moved && e.type === 'pointerup') {
@@ -627,7 +669,7 @@ function onUp(e: PointerEvent) {
 function onWheel(e: WheelEvent) {
   if (!(e.ctrlKey || e.metaKey || e.altKey)) return;     // scroll biasa dibiarkan native
   e.preventDefault();
-  const r = gc.getBoundingClientRect(), vx = e.clientX - r.left, vy = e.clientY - r.top;
+  const r = sc.getBoundingClientRect(), vx = e.clientX - r.left, vy = e.clientY - r.top;
   const f = Math.exp(-e.deltaY * (e.ctrlKey ? 0.012 : 0.006));
   const beat = (curL() + vx) / ppb, rowPos = (curT() + vy) / rowH;
   if (e.altKey) setZoomAt(ppb, rowH * f, vx, vy, beat, rowPos); else setZoomAt(ppb * f, rowH, vx, vy, beat, rowPos);
@@ -787,6 +829,7 @@ function build(): HTMLElement {
   gc = el.querySelector<HTMLCanvasElement>('.pr__grid')!;
   kc = el.querySelector<HTMLCanvasElement>('.pr__keys')!;
   rc = el.querySelector<HTMLCanvasElement>('.pr__ruler')!;
+  hudEl = document.createElement('div'); hudEl.className = 'pr__hud'; hudEl.setAttribute('aria-hidden', 'true'); el.querySelector('.pr__main')!.appendChild(hudEl);
   btnUndo = el.querySelector<HTMLButtonElement>('[data-act="undo"]')!;
   btnRedo = el.querySelector<HTMLButtonElement>('[data-act="redo"]')!;
 
@@ -846,14 +889,14 @@ export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.
   const mid = st.notes.length ? st.notes.reduce((a, n) => a + n.p, 0) / st.notes.length : 62;   // mulai di sekitar C4
   sc.scrollLeft = 0; sc.scrollTop = Math.max(0, (P_MAX - mid) * rowH - vh / 2);
   resetAnim(); selBarOn = false; selBar.hidden = true;
-  keysSig = rulerSig = ''; zoomPend = null; zoomFrame = false;
+  keysSig = rulerSig = ''; zoomPend = null; zoomFrame = false; window.clearTimeout(zoomEndT); gc.style.transform = ''; drawn.ppb = 0;
   setTool('draw'); updateUI(); redraw();
 }
 
 export function closePianoRoll() {
   if (!root || root.hidden) return;
   closeMenu();
-  const r = root; r.classList.remove('is-open'); g = null; ptrs.clear(); pinch = null;
+  const r = root; r.classList.remove('is-open'); g = null; ptrs.clear(); pinch = null; window.clearTimeout(zoomEndT); zoomPend = null; gc.style.transform = '';
   setTimeout(() => { if (!r.classList.contains('is-open')) r.hidden = true; }, 200);
   onClose && onClose();
 }
