@@ -319,7 +319,7 @@ function renderPatNotes(el) {
   if (!box) { box = document.createElement('div'); box.className = 'pattern__notes'; el.insertBefore(box, el.querySelector('.pattern__handle')); }
   let lo = 127, hi = 0; notes.forEach(n => { lo = Math.min(lo, n.p); hi = Math.max(hi, n.p); });
   const rows = Math.max(hi - lo + 1, 8), top = (rows - (hi - lo + 1)) / 2;   // minimal 8 baris supaya 1-2 nada tidak jadi balok raksasa
-  box.innerHTML = '<svg viewBox="0 0 ' + PR_BEATS + ' ' + rows + '" preserveAspectRatio="none" aria-hidden="true">' +
+  box.innerHTML = '<svg viewBox="0 0 ' + PR_BEATS + ' ' + rows + '" preserveAspectRatio="none" aria-hidden="true" style="width:calc(var(--bar) * ' + PR_BEATS / 4 + ')">' +
     notes.map(n => '<rect x="' + n.s + '" y="' + (top + hi - n.p + 0.1) + '" width="' + Math.max(n.l, 0.12) + '" height="0.8"/>').join('') + '</svg>';
 }
 // Banyak DERIZ bisa mengisi satu pattern: nada instrumen bawaan track pemilik pattern disimpan di kunci id pattern, nada DERIZ lain di "<id>@<id DERIZ>"
