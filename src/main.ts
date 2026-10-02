@@ -1296,10 +1296,11 @@ async function importAudio(trackId, file) {
 // waveform digambar ulang hanya kalau jendela audio berubah (panjang / offset), bukan saat zoom
 function syncWaves() {
   lanesEl.querySelectorAll('.pattern[data-clip]').forEach(p => {
-    const off = +p.dataset.off || 0, dur = pw(p) / BAR_W * SEC_PER_BAR, key = off.toFixed(3) + '|' + dur.toFixed(3);
+    const off = +p.dataset.off || 0, dur = pw(p) / BAR_W * SEC_PER_BAR, key = off.toFixed(3) + '|' + dur.toFixed(3) + '|' + (document.documentElement.dataset.wfmode || 'mono');
     if (p.dataset.wk !== key) { p.dataset.wk = key; renderWave(p, +p.dataset.clip, off, dur); }
   });
 }
+document.addEventListener('wfmodechange', syncWaves);   // Pengaturan > Waveform audio clip diganti: gambar ulang semua clip
 let waveRaf = 0, resyncT = 0;
 new MutationObserver(ms => {
   const hit = ms.some(m => m.type === 'childList'

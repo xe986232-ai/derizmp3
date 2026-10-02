@@ -1134,6 +1134,9 @@ body:has(.pr.is-open) .menu-btn{opacity:0;pointer-events:none;transform:scale(.8
 .mp__sw--black{background:#000}
 .mp__sw--tdefault{background:linear-gradient(135deg,#25252f 50%,#5b3de8 50%)}   /* contoh warna tiap theme */
 .mp__sw--tjembut{background:linear-gradient(135deg,#13131a 50%,#000 50%)}
+.mp__sw--w1,.mp__sw--w2{width:20px;border-radius:3px;border:0}   /* ikon mini: satu batang / dua batang */
+.mp__sw--w1{background:linear-gradient(#fff,#fff) 0 4px/100% 6px no-repeat}
+.mp__sw--w2{background:linear-gradient(#fff,#fff) 0 1px/100% 4.5px no-repeat,linear-gradient(#fff,#fff) 0 8.5px/100% 4.5px no-repeat}
 .mp__row{display:flex;align-items:center;justify-content:space-between;gap:14px}
 .mp__row__t{display:flex;flex-direction:column;gap:2px;min-width:0}
 .mp__row__t b{font-size:14px;font-weight:600}

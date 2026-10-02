@@ -87,6 +87,13 @@ export function initMenuPanel(): MenuPanel {
             '</div>' +
           '</div>' +
           '<div class="mp__card mp__item mp__set" style="--i:3">' +
+            '<div class="mp__sub"><span>Waveform audio clip</span></div>' +
+            '<div class="mp__seg" role="radiogroup" aria-label="Waveform audio clip">' +
+              '<button type="button" class="mp__segbtn" role="radio" data-wfm="mono"><i class="mp__sw mp__sw--w1"></i>1 batang</button>' +
+              '<button type="button" class="mp__segbtn" role="radio" data-wfm="stereo"><i class="mp__sw mp__sw--w2"></i>2 batang</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="mp__card mp__item mp__set" style="--i:4">' +
             '<div class="mp__row">' +
               '<span class="mp__row__t"><b>Record Mode</b><small>Track terpilih fokus, track lain di-blur</small></span>' +
               '<button type="button" class="mp__switch" role="switch" aria-checked="false" aria-label="Record Mode" data-rec><i></i></button>' +
@@ -123,6 +130,21 @@ export function initMenuPanel(): MenuPanel {
   let wfSaved = 'default';
   try { wfSaved = localStorage.getItem(WF_KEY) || 'default'; } catch { /* abaikan */ }
   setWf(wfSaved, false);
+
+  // ===== Pengaturan: Waveform audio clip (atribut data-wfmode di <html>; audio-engine.ts membaca atribut ini, main.ts menggambar ulang saat event 'wfmodechange') =====
+  const WFM_KEY = 'derizmp3.wfMode';
+  const wfmBtns = [...panel.querySelectorAll<HTMLButtonElement>('[data-wfm]')];
+  const setWfm = (v: string, save: boolean): void => {
+    const val = v === 'stereo' ? 'stereo' : 'mono';
+    document.documentElement.dataset.wfmode = val;
+    wfmBtns.forEach(b => { const on = b.dataset.wfm === val; b.classList.toggle('is-on', on); b.setAttribute('aria-checked', String(on)); });
+    if (save) { try { localStorage.setItem(WFM_KEY, val); } catch { /* penyimpanan diblokir: tetap berlaku sampai halaman ditutup */ } }
+    document.dispatchEvent(new CustomEvent('wfmodechange'));
+  };
+  wfmBtns.forEach(b => b.addEventListener('click', () => setWfm(b.dataset.wfm as string, true)));
+  let wfmSaved = 'mono';
+  try { wfmSaved = localStorage.getItem(WFM_KEY) || 'mono'; } catch { /* abaikan */ }
+  setWfm(wfmSaved, false);
 
   // ===== Pengaturan: Record Mode (atribut data-rec di <html>; main.ts mendengarkan event 'recmodechange') =====
   const REC_KEY = 'derizmp3.recMode';

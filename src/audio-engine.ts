@@ -1,7 +1,7 @@
 // Mesin audio clip: decode file, simpan buffer, gambar waveform sederhana, dan putar sesuai posisi playhead.
 // Satu clip di timeline = elemen .pattern dengan data-clip (id buffer) dan data-off (offset dalam detik).
 
-interface Entry { buf: AudioBuffer; peaks?: Float32Array; max: number; }
+interface Entry { buf: AudioBuffer; peaks?: Float32Array; chPeaks?: Float32Array[]; max: number; }
 const buffers = new Map<number, Entry>();
 let seq = 0;
 
@@ -72,19 +72,22 @@ const WAVE_COLS = 1200;   // kolom maksimum yang digambar per clip
 function peaksOf(e: Entry): Float32Array {
   if (e.peaks) return e.peaks;
   const { buf } = e, n = Math.max(1, Math.ceil(buf.duration * PPS)), p = new Float32Array(n * 2);
-  const sr = buf.sampleRate;
+  const sr = buf.sampleRate, per: Float32Array[] = [];
   for (let c = 0; c < buf.numberOfChannels; c++) {
-    const d = buf.getChannelData(c);
+    const d = buf.getChannelData(c), q = new Float32Array(n * 2);   // q: puncak channel ini saja (untuk mode dua batang stereo)
     for (let b = 0; b < n; b++) {
       const s0 = Math.floor(b * sr / PPS), s1 = Math.min(d.length, Math.floor((b + 1) * sr / PPS));
-      let lo = p[b * 2], hi = p[b * 2 + 1];
+      let lo = 0, hi = 0;
       for (let i = s0; i < s1; i++) { const v = d[i]; if (v < lo) lo = v; else if (v > hi) hi = v; }
-      p[b * 2] = lo; p[b * 2 + 1] = hi;
+      q[b * 2] = lo; q[b * 2 + 1] = hi;
+      if (lo < p[b * 2]) p[b * 2] = lo;
+      if (hi > p[b * 2 + 1]) p[b * 2 + 1] = hi;
     }
+    per.push(q);
   }
   let m = 0;
   for (let i = 0; i < p.length; i++) m = Math.max(m, Math.abs(p[i]));
-  e.peaks = p; e.max = m;
+  e.peaks = p; e.chPeaks = per; e.max = m;
   return p;
 }
 
@@ -101,27 +104,37 @@ export function renderWave(el: HTMLElement, clipId: number, offSec: number, durS
   }
   const audioSec = Math.min(durSec, e.buf.duration - offSec);
   if (audioSec <= 0) { host.textContent = ''; return; }
-  const p = peaksOf(e), n = p.length / 2;
+  const merged = peaksOf(e), n = merged.length / 2;
+  const stereo = document.documentElement.dataset.wfmode === 'stereo';   // Pengaturan > Waveform audio clip: 1 batang (semua channel digabung) / 2 batang (L atas, R bawah)
   const b0 = offSec * PPS, b1 = (offSec + audioSec) * PPS;
   const cols = Math.max(1, Math.min(WAVE_COLS, Math.ceil(b1 - b0)));
   const span = 1000 * (audioSec / durSec), norm = 0.92 / Math.max(e.max, 0.05);
-  const top: string[] = [], bot: string[] = [];
-  for (let i = 0; i < cols; i++) {
-    const lo = Math.min(n - 1, Math.floor(b0 + i * (b1 - b0) / cols));
-    const hi = Math.min(n, Math.max(lo + 1, Math.ceil(b0 + (i + 1) * (b1 - b0) / cols)));
-    let mn = 0, mx = 0;
-    for (let b = lo; b < hi; b++) { if (p[b * 2] < mn) mn = p[b * 2]; if (p[b * 2 + 1] > mx) mx = p[b * 2 + 1]; }
-    let yt = 50 - mx * norm * 48, yb = 50 - mn * norm * 48;
-    if (yb - yt < 1) { yt -= .5; yb += .5; }
-    const x = ((i + .5) / cols * span).toFixed(2);
-    top.push(x + ' ' + yt.toFixed(1)); bot.push(x + ' ' + yb.toFixed(1));
-  }
+  // satu batang gelombang di pita vertikal [cy - half, cy + half] (satuan viewBox 0..100); mengembalikan subpath tertutup
+  const band = (p: Float32Array, cy: number, half: number): string => {
+    const top: string[] = [], bot: string[] = [];
+    for (let i = 0; i < cols; i++) {
+      const lo = Math.min(n - 1, Math.floor(b0 + i * (b1 - b0) / cols));
+      const hi = Math.min(n, Math.max(lo + 1, Math.ceil(b0 + (i + 1) * (b1 - b0) / cols)));
+      let mn = 0, mx = 0;
+      for (let b = lo; b < hi; b++) { if (p[b * 2] < mn) mn = p[b * 2]; if (p[b * 2 + 1] > mx) mx = p[b * 2 + 1]; }
+      let yt = cy - mx * norm * half, yb = cy - mn * norm * half;
+      if (yb - yt < 1) { yt -= .5; yb += .5; }
+      const x = ((i + .5) / cols * span).toFixed(2);
+      top.push(x + ' ' + yt.toFixed(1)); bot.push(x + ' ' + yb.toFixed(1));
+    }
+    return 'M' + top.join('L') + 'L' + bot.reverse().join('L') + 'Z';
+  };
+  let d: string;
+  if (stereo) {
+    const L = e.chPeaks![0], R = e.chPeaks![1] ?? L;   // file mono: kedua batang sama
+    d = band(L, 25, 23.5) + band(R, 75, 23.5);
+  } else d = band(merged, 50, 48);
   const svg = document.createElementNS(SVGNS, 'svg');
   svg.setAttribute('viewBox', '0 0 1000 100');
   svg.setAttribute('preserveAspectRatio', 'none');
   svg.setAttribute('aria-hidden', 'true');
   const path = document.createElementNS(SVGNS, 'path');
-  path.setAttribute('d', 'M' + top.join('L') + 'L' + bot.reverse().join('L') + 'Z');
+  path.setAttribute('d', d);
   svg.appendChild(path);
   host.replaceChildren(svg);
 }
