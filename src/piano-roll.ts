@@ -8,6 +8,7 @@ export interface PianoRollOpts {
   track: string;
   pattern: string;
   color?: string;
+  ghosts?: Array<{ key: string; color: string }>;   // nada milik instrumen lain di pattern yang sama: ditampilkan meredup, hanya untuk dilihat (tidak bisa disentuh)
 }
 
 interface Note { id: number; p: number; s: number; l: number; sl?: boolean; }   // p: MIDI, s/l: dalam ketukan
@@ -60,6 +61,7 @@ let ppb = 64, rowH = 18;
 let tool: Tool = 'draw';
 let snapOn = true;   // tombol Snap (lampu indikator): nyala = note menempel ke garis grid yang terlihat
 let color = '#3fbf5f';
+let ghostSrc: Array<{ key: string; color: string }> = [];
 let selected = new Set<number>();
 let undoStack: string[] = [];
 let redoStack: string[] = [];
@@ -187,6 +189,17 @@ function drawGrid(zoomOnly = false) {
     const x = n.s * ppb - sx, w = Math.max(3, n.l * ppb), y = (P_MAX - n.p) * rowH - sy;
     return !(x + w + 2 * handleR() + 8 < 0 || x > vw || y + rowH < 0 || y > vh);
   };
+  for (const gs of ghostSrc) {   // nada instrumen lain: di belakang nada yang sedang diedit, warna meredup
+    const gst = states.get(gs.key); if (!gst || !gst.notes.length) continue;
+    c.fillStyle = gs.color; c.strokeStyle = gs.color; c.lineWidth = 1;
+    for (const n of gst.notes) {
+      if (!visible(n)) continue;
+      const x = n.s * ppb - sx, w = Math.max(3, n.l * ppb), y = (P_MAX - n.p) * rowH - sy;
+      c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 3);
+      c.globalAlpha = .28; c.fill(); c.globalAlpha = .5; c.stroke();
+    }
+    c.globalAlpha = 1;
+  }
   for (const n of st.notes) if (visible(n)) drawNoteBody(c, n, sx, sy, selected.has(n.id));
   for (const n of st.notes) {   // jalur luncuran: dari tinggi nada sumber ke tinggi nada slide
     if (!n.sl) continue;
@@ -983,6 +996,7 @@ export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.
   states.set(key, st);
 
   color = opts.color || '#3fbf5f';
+  ghostSrc = opts.ghosts || [];
   root.style.setProperty('--pr-color', color);
   root.setAttribute('aria-label', opts.track + ' – ' + opts.pattern);
 
@@ -990,7 +1004,8 @@ export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.
   const vw = sc.clientWidth, vh = sc.clientHeight;
   ppb = clamp(Math.floor(vw / total), 32, 96); rowH = 18;
   applySize();
-  const mid = st.notes.length ? st.notes.reduce((a, n) => a + n.p, 0) / st.notes.length : 62;   // mulai di sekitar C4
+  const seen = st.notes.length ? st.notes : ghostSrc.flatMap(gs => states.get(gs.key)?.notes ?? []);   // belum ada nada sendiri: pusatkan ke nada instrumen lain
+  const mid = seen.length ? seen.reduce((a, n) => a + n.p, 0) / seen.length : 62;   // mulai di sekitar C4
   sc.scrollLeft = 0; sc.scrollTop = Math.max(0, (P_MAX - mid) * rowH - vh / 2);
   resetAnim(); selBarOn = false; selBar.hidden = true;
   phSig = ''; keysSig = rulerSig = ''; zoomPend = null; zoomFrame = false; window.clearTimeout(zoomEndT); gc.style.transform = ''; drawn.ppb = 0; gridDirty = true;

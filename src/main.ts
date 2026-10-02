@@ -542,6 +542,7 @@ function editPattern() {
   prStartBar = pl(el) / BAR_W;
   openPianoRoll({
     id: el.dataset.prId,
+    ghosts: patGhosts(el, el.dataset.prId),
     track: nm ? nm.textContent : 'Track',
     pattern: el.querySelector('.pattern__title').textContent,
     color: lane.style.getPropertyValue('--track-color') || undefined,
@@ -549,6 +550,15 @@ function editPattern() {
   renderPlayhead();
 }
 // Masuk ke pattern dari tombol titik tiga di DERIZ: piano roll yang sama, tapi nadanya milik DERIZ ini (dimainkan lewat sampler DERIZ ini)
+const trackColorOf = track => { const c = document.querySelector('.trackheader-container[data-track="' + track + '"]'); return (c && getComputedStyle(c).getPropertyValue('--track-color').trim()) || '#a66cff'; };
+// nada instrumen lain di pattern yang sama (DERIZ lain di track mana pun + Supersaw milik track pattern): ditampilkan meredup di piano roll
+function patGhosts(el, curKey) {
+  const prId = el.dataset.prId, lt = el.parentElement.dataset.track, out = [];
+  const add = (key, track) => { if (key !== curKey && !out.some(g => g.key === key)) out.push({key, color: trackColorOf(track)}); };
+  if (hasSynth(lt)) add(prId, lt);
+  document.querySelectorAll('.trackheader-container').forEach(c => fxRack.derizIds(c.dataset.track).forEach(id => add(patKey(prId, id, lt), c.dataset.track)));
+  return out;
+}
 function enterPatternAs(el, fxId) {
   const lane = el.parentElement, track = fxRack.derizTrackOf(fxId); if (track === undefined) return;
   if (!el.dataset.prId) el.dataset.prId = 'pat' + (++prSeq);
@@ -556,6 +566,7 @@ function enterPatternAs(el, fxId) {
   prStartBar = pl(el) / BAR_W;
   openPianoRoll({
     id: patKey(el.dataset.prId, fxId, lane.dataset.track),
+    ghosts: patGhosts(el, patKey(el.dataset.prId, fxId, lane.dataset.track)),
     track: (nm ? nm.textContent : 'Track') + (fxRack.derizIds(track).length > 1 ? ' · ' + fxRack.derizLabel(fxId) : ''),
     pattern: el.querySelector('.pattern__title').textContent,
     color: (cont && getComputedStyle(cont).getPropertyValue('--track-color').trim()) || undefined,
