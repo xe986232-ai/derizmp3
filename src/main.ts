@@ -4,13 +4,13 @@ import { initEffectsPanel } from './effects-panel';
 import { initTrackMeters } from './track-meters';
 import { initFxRack } from './fx-rack';
 import { initLandscape } from './landscape';
-import { initMenuPanel } from './menu-panel';
+import { initMenuPanel, setProjectIO } from './menu-panel';
 import { hasSynth, startVoice, releaseVoice, playNote, stopAllSynth } from './synth-engine';
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
-import { decodeFile, addBuffer, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
+import { decodeFile, addBuffer, getBuffer, encodeWav, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
 import { slideSource, glideBeats } from './note-slide';
-import { openPianoRoll, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, clearPianoRollNotes, PR_BEATS } from './piano-roll';
+import { openPianoRoll, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getPianoRollNotes, setPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, clearPianoRollNotes, PR_BEATS } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 initLandscape();
 initMenuPanel();
@@ -935,7 +935,7 @@ const ICON_AUDIO_CLIP =
   '<path d="M3.45 11.5v1M6.3 10.6v2.8M9.15 7.25v9.5M12 10.1v3.8M14.85 8.7v6.65M17.7 10.6v2.8M20.55 11.5v1"/></svg>';
 function addTrack(t) {
   const id = ++trackSeq, cont = TRACK_TPL.cloneNode(true);
-  cont.dataset.track = id; cont.classList.add('is-new');
+  cont.dataset.track = id; cont.dataset.ins = t.n; cont.classList.add('is-new');
   cont.style.setProperty('--track-color', t.c);
   const used = [...document.querySelectorAll('.trackheader__track-name-button span')].map(x => x.textContent);
   let name = t.n, n = 2;
@@ -1407,3 +1407,88 @@ document.addEventListener('keydown', e => {   // Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shi
 histCur = histCapture(); histSync();
 
 initTrackMeters();   // meter level stereo di card track
+
+// ===== Simpan / buka file project (menu kanan atas) =====
+// Disimpan: BPM, panjang timeline, track (jenis, nama, warna, volume, on/off), pattern (posisi, lebar, judul), nada piano roll
+// (termasuk nada tiap DERIZ), dan audio clip di timeline. Belum disimpan: setelan efek/plugin dan isi audio di dalam plugin DERIZ.
+const r3p = v => Math.round(v * 1e3) / 1e3;
+function projectSnapshot() {
+  const clips = {}, tracks = [], seenClips = new Set();
+  document.querySelectorAll('.trackheader-container').forEach(c => {
+    const id = c.dataset.track, lane = lanesEl.querySelector('.lane[data-track="' + id + '"]');
+    const sl = c.querySelector('input[type=range]'), pwr = c.querySelector('.trackheader__pwr');
+    const pats = [...(lane ? lane.querySelectorAll('.pattern') : [])].map(p => {
+      const o = {s: r3p(pl(p) / BAR_W), w: r3p(pw(p) / BAR_W), t: p.querySelector('.pattern__title').textContent};
+      if (p.dataset.clip) {
+        o.c = p.dataset.clip; o.o = +p.dataset.off || 0;
+        if (!seenClips.has(o.c)) { seenClips.add(o.c); const b = getBuffer(+o.c); if (b) clips[o.c] = encodeWav(b); }
+      }
+      const pid = p.dataset.prId;
+      if (pid) {
+        const notes = getPianoRollNotes(pid); if (notes.length) o.n = notes;
+        const extra = pianoRollExtraKeys(pid).map(k => {
+          const fx = +k.slice(pid.length + 1), tr = fxRack.derizTrackOf(fx);
+          return tr === undefined ? null : {tr, i: fxRack.derizIds(tr).indexOf(fx), n: getPianoRollNotes(k)};
+        }).filter(Boolean);
+        if (extra.length) o.x = extra;
+      }
+      return o;
+    });
+    tracks.push({
+      id, ins: c.dataset.ins || 'Drums', name: document.getElementById('track-name-' + id).textContent,
+      color: c.style.getPropertyValue('--track-color'), vol: sl ? +sl.value : 100,
+      off: !!pwr && pwr.getAttribute('aria-checked') === 'false', deriz: fxRack.derizIds(id).length, pats,
+    });
+  });
+  return {data: {v: 1, bpm: BPM, bars: BARS, tracks}, clips};
+}
+function clearProject() {
+  if (playing) pausePlay();
+  stopAllSynth(); stopClips(actx); selectPattern(null); dismissAdd(true); closeKbd();
+  document.querySelectorAll('.trackheader-container').forEach(c => {
+    const lane = lanesEl.querySelector('.lane[data-track="' + c.dataset.track + '"]');
+    stopTrack(actx, c.dataset.track); fxRack.drop(c.dataset.track);
+    if (lane) lane.remove(); c.remove();
+  });
+  selTrack = null;
+}
+async function projectRestore(rec) {
+  const d = rec.data; if (!d || d.v !== 1) throw new Error('format project tidak dikenal');
+  const ctx = audio(), clipMap = {};
+  for (const [k, blob] of Object.entries(rec.clips || {})) clipMap[k] = addBuffer(await ctx.decodeAudioData(await blob.arrayBuffer()));
+  clearProject();
+  setBpm(d.bpm || 120);
+  if (d.bars > BARS) growTimeline(Math.min(MAX_BARS, d.bars));
+  const trMap = {}, pending = [];
+  for (const t of d.tracks) {
+    addTrack({n: t.ins, c: t.color || COLORS[0]});
+    const id = String(trackSeq); trMap[t.id] = id;
+    const cont = document.querySelector('.trackheader-container[data-track="' + id + '"]'), lane = lanesEl.querySelector('.lane[data-track="' + id + '"]');
+    document.getElementById('track-name-' + id).textContent = t.name;
+    cont.querySelector('.trackheader__track-name-button').title = t.name;
+    const sl = cont.querySelector('input[type=range]');
+    if (sl) { sl.setAttribute('aria-label', 'Volume, ' + t.name); sl.value = t.vol; sl.dispatchEvent(new Event('input', {bubbles: true})); }
+    panTip.hidden = true;
+    for (let i = fxRack.derizIds(id).length; i < (t.deriz || 0); i++) fxRack.addInstrument(id, 'deriz');
+    if (t.off) cont.querySelector('.trackheader__pwr').click();
+    for (const p of t.pats) {
+      const el = createPattern(lane, {start: p.s * BAR_W, width: p.w * BAR_W}, p.c && clipMap[p.c] ? {clip: clipMap[p.c], off: p.o || 0} : null);
+      el.querySelector('.pattern__title').textContent = p.t;
+      if (p.n || p.x) { el.dataset.prId = 'pat' + (++prSeq); pending.push({el, p}); }
+    }
+  }
+  for (const {el, p} of pending) {
+    const pid = el.dataset.prId;
+    if (p.n) setPianoRollNotes(pid, p.n);
+    for (const x of p.x || []) {
+      const tr = trMap[x.tr], fx = tr && fxRack.derizIds(tr)[x.i];
+      if (fx !== undefined) setPianoRollNotes(pid + '@' + fx, x.n);
+    }
+    renderPatNotes(el);
+  }
+  const first = document.querySelector('.trackheader-container');
+  if (first) selectTrack(first);
+  toStart(); syncWaves(); metroUI && metroUI.sync && metroUI.sync();
+  undoStack = []; redoStack = []; histCur = histCapture(); histSync();
+}
+setProjectIO({snapshot: projectSnapshot, restore: projectRestore, toast});

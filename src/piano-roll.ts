@@ -371,6 +371,13 @@ export function getPianoRollNotes(id: string): Array<{p: number; s: number; l: n
   const x = states.get(id);
   return x ? x.notes.map(n => (n.sl ? {p: n.p, s: n.s, l: n.l, sl: true} : {p: n.p, s: n.s, l: n.l})) : [];
 }
+// isi nada satu kunci dari data yang disimpan (memuat project)
+export function setPianoRollNotes(id: string, notes: Array<{p: number; s: number; l: number; sl?: boolean}>) {
+  const st: State = {notes: [], nextId: 1};
+  for (const n of notes) st.notes.push({id: st.nextId++, p: n.p, s: n.s, l: n.l, ...(n.sl ? {sl: true} : {})});
+  states.set(id, st);
+  onChange && onChange(id);
+}
 // salin nada dari satu pattern ke pattern lain (rentang ketukan [fromBeat, toBeat), digeser supaya mulai dari 0)
 export function copyPianoRollNotes(from: string, to: string, fromBeat = 0, toBeat = Infinity) {
   const src = states.get(from); if (!src) return;
