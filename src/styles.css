@@ -828,7 +828,7 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .deriz__row{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:14px;row-gap:9px;align-items:center}
 .deriz__row .deriz__stage{grid-column:1;grid-row:1;min-width:0}
 .deriz__knobs{grid-column:2;grid-row:1;display:flex;align-items:center;justify-content:center}
-.deriz__speed{grid-column:1;grid-row:3;display:flex;justify-content:center}   /* Speed: di bawah bar geser, di tengah lebar canvas */
+.deriz__speed{grid-column:1;grid-row:3;display:flex;justify-content:center;gap:28px}   /* Speed + Pitch berdampingan di bawah bar geser, di tengah lebar canvas */
 .deriz__knobs .fxc__cell,.deriz__speed .fxc__cell{justify-content:center;gap:7px}
 .deriz__knobs .fxc__label,.deriz__speed .fxc__label{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#8a8aa0}
 /* knob logam cekung: serasi dengan LED power, tombol tutup & faceplate (bukan knob datar seperti Reverb / EQ) */

@@ -16,7 +16,7 @@ interface DerizData { name: string; dur: number; buf: AudioBuffer; start: number
 // Spektrogram: frames x ROWS nilai dB (0..255 = -100..0 dBFS), baris 0 = frekuensi terendah (skala log); lut = palet warna yang disesuaikan dengan level puncak
 interface Spec { frames: number; hop: number; fmin: number; fmax: number; d: Uint8Array; lut: Uint32Array }   // cols: cache min/max per kolom pixel device (dihitung ulang hanya kalau lebar canvas berubah)   // start: posisi garis start, 0..1 dari durasi
 interface Fx { id: number; type: FxType; on: boolean; min: boolean; tab?: number; v: Record<string, number>; deriz?: DerizData; tok?: number; }
-interface Param { key: string; label: string; def: number; fmt: (v: number) => string; bipolar?: boolean; slider?: boolean; tab?: string; }   // tab: nama kategori (plugin dengan tab)   // bipolar: arc dari tengah (seperti knob pan); slider: slider vertikal, bukan knob
+interface Param { key: string; label: string; hint?: string; def: number; fmt: (v: number) => string; bipolar?: boolean; slider?: boolean; tab?: string; }   // tab: nama kategori (plugin dengan tab)   // bipolar: arc dari tengah (seperti knob pan); slider: slider vertikal, bukan knob
 interface EffectDef { type: FxType; name: string; params: Param[]; synth?: boolean; }   // synth: plugin instrumen (otomatis ada di track synth)
 
 const svg = (inner: string, size = 20) =>
@@ -31,6 +31,7 @@ const fmtSec = (s: number): string => (s < 1 ? Math.round(s * 1000) + ' ms' : s.
 const fmtHz = (hz: number): string => (hz >= 1000 ? (hz / 1000).toFixed(1) + ' kHz' : Math.round(hz) + ' Hz');
 
 const derizVol = (v: number | undefined): number => (v ?? 0.8) * 1.125;   // knob Volume: default 80% = penguatan 0.9 (sama seperti sebelumnya), 100% = 1.125
+const derizPitch = (v: number | undefined): number => Math.round(((v ?? 0.5) - 0.5) * 24);   // knob Pitch: tengah = 0, kiri -12, kanan +12 semitone (bulat)
 const derizSpeed = (v: number): number => 2 ** ((v - 0.5) * 2);   // knob Speed: tengah = 1×, kiri 0.5×, kanan 2× (kecepatan putar sampler; nada ikut berubah seperti kaset)
 
 const EFFECTS: EffectDef[] = [
@@ -49,7 +50,11 @@ const EFFECTS: EffectDef[] = [
       { key: 'high', label: 'High', def: 0.5, bipolar: true, fmt: fmtDb }
     ]
   },
-  { type: 'deriz', name: 'DERIZ', params: [{ key: 'speed', label: 'Speed', def: 0.5, bipolar: true, fmt: v => derizSpeed(v).toFixed(2) + '×' }, { key: 'volume', label: 'Volume', def: 0.8, fmt: pct }], synth: true },   // plugin track DERIZ: spektrogram + upload + knob; dibuat dari "+ Tambahkan track", bukan dari daftar efek
+  { type: 'deriz', name: 'DERIZ', params: [
+    { key: 'speed', label: 'Speed', hint: 'Speed (kecepatan putar)', def: 0.5, bipolar: true, fmt: v => derizSpeed(v).toFixed(2) + '×' },
+    { key: 'pitch', label: 'Pitch', hint: 'Pitch (nada, semitone)', def: 0.5, bipolar: true, fmt: v => { const n = derizPitch(v); return (n > 0 ? '+' : '') + n + ' st'; } },
+    { key: 'volume', label: 'Volume', hint: 'Volume (level suara)', def: 0.8, fmt: pct }
+  ], synth: true },   // plugin track DERIZ: spektrogram + upload + knob; dibuat dari "+ Tambahkan track", bukan dari daftar efek
   {
     type: 'supersaw', name: 'Supersaw', synth: true,
     params: [
@@ -135,7 +140,7 @@ function derizHtml(fx: Fx): string {
     `<div class="deriz__knobs">${dKnob(fx, 'volume')}</div>` +
     `<div class="deriz__nav${z && z.zoom > 1.001 ? '' : ' is-idle'}" aria-hidden="true"><i class="deriz__thumb"${z ? ` style="left:${(z.view * 100).toFixed(3)}%;width:${(100 / z.zoom).toFixed(3)}%"` : ''}></i></div>` +
     `<button type="button" class="deriz__swap"${z ? '' : ' hidden'}>Ganti</button>` +
-    `<div class="deriz__speed">${dKnob(fx, 'speed')}</div></div>` +
+    `<div class="deriz__speed">${dKnob(fx, 'speed')}${dKnob(fx, 'pitch')}</div></div>` +
     `<div class="deriz__kb"><div class="keyboardkeyboardcontroller deriz__keys"><div class="keys"></div></div></div>` +
     `<input type="file" class="deriz__file" accept="${AUDIO_ACCEPT}" hidden></div></div>`;
 }
@@ -435,12 +440,13 @@ export function initFxRack(host: () => AudioHost): FxRack {
     }
     keys.innerHTML = h;
   }
+  const derizRate = (m: number, fx: Fx): number => 2 ** ((m - KROOT + derizPitch(fx.v.pitch)) / 12) * derizSpeed(fx.v.speed);   // laju putar: nada tuts + Pitch (semitone) x Speed
   function kbOn(m: number): void {
     const fx = ovOpen ? find(ovOpen.card) : undefined, z = fx?.deriz;
     if (!fx || !z || !fx.on || !cur || kbVoices.has(m)) return;
     const { ctx, dest } = host(); if (ctx.state === 'suspended') void ctx.resume();
     const src = ctx.createBufferSource(), g = ctx.createGain(), t = ctx.currentTime;
-    src.buffer = z.buf; src.playbackRate.value = 2 ** ((m - KROOT) / 12) * derizSpeed(fx.v.speed);
+    src.buffer = z.buf; src.playbackRate.value = derizRate(m, fx);
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(derizVol(fx.v.volume), t + 0.006);
     src.connect(g); g.connect(trackInput(ctx, dest, cur));
     src.start(t, Math.min(z.start * z.dur, Math.max(0, z.dur - 0.01)));
@@ -448,7 +454,7 @@ export function initFxRack(host: () => AudioHost): FxRack {
     kbVoices.set(m, { src, g, ctx });
   }
   function kbRetune(fx: Fx): void {   // knob Speed diputar saat nada sedang ditahan: kecepatan ikut berubah mulus
-    kbVoices.forEach((v, m) => v.src.playbackRate.setTargetAtTime(2 ** ((m - KROOT) / 12) * derizSpeed(fx.v.speed), v.ctx.currentTime, 0.02));
+    kbVoices.forEach((v, m) => v.src.playbackRate.setTargetAtTime(derizRate(m, fx), v.ctx.currentTime, 0.02));
   }
   function kbVolume(fx: Fx): void {   // knob Volume diputar saat nada sedang ditahan: level ikut berubah mulus
     kbVoices.forEach(v => v.g.gain.setTargetAtTime(derizVol(fx.v.volume), v.ctx.currentTime, 0.02));
@@ -708,11 +714,23 @@ export function initFxRack(host: () => AudioHost): FxRack {
     fx.v[p.key] = v;
     paintCtl(el, v, p, defOf(fx.type).name);
     if (cur) applyAudio(cur);
-    if (fx.type === 'deriz' && p.key === 'speed') kbRetune(fx);
+    if (fx.type === 'deriz' && (p.key === 'speed' || p.key === 'pitch')) kbRetune(fx);
     if (fx.type === 'deriz' && p.key === 'volume') kbVolume(fx);
     if (!tip.hidden) showTip(el, p.fmt(v));
   };
 
+  // tooltip hover (mouse): nama knob + nilai sekarang, untuk knob yang punya hint
+  onRoots('pointerover', e => {
+    if (e.pointerType !== 'mouse' || drag) return;
+    const el = (e.target as Element).closest<HTMLElement>(CTL); if (!el || el.contains(e.relatedTarget as Node | null)) return;
+    const c = ctx(el); if (!c?.p.hint) return;
+    showTip(el, c.p.hint + ': ' + c.p.fmt(c.fx.v[c.p.key]));
+  });
+  onRoots('pointerout', e => {
+    if (drag) return;
+    const el = (e.target as Element).closest<HTMLElement>(CTL); if (!el || el.contains(e.relatedTarget as Node | null)) return;
+    hideTip();
+  });
   onRoots('pointerdown', e => {
     const el = (e.target as Element).closest<HTMLElement>(CTL); if (!el || (e.pointerType === 'mouse' && e.button !== 0)) return;
     const c = ctx(el); if (!c) return;
