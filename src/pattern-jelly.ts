@@ -1,4 +1,4 @@
-// Record Mode: card pattern (kotak berwarna di timeline) bisa diangkat, dibawa bebas ke mana saja, dan digoyang (jelly).
+// Record Mode: card pattern (kotak berwarna di timeline) bisa diangkat, dibawa bebas ke mana saja, dan digoyang (rotasi saja, tanpa melar).
 // Cara pakai: klik + TAHAN pattern (350ms, jangan geser) -> terangkat jadi overlay -> bawa ke mana saja -> lepas -> memantul balik.
 // Geser cepat tanpa menahan tetap memindah pattern kiri-kanan seperti biasa (logika di main.ts).
 // Yang digoyang adalah SALINAN visual (clone) di <body>; pattern aslinya tetap di lane tapi disembunyikan (muncul lagi saat salinan mendarat),
@@ -84,11 +84,9 @@ export function initPatternJelly(lanesEl: HTMLElement): void {
 
   function paint(): void {
     if (!card) return;
-    const sp = Math.hypot(vx, vy), s = Math.min(sp / 2600, 0.2);
-    const a = Math.atan2(vy, vx) * 180 / Math.PI;
+    // hanya posisi + rotasi (goyang miring), tanpa melar/memipih; scale hanya efek "terangkat"
     card.style.transform =
-      'translate3d(' + x.toFixed(2) + 'px,' + y.toFixed(2) + 'px,0) rotate(' + rot.toFixed(2) + 'deg) ' +
-      'rotate(' + a.toFixed(1) + 'deg) scale(' + ((1 + s) * lift).toFixed(4) + ',' + ((1 - s * 0.6) * lift).toFixed(4) + ') rotate(' + (-a).toFixed(1) + 'deg)';
+      'translate3d(' + x.toFixed(2) + 'px,' + y.toFixed(2) + 'px,0) rotate(' + rot.toFixed(2) + 'deg) scale(' + lift.toFixed(4) + ')';
   }
 
   function tick(now: number): void {
