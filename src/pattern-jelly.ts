@@ -1,7 +1,7 @@
 // Record Mode: card pattern (kotak berwarna di timeline) bisa diangkat, dibawa bebas ke mana saja, dan digoyang (jelly).
 // Cara pakai: klik + TAHAN pattern (350ms, jangan geser) -> terangkat jadi overlay -> bawa ke mana saja -> lepas -> memantul balik.
 // Geser cepat tanpa menahan tetap memindah pattern kiri-kanan seperti biasa (logika di main.ts).
-// Yang digoyang adalah SALINAN visual (clone) di <body>; pattern aslinya tetap di lane (jadi bayangan pudar),
+// Yang digoyang adalah SALINAN visual (clone) di <body>; pattern aslinya tetap di lane tapi disembunyikan (muncul lagi saat salinan mendarat),
 // sehingga data, jadwal audio, dan riwayat undo tidak tersentuh.
 import { POS_DRAG, POS_FREE, ROT, HOLD_MS, HOLD_SLOP, MAX_TILT, LIFT, REDUCE } from './record-jelly';
 
