@@ -1173,3 +1173,13 @@ body:has(.pr.is-open) .menu-btn{opacity:0;pointer-events:none;transform:scale(.8
 
 /* Penggaris timeline utama: tap / seret = pindahkan playhead (seperti penggaris piano roll) */
 .timeline-controls-header-wrapper{touch-action:none;cursor:pointer;-webkit-user-select:none;user-select:none}
+
+/* ===== Pindah urutan track: tahan icon channel mixer lalu geser atas / bawah ===== */
+.trackheader__left-content{touch-action:none;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
+.trackheader-container.is-moved{animation:none}
+html.is-reorder,html.is-reorder *{cursor:grabbing !important;user-select:none;-webkit-user-select:none}
+.trackheader-container.is-reordering{z-index:30}
+.trackheader-container.is-reordering .trackheader{box-shadow:0 16px 34px rgba(0,0,0,.55),0 0 0 1px var(--track-color,var(--accent));transform:scale(1.025);transition:transform .2s var(--ease-spring),box-shadow .2s var(--ease-out)}
+.lane.is-reordering{z-index:3;filter:brightness(1.18);box-shadow:0 10px 26px rgba(0,0,0,.5),0 0 0 1px var(--track-color,var(--accent))}
+.trackheader__left-content.is-reorder-ready .trackheader__instrument-button{transform:scale(1.2);box-shadow:0 0 0 6px color-mix(in srgb,var(--track-color,var(--accent)) 35%,transparent)}
+@media (prefers-reduced-motion:reduce){.trackheader-container.is-reordering .trackheader{transition:none}}

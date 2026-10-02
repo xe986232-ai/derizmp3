@@ -2,6 +2,7 @@
 import { openAudioUploadCard } from './audio-upload-card';
 import { initEffectsPanel } from './effects-panel';
 import { initTrackMeters } from './track-meters';
+import { initTrackReorder } from './track-reorder';
 import { initFxRack } from './fx-rack';
 import { initRecordJelly } from './record-jelly';
 import { initLandscape } from './landscape';
@@ -864,6 +865,7 @@ function selectTrack(cont) {
   if (kbdEl.classList.contains('is-open')) openKbd(cont);   // keyboard yang sudah terbuka ikut pindah ke track terpilih
 }
 initRecordJelly(document.querySelector('.headers-list'), document.querySelector('.workspace'));   // Record Mode: card track terpilih bisa digoyang (drag + kenyal + rotasi)
+initTrackReorder(document.querySelector('.headers-list'), lanesEl, document.querySelector('.workspace'), () => { patBarPlace(); });   // tahan + geser icon channel mixer: pindah urutan track (card + lane), semua mode
 document.querySelector('.headers-list').addEventListener('pointerdown', e => {
   const c = e.target.closest('.trackheader-container');
   if (c) selectTrack(c);

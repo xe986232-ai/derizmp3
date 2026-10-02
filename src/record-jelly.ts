@@ -14,7 +14,7 @@ const MAX_TILT = 28;                   // derajat
 const LIFT = 1.035;                    // card sedikit membesar saat dipegang
 
 // elemen yang tidak boleh memulai drag (punya interaksi sendiri)
-const NO_DRAG = 'input, [role="slider"], .knob, .trackheader__pwr, .trackheader__rec-mode-button, .trackheader__more-options, [contenteditable="true"], .trackheader-separator';
+const NO_DRAG = 'input, [role="slider"], .knob, .trackheader__pwr, .trackheader__rec-mode-button, .trackheader__more-options, .trackheader__left-content, [contenteditable="true"], .trackheader-separator';
 
 export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement): void {
   const root = document.documentElement;
