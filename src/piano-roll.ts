@@ -47,7 +47,7 @@ let closeMenu: () => void = () => {};
 let menuOpen: () => boolean = () => false;
 
 // elemen
-let sc!: HTMLElement, space!: HTMLElement, gc!: HTMLCanvasElement, kc!: HTMLCanvasElement, rc!: HTMLCanvasElement;
+let sc!: HTMLElement, space!: HTMLElement, gc!: HTMLCanvasElement, gclip!: HTMLElement, kc!: HTMLCanvasElement, rc!: HTMLCanvasElement;
 let phDom!: HTMLElement, phBeat = -1;   // playhead: posisi dalam ketukan relatif ke awal pattern (<0 = tersembunyi)
 let btnUndo!: HTMLButtonElement, btnRedo!: HTMLButtonElement, selBar!: HTMLElement, btnPaste!: HTMLButtonElement;
 
@@ -131,11 +131,27 @@ function drawHandle(c: CanvasRenderingContext2D, n: Note, sx: number, sy: number
   c.fillStyle = '#fff'; c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.fill();
 }
 
-let drawn = {ppb: 0, rowH: 0, sx: 0, sy: 0};   // parameter yang dipakai gambar grid terakhir (dasar transform CSS saat pinch)
+// Canvas grid sengaja LEBIH BESAR dari layar (overscan): geser kecil cukup menggeser canvas lewat CSS transform tanpa gambar ulang.
+const OV_X = 0.4, OV_Y = 0.3;
+let drawn = {ppb: 0, rowH: 0, ox: 0, oy: 0, w: 0, h: 0, vw: 0, vh: 0};   // apa yang sedang ada di canvas: konten mulai di (ox,oy), ukuran w x h, untuk layar vw x vh
+let gridDirty = true;   // true = isi grid berubah (note, hover, animasi, ukuran); false = hanya posisi scroll
+function placeGrid(l: number, t: number) {
+  const d = drawn; if (!d.ppb) return;
+  const kx = ppb / d.ppb, ky = rowH / d.rowH;
+  gc.style.transform = 'translate(' + (d.ox * kx - l) + 'px,' + (d.oy * ky - t) + 'px) scale(' + kx + ',' + ky + ')';
+}
+function gridCovers(l: number, t: number) {
+  const d = drawn;
+  return d.ppb === ppb && d.rowH === rowH && d.vw === sc.clientWidth && d.vh === sc.clientHeight && l >= d.ox && l + d.vw <= d.ox + d.w && t >= d.oy && t + d.vh <= d.oy + d.h;
+}
 function drawGrid(zoomOnly = false) {
   const tg = performance.now();   // zoomOnly: frame ini hanya zoom, note tidak berubah -> lewati deteksi note baru / hilang
-  const vw = sc.clientWidth, vh = sc.clientHeight;
-  const c = fit(gc, vw, vh, 2), sx = sc.scrollLeft, sy = sc.scrollTop;
+  const vw0 = sc.clientWidth, vh0 = sc.clientHeight, sl = sc.scrollLeft, stp = sc.scrollTop;
+  const mx = Math.round(vw0 * OV_X), my = Math.round(vh0 * OV_Y);
+  const vw = vw0 + 2 * mx, vh = vh0 + 2 * my;           // ukuran canvas (vw/vh di bawah = ukuran canvas)
+  const sx = Math.max(0, sl - mx), sy = Math.max(0, stp - my);   // konten di pojok kiri-atas canvas
+  gclip.style.width = vw0 + 'px'; gclip.style.height = vh0 + 'px';
+  const c = fit(gc, vw, vh, 2);
   c.fillStyle = '#101016'; c.fillRect(0, 0, vw, vh);
   const xr = Math.min(vw, total * ppb - sx);
   const r0 = Math.max(0, Math.floor(sy / rowH)), r1 = Math.min(ROWS - 1, Math.floor((sy + vh) / rowH));
@@ -184,7 +200,7 @@ function drawGrid(zoomOnly = false) {
     c.globalAlpha = 1 - t; drawNoteBody(c, gh.n, sx, sy, false); if (gh.h) drawHandle(c, gh.n, sx, sy, 1 - easeOut(t)); c.globalAlpha = 1;
   }
   if (animating) schedule();
-  drawn = {ppb, rowH, sx, sy}; hudGrid = performance.now() - tg;
+  drawn = {ppb, rowH, ox: sx, oy: sy, w: vw, h: vh, vw: vw0, vh: vh0}; placeGrid(sl, stp); hudGrid = performance.now() - tg;
   // marquee
   if (g && g.kind === 'marquee') {
     const a = g.x0 - sx, b = g.y0 - sy, w = g.x - g.x0, h = g.y - g.y0;
@@ -309,30 +325,32 @@ function flushZoom() {
 // Begitu zoom berhenti ZOOM_IDLE ms (atau jari lepas), layout ditulis sekali dan grid digambar ulang tajam.
 const ZOOM_IDLE = 120;
 let zoomEndT = 0, hudGrid = 0, hudMode = 'full';
-function previewZoom() {
-  const z = zoomPend!, d = drawn;
-  if (!d.ppb) return;
-  const kx = ppb / d.ppb, ky = rowH / d.rowH;
-  gc.style.transform = 'translate(' + (d.sx * kx - z.l) + 'px,' + (d.sy * ky - z.t) + 'px) scale(' + kx + ',' + ky + ')';
-}
 function commitZoom() {
   zoomEndT = 0;
   if (!zoomPend) return;
   if (pinch) { zoomEndT = window.setTimeout(commitZoom, ZOOM_IDLE); return; }   // jari masih menempel
-  gc.style.transform = '';
   flushZoom(); zoomFrame = true; schedule();
 }
 function redraw() {
   const t0 = performance.now();
   if (zoomPend) {
-    hudMode = 'preview';
-    previewZoom(); drawKeys(); drawRuler(); placePlayhead();
-    if (selBar && !selBar.hidden) { selBar.hidden = true; selBarOn = false; }
-    window.clearTimeout(zoomEndT); zoomEndT = window.setTimeout(commitZoom, ZOOM_IDLE);
+    const z = zoomPend;
+    if (!pinch && drawn.ppb === ppb && drawn.rowH === rowH && !gridCovers(z.l, z.t)) {   // geser sudah melewati overscan: gambar ulang sekarang
+      window.clearTimeout(zoomEndT); zoomEndT = 0; flushZoom(); zoomFrame = true; gridDirty = true;
+    } else {
+      hudMode = 'preview';
+      placeGrid(z.l, z.t); drawKeys(); drawRuler(); placePlayhead();
+      if (selBar && !selBar.hidden) { selBar.hidden = true; selBarOn = false; }
+      window.clearTimeout(zoomEndT); zoomEndT = window.setTimeout(commitZoom, ZOOM_IDLE);
+      hudTick(t0); return;
+    }
+  }
+  if (!gridDirty && gridCovers(sc.scrollLeft, sc.scrollTop)) {   // hanya scroll biasa & masih di dalam canvas: geser saja
+    hudMode = 'scroll';
+    placeGrid(sc.scrollLeft, sc.scrollTop); drawKeys(); drawRuler(); placeSelBar(); placePlayhead();
     hudTick(t0); return;
   }
-  hudMode = 'full';
-  flushZoom();
+  hudMode = 'full'; gridDirty = false;
   const zo = zoomFrame; zoomFrame = false;
   drawGrid(zo); drawKeys(); drawRuler(); placeSelBar(); placePlayhead();
   // notifyChange membuat JSON seluruh note: di frame zoom ditunda (note tidak berubah), supaya tidak ikut membebani gesture
@@ -351,7 +369,14 @@ function hudTick(t0: number) {
   hudEl.textContent = 'FPS ' + Math.round(fps) + ' · js ' + hudJs.toFixed(1) + 'ms · grid ' + hudGrid.toFixed(1) + 'ms · ' + hudMode;
 }
 let notifyT = 0;
-function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; redraw(); }); }
+function schedule() { gridDirty = true; scheduleScroll(); }
+function scheduleScroll() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; redraw(); }); }   // scroll murni: isi grid tidak berubah
+// geser (sentuh / tool tangan): posisi disimpan di zoomPend, canvas digeser lewat transform; layout baru ditulis saat berhenti
+function panTo(l: number, t: number) {
+  const maxL = Math.max(0, total * ppb + EDGE_PAD - sc.clientWidth), maxT = Math.max(0, ROWS * rowH - sc.clientHeight);
+  zoomPend = {l: clamp(l, 0, maxL), t: clamp(t, 0, maxT)};
+  scheduleScroll();
+}
 
 // ---------- ukuran & zoom ----------
 function applySize() {
@@ -459,7 +484,7 @@ let pinch: {d0x: number; d0y: number; ppb0: number; row0: number; beat0: number;
 
 function localXY(e: {clientX: number; clientY: number}) {
   const r = sc.getBoundingClientRect();
-  return {x: e.clientX - r.left + sc.scrollLeft, y: e.clientY - r.top + sc.scrollTop};
+  return {x: e.clientX - r.left + curL(), y: e.clientY - r.top + curT()};
 }
 function hit(cx: number, cy: number): {n: Note} | null {
   const row = Math.floor(cy / rowH), p = P_MAX - row;
@@ -505,7 +530,7 @@ function onDown(e: PointerEvent) {
   if (ptrs.size > 2 || pinch) return;
 
   const {x, y} = localXY(e);
-  const base: Gesture = {kind: 'pan', id: e.pointerId, x0: x, y0: y, x, y, snap0: snapshot(), pushed: false, changed: false, sl: sc.scrollLeft, stp: sc.scrollTop, cx: e.clientX, cy: e.clientY, t0: performance.now()};
+  const base: Gesture = {kind: 'pan', id: e.pointerId, x0: x, y0: y, x, y, snap0: snapshot(), pushed: false, changed: false, sl: curL(), stp: curT(), cx: e.clientX, cy: e.clientY, t0: performance.now()};
   const t: Tool = e.button === 1 ? 'pan' : tool;
 
   if (t === 'pan') { g = base; gc.style.cursor = 'grabbing'; return; }
@@ -595,7 +620,7 @@ function onMove(e: PointerEvent) {
   }
   switch (g.kind) {
     case 'pan':
-      sc.scrollLeft = g.sl - (e.clientX - g.cx); sc.scrollTop = g.stp - (e.clientY - g.cy); break;
+      panTo(g.sl - (e.clientX - g.cx), g.stp - (e.clientY - g.cy)); break;
     case 'new': {
       const n = g.anchor!;
       if (Math.abs(x - g.x0) > 3) {
@@ -820,13 +845,14 @@ function build(): HTMLElement {
       '<div class="pr__corner"></div>' +
       '<canvas class="pr__ruler" aria-hidden="true"></canvas>' +
       '<canvas class="pr__keys" aria-hidden="true"></canvas>' +
-      '<div class="pr__scroll"><div class="pr__space"></div><canvas class="pr__grid" role="img" aria-label="Grid nada"></canvas></div>' +
+      '<div class="pr__scroll"><div class="pr__space"></div><div class="pr__clip"><canvas class="pr__grid" role="img" aria-label="Grid nada"></canvas></div></div>' +
       '<div class="pr__phclip" aria-hidden="true"><div class="pr__ph"><svg width="9" height="20" viewBox="0 0 9 20"><path d="M5 0H4C1.79 0 0 1.79 0 4v8.6c0 .86.27 1.69.78 2.38L4.5 20l3.72-5.02A4 4 0 0 0 9 12.6V4c0-2.21-1.79-4-4-4Z" fill="currentColor"/></svg><i></i></div></div>' +
     '</div>';
 
   sc = el.querySelector<HTMLElement>('.pr__scroll')!;
   space = el.querySelector<HTMLElement>('.pr__space')!;
   gc = el.querySelector<HTMLCanvasElement>('.pr__grid')!;
+  gclip = el.querySelector<HTMLElement>('.pr__clip')!;
   kc = el.querySelector<HTMLCanvasElement>('.pr__keys')!;
   rc = el.querySelector<HTMLCanvasElement>('.pr__ruler')!;
   hudEl = document.createElement('div'); hudEl.className = 'pr__hud'; hudEl.setAttribute('aria-hidden', 'true'); el.querySelector('.pr__main')!.appendChild(hudEl);
@@ -862,7 +888,7 @@ function build(): HTMLElement {
   gc.addEventListener('pointerleave', () => { if (hoverP !== -1 && !g) { hoverP = -1; schedule(); } });
   gc.addEventListener('wheel', onWheel, {passive: false});
   gc.addEventListener('contextmenu', e => e.preventDefault());
-  sc.addEventListener('scroll', schedule, {passive: true});
+  sc.addEventListener('scroll', scheduleScroll, {passive: true});
   new ResizeObserver(() => { if (root && !root.hidden) schedule(); }).observe(sc);
 
   el.querySelector('.pr__back')!.addEventListener('click', closePianoRoll);
@@ -889,7 +915,7 @@ export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.
   const mid = st.notes.length ? st.notes.reduce((a, n) => a + n.p, 0) / st.notes.length : 62;   // mulai di sekitar C4
   sc.scrollLeft = 0; sc.scrollTop = Math.max(0, (P_MAX - mid) * rowH - vh / 2);
   resetAnim(); selBarOn = false; selBar.hidden = true;
-  keysSig = rulerSig = ''; zoomPend = null; zoomFrame = false; window.clearTimeout(zoomEndT); gc.style.transform = ''; drawn.ppb = 0;
+  keysSig = rulerSig = ''; zoomPend = null; zoomFrame = false; window.clearTimeout(zoomEndT); gc.style.transform = ''; drawn.ppb = 0; gridDirty = true;
   setTool('draw'); updateUI(); redraw();
 }
 
