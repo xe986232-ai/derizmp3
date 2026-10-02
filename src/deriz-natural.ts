@@ -70,6 +70,7 @@ export class DerizNatural implements Sampler {
       node.connect(gain);
       const data: Float32Array[] = [];
       for (let c = 0; c < chs; c++) data.push(buf.getChannelData(c).slice());
+      node.configure({ splitComputation: true });   // sebar beban hitung merata: akor (banyak node) tidak menyebabkan dropout / kresek
       await node.addBuffers(data);
       node.setUpdateInterval(0.05, () => { if (v.active && !v.rel && node.inputTime >= buf.duration - 0.03) this.release(v); });   // sample habis: lepas sendiri
     });

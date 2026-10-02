@@ -9,6 +9,7 @@
 import { setReverb, setEq, reverbSeconds, eqDb, decodeStandalone, trackInput } from './audio-engine';
 import { DerizSynth, type Sampler } from './deriz-synth';
 import { DerizNatural } from './deriz-natural';
+import { DerizTape } from './deriz-tape';
 import { isAudio, ACCEPT as AUDIO_ACCEPT } from './audio-upload-card';
 import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } from './synth-engine';
 
@@ -17,7 +18,11 @@ type FxType = 'reverb' | 'eq' | 'supersaw' | 'deriz';
 interface DerizData { name: string; dur: number; buf: AudioBuffer; start: number; zoom: number; view: number; spec: Spec | null; busy?: number; }   // start: posisi garis start, 0..1 dari durasi; zoom >= 1: jendela terlihat = [view, view + 1/zoom] dari durasi; spec: spektrogram (null selagi dianalisis, busy = persen)
 // Spektrogram: frames x ROWS nilai dB (0..255 = -100..0 dBFS), baris 0 = frekuensi terendah (skala log); lut = palet warna yang disesuaikan dengan level puncak
 interface Spec { frames: number; hop: number; fmin: number; fmax: number; d: Uint8Array; lut: Uint32Array }   // cols: cache min/max per kolom pixel device (dihitung ulang hanya kalau lebar canvas berubah)   // start: posisi garis start, 0..1 dari durasi
-interface Fx { id: number; type: FxType; on: boolean; min: boolean; tab?: number; v: Record<string, number>; deriz?: DerizData; tok?: number; nat?: boolean; }   // nat: mesin sampler DERIZ; undefined / true = Natural (koreksi formant), false = Klasik
+type Eng = 'natural' | 'klasik' | 'tape';
+const ENG_LABEL: Record<Eng, string> = { natural: 'Natural', klasik: 'Klasik', tape: 'Tape' };
+const ENG_NEXT: Record<Eng, Eng> = { natural: 'klasik', klasik: 'tape', tape: 'natural' };
+function engOf(fx: { eng?: Eng; nat?: boolean }): Eng { return fx.eng ?? (fx.nat === false ? 'klasik' : 'natural'); }
+interface Fx { id: number; type: FxType; on: boolean; min: boolean; tab?: number; v: Record<string, number>; deriz?: DerizData; tok?: number; nat?: boolean; eng?: Eng; }   // eng: mesin sampler DERIZ (undefined = Natural); nat: field lama (false = Klasik), tetap dibaca supaya proyek lama aman
 interface Param { key: string; label: string; hint?: string; def: number; fmt: (v: number) => string; bipolar?: boolean; slider?: boolean; tab?: string; }   // tab: nama kategori (plugin dengan tab)   // bipolar: arc dari tengah (seperti knob pan); slider: slider vertikal, bukan knob
 interface EffectDef { type: FxType; name: string; params: Param[]; synth?: boolean; }   // synth: plugin instrumen (otomatis ada di track synth)
 
@@ -143,7 +148,7 @@ function derizHtml(fx: Fx): string {
     `<div class="deriz__vol">${dKnob(fx, 'volume')}</div>` +
     `<div class="deriz__nav${z && z.zoom > 1.001 ? '' : ' is-idle'}" aria-hidden="true"><i class="deriz__thumb"${z ? ` style="left:${(z.view * 100).toFixed(3)}%;width:${(100 / z.zoom).toFixed(3)}%"` : ''}></i></div>` +
     `<button type="button" class="deriz__swap"${z ? '' : ' hidden'}>Ganti</button>` +
-    `<button type="button" class="deriz__mode" aria-pressed="${fx.nat !== false}" title="Natural: pitch-shift dengan koreksi formant (tidak robotik). Klasik: mesin WSOLA bawaan, lebih ringan.">${fx.nat !== false ? 'Natural' : 'Klasik'}</button></div>` +
+    `<button type="button" class="deriz__mode" aria-pressed="${engOf(fx) !== 'klasik'}" title="Natural: pitch-shift dengan koreksi formant, durasi tetap. Klasik: mesin WSOLA bawaan, lebih ringan. Tape: nada dan kecepatan berubah bersamaan (seperti kaset), paling bersih.">${ENG_LABEL[engOf(fx)]}</button></div>` +
     `<div class="deriz__kb"><div class="keyboardkeyboardcontroller deriz__keys"><div class="keys"></div></div></div>` +
     `<input type="file" class="deriz__file" accept="${AUDIO_ACCEPT}" hidden></div></div>`;
 }
@@ -427,7 +432,7 @@ export function initFxRack(host: () => AudioHost): FxRack {
   const KROOT = 60, KBASE = 48, KOCT = 3, NW = 7 * KOCT, WPC = [0, 2, 4, 5, 7, 9, 11], BLK = [0, 1, 3, 4, 5];   // tetap 3 oktaf: C3 sampai B5 (21 tuts putih), tanpa ganti oktaf; BLK: tuts putih (C D F G A) yang punya tuts hitam di kanannya
   const KMAP: Record<string, number> = { z: 0, s: 1, x: 2, d: 3, c: 4, v: 5, g: 6, b: 7, h: 8, n: 9, j: 10, m: 11, ',': 12, l: 13, '.': 14, '1': 15, q: 16, w: 17, '3': 18, e: 19, '4': 20, r: 21, '5': 22, t: 23, y: 24, '7': 25, u: 26, '8': 27, i: 28, o: 29, '0': 30, p: 31 };
   const kbVoices = new Map<number, { id: number }>();   // tuts yang sedang ditahan -> id nada di worklet
-  const synths = new Map<number, { ctx: AudioContext; nat: boolean; p: Promise<Sampler>; s?: Sampler }>();   // satu sampler worklet per plugin DERIZ (dibuat saat overlay dibuka)
+  const synths = new Map<number, { ctx: AudioContext; eng: Eng; p: Promise<Sampler>; s?: Sampler }>();   // satu sampler worklet per plugin DERIZ (dibuat saat overlay dibuka)
   let kbSeq = 0;
   const kbPtr = new Map<number, number>(), kbKeysDown = new Map<string, number>();
   const kbCard = (): HTMLElement | null => ovOpen?.card ?? null;
@@ -450,10 +455,10 @@ export function initFxRack(host: () => AudioHost): FxRack {
   // Sampler (AudioWorklet, lihat deriz-synth.ts): tuts hanya mengubah NADA; kecepatan sample hanya diatur knob Speed.
   function derizSynth(fx: Fx, ctx: AudioContext): Promise<Sampler> {
     let e = synths.get(fx.id);
-    const nat = fx.nat !== false;
-    if (!e || e.ctx !== ctx || e.nat !== nat) {
+    const eng = engOf(fx);
+    if (!e || e.ctx !== ctx || e.eng !== eng) {
       void e?.p.then(x => x.dispose(), () => { /* gagal dibuat */ });
-      const made = { ctx, nat, p: nat ? DerizNatural.create(ctx) : DerizSynth.create(ctx) } as { ctx: AudioContext; nat: boolean; p: Promise<Sampler>; s?: Sampler };
+      const made = { ctx, eng, p: eng === 'natural' ? DerizNatural.create(ctx) : eng === 'tape' ? DerizTape.create(ctx) : DerizSynth.create(ctx) } as { ctx: AudioContext; eng: Eng; p: Promise<Sampler>; s?: Sampler };
       made.p.then(x => { made.s = x; }, () => { if (synths.get(fx.id) === made) synths.delete(fx.id); });
       synths.set(fx.id, made); e = made;
     }
@@ -960,11 +965,11 @@ export function initFxRack(host: () => AudioHost): FxRack {
     if (!card || t.matches('.deriz__file')) return;
     if (t.closest('.fxc__pop')) { if (ovOpen?.card === card) closeOverlay(); else openOverlay(card); return; }
     const modeBtn = t.closest<HTMLButtonElement>('.deriz__mode');
-    if (modeBtn) {   // ganti mesin: Natural <-> Klasik (nada yang sedang ditahan dilepas dulu; mesin baru dibuat di tuts berikutnya)
+    if (modeBtn) {   // ganti mesin: Natural -> Klasik -> Tape (nada yang sedang ditahan dilepas dulu; mesin baru dibuat di tuts berikutnya)
       const fx = find(card); if (!fx) return;
       kbReleaseAll();
-      fx.nat = fx.nat === false;
-      modeBtn.textContent = fx.nat ? 'Natural' : 'Klasik'; modeBtn.setAttribute('aria-pressed', String(fx.nat));
+      fx.eng = ENG_NEXT[engOf(fx)]; delete fx.nat;
+      modeBtn.textContent = ENG_LABEL[fx.eng]; modeBtn.setAttribute('aria-pressed', String(fx.eng !== 'klasik'));
       return;
     }
     if (t.closest('.deriz__up, .deriz__swap')) { card.querySelector<HTMLInputElement>('.deriz__file')!.click(); return; }
