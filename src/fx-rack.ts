@@ -116,7 +116,6 @@ const cellHtml = (d: EffectDef, fx: Fx, p: Param): string => p.slider
 // ---------- DERIZ: canvas audio ----------
 const ICON_UP = svg('<path d="M12 16V5M7 10l5-5 5 5M5 19h14"/>', 16);
 const ICON_POP = svg('<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/>', 16);   // buka DERIZ di tengah layar
-const ICON_SWAP = svg('<path d="M4 8h13l-3-3M20 16H7l3 3"/>', 12);   // ganti audio
 const ICON_X = svg('<path d="M6 6l12 12M18 6L6 18"/>', 16);
 const esc = (t: string): string => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 const fmtDur = (s: number): string => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
@@ -133,10 +132,10 @@ function derizHtml(fx: Fx): string {
     `<div class="deriz__start" role="slider" tabindex="0" aria-label="Garis start" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${z ? z.start.toFixed(4) : 0}" aria-valuetext="${posText(z)}"></div>` +
     `<button type="button" class="deriz__up">${ICON_UP}<span>Upload audio</span></button><i class="deriz__scan" aria-hidden="true"></i><i class="deriz__glass" aria-hidden="true"></i></div>` +
     `<div class="deriz__knobs">${defOf('deriz').params.map(p => cellHtml(defOf('deriz'), fx, p)).join('')}</div>` +
-    `<div class="deriz__nav${z && z.zoom > 1.001 ? '' : ' is-idle'}" aria-hidden="true"><i class="deriz__thumb"${z ? ` style="left:${(z.view * 100).toFixed(3)}%;width:${(100 / z.zoom).toFixed(3)}%"` : ''}></i></div></div>` +
+    `<div class="deriz__nav${z && z.zoom > 1.001 ? '' : ' is-idle'}" aria-hidden="true"><i class="deriz__thumb"${z ? ` style="left:${(z.view * 100).toFixed(3)}%;width:${(100 / z.zoom).toFixed(3)}%"` : ''}></i></div>` +
+    `<button type="button" class="deriz__swap"${z ? '' : ' hidden'}>Ganti</button></div>` +
     `<div class="fxc__label deriz__meta"><span class="deriz__pos">${posText(z)}</span>` +
-    `<span class="deriz__dur"${z ? '' : ' hidden'}>${z ? fmtDur(z.dur) : ''}</span>` +
-    `<button type="button" class="deriz__swap"${z ? '' : ' hidden'}>${ICON_SWAP}<span>Ganti</span></button></div>` +
+    `<span class="deriz__dur"${z ? '' : ' hidden'}>${z ? fmtDur(z.dur) : ''}</span></div>` +
     `<div class="deriz__kb"><div class="keyboardkeyboardcontroller deriz__keys"><div class="keys"></div></div></div>` +
     `<input type="file" class="deriz__file" accept="${AUDIO_ACCEPT}" hidden></div></div>`;
 }
