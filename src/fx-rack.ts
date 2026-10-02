@@ -123,7 +123,7 @@ function derizHtml(fx: Fx): string {
   return `<div class="fxc__knobs deriz"><div class="fxc__cell deriz__cell">` +
     `<div class="deriz__stage${z ? ' has-audio' : ''}" style="--s:${z ? z.start.toFixed(4) : 0}"><canvas class="deriz__canvas" role="img" aria-label="Waveform audio DERIZ"></canvas>` +
     `<div class="deriz__start" role="slider" tabindex="0" aria-label="Garis start" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${z ? z.start.toFixed(4) : 0}" aria-valuetext="${posText(z)}"></div>` +
-    `<button type="button" class="deriz__up">${ICON_UP}<span>Upload audio</span></button></div>` +
+    `<button type="button" class="deriz__up">${ICON_UP}<span>Upload audio</span></button><i class="deriz__glass" aria-hidden="true"></i></div>` +
     `<div class="fxc__label deriz__meta"><span class="deriz__pos">${posText(z)}</span>` +
     `<span class="deriz__dur"${z ? '' : ' hidden'}>${z ? fmtDur(z.dur) : ''}</span>` +
     `<button type="button" class="deriz__swap"${z ? '' : ' hidden'}>Ganti</button></div>` +
@@ -176,8 +176,13 @@ function paintDeriz(card: HTMLElement, fx: Fx): void {
   g.setTransform(1, 0, 0, 1, 0, 0);   // gambar langsung dalam pixel device (1 kolom = 1 pixel device)
   g.clearRect(0, 0, W, H);
   const mid = H / 2;
-  g.fillStyle = 'rgba(255,255,255,.1)';
-  g.fillRect(0, Math.round(mid) - Math.max(1, Math.round(dpr)) / 2, W, Math.max(1, Math.round(dpr)));   // garis tengah (juga tampil saat canvas masih kosong)
+  const gl = Math.max(1, Math.round(dpr));
+  g.fillStyle = 'rgba(255,255,255,.05)';   // grid layar ala scope: 8 kolom waktu + garis +/-50% (juga tampil saat canvas masih kosong)
+  for (let i = 1; i < 8; i++) g.fillRect(Math.round(W * i / 8), 0, gl, H);
+  g.fillRect(0, Math.round(H * .25), W, gl); g.fillRect(0, Math.round(H * .75), W, gl);
+  const cl = g.createLinearGradient(0, 0, W, 0);   // garis tengah memudar di kedua ujung
+  cl.addColorStop(0, 'rgba(255,255,255,0)'); cl.addColorStop(.5, 'rgba(255,255,255,.26)'); cl.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = cl; g.fillRect(0, Math.round(mid - gl / 2), W, gl);
   const z = fx.deriz;
   if (!z) return;
   const pad = Math.round(DERIZ_PAD * dpr), cols = Math.max(1, W - pad * 2);
@@ -190,7 +195,10 @@ function paintDeriz(card: HTMLElement, fx: Fx): void {
     top[x] = y0; bot[x] = y1;
   }
   // satu polygon tersambung (bukan bar terpisah): kolom bersebelahan selalu nyambung, bentuknya meruncing mulus
-  g.fillStyle = getComputedStyle(cv).getPropertyValue('--accent').trim() || '#a66cff';
+  const acc = getComputedStyle(cv).getPropertyValue('--accent').trim() || '#a66cff';
+  const gr = g.createLinearGradient(0, 0, 0, H);   // tepi berwarna aksen, inti terang: kesan gelombang bercahaya
+  gr.addColorStop(0, acc); gr.addColorStop(.5, '#f4eeff'); gr.addColorStop(1, acc);
+  g.fillStyle = gr; g.shadowColor = acc; g.shadowBlur = 9 * dpr;
   g.beginPath();
   g.moveTo(pad, top[0]);
   for (let x = 0; x < cols; x++) g.lineTo(pad + x + .5, top[x]);
@@ -200,6 +208,7 @@ function paintDeriz(card: HTMLElement, fx: Fx): void {
   g.lineTo(pad, bot[0]);
   g.closePath();
   g.fill();
+  g.shadowBlur = 0;
 }
 
 const tabNames = (d: EffectDef): string[] => [...new Set(d.params.map(p => p.tab).filter((t): t is string => !!t))];
@@ -214,7 +223,7 @@ function cardHtml(fx: Fx, i: number): string {
   const body = fx.type === 'deriz' ? derizHtml(fx) : tabs.length
     ? tabs.map((t, k) => `<div class="fxc__knobs fxc__panel" role="tabpanel" data-tab="${k}"${k === cur ? '' : ' hidden'}>${d.params.filter(p => p.tab === t).map(p => cellHtml(d, fx, p)).join('')}</div>`).join('')
     : `<div class="fxc__knobs">${d.params.map(p => cellHtml(d, fx, p)).join('')}</div>`;
-  return `<section class="fxc${fx.on ? '' : ' is-off'}${fx.min ? ' is-min' : ''}${tabs.length ? ' has-tabs' : ''}" data-fx="${fx.id}" style="--i:${i}" aria-label="${d.name}">` +
+  return `<section class="fxc${fx.on ? '' : ' is-off'}${fx.min ? ' is-min' : ''}${tabs.length ? ' has-tabs' : ''}${fx.type === 'deriz' ? ' fxc--deriz' : ''}" data-fx="${fx.id}" style="--i:${i}" aria-label="${d.name}">` +
     `<header class="fxc__head"><h3 class="fxc__name"><button type="button" class="fxc__title" aria-expanded="${!fx.min}" title="Klik untuk minimize / maximize">${d.name}</button></h3>${tabBar}` +
     `<button type="button" class="fxc__pwr" role="switch" aria-checked="${fx.on}" aria-label="${d.name} nyala / mati" title="Nyala / mati"></button>` +
     (d.synth ? '' : `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi ${d.name}" title="Opsi">${ICON_MORE}</button>`) + `</header>` +
@@ -591,6 +600,20 @@ export function initFxRack(): FxRack {
     e.preventDefault(); e.stopPropagation();   // panah tidak ikut memicu mundur / maju milik DAW
     setStart(card, fx, f, 900);
   });
+
+  // ---------- DERIZ: card miring 3D mengikuti kursor + kilau mengikuti arah cahaya (mouse saja; mati saat reduced-motion / drag garis start) ----------
+  const untilt = (c: HTMLElement): void => { c.classList.remove('is-tilting'); c.style.setProperty('--rx', '0deg'); c.style.setProperty('--ry', '0deg'); c.style.setProperty('--mx', '50%'); c.style.setProperty('--my', '0%'); };
+  list.addEventListener('pointermove', e => {
+    if (reduce || e.pointerType !== 'mouse' || sd) return;
+    const card = (e.target as Element).closest<HTMLElement>('.fxc--deriz');
+    list.querySelectorAll<HTMLElement>('.fxc--deriz.is-tilting').forEach(c => { if (c !== card) untilt(c); });
+    if (!card) return;
+    const r = card.getBoundingClientRect(), px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
+    card.classList.add('is-tilting');
+    card.style.setProperty('--ry', ((px - .5) * 7).toFixed(2) + 'deg'); card.style.setProperty('--rx', ((.5 - py) * 5).toFixed(2) + 'deg');
+    card.style.setProperty('--mx', (px * 100).toFixed(1) + '%'); card.style.setProperty('--my', (py * 100).toFixed(1) + '%');
+  });
+  list.addEventListener('pointerleave', () => list.querySelectorAll<HTMLElement>('.fxc--deriz.is-tilting').forEach(untilt));
 
   list.addEventListener('click', e => {
     const t = e.target as Element, card = t.closest<HTMLElement>('.fxc');
