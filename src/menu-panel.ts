@@ -19,6 +19,12 @@ const fmtDate = (t: number) => new Date(t).toLocaleString('id-ID', {day: 'numeri
 const IC_DL = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>';
 const IC_DEL = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg>';
 
+const svgi = (d: string, w = 20): string => '<svg viewBox="0 0 24 24" width="' + w + '" height="' + w + '" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+const IC_FOLDER = svgi('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>');
+const IC_GEAR = svgi('<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>');
+const IC_CHEV = svgi('<path d="M9 5l7 7-7 7"/>', 16);
+const IC_BACK = svgi('<path d="M15 5l-7 7 7 7"/>', 18);
+
 const ICON_GRID =
   '<svg class="menu-btn__ic menu-btn__ic--grid" viewBox="0 0 24 24" aria-hidden="true">' +
   '<rect x="4" y="4" width="6.5" height="6.5" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>' +
@@ -44,20 +50,55 @@ export function initMenuPanel(): MenuPanel {
   panel.id = 'menuPanel'; panel.className = 'mp'; panel.setAttribute('aria-label', 'Menu');
   panel.innerHTML =
     '<div class="mp__panel">' +
-      '<header class="mp__head mp__item" style="--i:0"><h2 class="mp__title">Menu</h2></header>' +
+      '<header class="mp__head mp__item" style="--i:0"><button type="button" class="mp__back" aria-label="Kembali ke menu" title="Kembali" hidden>' + IC_BACK + '</button><h2 class="mp__title">Menu</h2></header>' +
       '<div class="mp__body">' +
-        '<div class="mp__card mp__item mp__save" style="--i:1">' +
-          '<button type="button" class="mp__savebtn" aria-label="Simpan project">' +
-            '<svg class="mp__ring" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" pathLength="100"/></svg><span>SAVE</span></button>' +
-          '<p class="mp__hint">Ketuk: simpan sebagai project baru.<br>Tahan: simpan perubahan ke project yang sedang dibuka.</p>' +
-        '</div>' +
-        '<div class="mp__card mp__item" style="--i:2">' +
-          '<div class="mp__sub"><span>File project</span><button type="button" class="mp__imp">Buka .json</button></div>' +
-          '<ul class="mp__files"></ul><p class="mp__hint mp__empty">Belum ada project tersimpan.</p>' +
-          '<input type="file" class="mp__impfile" accept="application/json,.json" hidden>' +
-        '</div>' +
+        // halaman utama: daftar kategori
+        '<nav class="mp__page" data-page="home" aria-label="Kategori menu">' +
+          '<button type="button" class="mp__cat mp__item" style="--i:1" data-go="project">' + IC_FOLDER + '<span class="mp__cat__t"><b>Project</b><small>Simpan &amp; buka project</small></span>' + IC_CHEV + '</button>' +
+          '<button type="button" class="mp__cat mp__item" style="--i:2" data-go="settings">' + IC_GEAR + '<span class="mp__cat__t"><b>Pengaturan</b><small>Preferensi aplikasi</small></span>' + IC_CHEV + '</button>' +
+        '</nav>' +
+        // kategori Project
+        '<section class="mp__page" data-page="project" aria-label="Project" hidden>' +
+          '<div class="mp__card mp__item mp__save" style="--i:1">' +
+            '<button type="button" class="mp__savebtn" aria-label="Simpan project">' +
+              '<svg class="mp__ring" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" pathLength="100"/></svg><span>SAVE</span></button>' +
+            '<p class="mp__hint">Ketuk: simpan sebagai project baru.<br>Tahan: simpan perubahan ke project yang sedang dibuka.</p>' +
+          '</div>' +
+          '<div class="mp__card mp__item" style="--i:2">' +
+            '<div class="mp__sub"><span>File project</span><button type="button" class="mp__imp">Buka .json</button></div>' +
+            '<ul class="mp__files"></ul><p class="mp__hint mp__empty">Belum ada project tersimpan.</p>' +
+            '<input type="file" class="mp__impfile" accept="application/json,.json" hidden>' +
+          '</div>' +
+        '</section>' +
+        // kategori Pengaturan
+        '<section class="mp__page" data-page="settings" aria-label="Pengaturan" hidden>' +
+          '<div class="mp__card mp__item" style="--i:1"><p class="mp__hint">Belum ada pengaturan.</p></div>' +
+        '</section>' +
       '</div>' +
     '</div>';
+
+  // ===== Halaman kategori (home / project / settings) =====
+  const TITLES: Record<string, string> = {home: 'Menu', project: 'Project', settings: 'Pengaturan'};
+  const pages = [...panel.querySelectorAll<HTMLElement>('.mp__page')];
+  const titleEl = panel.querySelector('.mp__title') as HTMLElement;
+  const backBtn = panel.querySelector('.mp__back') as HTMLButtonElement;
+  const bodyEl = panel.querySelector('.mp__body') as HTMLElement;
+  let view = 'home';
+  const go = (v: string): void => {
+    if (v === view) return;
+    view = v;
+    pages.forEach(pg => { pg.hidden = pg.dataset.page !== v; });
+    titleEl.textContent = TITLES[v] || 'Menu';
+    backBtn.hidden = v === 'home';
+    bodyEl.scrollTop = 0;
+    const cur = pages.find(pg => pg.dataset.page === v);
+    if (cur) { cur.classList.remove('is-in'); void cur.offsetWidth; cur.classList.add('is-in'); }
+  };
+  panel.addEventListener('click', e => {
+    const t = (e.target as HTMLElement).closest('[data-go]') as HTMLElement | null;
+    if (t) go(t.dataset.go as string);
+  });
+  backBtn.addEventListener('click', () => go('home'));
 
   let open = false;
 
@@ -71,6 +112,7 @@ export function initMenuPanel(): MenuPanel {
     // saat tertutup, isi panel tidak boleh bisa difokus / dibaca screen reader
     if (open) { panel.removeAttribute('inert'); panel.removeAttribute('aria-hidden'); }
     else { panel.setAttribute('inert', ''); panel.setAttribute('aria-hidden', 'true'); }
+    if (!open) setTimeout(() => { if (!open) go('home'); }, 480);   // kembali ke daftar kategori setelah panel selesai meluncur keluar
     void animate;
   };
 
@@ -83,7 +125,9 @@ export function initMenuPanel(): MenuPanel {
     apply(false, true);
   });
   document.addEventListener('keydown', e => {
-    if (open && e.key === 'Escape') { apply(false, true); btn.focus(); }
+    if (!open || e.key !== 'Escape') return;
+    if (view !== 'home') { go('home'); return; }
+    apply(false, true); btn.focus();
   });
 
   // piano roll terbuka -> panel menutup (tombolnya sendiri disembunyikan lewat CSS)
