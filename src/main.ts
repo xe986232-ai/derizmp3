@@ -961,6 +961,16 @@ function metroPump() {
     nextBeat++;
   }
 }
+// Penempatan clip dalam satuan bar (bukan piksel): zoom mengubah piksel tapi tidak mengubah posisi bar, jadi tidak perlu jadwal ulang
+const clipPlacements = () => [...lanesEl.querySelectorAll('.pattern[data-clip]')].map(p => ({
+  track: p.parentElement.dataset.track, clip: +p.dataset.clip,
+  startBar: pl(p) / BAR_W, endBar: (pl(p) + pw(p)) / BAR_W, offsetSec: +p.dataset.off || 0}));
+const r3 = v => Math.round(v * 1000) / 1000;
+const placementSig = () => JSON.stringify([
+  clipPlacements().map(c => [c.track, c.clip, r3(c.startBar), r3(c.endBar), r3(c.offsetSec)]),
+  [...lanesEl.querySelectorAll('.pattern[data-pr-id]')].map(p => [p.parentElement.dataset.track, p.dataset.prId, r3(pl(p) / BAR_W), r3(pw(p) / BAR_W)])
+]);
+let schedSig = '';
 function scheduleClips(countIn) {
   const ctx = audio(), beat = 60 / BPM, lead = countIn ? 4 * beat : 0;
   document.querySelectorAll('.trackheader-container').forEach(c => {
@@ -971,9 +981,8 @@ function scheduleClips(countIn) {
   if (countIn) for (let i = 0; i < 4; i++) metroClick(ctx, startCtx - (4 - i) * beat, i === 0);
   nextBeat = Math.ceil(startPos * 4 - 1e-6); lastBeat = -1;
   clearInterval(metroTimer); metroTimer = setInterval(metroPump, 25); metroPump();
-  const clips = [...lanesEl.querySelectorAll('.pattern[data-clip]')].map(p => ({
-    track: p.parentElement.dataset.track, clip: +p.dataset.clip,
-    startBar: pl(p) / BAR_W, endBar: (pl(p) + pw(p)) / BAR_W, offsetSec: +p.dataset.off || 0}));
+  const clips = clipPlacements();
+  schedSig = placementSig();
   playClips(ctx, master, clips, posBars, SEC_PER_BAR, startCtx);
   stopAllSynth(ctx); buildSynthQueue(); synthPump(ctx, ctx.currentTime + .12);
 }
@@ -1098,7 +1107,8 @@ new MutationObserver(ms => {
     : m.target.classList && m.target.classList.contains('pattern'));
   if (!hit) return;
   if (!waveRaf) waveRaf = requestAnimationFrame(() => { waveRaf = 0; syncWaves(); });
-  if (playing) { clearTimeout(resyncT); resyncT = setTimeout(() => { if (playing) scheduleClips(); }, 120); }   // clip digeser/dihapus saat main
+  // clip digeser/dihapus saat main -> jadwal ulang. Zoom hanya mengubah piksel, jadi dilewati (kalau tidak, suara putus-putus saat zoom)
+  if (playing) { clearTimeout(resyncT); resyncT = setTimeout(() => { if (playing && placementSig() !== schedSig) scheduleClips(); }, 120); }
 }).observe(lanesEl, {childList: true, subtree: true, attributes: true, attributeFilter: ['style']});
 // switch on/off track (ungu = nyala): mati -> track hening (meter ikut nol), pattern di lane diredupkan
 document.querySelector('.headers-list').addEventListener('click', e => {
