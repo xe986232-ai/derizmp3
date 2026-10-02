@@ -72,10 +72,31 @@ export function initMenuPanel(): MenuPanel {
         '</section>' +
         // kategori Pengaturan
         '<section class="mp__page" data-page="settings" aria-label="Pengaturan" hidden>' +
-          '<div class="mp__card mp__item" style="--i:1"><p class="mp__hint">Belum ada pengaturan.</p></div>' +
+          '<div class="mp__card mp__item mp__set" style="--i:1">' +
+            '<div class="mp__sub"><span>Waveform &amp; bar color</span></div>' +
+            '<div class="mp__seg" role="radiogroup" aria-label="Waveform & bar color">' +
+              '<button type="button" class="mp__segbtn" role="radio" data-wf="default"><i class="mp__sw mp__sw--default"></i>Default</button>' +
+              '<button type="button" class="mp__segbtn" role="radio" data-wf="black"><i class="mp__sw mp__sw--black"></i>Black</button>' +
+            '</div>' +
+            '<p class="mp__hint">Warna waveform audio di timeline dan note yang terlihat dari luar piano roll.</p>' +
+          '</div>' +
         '</section>' +
       '</div>' +
     '</div>';
+
+  // ===== Pengaturan: Waveform & bar color (disimpan di browser, diterapkan lewat atribut data-wf di <html>) =====
+  const WF_KEY = 'derizmp3.wfColor';
+  const wfBtns = [...panel.querySelectorAll<HTMLButtonElement>('[data-wf]')];
+  const setWf = (v: string, save: boolean): void => {
+    const val = v === 'black' ? 'black' : 'default';
+    document.documentElement.dataset.wf = val;
+    wfBtns.forEach(b => { const on = b.dataset.wf === val; b.classList.toggle('is-on', on); b.setAttribute('aria-checked', String(on)); });
+    if (save) { try { localStorage.setItem(WF_KEY, val); } catch { /* penyimpanan diblokir: tetap berlaku sampai halaman ditutup */ } }
+  };
+  wfBtns.forEach(b => b.addEventListener('click', () => setWf(b.dataset.wf as string, true)));
+  let wfSaved = 'default';
+  try { wfSaved = localStorage.getItem(WF_KEY) || 'default'; } catch { /* abaikan */ }
+  setWf(wfSaved, false);
 
   // ===== Halaman kategori (home / project / settings) =====
   const TITLES: Record<string, string> = {home: 'Menu', project: 'Project', settings: 'Pengaturan'};
