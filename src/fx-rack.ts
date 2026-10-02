@@ -312,6 +312,7 @@ function cardHtml(fx: Fx, i: number): string {
     : `<div class="fxc__knobs">${d.params.map(p => cellHtml(d, fx, p)).join('')}</div>`;
   return `<section class="fxc${fx.on ? '' : ' is-off'}${fx.min ? ' is-min' : ''}${tabs.length ? ' has-tabs' : ''}${fx.type === 'deriz' ? ' fxc--deriz' : ''}" data-fx="${fx.id}" style="--i:${i}" aria-label="${d.name}">` +
     `<header class="fxc__head"><h3 class="fxc__name"><button type="button" class="fxc__title" aria-expanded="${!fx.min}" title="Klik untuk minimize / maximize">${d.name}</button></h3>${tabBar}` +
+    (fx.type === 'deriz' ? `<button type="button" class="fxc__pat" aria-haspopup="menu" aria-expanded="false" aria-label="Pattern: pilih pattern untuk diisi DERIZ" title="Masuk ke pattern">${ICON_MORE}</button>` : '') +
     `<button type="button" class="fxc__pwr" role="switch" aria-checked="${fx.on}" aria-label="${d.name} nyala / mati" title="Nyala / mati"></button>` +
     (fx.type === 'deriz' ? `<button type="button" class="fxc__pop" aria-label="Buka DERIZ di tengah layar" title="Buka di tengah layar">${ICON_POP}</button><button type="button" class="fxc__close" aria-label="Tutup DERIZ" title="Tutup (Esc)">${ICON_X}</button>` : '') +
     (d.synth ? '' : `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi ${d.name}" title="Opsi">${ICON_MORE}</button>`) + `</header>` +
@@ -332,7 +333,14 @@ export interface FxRack {
 
 export interface AudioHost { ctx: AudioContext; dest: AudioNode }
 
-export function initFxRack(host: () => AudioHost): FxRack {
+// Jembatan ke timeline: DERIZ menampilkan daftar pattern aktif dan masuk ke salah satunya (piano roll untuk DERIZ ini di pattern itu)
+export interface PatternRow { title: string; trackName: string; color: string; bar: number; notes: number; ref: unknown }   // notes: jumlah nada milik DERIZ ini di pattern tsb; ref: pegangan milik timeline
+export interface PatternBridge {
+  list(track: string): PatternRow[];          // semua pattern instrumen di timeline, urut dari atas ke bawah lalu kiri ke kanan
+  open(row: PatternRow, track: string): void; // masuk ke pattern: buka piano roll untuk DERIZ milik track ini
+}
+
+export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxRack {
   const addBtn = document.getElementById('fxAdd') as HTMLButtonElement;
   const list = document.getElementById('fxList')!;
   const bodyEl = addBtn.closest('.fx__body') as HTMLElement;
@@ -690,6 +698,51 @@ export function initFxRack(host: () => AudioHost): FxRack {
     el.querySelector<HTMLButtonElement>('button')!.focus({ preventScroll: true });
   }
 
+  // ---------- DERIZ: menu pattern (tombol titik tiga di kiri indikator nyala/mati) ----------
+  function openPatMenu(btn: HTMLButtonElement): void {
+    if (!patterns || !cur) return;
+    const track = cur;
+    closePicker(true); closeMenu(true); hideTip();
+    const rows = patterns.list(track);
+    const el = document.createElement('div');
+    el.className = 'track-menu fx-menu fx-pats';
+    el.setAttribute('role', 'menu');
+    const head = document.createElement('div');
+    head.className = 'fx-pats__head'; head.textContent = 'Pattern aktif';
+    el.appendChild(head);
+    if (!rows.length) {
+      const empty = document.createElement('div');
+      empty.className = 'fx-pats__empty'; empty.textContent = 'Belum ada pattern. Klik area kosong di timeline untuk menambah.';
+      el.appendChild(empty);
+    }
+    for (const row of rows) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.setAttribute('role', 'menuitem'); b.className = 'track-menu__item fx-pats__item';
+      const dot = document.createElement('i'); dot.className = 'track-menu__dot'; dot.style.background = row.color;
+      const txt = document.createElement('span'); txt.className = 'fx-pats__txt';
+      const t1 = document.createElement('b'); t1.textContent = row.title;
+      const t2 = document.createElement('small'); t2.textContent = row.trackName + ' · bar ' + row.bar;
+      txt.append(t1, t2);
+      b.append(dot, txt);
+      if (row.notes) { const c = document.createElement('em'); c.className = 'fx-pats__count'; c.textContent = row.notes + ' nada'; b.appendChild(c); }
+      b.addEventListener('click', () => { closeMenu(true); closeOverlay(true); patterns.open(row, track); });
+      el.appendChild(b);
+    }
+    document.body.appendChild(el);
+    const r = btn.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
+    el.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
+    el.style.top = Math.max(8, Math.min(r.bottom + 6, innerHeight - h - 8)) + 'px';
+    el.style.transformOrigin = 'top left';
+    menu = el; menuBtn = btn;
+    btn.setAttribute('aria-expanded', 'true');
+    el.addEventListener('keydown', e => e.stopPropagation());
+    el.addEventListener('keyup', e => e.stopPropagation());
+    document.addEventListener('pointerdown', onMenuOutside, true);
+    document.addEventListener('keydown', onMenuKey, true);
+    window.addEventListener('resize', onMenuResize);
+    el.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
+  }
+
   // ---------- kartu efek ----------
   const paintAll = (card: HTMLElement, fx: Fx) => {
     const d = defOf(fx.type);
@@ -998,6 +1051,8 @@ export function initFxRack(host: () => AudioHost): FxRack {
     if (!card || t.matches('.deriz__file')) return;
     if (t.closest('.fxc__pop')) { if (ovOpen?.card === card) closeOverlay(); else openOverlay(card); return; }
     if (t.closest('.deriz__up, .deriz__swap')) { card.querySelector<HTMLInputElement>('.deriz__file')!.click(); return; }
+    const pat = t.closest<HTMLButtonElement>('.fxc__pat');
+    if (pat) { menu && menuBtn === pat ? closeMenu() : openPatMenu(pat); return; }
     const more = t.closest<HTMLButtonElement>('.fxc__more');
     if (more) { menu && menuBtn === more ? closeMenu() : openMenu(more, card); return; }
     const tabBtn = t.closest<HTMLButtonElement>('.fxc__tab');   // ganti kategori plugin

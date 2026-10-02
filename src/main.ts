@@ -9,7 +9,7 @@ import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
 import { decodeFile, addBuffer, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
 import { slideSource, glideBeats } from './note-slide';
-import { openPianoRoll, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, PR_BEATS } from './piano-roll';
+import { openPianoRoll, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, PR_BEATS } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 initLandscape();
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -311,7 +311,7 @@ function slot(lane, x) {
 // Isi note ditampilkan mini di dalam pattern (seperti piano roll kecil): x = ketukan dari awal pattern, y = nada (dipusatkan sesuai rentang nada)
 function renderPatNotes(el) {
   const id = el.dataset.prId; if (!id) return;
-  const notes = getPianoRollNotes(id);
+  const notes = [id, ...pianoRollExtraKeys(id)].flatMap(k => getPianoRollNotes(k));   // nada milik track pattern + nada dari DERIZ lain yang mengisi pattern ini
   let box = el.querySelector('.pattern__notes');
   if (!notes.length) { if (box) box.remove(); return; }
   if (!box) { box = document.createElement('div'); box.className = 'pattern__notes'; el.insertBefore(box, el.querySelector('.pattern__handle')); }
@@ -320,7 +320,12 @@ function renderPatNotes(el) {
   box.innerHTML = '<svg viewBox="0 0 ' + PR_BEATS + ' ' + rows + '" preserveAspectRatio="none" aria-hidden="true">' +
     notes.map(n => '<rect x="' + n.s + '" y="' + (top + hi - n.p + 0.1) + '" width="' + Math.max(n.l, 0.12) + '" height="0.8"/>').join('') + '</svg>';
 }
-setPianoRollChangeHandler(id => { const el = lanesEl.querySelector('.pattern[data-pr-id="' + id + '"]'); if (el) renderPatNotes(el); });
+// Banyak DERIZ bisa mengisi satu pattern: nada track pemilik pattern disimpan di kunci id pattern, nada DERIZ dari track lain di "<id>@<track DERIZ>"
+const patKey = (prId, track, ownTrack) => track === ownTrack ? prId : prId + '@' + track;
+const patBase = id => id.split('@')[0];
+const copyPatNotes = (from, to, a, b) => { copyPianoRollNotes(from, to, a, b); for (const k of pianoRollExtraKeys(from)) copyPianoRollNotes(k, to + k.slice(from.length), a, b); };
+const trimPatNotes = (id, beat) => { trimPianoRollNotes(id, beat); for (const k of pianoRollExtraKeys(id)) trimPianoRollNotes(k, beat); };
+setPianoRollChangeHandler(id => { const el = lanesEl.querySelector('.pattern[data-pr-id="' + patBase(id) + '"]'); if (el) renderPatNotes(el); });
 function createPattern(lane, sl, ci) {   // ci = {clip, off}: pattern ini adalah audio clip
   const cont = document.querySelector('.trackheader-container[data-track="' + lane.dataset.track + '"]');
   const col = cont && cont.style.getPropertyValue('--track-color');
@@ -516,7 +521,7 @@ function copyPattern() {
   if (start + w > W + .5) return shakeBar();
   const n = createPattern(lane, {start, width: w}, clipOf(el, 0));
   n.querySelector('.pattern__title').textContent = el.querySelector('.pattern__title').textContent;
-  if (el.dataset.prId) { n.dataset.prId = 'pat' + (++prSeq); copyPianoRollNotes(el.dataset.prId, n.dataset.prId); renderPatNotes(n); }   // salinan ikut membawa nada
+  if (el.dataset.prId) { n.dataset.prId = 'pat' + (++prSeq); copyPatNotes(el.dataset.prId, n.dataset.prId); renderPatNotes(n); }   // salinan ikut membawa nada
   patAnchor = null; selectPattern(n);
   n.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'smooth'});
 }
@@ -543,6 +548,39 @@ function editPattern() {
   });
   renderPlayhead();
 }
+// Masuk ke pattern dari tombol titik tiga di DERIZ: piano roll yang sama, tapi nadanya milik DERIZ ini (dimainkan lewat sampler DERIZ ini)
+function enterPatternAs(el, track) {
+  const lane = el.parentElement;
+  if (!el.dataset.prId) el.dataset.prId = 'pat' + (++prSeq);
+  const nm = document.getElementById('track-name-' + track), cont = document.querySelector('.trackheader-container[data-track="' + track + '"]');
+  prStartBar = pl(el) / BAR_W;
+  openPianoRoll({
+    id: patKey(el.dataset.prId, track, lane.dataset.track),
+    track: nm ? nm.textContent : 'Track',
+    pattern: el.querySelector('.pattern__title').textContent,
+    color: (cont && getComputedStyle(cont).getPropertyValue('--track-color').trim()) || undefined,
+  });
+  if (kbdCont && cont) openKbd(cont);   // keyboard di bawah ikut memainkan DERIZ ini
+  renderPlayhead();
+}
+const patternBridge = {
+  list(track) {
+    const rows = [...lanesEl.querySelectorAll('.pattern:not([data-clip])')].map(el => {
+      const lane = el.parentElement, lt = lane.dataset.track, id = el.dataset.prId;
+      const nm = document.getElementById('track-name-' + lt), cont = document.querySelector('.trackheader-container[data-track="' + lt + '"]');
+      return {
+        title: el.querySelector('.pattern__title').textContent || 'Pattern',
+        trackName: nm ? nm.textContent : 'Track',
+        color: (cont && getComputedStyle(cont).getPropertyValue('--track-color').trim()) || '#a66cff',
+        bar: Math.round(pl(el) / BAR_W * 100) / 100 + 1,
+        notes: id ? getPianoRollNotes(patKey(id, track, lt)).length : 0,
+        ref: el, top: lane.offsetTop, left: pl(el)
+      };
+    });
+    return rows.sort((a, b) => a.top - b.top || a.left - b.left);
+  },
+  open(row, track) { if (row.ref.isConnected) enterPatternAs(row.ref, track); }
+};
 lanesEl.addEventListener('dblclick', e => {   // ganti nama pattern: klik dua kali judulnya
   const t = e.target.closest && e.target.closest('.pattern__title');
   if (t && selPat && selPat.contains(t)) renamePattern();
@@ -578,7 +616,7 @@ function splitPattern() {
   n.querySelector('.pattern__title').textContent = el.querySelector('.pattern__title').textContent;
   if (el.dataset.prId) {   // nada ikut terbagi: kiri dipotong di titik bagi, kanan mulai dari titik itu
     const cb = (cut - s0) / BAR_W * 4;
-    n.dataset.prId = 'pat' + (++prSeq); copyPianoRollNotes(el.dataset.prId, n.dataset.prId, cb); trimPianoRollNotes(el.dataset.prId, cb);
+    n.dataset.prId = 'pat' + (++prSeq); copyPatNotes(el.dataset.prId, n.dataset.prId, cb); trimPatNotes(el.dataset.prId, cb);
     renderPatNotes(el); renderPatNotes(n);
   }
   el.style.width = (cut - s0) + 'px'; handleSide(el);
@@ -824,7 +862,7 @@ document.querySelector('.headers-list').addEventListener('click', e => {
 });
 document.querySelectorAll('.trackheader__left-content').forEach(b => b.title = 'Tutup panel track');
 // Panel efek (kanan): lebar timeline berubah selama animasi, jadi ruler & toolbar pattern digambar ulang tiap frame
-const fxRack = initFxRack(() => ({ ctx: audio(), dest: master }));   // isi panel efek: tombol +, card pilihan efek, dan card tiap efek (per track)
+const fxRack = initFxRack(() => ({ ctx: audio(), dest: master }), patternBridge);   // isi panel efek: tombol +, card pilihan efek, dan card tiap efek (per track)
 initEffectsPanel(settled => { paintRuler(settled); patBarPlace(); }, () => { closeMenu(true); closeAddMenu(true); dismissAdd(true); fxRack.closePicker(true); });
 fxRack.show(selTrack ? selTrack.closest('.trackheader-container').dataset.track : null);
 // ===== Menu "Tambahkan track" =====
@@ -966,30 +1004,37 @@ function synthPump(ctx, ahead) {
     if (n.deriz) fxRack.derizPlay(n.track, n.p, n.when, n.dur, n.glides); else playNote(ctx, master, n.track, n.p, n.when, n.dur, n.glides);
   }
 }
+// Nada satu pattern (kunci nada = key) dijadwalkan ke instrumen track "track"; deriz = lewat sampler DERIZ track itu
+function queueNotes(el, key, track, deriz, bs) {
+  const notes = getPianoRollNotes(key); if (!notes.length) return;
+  const b0 = pl(el) / BAR_W * 4, b1 = (pl(el) + pw(el)) / BAR_W * 4, from = startPos * 4;
+  // slide: nada slide tidak dibunyikan ulang; suara nada sumber dipanjangkan sampai akhir nada slide dan tinggi nadanya meluncur
+  notes.sort((a, b) => a.s - b.s);
+  const ent = new Map(), list = [];
+  notes.forEach(n => {
+    const s = b0 + n.s, e = Math.min(s + n.l, b1);
+    if (e <= from + 1e-6 || s >= b1) return;
+    const src = slideSource(notes, n), en = src && ent.get(src);
+    if (en) {
+      ent.set(n, en); en.eb = Math.max(en.eb, e);
+      if (s <= from) { en.p = n.p; en.cur = n.p; en.glides = []; }   // mulai main di tengah / setelah luncuran: langsung di tinggi nada akhir
+      else { en.glides.push({b: s, from: en.cur, to: n.p, d: Math.min(glideBeats(n), e - s)}); en.cur = n.p; }
+      return;
+    }
+    const e1 = {p: n.p, cur: n.p, sb: Math.max(s, from), eb: e, glides: []};
+    ent.set(n, e1); list.push(e1);
+  });
+  list.forEach(en => synthQ.push({track, deriz, p: en.p, when: startCtx + (en.sb - from) * bs, dur: (en.eb - en.sb) * bs,
+    glides: en.glides.length ? en.glides.map(g => ({when: startCtx + (g.b - from) * bs, from: g.from, to: g.to, dur: g.d * bs})) : undefined}));
+}
 function buildSynthQueue() {
   synthQ = []; synthI = 0;
   const bs = SEC_PER_BAR / 4;   // detik per ketukan
+  const derizTracks = [...document.querySelectorAll('.trackheader-container')].map(c => c.dataset.track).filter(t => !hasSynth(t) && fxRack.hasDeriz(t));
   lanesEl.querySelectorAll('.pattern[data-pr-id]').forEach(el => {
-    const track = el.parentElement.dataset.track, deriz = !hasSynth(track) && fxRack.hasDeriz(track); if (!deriz && !hasSynth(track)) return;
-    const b0 = pl(el) / BAR_W * 4, b1 = (pl(el) + pw(el)) / BAR_W * 4, from = startPos * 4;
-    // slide: nada slide tidak dibunyikan ulang; suara nada sumber dipanjangkan sampai akhir nada slide dan tinggi nadanya meluncur
-    const notes = getPianoRollNotes(el.dataset.prId).sort((a, b) => a.s - b.s), ent = new Map();
-    const list = [];
-    notes.forEach(n => {
-      const s = b0 + n.s, e = Math.min(s + n.l, b1);
-      if (e <= from + 1e-6 || s >= b1) return;
-      const src = slideSource(notes, n), en = src && ent.get(src);
-      if (en) {
-        ent.set(n, en); en.eb = Math.max(en.eb, e);
-        if (s <= from) { en.p = n.p; en.cur = n.p; en.glides = []; }   // mulai main di tengah / setelah luncuran: langsung di tinggi nada akhir
-        else { en.glides.push({b: s, from: en.cur, to: n.p, d: Math.min(glideBeats(n), e - s)}); en.cur = n.p; }
-        return;
-      }
-      const e1 = {p: n.p, cur: n.p, sb: Math.max(s, from), eb: e, glides: []};
-      ent.set(n, e1); list.push(e1);
-    });
-    list.forEach(en => synthQ.push({track, deriz, p: en.p, when: startCtx + (en.sb - from) * bs, dur: (en.eb - en.sb) * bs,
-      glides: en.glides.length ? en.glides.map(g => ({when: startCtx + (g.b - from) * bs, from: g.from, to: g.to, dur: g.d * bs})) : undefined}));
+    const track = el.parentElement.dataset.track, id = el.dataset.prId, deriz = !hasSynth(track) && fxRack.hasDeriz(track);
+    if (deriz || hasSynth(track)) queueNotes(el, id, track, deriz, bs);   // instrumen milik track pattern ini
+    for (const t of derizTracks) if (t !== track) queueNotes(el, patKey(id, t, track), t, true, bs);   // DERIZ track lain yang ikut mengisi pattern ini
   });
   synthQ.sort((a, b) => a.when - b.when);
 }

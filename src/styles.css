@@ -941,3 +941,18 @@ body:has(.pr.is-open) .landscape-btn svg{width:14px;height:14px}
 .hist-btn{width:28px;height:28px;font-size:9px}
 .metro-btn{font-size:12px}
 .kbd-toggle svg{width:16px;height:16px}
+
+/* DERIZ: tombol titik tiga (masuk ke pattern) di kiri indikator nyala/mati + menu daftar pattern */
+.fxc__pat{width:26px;height:26px;flex:none;padding:0;border:0;border-radius:50%;background:transparent;color:#9a9ab0;display:grid;place-items:center;cursor:pointer;transition:background .2s ease,color .2s ease,transform .15s ease}
+.fxc__pat:hover,.fxc__pat[aria-expanded="true"]{background:rgba(255,255,255,.1);color:#fff}
+.fxc__pat:active{transform:scale(.9)}
+.fxc__pat:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.fx-pats{z-index:260;min-width:236px;max-width:min(320px,calc(100vw - 16px));max-height:min(60vh,420px);overflow-y:auto;padding:6px}
+.fx-pats__head{padding:6px 10px 4px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.fx-pats__empty{padding:8px 10px 10px;max-width:224px;font-size:12px;line-height:1.45;color:var(--muted)}
+.fx-pats__item{height:auto;min-height:48px;padding:6px 10px}
+.fx-pats__txt{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+.fx-pats__txt b{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fx-pats__txt small{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fx-pats__count{flex:none;padding:2px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:11px;font-style:normal;font-weight:600}
+@media (prefers-reduced-motion:reduce){.fxc__pat{transition:none!important}}
