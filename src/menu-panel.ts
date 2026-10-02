@@ -78,7 +78,6 @@ export function initMenuPanel(): MenuPanel {
               '<button type="button" class="mp__segbtn" role="radio" data-wf="default"><i class="mp__sw mp__sw--default"></i>Default</button>' +
               '<button type="button" class="mp__segbtn" role="radio" data-wf="black"><i class="mp__sw mp__sw--black"></i>Black</button>' +
             '</div>' +
-            '<p class="mp__hint">Warna waveform audio di timeline dan note yang terlihat dari luar piano roll.</p>' +
           '</div>' +
         '</section>' +
       '</div>' +
