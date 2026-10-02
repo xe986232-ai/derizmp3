@@ -31,15 +31,27 @@ class DerizSampler extends AudioWorkletProcessor {
       this.sinc[i] = u >= 1 ? 0 : sc * (0.42 + 0.5 * Math.cos(Math.PI * u) + 0.08 * Math.cos(2 * Math.PI * u));
     }
     this.voices = [];
+    this.pend = [];   // perintah on / off yang dijadwalkan di waktu AudioContext tertentu (piano roll)
     this.speed = 1; this.pitch = 0; this.vol = 0.9; this.volS = 0.9;
     this.port.onmessage = e => this.msg(e.data);
   }
   msg(m) {
-    if (m.t === 'buf') this.setBuf(m);
-    else if (m.t === 'on') { this.speed = m.speed; this.pitch = m.pitch; this.vol = m.vol; this.start(m); }
-    else if (m.t === 'off') { for (const v of this.voices) if (v.id === m.id) v.rel = true; }
+    if (m.t === 'buf') { this.pend = []; this.setBuf(m); }
+    else if (m.t === 'on' || m.t === 'off') { if (m.at && m.at > currentTime) this.pend.push(m); else this.apply(m); }
     else if (m.t === 'p') { this.speed = m.speed; this.pitch = m.pitch; this.vol = m.vol; }
-    else if (m.t === 'kill') this.voices = [];
+    else if (m.t === 'relall') { this.pend = []; for (const v of this.voices) v.rel = true; }
+    else if (m.t === 'kill') { this.voices = []; this.pend = []; }
+  }
+  apply(m) {
+    if (m.t === 'on') { this.speed = m.speed; this.pitch = m.pitch; this.vol = m.vol; this.start(m); }
+    else { for (const v of this.voices) if (v.id === m.id) v.rel = true; }
+  }
+  // jalankan perintah terjadwal yang jatuh tempo di blok audio ini (ketelitian satu blok = 128 sampel, sekitar 2,7 ms)
+  flush() {
+    if (!this.pend.length) return;
+    const lim = currentTime + 128 / sampleRate, due = [], rest = [];
+    for (const m of this.pend) (m.at <= lim ? due : rest).push(m);
+    if (due.length) { this.pend = rest; for (const m of due) this.apply(m); }
   }
   setBuf(m) {
     this.bufRate = m.rate; this.wins.clear(); this.voices = [];
@@ -221,6 +233,7 @@ class DerizSampler extends AudioWorkletProcessor {
   }
   process(inputs, outputs) {
     const out = outputs[0], oL = out[0], oR = out[1] || out[0], n = oL.length;
+    this.flush();
     if (!this.voices.length) return true;
     const g0 = this.volS; this.volS += (this.vol - this.volS) * 0.25; const g1 = this.volS;
     for (let vi = this.voices.length - 1; vi >= 0; vi--) {
@@ -301,10 +314,12 @@ export class DerizSynth {
     this.node.port.postMessage({ t: 'buf', ch, rate: buf.sampleRate }, ch.map(a => a.buffer));
   }
 
-  noteOn(id: number, semis: number, start: number, speed: number, pitch: number, vol: number): void {
-    this.node.port.postMessage({ t: 'on', id, semis, start, speed, pitch, vol });
+  // at (opsional) = waktu AudioContext tempat nada mulai / dilepas; kosong = sekarang
+  noteOn(id: number, semis: number, start: number, speed: number, pitch: number, vol: number, at = 0): void {
+    this.node.port.postMessage({ t: 'on', id, semis, start, speed, pitch, vol, at });
   }
-  noteOff(id: number): void { this.node.port.postMessage({ t: 'off', id }); }
+  noteOff(id: number, at = 0): void { this.node.port.postMessage({ t: 'off', id, at }); }
+  releaseAll(): void { this.node.port.postMessage({ t: 'relall' }); }   // lepas semua nada (peluruhan halus) dan batalkan yang terjadwal
   params(speed: number, pitch: number, vol: number): void { this.node.port.postMessage({ t: 'p', speed, pitch, vol }); }
 
   dispose(): void {

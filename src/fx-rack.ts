@@ -323,6 +323,11 @@ export interface FxRack {
   drop(track: string): void;          // track dihapus: buang efeknya
   addInstrument(track: string, type: 'supersaw' | 'deriz'): void;   // track synth baru: pasang plugin instrumennya (kartu di paling atas)
   closePicker(instant?: boolean): void;
+  hasDeriz(track: string): boolean;   // track punya plugin DERIZ yang menyala dan sudah berisi audio
+  derizPlay(track: string, midi: number, when: number, dur: number): void;   // nada terjadwal dari piano roll (when = waktu AudioContext)
+  derizOn(track: string, midi: number): number;   // nada langsung (keyboard di bawah piano roll); mengembalikan id untuk derizOff
+  derizOff(id: number): void;
+  derizStop(): void;   // lepas semua nada DERIZ dan batalkan yang terjadwal
 }
 
 export interface AudioHost { ctx: AudioContext; dest: AudioNode }
@@ -471,6 +476,41 @@ export function initFxRack(host: () => AudioHost): FxRack {
       s.noteOn(id, m - KROOT, Math.floor(Math.min(z2.start * z2.dur, Math.max(0, z2.dur - 0.01)) * z2.buf.sampleRate), sp, pi, vo);
     }).catch(err => console.error(err));
   }
+  // ---------- DERIZ dari piano roll: nada terjadwal (playback) dan nada langsung (keyboard), tanpa overlay ----------
+  const derizOf = (track: string): Fx | undefined => racks.get(track)?.find(f => f.type === 'deriz' && f.on && f.deriz);
+  const derizStart = (z: DerizData): number => Math.floor(Math.min(z.start * z.dur, Math.max(0, z.dur - 0.01)) * z.buf.sampleRate);
+  const liveRel = new Set<number>();   // nada langsung yang dilepas sebelum sampler siap
+  function derizPlay(track: string, midi: number, when: number, dur: number): void {
+    const fx = derizOf(track); if (!fx) return;
+    const { ctx, dest } = host(), id = ++kbSeq;
+    derizSynth(fx, ctx).then(s => {
+      const z = fx.deriz; if (!z) return;
+      s.routeTo(trackInput(ctx, dest, track)); s.setBuffer(z.buf);
+      const [sp, pi, vo] = derizArgs(fx), at = Math.max(when, ctx.currentTime);
+      s.noteOn(id, midi - KROOT, derizStart(z), sp, pi, vo, at);
+      s.noteOff(id, at + Math.max(0.01, dur));
+    }).catch(err => console.error(err));
+  }
+  function derizOn(track: string, midi: number): number {
+    const fx = derizOf(track); if (!fx) return 0;
+    const { ctx, dest } = host(), id = ++kbSeq;
+    derizSynth(fx, ctx).then(s => {
+      if (liveRel.delete(id)) return;   // sudah dilepas selagi sampler disiapkan
+      const z = fx.deriz; if (!z) return;
+      s.routeTo(trackInput(ctx, dest, track)); s.setBuffer(z.buf);
+      const [sp, pi, vo] = derizArgs(fx);
+      s.noteOn(id, midi - KROOT, derizStart(z), sp, pi, vo);
+    }).catch(err => console.error(err));
+    return id;
+  }
+  function derizOff(id: number): void {
+    if (!id) return;
+    liveRel.add(id);
+    let sent = false;
+    for (const e of synths.values()) if (e.s) { e.s.noteOff(id); sent = true; }
+    if (sent) liveRel.delete(id);
+  }
+  function derizStop(): void { for (const e of synths.values()) e.s?.releaseAll(); liveRel.clear(); }
   function kbParams(fx: Fx): void {   // knob Speed / Pitch / Volume diputar saat nada ditahan: ikut berubah mulus
     const s = synths.get(fx.id)?.s; if (s) s.params(...derizArgs(fx));
   }
@@ -1011,6 +1051,8 @@ export function initFxRack(host: () => AudioHost): FxRack {
       if (cur === track) { closePicker(true); closeMenu(true); hideTip(); closeOverlay(true, true); ro.disconnect(); cur = null; addBtn.disabled = true; list.replaceChildren(); layout(false); }
     },
     addInstrument,
-    closePicker
+    closePicker,
+    hasDeriz: track => !!derizOf(track),
+    derizPlay, derizOn, derizOff, derizStop
   };
 }

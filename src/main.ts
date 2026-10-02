@@ -655,6 +655,11 @@ function noteOn(m) {
     voices.set(m, {synth: startVoice(ctx, master, tid, m, ctx.currentTime)});
     return;
   }
+  if (tid && fxRack.hasDeriz(tid)) {   // track DERIZ: suara dari sampler-nya (audio yang di-upload), melewati efek track
+    audio();
+    voices.set(m, {deriz: fxRack.derizOn(tid, m)});
+    return;
+  }
   const ctx = audio(), t = ctx.currentTime, f = 440 * 2 ** ((m - 69) / 12);
   const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter(), g2 = ctx.createGain();
   o1.type = 'triangle'; o1.frequency.value = f;
@@ -670,6 +675,7 @@ function noteOff(m) {
   voices.delete(m);
   const t = actx.currentTime;
   if ('synth' in v) { releaseVoice(v.synth, t); return; }
+  if ('deriz' in v) { fxRack.derizOff(v.deriz); return; }
   v.g.gain.cancelScheduledValues(t); v.g.gain.setValueAtTime(v.g.gain.value, t); v.g.gain.setTargetAtTime(0, t, .07);
   v.o1.stop(t + .5); v.o2.stop(t + .5);
 }
@@ -935,20 +941,20 @@ let synthQ = [], synthI = 0;
 function synthPump(ctx, ahead) {
   while (synthI < synthQ.length && synthQ[synthI].when <= ahead) {
     const n = synthQ[synthI++];
-    playNote(ctx, master, n.track, n.p, n.when, n.dur);
+    if (n.deriz) fxRack.derizPlay(n.track, n.p, n.when, n.dur); else playNote(ctx, master, n.track, n.p, n.when, n.dur);
   }
 }
 function buildSynthQueue() {
   synthQ = []; synthI = 0;
   const bs = SEC_PER_BAR / 4;   // detik per ketukan
   lanesEl.querySelectorAll('.pattern[data-pr-id]').forEach(el => {
-    const track = el.parentElement.dataset.track; if (!hasSynth(track)) return;
+    const track = el.parentElement.dataset.track, deriz = !hasSynth(track) && fxRack.hasDeriz(track); if (!deriz && !hasSynth(track)) return;
     const b0 = pl(el) / BAR_W * 4, b1 = (pl(el) + pw(el)) / BAR_W * 4, from = startPos * 4;
     getPianoRollNotes(el.dataset.prId).forEach(n => {
       const s = b0 + n.s, e = Math.min(s + n.l, b1);
       if (e <= from + 1e-6 || s >= b1) return;
       const sb = Math.max(s, from);
-      synthQ.push({track, p: n.p, when: startCtx + (sb - from) * bs, dur: (e - sb) * bs});
+      synthQ.push({track, deriz, p: n.p, when: startCtx + (sb - from) * bs, dur: (e - sb) * bs});
     });
   });
   synthQ.sort((a, b) => a.when - b.when);
@@ -987,7 +993,7 @@ function scheduleClips(countIn) {
   const clips = clipPlacements();
   schedSig = placementSig();
   playClips(ctx, master, clips, posBars, SEC_PER_BAR, startCtx);
-  stopAllSynth(ctx); buildSynthQueue(); synthPump(ctx, ctx.currentTime + .12);
+  stopAllSynth(ctx); fxRack.derizStop(); buildSynthQueue(); synthPump(ctx, ctx.currentTime + .12);
 }
 function startPlay() {
   if (playing) return;
@@ -997,7 +1003,7 @@ function startPlay() {
   playRaf = requestAnimationFrame(tick); syncTransportUI();
 }
 function pausePlay() {
-  playing = false; cancelAnimationFrame(playRaf); playRaf = 0; stopClips(actx); stopAllSynth(actx); synthQ = []; clearInterval(metroTimer); metroTimer = 0; metroCancel(actx, true); metroUI.beat(-1); syncTransportUI();
+  playing = false; cancelAnimationFrame(playRaf); playRaf = 0; stopClips(actx); stopAllSynth(actx); fxRack.derizStop(); synthQ = []; clearInterval(metroTimer); metroTimer = 0; metroCancel(actx, true); metroUI.beat(-1); syncTransportUI();
 }
 const togglePlay = () => playing ? pausePlay() : startPlay();
 function toStart() {
