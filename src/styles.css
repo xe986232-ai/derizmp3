@@ -831,3 +831,16 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .fxc--deriz .deriz__pos,.fxc--deriz .deriz__dur{color:var(--accent);text-shadow:0 0 8px var(--accent-soft)}
 .fxc--deriz .deriz__meta{padding-top:3px}
 @media (prefers-reduced-motion:reduce){.fxc--deriz{transform:none!important;transition:none!important}}
+
+/* ---------- DERIZ: zoom canvas (tombol + / - / reset, bar navigasi saat di-zoom) ---------- */
+.deriz__zoom{position:absolute;right:6px;top:6px;z-index:5;display:none;align-items:center;gap:1px;padding:2px;border-radius:8px;background:rgba(9,9,15,.72);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),0 2px 6px rgba(0,0,0,.4)}
+.deriz__stage.has-audio .deriz__zoom{display:flex}
+.deriz__zb,.deriz__zv{min-width:22px;height:22px;padding:0 5px;border:0;border-radius:6px;background:transparent;color:#d8d8e6;font:inherit;font-size:12px;line-height:1;font-variant-numeric:tabular-nums;cursor:pointer;transition:background-color .15s ease}
+.deriz__zv{min-width:34px;color:var(--accent);text-shadow:0 0 8px var(--accent-soft)}
+.deriz__zb:hover,.deriz__zv:hover{background:rgba(255,255,255,.1)}
+.deriz__zb:focus-visible,.deriz__zv:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+@media (pointer:coarse){.deriz__zb,.deriz__zv{height:28px;min-width:28px}.deriz__zv{min-width:40px}}
+.deriz__nav{position:absolute;left:6px;right:6px;bottom:2px;height:16px;z-index:5;display:none;touch-action:none;cursor:pointer}
+.deriz__stage.is-zoomed .deriz__nav{display:block}
+.deriz__nav::before{content:"";position:absolute;left:0;right:0;top:50%;height:4px;margin-top:-2px;border-radius:2px;background:rgba(255,255,255,.1)}
+.deriz__thumb{position:absolute;top:50%;height:4px;min-width:8px;margin-top:-2px;border-radius:2px;background:var(--accent);box-shadow:0 0 6px var(--accent)}

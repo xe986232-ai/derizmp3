@@ -12,7 +12,8 @@ import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } f
 
 type FxType = 'reverb' | 'eq' | 'supersaw' | 'deriz';
 // DERIZ: audio yang di-upload ke canvas plugin (buffer disimpan untuk tahap berikutnya; peaks + max khusus untuk menggambar waveform)
-interface DerizData { name: string; dur: number; buf: AudioBuffer; peaks: Float32Array; max: number; start: number; cols?: { n: number; a: Float32Array }; }   // cols: cache min/max per kolom pixel device (dihitung ulang hanya kalau lebar canvas berubah)   // start: posisi garis start, 0..1 dari durasi
+interface DerizData { name: string; dur: number; buf: AudioBuffer; peaks: Float32Array; max: number; start: number; zoom: number; view: number; mip: Mip[]; cols?: { n: number; zoom: number; view: number; a: Float32Array }; }   // zoom >= 1: jendela yang terlihat = [view, view + 1/zoom] dari durasi; mip: puncak berjenjang supaya zoom / geser tetap ringan di file panjang
+interface Mip { bs: number; a: Float32Array }   // cols: cache min/max per kolom pixel device (dihitung ulang hanya kalau lebar canvas berubah)   // start: posisi garis start, 0..1 dari durasi
 interface Fx { id: number; type: FxType; on: boolean; min: boolean; tab?: number; v: Record<string, number>; deriz?: DerizData; tok?: number; }
 interface Param { key: string; label: string; def: number; fmt: (v: number) => string; bipolar?: boolean; slider?: boolean; tab?: string; }   // tab: nama kategori (plugin dengan tab)   // bipolar: arc dari tengah (seperti knob pan); slider: slider vertikal, bukan knob
 interface EffectDef { type: FxType; name: string; params: Param[]; synth?: boolean; }   // synth: plugin instrumen (otomatis ada di track synth)
@@ -115,14 +116,18 @@ const esc = (t: string): string => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<
 const fmtDur = (s: number): string => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
 const fmtPos = (s: number): string => { const q = Math.round(Math.max(0, s) * 10), m = Math.floor(q / 600), r = (q % 600) / 10; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1); };   // m:ss.d
 const posText = (z: DerizData | undefined): string => (z ? 'Start ' + fmtPos(z.start * z.dur) : 'Belum ada audio');
+const zoomText = (z: DerizData | undefined): string => (z ? (z.zoom < 10 ? String(Math.round(z.zoom * 10) / 10) : String(Math.round(z.zoom))) : '1') + '×';
+const visS = (z: DerizData): number => (z.start - z.view) * z.zoom;   // posisi garis start dalam jendela yang terlihat (bisa di luar 0..1 saat di-zoom)
 const DERIZ_PAD = 6;   // jarak kiri/kanan canvas: garis start di 0 / 1 dan ujung waveform sejajar, pegangan tidak terpotong
 
 // Tinggi isi sama dengan card knob (Reverb / EQ): canvas 72 px (= tinggi knob) + satu baris label, dalam wadah .fxc__knobs yang sama.
 function derizHtml(fx: Fx): string {
   const z = fx.deriz;
   return `<div class="fxc__knobs deriz"><div class="fxc__cell deriz__cell">` +
-    `<div class="deriz__stage${z ? ' has-audio' : ''}" style="--s:${z ? z.start.toFixed(4) : 0}"><canvas class="deriz__canvas" role="img" aria-label="Waveform audio DERIZ"></canvas>` +
+    `<div class="deriz__stage${z ? ' has-audio' : ''}${z && z.zoom > 1.001 ? ' is-zoomed' : ''}" style="--s:${z ? visS(z).toFixed(4) : 0}"><canvas class="deriz__canvas" role="img" aria-label="Waveform audio DERIZ"></canvas>` +
     `<div class="deriz__start" role="slider" tabindex="0" aria-label="Garis start" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${z ? z.start.toFixed(4) : 0}" aria-valuetext="${posText(z)}"></div>` +
+    `<div class="deriz__zoom" role="group" aria-label="Zoom waveform"><button type="button" class="deriz__zb" data-z="out" aria-label="Perkecil" title="Perkecil">&minus;</button><button type="button" class="deriz__zv" aria-label="Reset zoom" title="Reset zoom">${zoomText(z)}</button><button type="button" class="deriz__zb" data-z="in" aria-label="Perbesar" title="Perbesar">+</button></div>` +
+    `<div class="deriz__nav" aria-hidden="true"><i class="deriz__thumb"${z ? ` style="left:${(z.view * 100).toFixed(3)}%;width:${(100 / z.zoom).toFixed(3)}%"` : ''}></i></div>` +
     `<button type="button" class="deriz__up">${ICON_UP}<span>Upload audio</span></button><i class="deriz__glass" aria-hidden="true"></i></div>` +
     `<div class="fxc__label deriz__meta"><span class="deriz__pos">${posText(z)}</span>` +
     `<span class="deriz__dur"${z ? '' : ' hidden'}>${z ? fmtDur(z.dur) : ''}</span>` +
@@ -130,32 +135,76 @@ function derizHtml(fx: Fx): string {
     `<input type="file" class="deriz__file" accept="${AUDIO_ACCEPT}" hidden></div></div>`;
 }
 
+function updateZoomUi(card: HTMLElement, z: DerizData | undefined): void {
+  const stage = card.querySelector<HTMLElement>('.deriz__stage')!;
+  stage.classList.toggle('is-zoomed', !!z && z.zoom > 1.001);
+  stage.style.setProperty('--s', z ? visS(z).toFixed(4) : '0');
+  const zv = card.querySelector<HTMLElement>('.deriz__zv'); if (zv) zv.textContent = zoomText(z);
+  const th = card.querySelector<HTMLElement>('.deriz__thumb');
+  if (th && z) { th.style.left = (z.view * 100).toFixed(3) + '%'; th.style.width = (100 / z.zoom).toFixed(3) + '%'; }
+}
+
 function updateDerizUi(card: HTMLElement, fx: Fx): void {
   const z = fx.deriz;
   card.querySelector('.deriz__stage')!.classList.toggle('has-audio', !!z);
   card.querySelector('.deriz__stage')!.classList.remove('is-loading');
   card.querySelector('.deriz__pos')!.textContent = posText(z);
-  card.querySelector<HTMLElement>('.deriz__stage')!.style.setProperty('--s', z ? z.start.toFixed(4) : '0');
+  updateZoomUi(card, z);
   const dur = card.querySelector<HTMLElement>('.deriz__dur')!, swap = card.querySelector<HTMLElement>('.deriz__swap')!;
   dur.hidden = swap.hidden = !z;
   dur.textContent = z ? fmtDur(z.dur) : '';
 }
 
-// Min/max per kolom pixel device, dihitung dari SAMPLE ASLI (bukan dari peaks 1200 bucket) supaya tajam di lebar / dpr berapa pun.
-// Semua channel digabung. Kalau sample lebih sedikit dari kolom (one-shot pendek di canvas lebar), nilainya diinterpolasi linear
-// antar sample supaya tidak ada lubang datar. Hasil: [min0, max0, min1, max1, ...]
-function columnPeaks(buf: AudioBuffer, cols: number): Float32Array {
-  const out = new Float32Array(cols * 2), len = buf.length, spp = len / cols;
+// Puncak berjenjang (blok 32 / 256 / 2048 sample, semua channel digabung), dibuat sekali saat upload.
+function buildMip(buf: AudioBuffer): Mip[] {
+  const len = buf.length, bs = 32, n = Math.ceil(len / bs), a = new Float32Array(n * 2);
+  for (let b = 0; b < n; b++) { a[b * 2] = Infinity; a[b * 2 + 1] = -Infinity; }
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const d = buf.getChannelData(c);
+    for (let b = 0; b < n; b++) {
+      let lo = a[b * 2], hi = a[b * 2 + 1];
+      for (let i = b * bs, e = Math.min(len, i + bs); i < e; i++) { const v = d[i]; if (v < lo) lo = v; if (v > hi) hi = v; }
+      a[b * 2] = lo; a[b * 2 + 1] = hi;
+    }
+  }
+  const out: Mip[] = [{ bs, a }];
+  for (let k = 0; k < 2; k++) {
+    const pv = out[out.length - 1], pn = pv.a.length / 2, nn = Math.ceil(pn / 8), na = new Float32Array(nn * 2);
+    for (let b = 0; b < nn; b++) {
+      let lo = Infinity, hi = -Infinity;
+      for (let j = b * 8, e = Math.min(pn, j + 8); j < e; j++) { if (pv.a[j * 2] < lo) lo = pv.a[j * 2]; if (pv.a[j * 2 + 1] > hi) hi = pv.a[j * 2 + 1]; }
+      na[b * 2] = lo; na[b * 2 + 1] = hi;
+    }
+    out.push({ bs: pv.bs * 8, a: na });
+  }
+  return out;
+}
+
+// Min/max per kolom pixel device untuk JENDELA yang terlihat (zoom + view). Banyak sample per pixel: pakai level mip yang pas.
+// Sedikit sample per pixel: scan sample asli; kurang dari 1 sample per pixel: interpolasi linear (tanpa lubang). Hasil: [min0, max0, ...]
+function columnPeaks(z: DerizData, cols: number): Float32Array {
+  const buf = z.buf, len = buf.length, s0 = z.view * len, spp = len / z.zoom / cols, out = new Float32Array(cols * 2);
+  let lvl: Mip | undefined; for (const m of z.mip) if (m.bs * 2 <= spp) lvl = m;
+  if (lvl) {
+    const n = lvl.a.length / 2, bs = lvl.bs;
+    for (let b = 0; b < cols; b++) {
+      const i0 = Math.min(n - 1, Math.floor((s0 + b * spp) / bs)), i1 = Math.min(n, Math.max(i0 + 1, Math.floor((s0 + (b + 1) * spp) / bs)));
+      let lo = Infinity, hi = -Infinity;
+      for (let i = i0; i < i1; i++) { if (lvl.a[i * 2] < lo) lo = lvl.a[i * 2]; if (lvl.a[i * 2 + 1] > hi) hi = lvl.a[i * 2 + 1]; }
+      out[b * 2] = lo; out[b * 2 + 1] = hi;
+    }
+    return out;
+  }
   for (let b = 0; b < cols; b++) { out[b * 2] = Infinity; out[b * 2 + 1] = -Infinity; }
   for (let c = 0; c < buf.numberOfChannels; c++) {
     const d = buf.getChannelData(c);
     for (let b = 0; b < cols; b++) {
       let lo = out[b * 2], hi = out[b * 2 + 1];
       if (spp >= 1) {
-        const s0 = Math.floor(b * spp), s1 = Math.min(len, Math.max(s0 + 1, Math.floor((b + 1) * spp)));
-        for (let i = s0; i < s1; i++) { const v = d[i]; if (v < lo) lo = v; if (v > hi) hi = v; }
+        const a0 = Math.min(len - 1, Math.floor(s0 + b * spp)), a1 = Math.min(len, Math.max(a0 + 1, Math.floor(s0 + (b + 1) * spp)));
+        for (let i = a0; i < a1; i++) { const v = d[i]; if (v < lo) lo = v; if (v > hi) hi = v; }
       } else {
-        const pos = b * spp, i0 = Math.min(len - 1, Math.floor(pos)), f = pos - i0, v = d[i0] * (1 - f) + d[Math.min(len - 1, i0 + 1)] * f;
+        const pos = s0 + b * spp, i0 = Math.max(0, Math.min(len - 1, Math.floor(pos))), f = pos - i0, v = d[i0] * (1 - f) + d[Math.min(len - 1, i0 + 1)] * f;
         if (v < lo) lo = v; if (v > hi) hi = v;
       }
       out[b * 2] = lo; out[b * 2 + 1] = hi;
@@ -186,7 +235,7 @@ function paintDeriz(card: HTMLElement, fx: Fx): void {
   const z = fx.deriz;
   if (!z) return;
   const pad = Math.round(DERIZ_PAD * dpr), cols = Math.max(1, W - pad * 2);
-  if (!z.cols || z.cols.n !== cols) z.cols = { n: cols, a: columnPeaks(z.buf, cols) };
+  if (!z.cols || z.cols.n !== cols || z.cols.zoom !== z.zoom || z.cols.view !== z.view) z.cols = { n: cols, zoom: z.zoom, view: z.view, a: columnPeaks(z, cols) };
   const a = z.cols.a, k = (mid - 4 * dpr) / Math.max(z.max, 0.05);   // normalisasi: puncak tertinggi hampir memenuhi tinggi canvas
   const top = new Float32Array(cols), bot = new Float32Array(cols), minH = Math.max(2, 2 * dpr);
   for (let x = 0; x < cols; x++) {
@@ -519,7 +568,7 @@ export function initFxRack(): FxRack {
       const buf = await decodeStandalone(file), peaks = bucketPeaks(buf, 1200);
       let max = 0; for (let i = 0; i < peaks.length; i++) max = Math.max(max, Math.abs(peaks[i]));
       if (my !== fx.tok) return;
-      fx.deriz = { name: file.name, dur: buf.duration, buf, peaks, max, start: 0 };
+      fx.deriz = { name: file.name, dur: buf.duration, buf, peaks, max, start: 0, zoom: 1, view: 0, mip: buildMip(buf) };
     } catch (err) {
       console.error(err);
       if (my === fx.tok) warn('File tidak bisa dibaca');
@@ -547,15 +596,16 @@ export function initFxRack(): FxRack {
   });
 
   // ---------- DERIZ: garis start. Drag garisnya (atau tap / klik di mana saja pada canvas untuk memindahkan), panah keyboard menggeser, dobel klik = kembali ke 0 ----------
-  const fracAt = (stage: HTMLElement, x: number): number => {
+  const winAt = (stage: HTMLElement, x: number): number => {   // posisi x dalam jendela yang terlihat, 0..1
     const r = stage.getBoundingClientRect();
     return Math.max(0, Math.min(1, (x - r.left - DERIZ_PAD) / Math.max(1, r.width - DERIZ_PAD * 2)));
   };
+  const fracAt = (stage: HTMLElement, x: number, z: DerizData): number => Math.max(0, Math.min(1, z.view + winAt(stage, x) / z.zoom));   // posisi global 0..1 dari durasi
   const setStart = (card: HTMLElement, fx: Fx, f: number, tipMs = -1): void => {   // tipMs: -1 tanpa tooltip, 0 tooltip menetap, >0 hilang otomatis
     const z = fx.deriz; if (!z) return;
     z.start = Math.max(0, Math.min(1, f));
     const mk = card.querySelector<HTMLElement>('.deriz__start')!;
-    card.querySelector<HTMLElement>('.deriz__stage')!.style.setProperty('--s', z.start.toFixed(4));
+    updateZoomUi(card, z);
     card.querySelector('.deriz__pos')!.textContent = posText(z);
     mk.setAttribute('aria-valuenow', z.start.toFixed(4)); mk.setAttribute('aria-valuetext', posText(z));
     if (tipMs >= 0) showTip(mk, fmtPos(z.start * z.dur), tipMs);
@@ -563,35 +613,40 @@ export function initFxRack(): FxRack {
   let sd: { stage: HTMLElement; card: HTMLElement; fx: Fx; sx: number; off: number; drag: boolean } | null = null;
   list.addEventListener('pointerdown', e => {
     const stage = (e.target as Element).closest<HTMLElement>('.deriz__stage.has-audio'); if (!stage || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    if ((e.target as Element).closest('.deriz__zoom, .deriz__nav')) return;   // tombol zoom / bar navigasi punya penanganan sendiri
+    if (e.pointerType === 'touch') {
+      touches.set(e.pointerId, e.clientX);
+      if (touches.size === 2) { startPinch(stage); return; }   // dua jari = cubit untuk zoom
+    }
     const card = stage.closest<HTMLElement>('.fxc'), fx = card && find(card); if (!card || !fx?.deriz) return;
-    const lineX = stage.getBoundingClientRect().left + DERIZ_PAD + fx.deriz.start * (stage.clientWidth - DERIZ_PAD * 2);
+    const lineX = stage.getBoundingClientRect().left + DERIZ_PAD + visS(fx.deriz) * (stage.clientWidth - DERIZ_PAD * 2);
     const near = Math.abs(e.clientX - lineX) <= 18;
     // mouse: langsung pindah + drag. Sentuh: hanya drag kalau menyentuh garisnya; sentuhan lain = tap (dihitung saat dilepas) supaya scroll panel tidak menggeser garis
     sd = { stage, card, fx, sx: e.clientX, off: near ? lineX - e.clientX : 0, drag: near || e.pointerType === 'mouse' };
     stage.setPointerCapture(e.pointerId); stage.classList.add('is-dragging');
     card.querySelector<HTMLElement>('.deriz__start')!.focus({ preventScroll: true });
-    if (sd.drag) { setStart(card, fx, fracAt(stage, e.clientX + sd.off), 0); e.preventDefault(); }
+    if (sd.drag) { setStart(card, fx, fracAt(stage, e.clientX + sd.off, fx.deriz), 0); e.preventDefault(); }
   });
   list.addEventListener('pointermove', e => {
-    if (sd?.drag) setStart(sd.card, sd.fx, fracAt(sd.stage, e.clientX + sd.off), 0);
+    if (sd?.drag) setStart(sd.card, sd.fx, fracAt(sd.stage, e.clientX + sd.off, sd.fx.deriz!), 0);
   });
   const endStart = (e: PointerEvent): void => {
     if (!sd) return;
     const s = sd; sd = null;
     s.stage.classList.remove('is-dragging'); hideTip();
-    if (e.type === 'pointerup' && !s.drag && Math.abs(e.clientX - s.sx) < 8) setStart(s.card, s.fx, fracAt(s.stage, e.clientX), 900);   // tap
+    if (e.type === 'pointerup' && !s.drag && Math.abs(e.clientX - s.sx) < 8) setStart(s.card, s.fx, fracAt(s.stage, e.clientX, s.fx.deriz!), 900);   // tap
   };
   list.addEventListener('pointerup', endStart);
   list.addEventListener('pointercancel', endStart);
   list.addEventListener('dblclick', e => {
-    const stage = (e.target as Element).closest<HTMLElement>('.deriz__stage.has-audio'); if (!stage) return;
+    const stage = (e.target as Element).closest<HTMLElement>('.deriz__stage.has-audio'); if (!stage || (e.target as Element).closest('.deriz__zoom, .deriz__nav')) return;
     const card = stage.closest<HTMLElement>('.fxc'), fx = card && find(card);
     if (card && fx?.deriz) setStart(card, fx, 0, 900);
   });
   list.addEventListener('keydown', e => {
     const mk = (e.target as Element).closest<HTMLElement>('.deriz__start'); if (!mk) return;
     const card = mk.closest<HTMLElement>('.fxc'), fx = card && find(card), z = fx?.deriz; if (!card || !fx || !z) return;
-    const step = e.shiftKey ? 0.05 : 0.01;
+    const step = (e.shiftKey ? 0.05 : 0.01) / z.zoom;
     let f: number | null = null;
     if (e.key === 'ArrowRight' || e.key === 'ArrowUp') f = z.start + step;
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') f = z.start - step;
@@ -600,6 +655,63 @@ export function initFxRack(): FxRack {
     e.preventDefault(); e.stopPropagation();   // panah tidak ikut memicu mundur / maju milik DAW
     setStart(card, fx, f, 900);
   });
+
+  // ---------- DERIZ: zoom canvas. Tombol + / - / reset, Ctrl+scroll (juga cubit di trackpad), cubit dua jari, bar navigasi di bawah untuk geser ----------
+  const maxZoom = (z: DerizData): number => Math.max(1, Math.min(2000, z.dur / 0.003));   // jendela terkecil kira-kira 3 ms
+  const setView = (card: HTMLElement, fx: Fx, zoom: number, ga: number, wa: number): void => {   // ga: titik global yang dijaga tetap di posisi jendela wa (0..1)
+    const z = fx.deriz; if (!z) return;
+    z.zoom = Math.max(1, Math.min(maxZoom(z), zoom));
+    z.view = Math.max(0, Math.min(1 - 1 / z.zoom, ga - wa / z.zoom));
+    updateZoomUi(card, z); paintDeriz(card, fx);
+  };
+  const touches = new Map<number, number>();
+  let pinch: { card: HTMLElement; fx: Fx; stage: HTMLElement; d0: number; z0: number; ga: number } | null = null;
+  const startPinch = (stage: HTMLElement): void => {
+    if (sd) { sd.stage.classList.remove('is-dragging'); sd = null; hideTip(); }
+    const card = stage.closest<HTMLElement>('.fxc'), fx = card && find(card), z = fx?.deriz; if (!card || !fx || !z) return;
+    const [x1, x2] = [...touches.values()];
+    pinch = { card, fx, stage, d0: Math.max(24, Math.abs(x1 - x2)), z0: z.zoom, ga: fracAt(stage, (x1 + x2) / 2, z) };
+  };
+  list.addEventListener('pointermove', e => {
+    if (!touches.has(e.pointerId)) return;
+    touches.set(e.pointerId, e.clientX);
+    if (!pinch || touches.size < 2) return;
+    const [x1, x2] = [...touches.values()];
+    setView(pinch.card, pinch.fx, pinch.z0 * Math.max(1, Math.abs(x1 - x2)) / pinch.d0, pinch.ga, winAt(pinch.stage, (x1 + x2) / 2));   // titik di antara dua jari tetap di bawah jari
+  });
+  const endTouch = (e: PointerEvent): void => { touches.delete(e.pointerId); if (touches.size < 2) pinch = null; };
+  list.addEventListener('pointerup', endTouch); list.addEventListener('pointercancel', endTouch);
+  list.addEventListener('click', e => {
+    const b = (e.target as Element).closest<HTMLElement>('.deriz__zb, .deriz__zv'); if (!b) return;
+    const card = b.closest<HTMLElement>('.fxc'), fx = card && find(card), z = fx?.deriz; if (!card || !fx || !z) return;
+    if (b.classList.contains('deriz__zv')) setView(card, fx, 1, 0, 0);
+    else setView(card, fx, z.zoom * (b.dataset.z === 'in' ? 2 : .5), z.view + .5 / z.zoom, .5);   // zoom ke tengah jendela
+  });
+  list.addEventListener('wheel', e => {
+    const stage = (e.target as Element).closest<HTMLElement>('.deriz__stage.has-audio'); if (!stage) return;
+    const card = stage.closest<HTMLElement>('.fxc'), fx = card && find(card), z = fx?.deriz; if (!card || !fx || !z) return;
+    if (e.ctrlKey || e.metaKey) {   // Ctrl / Cmd + scroll, atau cubit di trackpad: zoom ke arah kursor
+      e.preventDefault();
+      const wa = winAt(stage, e.clientX);
+      setView(card, fx, z.zoom * Math.exp(-e.deltaY * 0.004), z.view + wa / z.zoom, wa);
+    } else if (z.zoom > 1.001 && (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY))) {   // Shift + scroll / geser horizontal: geser jendela
+      e.preventDefault();
+      setView(card, fx, z.zoom, z.view + ((e.deltaX || e.deltaY) / Math.max(1, stage.clientWidth)) / z.zoom * 1 + 0.5 / z.zoom, .5);
+    }
+  }, { passive: false });
+  let nd: { card: HTMLElement; fx: Fx; nav: HTMLElement } | null = null;   // geser lewat bar navigasi (mouse / sentuh)
+  const navTo = (x: number): void => {
+    if (!nd) return;
+    const r = nd.nav.getBoundingClientRect();
+    setView(nd.card, nd.fx, nd.fx.deriz!.zoom, Math.max(0, Math.min(1, (x - r.left) / Math.max(1, r.width))), .5);
+  };
+  list.addEventListener('pointerdown', e => {
+    const nav = (e.target as Element).closest<HTMLElement>('.deriz__nav'); if (!nav || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const card = nav.closest<HTMLElement>('.fxc'), fx = card && find(card); if (!card || !fx?.deriz) return;
+    nd = { card, fx, nav }; nav.setPointerCapture(e.pointerId); e.preventDefault(); navTo(e.clientX);
+  });
+  list.addEventListener('pointermove', e => { if (nd) navTo(e.clientX); });
+  list.addEventListener('pointerup', () => { nd = null; }); list.addEventListener('pointercancel', () => { nd = null; });
 
   // ---------- DERIZ: card miring 3D mengikuti kursor + kilau mengikuti arah cahaya (mouse saja; mati saat reduced-motion / drag garis start) ----------
   const untilt = (c: HTMLElement): void => { c.classList.remove('is-tilting'); c.style.setProperty('--rx', '0deg'); c.style.setProperty('--ry', '0deg'); c.style.setProperty('--mx', '50%'); c.style.setProperty('--my', '0%'); };
