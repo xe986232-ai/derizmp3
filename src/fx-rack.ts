@@ -118,7 +118,6 @@ const ICON_UP = svg('<path d="M12 16V5M7 10l5-5 5 5M5 19h14"/>', 16);
 const ICON_POP = svg('<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/>', 16);   // buka DERIZ di tengah layar
 const ICON_X = svg('<path d="M6 6l12 12M18 6L6 18"/>', 16);
 const esc = (t: string): string => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
-const fmtDur = (s: number): string => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
 const fmtPos = (s: number): string => { const q = Math.round(Math.max(0, s) * 10), m = Math.floor(q / 600), r = (q % 600) / 10; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1); };   // m:ss.d
 const posText = (z: DerizData | undefined): string => (z ? (z.busy !== undefined ? '' : 'Start ' + fmtPos(z.start * z.dur)) : 'Belum ada audio')   // selagi dimuat / dianalisis: tanpa teks, animasi ada di dalam canvas;
 const visS = (z: DerizData): number => (z.start - z.view) * z.zoom;   // posisi garis start dalam jendela yang terlihat (bisa di luar 0..1 saat di-zoom)
@@ -134,8 +133,6 @@ function derizHtml(fx: Fx): string {
     `<div class="deriz__knobs">${defOf('deriz').params.map(p => cellHtml(defOf('deriz'), fx, p)).join('')}</div>` +
     `<div class="deriz__nav${z && z.zoom > 1.001 ? '' : ' is-idle'}" aria-hidden="true"><i class="deriz__thumb"${z ? ` style="left:${(z.view * 100).toFixed(3)}%;width:${(100 / z.zoom).toFixed(3)}%"` : ''}></i></div>` +
     `<button type="button" class="deriz__swap"${z ? '' : ' hidden'}>Ganti</button></div>` +
-    `<div class="fxc__label deriz__meta"><span class="deriz__pos">${posText(z)}</span>` +
-    `<span class="deriz__dur"${z ? '' : ' hidden'}>${z ? fmtDur(z.dur) : ''}</span></div>` +
     `<div class="deriz__kb"><div class="keyboardkeyboardcontroller deriz__keys"><div class="keys"></div></div></div>` +
     `<input type="file" class="deriz__file" accept="${AUDIO_ACCEPT}" hidden></div></div>`;
 }
@@ -155,11 +152,8 @@ function updateDerizUi(card: HTMLElement, fx: Fx): void {
   card.querySelector('.deriz__stage')!.classList.toggle('has-audio', !!z);
   card.querySelector('.deriz__stage')!.classList.remove('is-loading');
   setBusy(card.querySelector<HTMLElement>('.deriz__stage')!, !!z && z.busy !== undefined);
-  card.querySelector('.deriz__pos')!.textContent = posText(z);
   updateZoomUi(card, z);
-  const dur = card.querySelector<HTMLElement>('.deriz__dur')!, swap = card.querySelector<HTMLElement>('.deriz__swap')!;
-  dur.hidden = swap.hidden = !z;
-  dur.textContent = z ? fmtDur(z.dur) : '';
+  card.querySelector<HTMLElement>('.deriz__swap')!.hidden = !z;
 }
 
 // ---------- spektrogram: STFT (jendela Hann, FFT radix-2; dua frame nyata dikemas satu FFT kompleks), frekuensi skala log ----------
@@ -749,15 +743,15 @@ export function initFxRack(host: () => AudioHost): FxRack {
   // ---------- DERIZ: upload audio ke canvas (tombol, "Ganti", atau drag & drop file) ----------
   async function loadDeriz(card: HTMLElement, file: File): Promise<void> {
     const fx = find(card); if (!fx) return;
-    const stage = card.querySelector<HTMLElement>('.deriz__stage')!, name = card.querySelector<HTMLElement>('.deriz__pos')!;
-    const warn = (msg: string): void => {   // pesan singkat di baris label, lalu kembali ke keadaan semula
+    const stage = card.querySelector<HTMLElement>('.deriz__stage')!;
+    const warn = (msg: string): void => {   // pesan singkat (tooltip di atas layar), lalu kembali ke keadaan semula
       setBusy(stage, false); stage.classList.remove('is-loading', 'is-shake'); void stage.offsetWidth; stage.classList.add('is-shake');
-      name.textContent = msg;
+      showTip(stage, msg, 2400);
       window.setTimeout(() => { if (card.isConnected) updateDerizUi(card, fx); }, 2400);
     };
     if (!isAudio(file)) { warn('Bukan file audio'); return; }
     const my = fx.tok = (fx.tok ?? 0) + 1;   // upload yang lebih baru membatalkan yang lama
-    stage.classList.add('is-loading'); setBusy(stage, true); name.textContent = '';
+    stage.classList.add('is-loading'); setBusy(stage, true);
     try {
       const buf = await decodeStandalone(file);
       if (my !== fx.tok) return;
@@ -806,7 +800,6 @@ export function initFxRack(host: () => AudioHost): FxRack {
     z.start = Math.max(0, Math.min(1, f));
     const mk = card.querySelector<HTMLElement>('.deriz__start')!;
     updateZoomUi(card, z);
-    card.querySelector('.deriz__pos')!.textContent = posText(z);
     mk.setAttribute('aria-valuenow', z.start.toFixed(4)); mk.setAttribute('aria-valuetext', posText(z));
     if (tipMs >= 0) showTip(mk, fmtPos(z.start * z.dur), tipMs);
   };
