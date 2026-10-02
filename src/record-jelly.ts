@@ -37,6 +37,22 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
   let homeNext: Node | null = null;          // sibling setelah card di kandangnya (untuk mengembalikan posisi DOM)
   let lift = 1;
 
+  // ?dbg=1 -> log kecil di layar (untuk cek di HP tanpa devtools)
+  let dbgEl: HTMLElement | null = null;
+  const dbgLines: string[] = [];
+  const dbg = (m: string): void => {
+    if (!/[?&]dbg=1/.test(location.search)) return;
+    if (!dbgEl) {
+      dbgEl = document.createElement('pre');
+      dbgEl.style.cssText = 'position:fixed;left:6px;bottom:84px;z-index:9999;margin:0;padding:6px 8px;max-width:70vw;font:10px/1.35 ui-monospace,monospace;color:#9f9;background:rgba(0,0,0,.75);border-radius:6px;pointer-events:none;white-space:pre-wrap';
+      document.body.appendChild(dbgEl);
+    }
+    dbgLines.push(m); if (dbgLines.length > 9) dbgLines.shift();
+    dbgEl.textContent = dbgLines.join('\n');
+  };
+  ['pointerdown', 'pointerup', 'pointercancel', 'lostpointercapture', 'contextmenu'].forEach(t =>
+    document.addEventListener(t, ev => { if (card || t === 'pointerdown') dbg(t + (ev.cancelable === false ? '' : ' ') + ((ev as PointerEvent).pointerType || '') + (card ? ' held=' + held : '')); }, true));
+
   const selected = (): HTMLElement | null => headersList.querySelector('.trackheader--selected');
 
   function measureNatural(): void {
@@ -141,6 +157,7 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
   // klik tahan selesai: card terangkat jadi overlay (lepas dari kandang) dan langsung bisa dibawa kemana saja
   function pickUp(): void {
     if (!pending || !card) return;
+    dbg('PICKUP');
     pending = false; held = true; suppressClick = true;
     p0x = lx; p0y = ly; o0x = x; o0y = y; tx = x; ty = y;
     try { navigator.vibrate?.(12); } catch { /* abaikan */ }
@@ -208,8 +225,16 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
     if (suppressClick) { e.stopPropagation(); e.preventDefault(); suppressClick = false; }
   }, true);
 
-  // tahan lama di HP memicu menu konteks / seleksi teks: matikan untuk card yang dipilih saat Record Mode
-  headersList.addEventListener('contextmenu', e => { if (recOn() && (e.target as HTMLElement).closest('.trackheader--selected')) e.preventDefault(); });
+  // Android/Chrome: tahan lama memicu menu konteks / seleksi teks ~500ms -> pointercancel -> card terlepas & balik sendiri.
+  // Listener harus di document (capture): setelah terangkat card sudah di <body>, bukan lagi di headersList.
+  document.addEventListener('contextmenu', e => {
+    const t = e.target as HTMLElement | null;
+    if (card || (recOn() && t && t.closest && t.closest('.trackheader--selected'))) e.preventDefault();
+  }, true);
+  document.addEventListener('selectstart', e => { if (card) e.preventDefault(); }, true);
+  document.addEventListener('dragstart', e => { if (card) e.preventDefault(); }, true);
+  // jaga-jaga: saat card terangkat, cegah scroll / pull-to-refresh dari gesture yang sama
+  document.addEventListener('touchmove', e => { if (held && e.cancelable) e.preventDefault(); }, { passive: false });
 
   // ganti track / Record Mode dimatikan -> hentikan goyangan
   document.addEventListener('recmodechange', () => { if (!recOn() && card) finish(); });
