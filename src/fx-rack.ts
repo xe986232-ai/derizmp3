@@ -338,6 +338,7 @@ export interface FxRack {
   derizIds(track: string): number[];          // semua DERIZ di track ini, urut kartu (yang pertama = bawaan track)
   derizAll(): Array<{ id: number; track: string }>;   // semua DERIZ yang menyala dan sudah berisi audio, di semua track
   derizTrackOf(fxId: number): string | undefined;
+  addDeriz(track: string): void;   // tambah DERIZ di bawah yang sudah ada di track ini (dipakai saat membuka project; tanpa jendela otomatis)
   derizExport(track: string): DerizSaved[];   // keadaan semua DERIZ di track ini (urut kartu): nyala/mati, knob, audio + garis start + zoom
   derizImport(track: string, i: number, st: DerizSaved): void;   // pasang keadaan ke DERIZ ke-i di track ini (DERIZ-nya harus sudah ada)
   derizLabel(fxId: number): string;           // "DERIZ", "DERIZ 2", ...
@@ -1142,6 +1143,15 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   document.getElementById('fxBody')!.addEventListener('keyup', guard);
 
   // ---------- simpan / buka project: keadaan DERIZ (audio sample, garis start, zoom, knob) ----------
+  function addDeriz(trackId: string | number): void {
+    const track = String(trackId), d = defOf('deriz'), v: Record<string, number> = {};
+    d.params.forEach(p => { v[p.key] = p.def; });
+    const fx: Fx = { id: ++seq, type: 'deriz', on: true, min: false, v };
+    racks.set(track, [...(racks.get(track) ?? []), fx]);
+    if (!plainOwner.has(track)) plainOwner.set(track, fx.id);
+    applyAudio(track);
+    if (cur === track) api.show(track);
+  }
   function derizExport(track: string): DerizSaved[] {
     return (racks.get(track) ?? []).filter(f => f.type === 'deriz').map(f => {
       const o: DerizSaved = { on: f.on, v: { ...f.v } };
@@ -1195,7 +1205,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     derizIds: track => (racks.get(track) ?? []).filter(f => f.type === 'deriz').map(f => f.id),
     derizAll: () => [...racks.entries()].flatMap(([track, r]) => r.filter(f => f.type === 'deriz' && f.on && f.deriz).map(f => ({ id: f.id, track }))),
     derizTrackOf: fxId => { for (const [track, r] of racks) if (r.some(f => f.id === fxId)) return track; return undefined; },
-    derizExport, derizImport,
+    addDeriz, derizExport, derizImport,
     derizLabel: fxId => { const n = derizNo(fxId); return n > 1 ? 'DERIZ ' + n : 'DERIZ'; }
   };
   return api;

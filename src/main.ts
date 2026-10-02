@@ -1484,7 +1484,7 @@ async function projectRestore(rec) {
     const sl = cont.querySelector('input[type=range]');
     if (sl) { sl.setAttribute('aria-label', 'Volume, ' + t.name); sl.value = t.vol; sl.dispatchEvent(new Event('input', {bubbles: true})); }
     panTip.hidden = true;
-    for (let i = fxRack.derizIds(id).length; i < (t.deriz || 0); i++) fxRack.addInstrument(id, 'deriz');
+    while (fxRack.derizIds(id).length < (t.deriz || 0)) { const n = fxRack.derizIds(id).length; if (n === 0) fxRack.addInstrument(id, 'deriz'); else fxRack.addDeriz(id); if (fxRack.derizIds(id).length === n) break; }   // DERIZ pertama = bawaan track, sisanya (hasil Duplicate / ditambah dari daftar efek) lewat addDeriz
     (t.dz || []).forEach((st, i) => {   // isi DERIZ: audio sample, garis start, zoom, knob
       const z = st.z && dBufs[st.z.k];
       fxRack.derizImport(id, i, {on: st.on !== false, v: st.v || {}, ...(z ? {z: {name: st.z.name, start: st.z.start || 0, zoom: st.z.zoom || 1, view: st.z.view || 0, buf: z}} : {})});
