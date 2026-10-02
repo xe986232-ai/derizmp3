@@ -1410,10 +1410,11 @@ initTrackMeters();   // meter level stereo di card track
 
 // ===== Simpan / buka file project (menu kanan atas) =====
 // Disimpan: BPM, panjang timeline, track (jenis, nama, warna, volume, on/off), pattern (posisi, lebar, judul), nada piano roll
-// (termasuk nada tiap DERIZ), dan audio clip di timeline. Belum disimpan: setelan efek/plugin dan isi audio di dalam plugin DERIZ.
+// (termasuk nada tiap DERIZ), audio clip di timeline, dan isi tiap plugin DERIZ (audio sample, garis start, zoom, knob, nyala/mati).
+// Belum disimpan: setelan efek lain (reverb, EQ, dst).
 const r3p = v => Math.round(v * 1e3) / 1e3;
 function projectSnapshot() {
-  const clips = {}, tracks = [], seenClips = new Set();
+  const clips = {}, tracks = [], seenClips = new Set(), dKeys = new Map();   // dKeys: audio DERIZ -> kunci 'd1', 'd2', ... (audio yang sama dipakai bersama disimpan sekali)
   document.querySelectorAll('.trackheader-container').forEach(c => {
     const id = c.dataset.track, lane = lanesEl.querySelector('.lane[data-track="' + id + '"]');
     const sl = c.querySelector('input[type=range]'), pwr = c.querySelector('.trackheader__pwr');
@@ -1434,10 +1435,20 @@ function projectSnapshot() {
       }
       return o;
     });
+    const dz = fxRack.derizExport(id).map(st => {
+      const o = {on: st.on, v: st.v};
+      if (st.z) {
+        let k = dKeys.get(st.z.buf);
+        if (!k) { k = 'd' + (dKeys.size + 1); dKeys.set(st.z.buf, k); clips[k] = encodeWav(st.z.buf); }
+        o.z = {k, name: st.z.name, start: st.z.start, zoom: st.z.zoom, view: st.z.view};
+      }
+      return o;
+    });
     tracks.push({
       id, ins: c.dataset.ins || 'Drums', name: document.getElementById('track-name-' + id).textContent,
       color: c.style.getPropertyValue('--track-color'), vol: sl ? +sl.value : 100,
       off: !!pwr && pwr.getAttribute('aria-checked') === 'false', deriz: fxRack.derizIds(id).length, pats,
+      ...(dz.some(x => x.z) ? {dz} : {}),
     });
   });
   return {data: {v: 1, bpm: BPM, bars: BARS, tracks}, clips};
@@ -1454,8 +1465,12 @@ function clearProject() {
 }
 async function projectRestore(rec) {
   const d = rec.data; if (!d || d.v !== 1) throw new Error('format project tidak dikenal');
-  const ctx = audio(), clipMap = {};
-  for (const [k, blob] of Object.entries(rec.clips || {})) clipMap[k] = addBuffer(await ctx.decodeAudioData(await blob.arrayBuffer()));
+  const ctx = audio(), clipMap = {}, dBufs = {};
+  for (const [k, blob] of Object.entries(rec.clips || {})) {
+    const buf = await ctx.decodeAudioData(await blob.arrayBuffer());
+    if (k[0] === 'd') dBufs[k] = buf;   // audio sample DERIZ (bukan clip timeline)
+    else clipMap[k] = addBuffer(buf);
+  }
   clearProject();
   setBpm(d.bpm || 120);
   if (d.bars > BARS) growTimeline(Math.min(MAX_BARS, d.bars));
@@ -1470,6 +1485,10 @@ async function projectRestore(rec) {
     if (sl) { sl.setAttribute('aria-label', 'Volume, ' + t.name); sl.value = t.vol; sl.dispatchEvent(new Event('input', {bubbles: true})); }
     panTip.hidden = true;
     for (let i = fxRack.derizIds(id).length; i < (t.deriz || 0); i++) fxRack.addInstrument(id, 'deriz');
+    (t.dz || []).forEach((st, i) => {   // isi DERIZ: audio sample, garis start, zoom, knob
+      const z = st.z && dBufs[st.z.k];
+      fxRack.derizImport(id, i, {on: st.on !== false, v: st.v || {}, ...(z ? {z: {name: st.z.name, start: st.z.start || 0, zoom: st.z.zoom || 1, view: st.z.view || 0, buf: z}} : {})});
+    });
     if (t.off) cont.querySelector('.trackheader__pwr').click();
     for (const p of t.pats) {
       const el = createPattern(lane, {start: p.s * BAR_W, width: p.w * BAR_W}, p.c && clipMap[p.c] ? {clip: clipMap[p.c], off: p.o || 0} : null);

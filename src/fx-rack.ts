@@ -323,6 +323,9 @@ function cardHtml(fx: Fx, i: number): string {
     `<div class="fxc__collapse"><div class="fxc__body">${body}</div></div></section>`;
 }
 
+// Keadaan satu DERIZ untuk disimpan / dibuka di file project (audio ikut: buf)
+export interface DerizSaved { on: boolean; v: Record<string, number>; z?: { name: string; start: number; zoom: number; view: number; buf: AudioBuffer } }
+
 export interface FxRack {
   show(track: string | null): void;   // tampilkan efek milik track ini (null = tidak ada track terpilih)
   drop(track: string): void;          // track dihapus: buang efeknya
@@ -335,6 +338,8 @@ export interface FxRack {
   derizIds(track: string): number[];          // semua DERIZ di track ini, urut kartu (yang pertama = bawaan track)
   derizAll(): Array<{ id: number; track: string }>;   // semua DERIZ yang menyala dan sudah berisi audio, di semua track
   derizTrackOf(fxId: number): string | undefined;
+  derizExport(track: string): DerizSaved[];   // keadaan semua DERIZ di track ini (urut kartu): nyala/mati, knob, audio + garis start + zoom
+  derizImport(track: string, i: number, st: DerizSaved): void;   // pasang keadaan ke DERIZ ke-i di track ini (DERIZ-nya harus sudah ada)
   derizLabel(fxId: number): string;           // "DERIZ", "DERIZ 2", ...
   derizOff(id: number): void;
   derizStop(): void;   // lepas semua nada DERIZ dan batalkan yang terjadwal
@@ -1136,7 +1141,33 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   document.getElementById('fxBody')!.addEventListener('keydown', guard);
   document.getElementById('fxBody')!.addEventListener('keyup', guard);
 
-  return {
+  // ---------- simpan / buka project: keadaan DERIZ (audio sample, garis start, zoom, knob) ----------
+  function derizExport(track: string): DerizSaved[] {
+    return (racks.get(track) ?? []).filter(f => f.type === 'deriz').map(f => {
+      const o: DerizSaved = { on: f.on, v: { ...f.v } };
+      if (f.deriz) o.z = { name: f.deriz.name, start: f.deriz.start, zoom: f.deriz.zoom, view: f.deriz.view, buf: f.deriz.buf };
+      return o;
+    });
+  }
+  function derizImport(track: string, i: number, st: DerizSaved): void {
+    const fx = (racks.get(track) ?? []).filter(f => f.type === 'deriz')[i]; if (!fx) return;
+    fx.on = st.on; fx.v = { ...fx.v, ...st.v };
+    autoOpen = null;   // membuka project: jangan memunculkan jendela DERIZ otomatis
+    if (st.z) {
+      const my = fx.tok = (fx.tok ?? 0) + 1;
+      const z: DerizData = { name: st.z.name, dur: st.z.buf.duration, buf: st.z.buf, start: st.z.start, zoom: st.z.zoom, view: st.z.view, spec: null, busy: 0 };
+      fx.deriz = z;
+      void computeSpec(z.buf, pct => { z.busy = pct; }, () => fx.deriz === z && fx.tok === my).then(spec => {
+        if (!spec || fx.deriz !== z) return;
+        z.spec = spec; z.busy = undefined;
+        const c = cardById(fx.id); if (c) { updateDerizUi(c, fx); paintDeriz(c, fx); }
+      });
+    }
+    applyAudio(track);
+    if (cur === track) api.show(track);   // kartu track ini sedang tampil: gambar ulang dengan keadaan baru
+  }
+
+  const api: FxRack = {
     show(track) {
       closePicker(true); closeMenu(true); hideTip(); drag = null; closeOverlay(true, true); ro.disconnect();
       cur = track;
@@ -1164,6 +1195,8 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     derizIds: track => (racks.get(track) ?? []).filter(f => f.type === 'deriz').map(f => f.id),
     derizAll: () => [...racks.entries()].flatMap(([track, r]) => r.filter(f => f.type === 'deriz' && f.on && f.deriz).map(f => ({ id: f.id, track }))),
     derizTrackOf: fxId => { for (const [track, r] of racks) if (r.some(f => f.id === fxId)) return track; return undefined; },
+    derizExport, derizImport,
     derizLabel: fxId => { const n = derizNo(fxId); return n > 1 ? 'DERIZ ' + n : 'DERIZ'; }
   };
+  return api;
 }
