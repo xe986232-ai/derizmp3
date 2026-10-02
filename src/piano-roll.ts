@@ -17,7 +17,7 @@ type Tool = 'draw' | 'select' | 'erase' | 'pan';
 
 import { slideSource, glideBeats } from './note-slide';
 const P_MIN = 24, P_MAX = 108, ROWS = P_MAX - P_MIN + 1;   // C1..C8
-const KEY_W = 64, RULER_H = 32, BEATS_PER_BAR = 4, BARS = 8;   // grid selalu 8 bar (nomor 1..8)
+const KEY_W = 64, RULER_H = 32, BEATS_PER_BAR = 4, BARS = 15;   // grid selalu 15 bar (nomor 1..15)
 const PPB_MIN = 8, PPB_MAX = 480, ROW_MIN = 10, ROW_MAX = 40;
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const BLACK = new Set([1, 3, 6, 8, 10]);
