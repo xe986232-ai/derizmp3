@@ -607,19 +607,30 @@ button{font:inherit;color:inherit;cursor:pointer}
 .fxc__panel[hidden]{display:none}
 /* plugin DERIZ: canvas audio + upload. Isi setinggi card knob (canvas 72px + satu baris label), jadi ukuran card sama dengan Reverb / EQ */
 .deriz__cell{width:100%;align-items:stretch}
-.deriz__stage{position:relative;height:72px;border-radius:10px;overflow:hidden;background:#1c1c25;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);transition:box-shadow .2s ease}
+.deriz__stage{position:relative;height:72px;border-radius:10px;overflow:hidden;background:#1c1c25;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);transition:box-shadow .2s ease;
+  touch-action:pan-y;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+.deriz__stage.has-audio{cursor:ew-resize}
 .deriz__stage.is-over{box-shadow:inset 0 0 0 2px var(--accent)}
 .deriz__stage.is-shake{animation:uplShake .3s ease}
 .deriz__canvas{position:absolute;inset:0;width:100%;height:100%;display:block;transition:opacity .25s ease}
 .deriz__stage.is-loading .deriz__canvas{opacity:.35}
-.deriz__up{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:6px;height:34px;padding:0 14px;border:0;border-radius:10px;background:#f3f3f6;color:#16161d;font-family:inherit;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer;
+/* garis start: bagian sebelum garis diredupkan; garis putih + pegangan segitiga di atas, digeser lewat pointer di .deriz__stage */
+.deriz__stage::before{content:"";position:absolute;left:0;top:0;bottom:0;width:calc(6px + var(--s,0) * (100% - 12px));background:rgba(14,14,20,.55);pointer-events:none;z-index:1;opacity:0;transition:opacity .25s ease}
+.deriz__stage.has-audio::before{opacity:1}
+.deriz__start{display:none;position:absolute;top:0;bottom:0;left:calc(6px + var(--s,0) * (100% - 12px));width:28px;margin-left:-14px;z-index:2;outline:none;pointer-events:none}
+.deriz__stage.has-audio .deriz__start{display:block}
+.deriz__start::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;border-radius:1px;background:#fff;transition:background-color .15s ease,box-shadow .15s ease}
+.deriz__start::after{content:"";position:absolute;left:50%;top:0;width:12px;height:9px;margin-left:-6px;background:#fff;clip-path:polygon(0 0,100% 0,50% 100%);transition:background-color .15s ease}
+.deriz__stage.is-dragging .deriz__start::before,.deriz__stage.is-dragging .deriz__start::after{background:#e4dcff}
+.deriz__start:focus-visible::before{box-shadow:0 0 0 2px var(--accent)}
+.deriz__up{z-index:3;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:6px;height:34px;padding:0 14px;border:0;border-radius:10px;background:#f3f3f6;color:#16161d;font-family:inherit;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer;
   transition:transform .25s var(--ease-spring),background-color .2s ease,opacity .25s ease}
 .deriz__up:hover{background:#fff;transform:translate(-50%,-50%) scale(1.04)}
 .deriz__up:active{transform:translate(-50%,-50%) scale(.95);transition-duration:.08s}
 .deriz__up:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .deriz__stage.has-audio .deriz__up,.deriz__stage.is-loading .deriz__up{opacity:0;pointer-events:none}
 .deriz__meta{display:flex;align-items:baseline;justify-content:space-between;gap:8px;min-width:0}
-.deriz__name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.deriz__pos{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
 .deriz__dur{flex:none;font-variant-numeric:tabular-nums}
 .deriz__swap{flex:none;padding:0;border:0;background:none;color:var(--accent);font:inherit;line-height:inherit;cursor:pointer;transition:opacity .2s ease}
 .deriz__swap:hover{opacity:.8}

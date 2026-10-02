@@ -12,7 +12,7 @@ import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } f
 
 type FxType = 'reverb' | 'eq' | 'supersaw' | 'deriz';
 // DERIZ: audio yang di-upload ke canvas plugin (buffer disimpan untuk tahap berikutnya; peaks + max khusus untuk menggambar waveform)
-interface DerizData { name: string; dur: number; buf: AudioBuffer; peaks: Float32Array; max: number; }
+interface DerizData { name: string; dur: number; buf: AudioBuffer; peaks: Float32Array; max: number; start: number; }   // start: posisi garis start, 0..1 dari durasi
 interface Fx { id: number; type: FxType; on: boolean; min: boolean; tab?: number; v: Record<string, number>; deriz?: DerizData; tok?: number; }
 interface Param { key: string; label: string; def: number; fmt: (v: number) => string; bipolar?: boolean; slider?: boolean; tab?: string; }   // tab: nama kategori (plugin dengan tab)   // bipolar: arc dari tengah (seperti knob pan); slider: slider vertikal, bukan knob
 interface EffectDef { type: FxType; name: string; params: Param[]; synth?: boolean; }   // synth: plugin instrumen (otomatis ada di track synth)
@@ -113,14 +113,18 @@ const cellHtml = (d: EffectDef, fx: Fx, p: Param): string => p.slider
 const ICON_UP = svg('<path d="M12 16V5M7 10l5-5 5 5M5 19h14"/>', 16);
 const esc = (t: string): string => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 const fmtDur = (s: number): string => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+const fmtPos = (s: number): string => { const q = Math.round(Math.max(0, s) * 10), m = Math.floor(q / 600), r = (q % 600) / 10; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1); };   // m:ss.d
+const posText = (z: DerizData | undefined): string => (z ? 'Start ' + fmtPos(z.start * z.dur) : 'Belum ada audio');
+const DERIZ_PAD = 6;   // jarak kiri/kanan canvas: garis start di 0 / 1 dan ujung waveform sejajar, pegangan tidak terpotong
 
 // Tinggi isi sama dengan card knob (Reverb / EQ): canvas 72 px (= tinggi knob) + satu baris label, dalam wadah .fxc__knobs yang sama.
 function derizHtml(fx: Fx): string {
   const z = fx.deriz;
   return `<div class="fxc__knobs deriz"><div class="fxc__cell deriz__cell">` +
-    `<div class="deriz__stage${z ? ' has-audio' : ''}"><canvas class="deriz__canvas" role="img" aria-label="Waveform audio DERIZ"></canvas>` +
+    `<div class="deriz__stage${z ? ' has-audio' : ''}" style="--s:${z ? z.start.toFixed(4) : 0}"><canvas class="deriz__canvas" role="img" aria-label="Waveform audio DERIZ"></canvas>` +
+    `<div class="deriz__start" role="slider" tabindex="0" aria-label="Garis start" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${z ? z.start.toFixed(4) : 0}" aria-valuetext="${posText(z)}"></div>` +
     `<button type="button" class="deriz__up">${ICON_UP}<span>Upload audio</span></button></div>` +
-    `<div class="fxc__label deriz__meta"><span class="deriz__name">${z ? esc(z.name) : 'Belum ada audio'}</span>` +
+    `<div class="fxc__label deriz__meta"><span class="deriz__pos">${posText(z)}</span>` +
     `<span class="deriz__dur"${z ? '' : ' hidden'}>${z ? fmtDur(z.dur) : ''}</span>` +
     `<button type="button" class="deriz__swap"${z ? '' : ' hidden'}>Ganti</button></div>` +
     `<input type="file" class="deriz__file" accept="${AUDIO_ACCEPT}" hidden></div></div>`;
@@ -130,7 +134,8 @@ function updateDerizUi(card: HTMLElement, fx: Fx): void {
   const z = fx.deriz;
   card.querySelector('.deriz__stage')!.classList.toggle('has-audio', !!z);
   card.querySelector('.deriz__stage')!.classList.remove('is-loading');
-  card.querySelector('.deriz__name')!.textContent = z ? z.name : 'Belum ada audio';
+  card.querySelector('.deriz__pos')!.textContent = posText(z);
+  card.querySelector<HTMLElement>('.deriz__stage')!.style.setProperty('--s', z ? z.start.toFixed(4) : '0');
   const dur = card.querySelector<HTMLElement>('.deriz__dur')!, swap = card.querySelector<HTMLElement>('.deriz__swap')!;
   dur.hidden = swap.hidden = !z;
   dur.textContent = z ? fmtDur(z.dur) : '';
@@ -151,14 +156,14 @@ function paintDeriz(card: HTMLElement, fx: Fx): void {
   g.fillRect(0, Math.round(mid) - .5, w, 1);   // garis tengah (juga tampil saat canvas masih kosong)
   const z = fx.deriz;
   if (!z) return;
-  const n = z.peaks.length / 2, k = (mid - 4) / Math.max(z.max, 0.05);   // normalisasi: puncak tertinggi hampir memenuhi tinggi canvas
+  const n = z.peaks.length / 2, k = (mid - 4) / Math.max(z.max, 0.05), iw = Math.max(1, w - DERIZ_PAD * 2);   // normalisasi: puncak tertinggi hampir memenuhi tinggi canvas
   g.fillStyle = getComputedStyle(cv).getPropertyValue('--accent').trim() || '#a66cff';
-  for (let x = 0; x < w; x++) {
-    const lo = Math.min(n - 1, Math.floor(x * n / w)), hi = Math.min(n, Math.max(lo + 1, Math.floor((x + 1) * n / w)));
+  for (let x = 0; x < iw; x++) {
+    const lo = Math.min(n - 1, Math.floor(x * n / iw)), hi = Math.min(n, Math.max(lo + 1, Math.floor((x + 1) * n / iw)));
     let mn = 0, mx = 0;
     for (let b = lo; b < hi; b++) { if (z.peaks[b * 2] < mn) mn = z.peaks[b * 2]; if (z.peaks[b * 2 + 1] > mx) mx = z.peaks[b * 2 + 1]; }
     const y0 = mid - mx * k, y1 = mid - mn * k;
-    g.fillRect(x, y0, 1, Math.max(1, y1 - y0));
+    g.fillRect(DERIZ_PAD + x, y0, 1, Math.max(1, y1 - y0));
   }
 }
 
@@ -457,7 +462,7 @@ export function initFxRack(): FxRack {
   // ---------- DERIZ: upload audio ke canvas (tombol, "Ganti", atau drag & drop file) ----------
   async function loadDeriz(card: HTMLElement, file: File): Promise<void> {
     const fx = find(card); if (!fx) return;
-    const stage = card.querySelector<HTMLElement>('.deriz__stage')!, name = card.querySelector<HTMLElement>('.deriz__name')!;
+    const stage = card.querySelector<HTMLElement>('.deriz__stage')!, name = card.querySelector<HTMLElement>('.deriz__pos')!;
     const warn = (msg: string): void => {   // pesan singkat di baris label, lalu kembali ke keadaan semula
       stage.classList.remove('is-loading', 'is-shake'); void stage.offsetWidth; stage.classList.add('is-shake');
       name.textContent = msg;
@@ -470,7 +475,7 @@ export function initFxRack(): FxRack {
       const buf = await decodeStandalone(file), peaks = bucketPeaks(buf, 1200);
       let max = 0; for (let i = 0; i < peaks.length; i++) max = Math.max(max, Math.abs(peaks[i]));
       if (my !== fx.tok) return;
-      fx.deriz = { name: file.name, dur: buf.duration, buf, peaks, max };
+      fx.deriz = { name: file.name, dur: buf.duration, buf, peaks, max, start: 0 };
     } catch (err) {
       console.error(err);
       if (my === fx.tok) warn('File tidak bisa dibaca');
@@ -495,6 +500,61 @@ export function initFxRack(): FxRack {
     e.preventDefault(); z.classList.remove('is-over');
     const card = z.closest<HTMLElement>('.fxc'), f = e.dataTransfer?.files?.[0];
     if (card && f) void loadDeriz(card, f);
+  });
+
+  // ---------- DERIZ: garis start. Drag garisnya (atau tap / klik di mana saja pada canvas untuk memindahkan), panah keyboard menggeser, dobel klik = kembali ke 0 ----------
+  const fracAt = (stage: HTMLElement, x: number): number => {
+    const r = stage.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (x - r.left - DERIZ_PAD) / Math.max(1, r.width - DERIZ_PAD * 2)));
+  };
+  const setStart = (card: HTMLElement, fx: Fx, f: number, tipMs = -1): void => {   // tipMs: -1 tanpa tooltip, 0 tooltip menetap, >0 hilang otomatis
+    const z = fx.deriz; if (!z) return;
+    z.start = Math.max(0, Math.min(1, f));
+    const mk = card.querySelector<HTMLElement>('.deriz__start')!;
+    card.querySelector<HTMLElement>('.deriz__stage')!.style.setProperty('--s', z.start.toFixed(4));
+    card.querySelector('.deriz__pos')!.textContent = posText(z);
+    mk.setAttribute('aria-valuenow', z.start.toFixed(4)); mk.setAttribute('aria-valuetext', posText(z));
+    if (tipMs >= 0) showTip(mk, fmtPos(z.start * z.dur), tipMs);
+  };
+  let sd: { stage: HTMLElement; card: HTMLElement; fx: Fx; sx: number; off: number; drag: boolean } | null = null;
+  list.addEventListener('pointerdown', e => {
+    const stage = (e.target as Element).closest<HTMLElement>('.deriz__stage.has-audio'); if (!stage || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const card = stage.closest<HTMLElement>('.fxc'), fx = card && find(card); if (!card || !fx?.deriz) return;
+    const lineX = stage.getBoundingClientRect().left + DERIZ_PAD + fx.deriz.start * (stage.clientWidth - DERIZ_PAD * 2);
+    const near = Math.abs(e.clientX - lineX) <= 18;
+    // mouse: langsung pindah + drag. Sentuh: hanya drag kalau menyentuh garisnya; sentuhan lain = tap (dihitung saat dilepas) supaya scroll panel tidak menggeser garis
+    sd = { stage, card, fx, sx: e.clientX, off: near ? lineX - e.clientX : 0, drag: near || e.pointerType === 'mouse' };
+    stage.setPointerCapture(e.pointerId); stage.classList.add('is-dragging');
+    card.querySelector<HTMLElement>('.deriz__start')!.focus({ preventScroll: true });
+    if (sd.drag) { setStart(card, fx, fracAt(stage, e.clientX + sd.off), 0); e.preventDefault(); }
+  });
+  list.addEventListener('pointermove', e => {
+    if (sd?.drag) setStart(sd.card, sd.fx, fracAt(sd.stage, e.clientX + sd.off), 0);
+  });
+  const endStart = (e: PointerEvent): void => {
+    if (!sd) return;
+    const s = sd; sd = null;
+    s.stage.classList.remove('is-dragging'); hideTip();
+    if (e.type === 'pointerup' && !s.drag && Math.abs(e.clientX - s.sx) < 8) setStart(s.card, s.fx, fracAt(s.stage, e.clientX), 900);   // tap
+  };
+  list.addEventListener('pointerup', endStart);
+  list.addEventListener('pointercancel', endStart);
+  list.addEventListener('dblclick', e => {
+    const stage = (e.target as Element).closest<HTMLElement>('.deriz__stage.has-audio'); if (!stage) return;
+    const card = stage.closest<HTMLElement>('.fxc'), fx = card && find(card);
+    if (card && fx?.deriz) setStart(card, fx, 0, 900);
+  });
+  list.addEventListener('keydown', e => {
+    const mk = (e.target as Element).closest<HTMLElement>('.deriz__start'); if (!mk) return;
+    const card = mk.closest<HTMLElement>('.fxc'), fx = card && find(card), z = fx?.deriz; if (!card || !fx || !z) return;
+    const step = e.shiftKey ? 0.05 : 0.01;
+    let f: number | null = null;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') f = z.start + step;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') f = z.start - step;
+    else if (e.key === 'Home') f = 0; else if (e.key === 'End') f = 1;
+    if (f === null) return;
+    e.preventDefault(); e.stopPropagation();   // panah tidak ikut memicu mundur / maju milik DAW
+    setStart(card, fx, f, 900);
   });
 
   list.addEventListener('click', e => {
