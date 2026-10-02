@@ -926,3 +926,15 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 /* tombol layar penuh: saat piano roll terbuka, kecil dan bergeser ke kiri tombol X supaya tidak menimpanya */
 body:has(.pr.is-open) .landscape-btn{width:26px;height:26px;top:calc(env(safe-area-inset-top,0px) + 5px);right:calc(env(safe-area-inset-right,0px) + 52px)}
 body:has(.pr.is-open) .landscape-btn svg{width:14px;height:14px}
+
+/* Bar transport (bawah: M, Undo, Rewind, Play, Forward, Redo, buka keyboard) diperkecil */
+.studioheader__transport-controls-mobile{padding:3px 10px;border-radius:12px 12px 0 0}
+.transport-controls{gap:6px}
+.transport-controls__side{gap:2px}
+.transport-controls__button{width:28px;height:28px}
+.transport-controls__button .soundtrap-icon{width:16px;height:16px}
+.transport-controls .play{width:34px;height:34px}
+.transport-controls .play .soundtrap-icon{width:18px;height:18px}
+.hist-btn{width:28px;height:28px;font-size:9px}
+.metro-btn{font-size:12px}
+.kbd-toggle svg{width:16px;height:16px}
