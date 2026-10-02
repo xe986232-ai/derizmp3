@@ -317,7 +317,7 @@ html[data-rec="on"] .pat-bar{display:none}   /* menu bulat di atas pattern disem
 /* ===== RECORD MODE: card track terpilih bisa digoyang (src/record-jelly.ts) ===== */
 html[data-rec="on"] .trackheader--selected{touch-action:none;cursor:grab;will-change:transform}
 html[data-rec="on"] .trackheader--selected :is(input,.knob,[role="slider"]){cursor:auto}
-html.is-jelly .tracklist{overflow:visible}                      /* card boleh keluar dari kolom daftar track selama bergerak */
+html.is-jelly .tracklist{overflow:visible;z-index:190}                      /* card boleh keluar dari kolom daftar track selama bergerak */
 .trackheader-container.is-jelly{z-index:60}
 .trackheader.is-jelly{cursor:grabbing;user-select:none;-webkit-user-select:none;box-shadow:var(--bevel),0 18px 38px rgba(0,0,0,.5)}
 @media (prefers-reduced-motion:reduce){.lane,.mp__switch,.mp__switch i{transition:none}}

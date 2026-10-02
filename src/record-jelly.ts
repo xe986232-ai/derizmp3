@@ -45,9 +45,10 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
   }
 
   function clampTarget(): void {
-    const ws = workspace.getBoundingClientRect(), m = 6;
-    const minX = ws.left + m - nat.l, maxX = ws.right - m - nat.r;
-    const minY = ws.top + m - nat.t, maxY = ws.bottom - m - nat.b;
+    // batas = seluruh layar (bukan cuma .workspace), supaya card bisa dibawa ke mana saja
+    const vw = document.documentElement.clientWidth, vh = window.innerHeight, m = 6;
+    const minX = m - nat.l, maxX = vw - m - nat.r;
+    const minY = m - nat.t, maxY = vh - m - nat.b;
     tx = Math.min(Math.max(tx, Math.min(minX, 0)), Math.max(maxX, 0));
     ty = Math.min(Math.max(ty, Math.min(minY, 0)), Math.max(maxY, 0));
   }
@@ -56,15 +57,27 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
     if (!card || !cont) return;
     root.classList.add('is-jelly');
     cont.classList.add('is-jelly');
+    cont.classList.add('is-moved');   // matikan animasi masuk (fill-mode both menyisakan transform -> jadi containing block position:fixed & card tetap terpotong)
     card.classList.add('is-jelly');
     card.style.transition = 'none';
+    // angkat card keluar dari kandang: position:fixed lolos dari overflow .workspace/.tracklist.
+    // Slot di daftar track tetap (tinggi container fix), card dihitung dari posisi asalnya.
+    const s = card.style, w = card.offsetWidth, h = card.offsetHeight;   // ukur SEBELUM fixed (height:100% jadi merujuk ke layar)
+    s.position = 'fixed'; s.left = nat.l + 'px'; s.top = nat.t + 'px';
+    s.width = w + 'px'; s.height = h + 'px';
+    s.margin = '0'; s.boxSizing = 'border-box';
     last = performance.now();
     if (!raf) raf = requestAnimationFrame(tick);
   }
 
   function finish(): void {
     cancelAnimationFrame(raf); raf = 0;
-    if (card) { card.style.transform = ''; card.style.transition = ''; card.classList.remove('is-jelly'); }
+    if (card) {
+      const s = card.style;
+      s.transform = ''; s.transition = '';
+      s.position = s.left = s.top = s.width = s.height = s.margin = s.boxSizing = '';
+      card.classList.remove('is-jelly');
+    }
     if (cont) cont.classList.remove('is-jelly');
     root.classList.remove('is-jelly');
     card = cont = null;
