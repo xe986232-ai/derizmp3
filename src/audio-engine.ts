@@ -271,7 +271,9 @@ export function setEq(track: string, p: EqParams | null): void {
 
 function release(r: { src: AudioBufferSourceNode; env: GainNode }, now: number): void {
   r.src.onended = null;
+  const cur = r.env.gain.value;               // nilai saat ini (bisa sedang di tengah fade-in / fade-out clip)
   r.env.gain.cancelScheduledValues(now);
+  r.env.gain.setValueAtTime(cur, now);        // tanpa ini gain loncat balik ke 1 setelah cancel -> klik
   r.env.gain.setTargetAtTime(0, now, .008);   // fade sangat singkat agar tidak ada bunyi "klik"
   try { r.src.stop(now + .06); } catch { /* sudah berhenti */ }
   setTimeout(() => { r.src.disconnect(); r.env.disconnect(); }, 120);
@@ -287,6 +289,8 @@ export function stopTrack(ctx: AudioContext | null, track: string): void {
   if (!ctx) return;
   active.forEach(r => { if (r.track === track) { release(r, ctx.currentTime); active.delete(r); } });
 }
+
+const CLIP_FADE_IN = .004, CLIP_FADE_OUT = .006;   // detik; cukup singkat supaya serangan (transien) tidak terasa tumpul
 
 // Jadwalkan semua clip mulai dari posisi `fromBar`; `t0` = waktu AudioContext saat fromBar dimainkan.
 export function play(ctx: AudioContext, dest: AudioNode, clips: ClipPlacement[], fromBar: number, secPerBar: number, t0: number): void {
@@ -305,6 +309,11 @@ export function play(ctx: AudioContext, dest: AudioNode, clips: ClipPlacement[],
     const src = ctx.createBufferSource(), env = ctx.createGain();
     src.buffer = e.buf;
     src.connect(env); env.connect(trackGain(ctx, dest, c.track));
+    // clip dimulai / diakhiri di titik mana pun pada gelombang (offset, potongan, split): tanpa fade terdengar sebagai klik / kresek
+    const fin = Math.min(CLIP_FADE_IN, dur / 2), fout = Math.min(CLIP_FADE_OUT, dur / 2), tNow = Math.max(when, ctx.currentTime);
+    env.gain.setValueAtTime(0, tNow);
+    env.gain.linearRampToValueAtTime(1, tNow + fin);
+    if (when + dur - fout > tNow + fin) { env.gain.setValueAtTime(1, when + dur - fout); env.gain.linearRampToValueAtTime(0, when + dur); }
     const rec = { src, env, track: c.track };
     src.onended = () => { active.delete(rec); src.disconnect(); env.disconnect(); };
     active.add(rec);
