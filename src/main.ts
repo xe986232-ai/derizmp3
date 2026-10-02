@@ -989,6 +989,7 @@ function scheduleClips(countIn) {
 function startPlay() {
   if (playing) return;
   if (posBars >= BARS) posBars = 0;
+  startMark = posBars;   // titik start: tombol mundur akan kembali ke sini
   playing = true; scheduleClips(metro.countIn);
   playRaf = requestAnimationFrame(tick); syncTransportUI();
 }
@@ -997,12 +998,25 @@ function pausePlay() {
 }
 const togglePlay = () => playing ? pausePlay() : startPlay();
 function toStart() {
-  pausePlay(); posBars = 0; renderPlayhead(); syncTransportUI();
+  pausePlay(); posBars = 0; startMark = 0; renderPlayhead(); syncTransportUI();
   wsEl.scrollTo({left: 0, behavior: 'smooth'});
 }
 function seekBy(d) {
   posBars = Math.max(0, Math.min(BARS, posBars + d)); renderPlayhead();
   if (playing) scheduleClips();   // lompat saat sedang main: suara ikut pindah
+  else startMark = posBars;       // playhead digeser manual saat berhenti: posisi barunya jadi titik start
+}
+// Tombol mundur: kembali ke titik tempat terakhir kali Play dimulai; kalau sudah di sana (atau di sebelum itu), klik lagi = ke awal (bar 1)
+let startMark = 0;
+function showPlayhead() {   // geser timeline kalau playhead keluar dari layar
+  const off = tlEl.offsetLeft, x = off + posBars * BAR_W, l = wsEl.scrollLeft, w = wsEl.clientWidth;
+  if (x < l + off + 8 || x > l + w - 24) wsEl.scrollTo({left: Math.max(0, x - w * .3), behavior: REDUCE ? 'instant' : 'smooth'});
+}
+function rewind() {
+  const to = posBars > startMark + 1e-6 ? startMark : 0;
+  startMark = to;
+  posBars = to; renderPlayhead(); showPlayhead();
+  if (playing) scheduleClips();   // sedang main: lanjut main dari titik tujuan
 }
 // ===== Metronome & BPM project =====
 // Ganti BPM: 1 bar jadi lebih pendek / panjang. Posisi playhead (dalam bar) tetap; audio clip mempertahankan isi audionya,
@@ -1049,7 +1063,8 @@ function holdSeek(btn, d) {
   ['pointerup', 'pointerleave', 'pointercancel', 'blur'].forEach(ev => btn.addEventListener(ev, stop));
   btn.addEventListener('click', e => { if (e.detail === 0) seekBy(d); });   // aktivasi lewat keyboard (Enter/Space)
 }
-holdSeek(btnRew, -1); holdSeek(btnFwd, 1);
+btnRew.addEventListener('click', rewind);   // juga menangani Enter / Space saat tombol difokus
+holdSeek(btnFwd, 1);
 // pintasan: Space = putar/jeda, panah kiri/kanan = mundur/maju
 let spaceHandled = false;
 document.addEventListener('keydown', e => {
@@ -1059,7 +1074,7 @@ document.addEventListener('keydown', e => {
     e.preventDefault(); spaceHandled = true;
     if (!e.repeat) togglePlay();
   } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.ctrlKey && !e.shiftKey && !(e.target.matches && e.target.matches('input[type="range"]'))) {
-    e.preventDefault(); seekBy(e.key === 'ArrowLeft' ? -1 : 1);
+    e.preventDefault(); e.key === 'ArrowLeft' ? rewind() : seekBy(1);
   }
 });
 document.addEventListener('keyup', e => {   // cegah Space ikut "mengklik" tombol yang sedang fokus
