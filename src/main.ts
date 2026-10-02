@@ -8,7 +8,7 @@ import { hasSynth, startVoice, releaseVoice, playNote, stopAllSynth } from './sy
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
 import { decodeFile, addBuffer, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
-import { openPianoRoll, setPianoRollPlayhead, setPianoRollChangeHandler, getPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, PR_BEATS } from './piano-roll';
+import { openPianoRoll, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, PR_BEATS } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 initLandscape();
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1021,6 +1021,13 @@ function showPlayhead() {   // geser timeline kalau playhead keluar dari layar
   const off = tlEl.offsetLeft, x = off + posBars * BAR_W, l = wsEl.scrollLeft, w = wsEl.clientWidth;
   if (x < l + off + 8 || x > l + w - 24) wsEl.scrollTo({left: Math.max(0, x - w * .3), behavior: REDUCE ? 'instant' : 'smooth'});
 }
+// Tap / seret penggaris piano roll: playhead pindah ke posisi itu (relatif awal pattern yang dibuka)
+setPianoRollSeekHandler((beats, final) => {
+  posBars = Math.max(0, Math.min(BARS, prStartBar + beats / 4)); renderPlayhead();
+  if (!final) return;
+  if (playing) scheduleClips();   // sedang main: suara ikut pindah (hanya saat jari dilepas)
+  else startMark = posBars;       // berhenti: posisi baru jadi titik start
+});
 function rewind() {
   const to = posBars > startMark + 1e-6 ? startMark : 0;
   startMark = to;

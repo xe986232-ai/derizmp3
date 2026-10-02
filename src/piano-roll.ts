@@ -287,6 +287,21 @@ export function setPianoRollPlayhead(beats: number) { phBeat = beats; if (root &
 // ---------- sinkron ke timeline: isi note ditampilkan mini di dalam pattern ----------
 let onChange: ((id: string) => void) | null = null, notified = '';
 export const setPianoRollChangeHandler = (fn: (id: string) => void) => { onChange = fn; };
+// Tap / seret di penggaris (atas) = pindahkan playhead ke posisi itu. beats = ketukan dari awal pattern; final = jari/klik dilepas.
+let onSeek: ((beats: number, final: boolean) => void) | null = null;
+export const setPianoRollSeekHandler = (fn: (beats: number, final: boolean) => void) => { onSeek = fn; };
+let seekId = -1;
+function seekAt(e: PointerEvent, final: boolean) {
+  if (!onSeek) return;
+  const x = e.clientX - rc.getBoundingClientRect().left;
+  onSeek(clamp((curL() + x) / ppb, 0, total), final);
+}
+function onRulerDown(e: PointerEvent) {
+  if (seekId !== -1 || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  seekId = e.pointerId; rc.setPointerCapture(e.pointerId); seekAt(e, false);
+}
+function onRulerMove(e: PointerEvent) { if (e.pointerId === seekId) seekAt(e, false); }
+function onRulerUp(e: PointerEvent) { if (e.pointerId !== seekId) return; seekId = -1; seekAt(e, true); }
 function notifyChange() {
   if (!onChange || !curKey) return;
   const sn = curKey + snapshot();
@@ -881,6 +896,10 @@ function build(): HTMLElement {
   };
   el.querySelectorAll<HTMLElement>('[data-act]').forEach(b => b.addEventListener('click', () => acts[b.dataset.act!]()));
 
+  rc.addEventListener('pointerdown', onRulerDown);
+  rc.addEventListener('pointermove', onRulerMove);
+  rc.addEventListener('pointerup', onRulerUp);
+  rc.addEventListener('pointercancel', onRulerUp);
   gc.addEventListener('pointerdown', onDown);
   gc.addEventListener('pointermove', onMove);
   gc.addEventListener('pointerup', onUp);
