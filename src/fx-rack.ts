@@ -46,7 +46,7 @@ const EFFECTS: EffectDef[] = [
       { key: 'high', label: 'High', def: 0.5, bipolar: true, fmt: fmtDb }
     ]
   },
-  { type: 'deriz', name: 'DERIZ', params: [] },   // plugin canvas audio: isinya canvas waveform + upload (tanpa knob)
+  { type: 'deriz', name: 'DERIZ', params: [], synth: true },   // plugin track DERIZ: spektrogram + upload (tanpa knob); dibuat dari "+ Tambahkan track", bukan dari daftar efek
   {
     type: 'supersaw', name: 'Supersaw', synth: true,
     params: [
@@ -311,7 +311,7 @@ function cardHtml(fx: Fx, i: number): string {
 export interface FxRack {
   show(track: string | null): void;   // tampilkan efek milik track ini (null = tidak ada track terpilih)
   drop(track: string): void;          // track dihapus: buang efeknya
-  addInstrument(track: string, type: 'supersaw'): void;   // track synth baru: pasang plugin instrumennya (kartu di paling atas)
+  addInstrument(track: string, type: 'supersaw' | 'deriz'): void;   // track synth baru: pasang plugin instrumennya (kartu di paling atas)
   closePicker(instant?: boolean): void;
 }
 

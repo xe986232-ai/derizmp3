@@ -821,7 +821,7 @@ fxRack.show(selTrack ? selTrack.closest('.trackheader-container').dataset.track 
 // ===== Menu "Tambahkan track" =====
 const INSTRUMENTS = [
   {n:'Drums', c:'#ff9f1c'}, {n:'Audio clip', c:'#14b8a6'}, {n:'Supersaw', c:'#5b3de8'},
-  {n:'Minisynth', c:'#2f7bff'}, {n:'GMS Synth', c:'#ff4d8d'}, {n:'DW Sampler', c:'#3fbf5f'}
+  {n:'Minisynth', c:'#2f7bff'}, {n:'GMS Synth', c:'#ff4d8d'}, {n:'DW Sampler', c:'#3fbf5f'}, {n:'DERIZ', c:'#22c7e8'}
 ];
 let addMenu = null, addBtn = null;
 let trackSeq = Math.max(1, ...[...document.querySelectorAll('.trackheader-container')].map(c => +c.dataset.track));
@@ -881,6 +881,7 @@ function addTrack(t) {
   initRec(cont); initSliders(cont); initKnobs(cont); initMore(cont);
   cont.querySelector('.trackheader__left-content').title = panelCollapsed() ? 'Buka panel track' : 'Tutup panel track';
   if (t.n === 'Supersaw') fxRack.addInstrument(id, 'supersaw');   // plugin synth otomatis muncul di panel efek track ini
+  if (t.n === 'DERIZ') fxRack.addInstrument(id, 'deriz');   // plugin DERIZ (spektrogram + upload audio) juga otomatis muncul di track ini
   selectTrack(cont);
   if (!REDUCE) {
     const H = lane.offsetHeight, o = {duration:520, easing:EASE_OUT, fill:'backwards'};
