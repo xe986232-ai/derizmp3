@@ -307,7 +307,7 @@ function cardHtml(fx: Fx, i: number): string {
   return `<section class="fxc${fx.on ? '' : ' is-off'}${fx.min ? ' is-min' : ''}${tabs.length ? ' has-tabs' : ''}${fx.type === 'deriz' ? ' fxc--deriz' : ''}" data-fx="${fx.id}" style="--i:${i}" aria-label="${d.name}">` +
     `<header class="fxc__head"><h3 class="fxc__name"><button type="button" class="fxc__title" aria-expanded="${!fx.min}" title="Klik untuk minimize / maximize">${d.name}</button></h3>${tabBar}` +
     `<button type="button" class="fxc__pwr" role="switch" aria-checked="${fx.on}" aria-label="${d.name} nyala / mati" title="Nyala / mati"></button>` +
-    (fx.type === 'deriz' ? `<button type="button" class="fxc__pop" aria-label="Buka DERIZ di tengah layar" title="Buka di tengah layar">${ICON_POP}</button>` : '') +
+    (fx.type === 'deriz' ? `<button type="button" class="fxc__pop" aria-label="Buka DERIZ di tengah layar" title="Buka di tengah layar">${ICON_POP}</button><button type="button" class="fxc__close" aria-label="Tutup DERIZ" title="Tutup (Esc)">${ICON_X}</button>` : '') +
     (d.synth ? '' : `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi ${d.name}" title="Opsi">${ICON_MORE}</button>`) + `</header>` +
     `<div class="fxc__collapse"><div class="fxc__body">${body}</div></div></section>`;
 }
@@ -332,7 +332,7 @@ export function initFxRack(host: () => AudioHost): FxRack {
   const ov = document.createElement('div');
   ov.className = 'derizov'; ov.hidden = true;
   ov.innerHTML = '<div class="derizov__back"></div><div class="derizov__win" role="dialog" aria-modal="true" aria-label="DERIZ" tabindex="-1">' +
-    `<button type="button" class="derizov__x" aria-label="Tutup DERIZ" title="Tutup (Esc)">${ICON_X}</button><div class="derizov__slot"></div></div>`;
+    '<div class="derizov__slot"></div></div>';
   document.body.appendChild(ov);
   const ovWin = ov.querySelector<HTMLElement>('.derizov__win')!, ovSlot = ov.querySelector<HTMLElement>('.derizov__slot')!;
   function onRoots<K extends keyof HTMLElementEventMap>(type: K, fn: (e: HTMLElementEventMap[K]) => void, opt?: boolean | AddEventListenerOptions): void {
@@ -405,7 +405,7 @@ export function initFxRack(host: () => AudioHost): FxRack {
   }
   ov.addEventListener('click', e => {
     const t = e.target as Element;
-    if (t.classList.contains('derizov__back') || t.closest('.derizov__x')) closeOverlay();
+    if (t.classList.contains('derizov__back') || t.closest('.fxc__close')) closeOverlay();
   });
   ov.addEventListener('keydown', e => e.stopPropagation());   // pintasan DAW (Space, panah) tidak ikut jalan selama overlay terbuka
   ov.addEventListener('keyup', e => e.stopPropagation());
