@@ -31,6 +31,7 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
   let gx = 0, gy = 0;                        // titik pegang relatif ke tengah card (-1..1)
   let nat = { l: 0, t: 0, r: 0, b: 0 };      // kotak card di posisi asal (tanpa transform)
   let suppressClick = false;
+  let homeNext: Node | null = null;          // sibling setelah card di kandangnya (untuk mengembalikan posisi DOM)
   let lift = 1;
 
   const selected = (): HTMLElement | null => headersList.querySelector('.trackheader--selected');
@@ -65,17 +66,25 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
     const s = card.style, w = card.offsetWidth, h = card.offsetHeight;   // ukur SEBELUM fixed (height:100% jadi merujuk ke layar)
     s.position = 'fixed'; s.left = nat.l + 'px'; s.top = nat.t + 'px';
     s.width = w + 'px'; s.height = h + 'px';
-    s.margin = '0'; s.boxSizing = 'border-box';
+    s.margin = '0'; s.boxSizing = 'border-box'; s.zIndex = '450';   // di atas semua panel (menu = 480, tombol = 500)
+    // pindahkan card ke <body>: tidak ada ancestor (overflow/transform/sticky) yang bisa memotong atau menjebaknya, termasuk di Safari iOS
+    const col = cont.style.getPropertyValue('--track-color');
+    if (col) s.setProperty('--track-color', col);
+    homeNext = card.nextSibling;
+    document.body.appendChild(card);
     last = performance.now();
     if (!raf) raf = requestAnimationFrame(tick);
   }
 
   function finish(): void {
     cancelAnimationFrame(raf); raf = 0;
+    if (card && cont && card.parentNode === document.body) cont.insertBefore(card, homeNext && homeNext.parentNode === cont ? homeNext : null);
+    homeNext = null;
     if (card) {
       const s = card.style;
+      s.removeProperty('--track-color');
       s.transform = ''; s.transition = '';
-      s.position = s.left = s.top = s.width = s.height = s.margin = s.boxSizing = '';
+      s.position = s.left = s.top = s.width = s.height = s.margin = s.boxSizing = s.zIndex = '';
       card.classList.remove('is-jelly');
     }
     if (cont) cont.classList.remove('is-jelly');
@@ -143,7 +152,7 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
     try { th.setPointerCapture(e.pointerId); } catch { /* abaikan */ }
   });
 
-  headersList.addEventListener('pointermove', e => {
+  document.addEventListener('pointermove', e => {
     if (e.pointerId !== pointerId || !card) return;
     const dx = e.clientX - p0x, dy = e.clientY - p0y;
     if (pending) {
@@ -169,8 +178,8 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
     if (!raf) { last = performance.now(); raf = requestAnimationFrame(tick); }
     setTimeout(() => { suppressClick = false; }, 0);
   };
-  headersList.addEventListener('pointerup', release);
-  headersList.addEventListener('pointercancel', release);
+  document.addEventListener('pointerup', release);
+  document.addEventListener('pointercancel', release);
 
   // setelah drag, klik yang menyusul (mis. tombol ikon instrumen -> buka/tutup panel) dibuang
   headersList.addEventListener('click', e => {
@@ -179,6 +188,6 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
 
   // ganti track / Record Mode dimatikan -> hentikan goyangan
   document.addEventListener('recmodechange', () => { if (!recOn() && card) finish(); });
-  new MutationObserver(() => { if (card && card !== selected()) finish(); })
+  new MutationObserver(() => { if (card && !card.classList.contains('trackheader--selected')) finish(); })
     .observe(headersList, { subtree: true, attributes: true, attributeFilter: ['class'] });
 }
