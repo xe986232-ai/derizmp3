@@ -605,6 +605,26 @@ button{font:inherit;color:inherit;cursor:pointer}
 .fxc__tab:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .fxc.is-min .fxc__tabs{opacity:0;pointer-events:none}
 .fxc__panel[hidden]{display:none}
+/* plugin DERIZ: canvas audio + upload. Isi setinggi card knob (canvas 72px + satu baris label), jadi ukuran card sama dengan Reverb / EQ */
+.deriz__cell{width:100%;align-items:stretch}
+.deriz__stage{position:relative;height:72px;border-radius:10px;overflow:hidden;background:#1c1c25;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);transition:box-shadow .2s ease}
+.deriz__stage.is-over{box-shadow:inset 0 0 0 2px var(--accent)}
+.deriz__stage.is-shake{animation:uplShake .3s ease}
+.deriz__canvas{position:absolute;inset:0;width:100%;height:100%;display:block;transition:opacity .25s ease}
+.deriz__stage.is-loading .deriz__canvas{opacity:.35}
+.deriz__up{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:6px;height:34px;padding:0 14px;border:0;border-radius:10px;background:#f3f3f6;color:#16161d;font-family:inherit;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer;
+  transition:transform .25s var(--ease-spring),background-color .2s ease,opacity .25s ease}
+.deriz__up:hover{background:#fff;transform:translate(-50%,-50%) scale(1.04)}
+.deriz__up:active{transform:translate(-50%,-50%) scale(.95);transition-duration:.08s}
+.deriz__up:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.deriz__stage.has-audio .deriz__up,.deriz__stage.is-loading .deriz__up{opacity:0;pointer-events:none}
+.deriz__meta{display:flex;align-items:baseline;justify-content:space-between;gap:8px;min-width:0}
+.deriz__name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.deriz__dur{flex:none;font-variant-numeric:tabular-nums}
+.deriz__swap{flex:none;padding:0;border:0;background:none;color:var(--accent);font:inherit;line-height:inherit;cursor:pointer;transition:opacity .2s ease}
+.deriz__swap:hover{opacity:.8}
+.deriz__swap:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.deriz__dur[hidden],.deriz__swap[hidden]{display:none}
 /* tombol + pindah ke bawah setelah ada efek */
 .fx__body.has-fx .fx__top{order:2;margin:6px 0 0}
 @media (prefers-reduced-motion:reduce){.fxc,.fx-pick,.fx-pick__item{animation:none!important}.fx__add,.fx__add svg,.fxc__pwr,.fxc__pwr::after,.fxc__more,.fxc__collapse,.fxc__body{transition:none!important}}

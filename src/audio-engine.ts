@@ -17,6 +17,27 @@ export async function decodeFile(ctx: AudioContext, file: File): Promise<AudioBu
   return ctx.decodeAudioData(await file.arrayBuffer());
 }
 
+// Decode file untuk plugin (mis. DERIZ) tanpa AudioContext yang sedang berjalan: OfflineAudioContext tidak butuh gestur pengguna.
+export async function decodeStandalone(file: File): Promise<AudioBuffer> {
+  const Ctor = window.OfflineAudioContext || (window as unknown as { webkitOfflineAudioContext: typeof OfflineAudioContext }).webkitOfflineAudioContext;
+  return new Ctor(2, 1, 44100).decodeAudioData(await file.arrayBuffer());
+}
+
+// Puncak (min, max) per "bucket" rata di seluruh durasi; semua channel digabung. Hasil: [min0, max0, min1, max1, ...]
+export function bucketPeaks(buf: AudioBuffer, n: number): Float32Array {
+  const p = new Float32Array(n * 2), len = buf.length;
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const d = buf.getChannelData(c);
+    for (let b = 0; b < n; b++) {
+      const s0 = Math.floor(b * len / n), s1 = Math.min(len, Math.max(s0 + 1, Math.floor((b + 1) * len / n)));
+      let lo = p[b * 2], hi = p[b * 2 + 1];
+      for (let i = s0; i < s1; i++) { const v = d[i]; if (v < lo) lo = v; else if (v > hi) hi = v; }
+      p[b * 2] = lo; p[b * 2 + 1] = hi;
+    }
+  }
+  return p;
+}
+
 export function addBuffer(buf: AudioBuffer): number {
   buffers.set(++seq, { buf, max: 0 });
   return seq;

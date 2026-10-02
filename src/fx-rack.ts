@@ -4,12 +4,16 @@
 // Selain efek (Reverb, Equalizer) ada plugin instrumen (Supersaw): kartunya otomatis muncul di paling atas saat track synth dibuat,
 // memakai knob + slider vertikal, dan tidak bisa dihapus / tidak muncul di daftar pilihan efek.
 // Efek / plugin baru cukup ditambah ke EFFECTS (nama, parameter) dan ke applyAudio().
+// DERIZ: plugin dengan canvas audio (waveform) + upload file; tahap ini baru menampilkan audio, belum memproses suara.
 
-import { setReverb, setEq, reverbSeconds, eqDb } from './audio-engine';
+import { setReverb, setEq, reverbSeconds, eqDb, decodeStandalone, bucketPeaks } from './audio-engine';
+import { isAudio, ACCEPT as AUDIO_ACCEPT } from './audio-upload-card';
 import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } from './synth-engine';
 
-type FxType = 'reverb' | 'eq' | 'supersaw';
-interface Fx { id: number; type: FxType; on: boolean; min: boolean; tab?: number; v: Record<string, number>; }
+type FxType = 'reverb' | 'eq' | 'supersaw' | 'deriz';
+// DERIZ: audio yang di-upload ke canvas plugin (buffer disimpan untuk tahap berikutnya; peaks + max khusus untuk menggambar waveform)
+interface DerizData { name: string; dur: number; buf: AudioBuffer; peaks: Float32Array; max: number; }
+interface Fx { id: number; type: FxType; on: boolean; min: boolean; tab?: number; v: Record<string, number>; deriz?: DerizData; tok?: number; }
 interface Param { key: string; label: string; def: number; fmt: (v: number) => string; bipolar?: boolean; slider?: boolean; tab?: string; }   // tab: nama kategori (plugin dengan tab)   // bipolar: arc dari tengah (seperti knob pan); slider: slider vertikal, bukan knob
 interface EffectDef { type: FxType; name: string; params: Param[]; synth?: boolean; }   // synth: plugin instrumen (otomatis ada di track synth)
 
@@ -40,6 +44,7 @@ const EFFECTS: EffectDef[] = [
       { key: 'high', label: 'High', def: 0.5, bipolar: true, fmt: fmtDb }
     ]
   },
+  { type: 'deriz', name: 'DERIZ', params: [] },   // plugin canvas audio: isinya canvas waveform + upload (tanpa knob)
   {
     type: 'supersaw', name: 'Supersaw', synth: true,
     params: [
@@ -104,6 +109,59 @@ const cellHtml = (d: EffectDef, fx: Fx, p: Param): string => p.slider
     `<div role="slider" tabindex="0" class="knob-input" data-k="${p.key}" aria-label="${d.name} ${p.label}" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${fx.v[p.key]}">` +
     `<div class="knobwheel">${knobSvg}</div></div></div></div><span class="fxc__label">${p.label}</span></div>`;
 
+// ---------- DERIZ: canvas audio ----------
+const ICON_UP = svg('<path d="M12 16V5M7 10l5-5 5 5M5 19h14"/>', 16);
+const esc = (t: string): string => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
+const fmtDur = (s: number): string => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+
+// Tinggi isi sama dengan card knob (Reverb / EQ): canvas 72 px (= tinggi knob) + satu baris label, dalam wadah .fxc__knobs yang sama.
+function derizHtml(fx: Fx): string {
+  const z = fx.deriz;
+  return `<div class="fxc__knobs deriz"><div class="fxc__cell deriz__cell">` +
+    `<div class="deriz__stage${z ? ' has-audio' : ''}"><canvas class="deriz__canvas" role="img" aria-label="Waveform audio DERIZ"></canvas>` +
+    `<button type="button" class="deriz__up">${ICON_UP}<span>Upload audio</span></button></div>` +
+    `<div class="fxc__label deriz__meta"><span class="deriz__name">${z ? esc(z.name) : 'Belum ada audio'}</span>` +
+    `<span class="deriz__dur"${z ? '' : ' hidden'}>${z ? fmtDur(z.dur) : ''}</span>` +
+    `<button type="button" class="deriz__swap"${z ? '' : ' hidden'}>Ganti</button></div>` +
+    `<input type="file" class="deriz__file" accept="${AUDIO_ACCEPT}" hidden></div></div>`;
+}
+
+function updateDerizUi(card: HTMLElement, fx: Fx): void {
+  const z = fx.deriz;
+  card.querySelector('.deriz__stage')!.classList.toggle('has-audio', !!z);
+  card.querySelector('.deriz__stage')!.classList.remove('is-loading');
+  card.querySelector('.deriz__name')!.textContent = z ? z.name : 'Belum ada audio';
+  const dur = card.querySelector<HTMLElement>('.deriz__dur')!, swap = card.querySelector<HTMLElement>('.deriz__swap')!;
+  dur.hidden = swap.hidden = !z;
+  dur.textContent = z ? fmtDur(z.dur) : '';
+}
+
+function paintDeriz(card: HTMLElement, fx: Fx): void {
+  const cv = card.querySelector<HTMLCanvasElement>('.deriz__canvas');
+  if (!cv) return;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const g = cv.getContext('2d')!;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const mid = h / 2;
+  g.fillStyle = 'rgba(255,255,255,.1)';
+  g.fillRect(0, Math.round(mid) - .5, w, 1);   // garis tengah (juga tampil saat canvas masih kosong)
+  const z = fx.deriz;
+  if (!z) return;
+  const n = z.peaks.length / 2, k = (mid - 4) / Math.max(z.max, 0.05);   // normalisasi: puncak tertinggi hampir memenuhi tinggi canvas
+  g.fillStyle = getComputedStyle(cv).getPropertyValue('--accent').trim() || '#a66cff';
+  for (let x = 0; x < w; x++) {
+    const lo = Math.min(n - 1, Math.floor(x * n / w)), hi = Math.min(n, Math.max(lo + 1, Math.floor((x + 1) * n / w)));
+    let mn = 0, mx = 0;
+    for (let b = lo; b < hi; b++) { if (z.peaks[b * 2] < mn) mn = z.peaks[b * 2]; if (z.peaks[b * 2 + 1] > mx) mx = z.peaks[b * 2 + 1]; }
+    const y0 = mid - mx * k, y1 = mid - mn * k;
+    g.fillRect(x, y0, 1, Math.max(1, y1 - y0));
+  }
+}
+
 const tabNames = (d: EffectDef): string[] => [...new Set(d.params.map(p => p.tab).filter((t): t is string => !!t))];
 
 function cardHtml(fx: Fx, i: number): string {
@@ -113,7 +171,7 @@ function cardHtml(fx: Fx, i: number): string {
     ? `<div class="fxc__tabs" role="tablist" aria-label="Kategori ${d.name}">` +
       tabs.map((t, k) => `<button type="button" role="tab" class="fxc__tab" data-tab="${k}" aria-selected="${k === cur}">${t}</button>`).join('') + `</div>`
     : '';
-  const body = tabs.length
+  const body = fx.type === 'deriz' ? derizHtml(fx) : tabs.length
     ? tabs.map((t, k) => `<div class="fxc__knobs fxc__panel" role="tabpanel" data-tab="${k}"${k === cur ? '' : ' hidden'}>${d.params.filter(p => p.tab === t).map(p => cellHtml(d, fx, p)).join('')}</div>`).join('')
     : `<div class="fxc__knobs">${d.params.map(p => cellHtml(d, fx, p)).join('')}</div>`;
   return `<section class="fxc${fx.on ? '' : ' is-off'}${fx.min ? ' is-min' : ''}${tabs.length ? ' has-tabs' : ''}" data-fx="${fx.id}" style="--i:${i}" aria-label="${d.name}">` +
@@ -142,6 +200,13 @@ export function initFxRack(): FxRack {
     const id = el?.closest<HTMLElement>('.fxc')?.dataset.fx;
     return fxs().find(f => String(f.id) === id);
   };
+
+  // canvas DERIZ digambar ulang saat ukurannya berubah (panel efek dibuka / ditutup, layar diputar)
+  const ro = new ResizeObserver(es => es.forEach(en => {
+    const card = (en.target as Element).closest<HTMLElement>('.fxc'), fx = card && find(card);
+    if (card && fx) paintDeriz(card, fx);
+  }));
+  const watch = (card: Element): void => { const cv = card.querySelector('.deriz__canvas'); if (cv) ro.observe(cv); };
 
   // Tombol "+": di atas saat belum ada efek, pindah ke bawah daftar setelah ada efek (dengan animasi geser halus)
   function layout(animate: boolean): void {
@@ -301,6 +366,7 @@ export function initFxRack(): FxRack {
     list.insertAdjacentHTML('beforeend', cardHtml(fx, 0));
     const card = list.lastElementChild as HTMLElement;
     paintAll(card, fx);
+    watch(card);
     layout(true);
     card.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
   }
@@ -327,7 +393,7 @@ export function initFxRack(): FxRack {
     racks.set(cur, fxs().filter(f => f !== fx));
     applyAudio(cur);
     if (pick) closePicker(true);
-    const done = () => { card.remove(); layout(true); };
+    const done = () => { card.querySelectorAll('canvas').forEach(c => ro.unobserve(c)); card.remove(); layout(true); };
     if (reduce) { done(); return; }
     const h = card.offsetHeight, mb = parseFloat(getComputedStyle(card).marginBottom) || 0;
     card.style.overflow = 'hidden'; card.style.pointerEvents = 'none';
@@ -388,9 +454,53 @@ export function initFxRack(): FxRack {
   });
   list.addEventListener('blur', e => { if ((e.target as Element).matches?.(CTL) && !drag) hideTip(); }, true);
 
+  // ---------- DERIZ: upload audio ke canvas (tombol, "Ganti", atau drag & drop file) ----------
+  async function loadDeriz(card: HTMLElement, file: File): Promise<void> {
+    const fx = find(card); if (!fx) return;
+    const stage = card.querySelector<HTMLElement>('.deriz__stage')!, name = card.querySelector<HTMLElement>('.deriz__name')!;
+    const warn = (msg: string): void => {   // pesan singkat di baris label, lalu kembali ke keadaan semula
+      stage.classList.remove('is-loading', 'is-shake'); void stage.offsetWidth; stage.classList.add('is-shake');
+      name.textContent = msg;
+      window.setTimeout(() => { if (card.isConnected) updateDerizUi(card, fx); }, 2400);
+    };
+    if (!isAudio(file)) { warn('Bukan file audio'); return; }
+    const my = fx.tok = (fx.tok ?? 0) + 1;   // upload yang lebih baru membatalkan yang lama
+    stage.classList.add('is-loading'); name.textContent = 'Memuat…';
+    try {
+      const buf = await decodeStandalone(file), peaks = bucketPeaks(buf, 1200);
+      let max = 0; for (let i = 0; i < peaks.length; i++) max = Math.max(max, Math.abs(peaks[i]));
+      if (my !== fx.tok) return;
+      fx.deriz = { name: file.name, dur: buf.duration, buf, peaks, max };
+    } catch (err) {
+      console.error(err);
+      if (my === fx.tok) warn('File tidak bisa dibaca');
+      return;
+    }
+    const live = list.querySelector<HTMLElement>(`.fxc[data-fx="${fx.id}"]`);   // kartu bisa saja sudah dihapus / track diganti selama decode
+    if (!live) return;
+    updateDerizUi(live, fx); paintDeriz(live, fx);
+  }
+  list.addEventListener('change', e => {
+    const inp = e.target as HTMLInputElement;
+    if (!inp.matches?.('.deriz__file')) return;
+    const card = inp.closest<HTMLElement>('.fxc'), f = inp.files?.[0];
+    inp.value = '';
+    if (card && f) void loadDeriz(card, f);
+  });
+  const dropZone = (e: Event) => (e.target as Element).closest<HTMLElement>('.deriz__stage');
+  list.addEventListener('dragover', e => { const z = dropZone(e); if (!z) return; e.preventDefault(); z.classList.add('is-over'); });
+  list.addEventListener('dragleave', e => { dropZone(e)?.classList.remove('is-over'); });
+  list.addEventListener('drop', e => {
+    const z = dropZone(e); if (!z) return;
+    e.preventDefault(); z.classList.remove('is-over');
+    const card = z.closest<HTMLElement>('.fxc'), f = e.dataTransfer?.files?.[0];
+    if (card && f) void loadDeriz(card, f);
+  });
+
   list.addEventListener('click', e => {
     const t = e.target as Element, card = t.closest<HTMLElement>('.fxc');
-    if (!card) return;
+    if (!card || t.matches('.deriz__file')) return;
+    if (t.closest('.deriz__up, .deriz__swap')) { card.querySelector<HTMLInputElement>('.deriz__file')!.click(); return; }
     const more = t.closest<HTMLButtonElement>('.fxc__more');
     if (more) { menu && menuBtn === more ? closeMenu() : openMenu(more, card); return; }
     const tabBtn = t.closest<HTMLButtonElement>('.fxc__tab');   // ganti kategori plugin
@@ -427,20 +537,20 @@ export function initFxRack(): FxRack {
 
   return {
     show(track) {
-      closePicker(true); closeMenu(true); hideTip(); drag = null;
+      closePicker(true); closeMenu(true); hideTip(); drag = null; ro.disconnect();
       cur = track;
       addBtn.disabled = !track;
       list.replaceChildren();
       if (!track) { layout(false); return; }
       applyAudio(track);
       list.innerHTML = fxs().map((f, i) => cardHtml(f, i)).join('');
-      list.querySelectorAll<HTMLElement>('.fxc').forEach(c => { const f = find(c); if (f) paintAll(c, f); });
+      list.querySelectorAll<HTMLElement>('.fxc').forEach(c => { const f = find(c); if (f) paintAll(c, f); watch(c); });
       layout(false);
     },
     drop(track) {
       racks.delete(track);
       setReverb(track, null); setEq(track, null); setSupersaw(track, null);
-      if (cur === track) { closePicker(true); closeMenu(true); hideTip(); cur = null; addBtn.disabled = true; list.replaceChildren(); layout(false); }
+      if (cur === track) { closePicker(true); closeMenu(true); hideTip(); ro.disconnect(); cur = null; addBtn.disabled = true; list.replaceChildren(); layout(false); }
     },
     addInstrument,
     closePicker

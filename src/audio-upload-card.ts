@@ -3,7 +3,7 @@
 // (kunci = id track) supaya tahap berikutnya (decode, waveform, playback) tinggal membacanya.
 
 const AUDIO_EXT = /\.(mp3|wav|wave|ogg|oga|m4a|aac|flac|opus|weba|webm)$/i;
-const ACCEPT = 'audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac,.opus';
+export const ACCEPT = 'audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac,.opus';
 
 export const trackAudioFiles = new Map<number, File>();
 
@@ -17,7 +17,7 @@ export interface UploadAnchor {
 
 let current: { close: (instant?: boolean) => void } | null = null;
 
-const isAudio = (f: File) => f.type.startsWith('audio/') || AUDIO_EXT.test(f.name);
+export const isAudio = (f: File) => f.type.startsWith('audio/') || AUDIO_EXT.test(f.name);
 
 const ICON_UP = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 16V5M7 10l5-5 5 5M5 19h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
