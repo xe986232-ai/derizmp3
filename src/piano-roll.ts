@@ -382,6 +382,7 @@ export function copyPianoRollNotes(from: string, to: string, fromBeat = 0, toBea
   states.set(to, dst);
 }
 // nada milik DERIZ lain di pattern yang sama disimpan dengan kunci "<id pattern>@<id track DERIZ>"; daftar kunci tambahan itu untuk id ini
+export function clearPianoRollNotes(id: string) { if (states.delete(id)) onChange && onChange(id); }   // kosongkan nada satu kunci (mis. pemilik kunci polos dihapus)
 export function dropPianoRollNotesOf(suffix: string) {   // buang semua nada berkunci "<pattern>@<suffix>" dan kabarkan perubahannya
   for (const k of [...states.keys()]) if (k.endsWith('@' + suffix)) { states.delete(k); onChange && onChange(k); }
 }

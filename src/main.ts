@@ -9,7 +9,7 @@ import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
 import { decodeFile, addBuffer, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
 import { slideSource, glideBeats } from './note-slide';
-import { openPianoRoll, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, PR_BEATS } from './piano-roll';
+import { openPianoRoll, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, clearPianoRollNotes, PR_BEATS } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 initLandscape();
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -321,7 +321,7 @@ function renderPatNotes(el) {
     notes.map(n => '<rect x="' + n.s + '" y="' + (top + hi - n.p + 0.1) + '" width="' + Math.max(n.l, 0.12) + '" height="0.8"/>').join('') + '</svg>';
 }
 // Banyak DERIZ bisa mengisi satu pattern: nada instrumen bawaan track pemilik pattern disimpan di kunci id pattern, nada DERIZ lain di "<id>@<id DERIZ>"
-const patKey = (prId, fxId, laneTrack) => !hasSynth(laneTrack) && fxRack.derizIds(laneTrack)[0] === fxId ? prId : prId + '@' + fxId;   // DERIZ bawaan track pemilik pattern pakai kunci polos (data lama tetap terbaca)
+const patKey = (prId, fxId, laneTrack) => !hasSynth(laneTrack) && fxRack.derizOwnsPlain(laneTrack, fxId) ? prId : prId + '@' + fxId;   // DERIZ pertama yang dibuat di track pemilik pattern pakai kunci polos (data lama tetap terbaca)
 const patBase = id => id.split('@')[0];
 const copyPatNotes = (from, to, a, b) => { copyPianoRollNotes(from, to, a, b); for (const k of pianoRollExtraKeys(from)) copyPianoRollNotes(k, to + k.slice(from.length), a, b); };
 const trimPatNotes = (id, beat) => { trimPianoRollNotes(id, beat); for (const k of pianoRollExtraKeys(id)) trimPianoRollNotes(k, beat); };
@@ -541,8 +541,8 @@ function editPattern() {
   if (!el.dataset.prId) el.dataset.prId = 'pat' + (++prSeq);   // kunci supaya nada piano roll tersimpan per pattern
   prStartBar = pl(el) / BAR_W;
   openPianoRoll({
-    id: el.dataset.prId,
-    ghosts: patGhosts(el, el.dataset.prId),
+    id: editKey(el),
+    ghosts: patGhosts(el, editKey(el)),
     track: nm ? nm.textContent : 'Track',
     pattern: el.querySelector('.pattern__title').textContent,
     color: lane.style.getPropertyValue('--track-color') || undefined,
@@ -558,6 +558,11 @@ function patGhosts(el, curKey) {
   if (hasSynth(lt)) add(prId, lt);
   document.querySelectorAll('.trackheader-container').forEach(c => fxRack.derizIds(c.dataset.track).forEach(id => add(patKey(prId, id, lt), c.dataset.track)));
   return out;
+}
+// tombol Edit: kunci nada instrumen track pemilik pattern (Supersaw = polos; DERIZ = DERIZ pertama yang ada di track itu)
+function editKey(el) {
+  const lt = el.parentElement.dataset.track, ids = hasSynth(lt) ? [] : fxRack.derizIds(lt);
+  return ids.length ? patKey(el.dataset.prId, ids[0], lt) : el.dataset.prId;
 }
 function enterPatternAs(el, fxId) {
   const lane = el.parentElement, track = fxRack.derizTrackOf(fxId); if (track === undefined) return;
@@ -591,7 +596,10 @@ const patternBridge = {
     return rows.sort((a, b) => a.top - b.top || a.left - b.left);
   },
   open(row, fxId) { if (row.ref.isConnected) enterPatternAs(row.ref, fxId); },
-  removed(fxId) { dropPianoRollNotesOf(String(fxId)); }
+  removed(fxId, track, ownedPlain) {
+    dropPianoRollNotesOf(String(fxId));
+    if (ownedPlain) lanesEl.querySelectorAll('.pattern[data-pr-id]').forEach(p => { if (p.parentElement.dataset.track === track) clearPianoRollNotes(p.dataset.prId); });
+  }
 };
 lanesEl.addEventListener('dblclick', e => {   // ganti nama pattern: klik dua kali judulnya
   const t = e.target.closest && e.target.closest('.pattern__title');
