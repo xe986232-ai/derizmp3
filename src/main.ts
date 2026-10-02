@@ -1,5 +1,5 @@
 // @ts-nocheck
-import '@fontsource-variable/orbitron';   // font judul plugin DERIZ (dibundel, tidak butuh internet)
+import '@fontsource/syncopate/700.css';   // font judul plugin DERIZ (dibundel, tidak butuh internet)
 import { openAudioUploadCard } from './audio-upload-card';
 import { initEffectsPanel } from './effects-panel';
 import { initTrackMeters } from './track-meters';
