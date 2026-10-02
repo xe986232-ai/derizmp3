@@ -4,6 +4,7 @@ import { initEffectsPanel } from './effects-panel';
 import { initTrackMeters } from './track-meters';
 import { initFxRack } from './fx-rack';
 import { initLandscape } from './landscape';
+import { initMenuPanel } from './menu-panel';
 import { hasSynth, startVoice, releaseVoice, playNote, stopAllSynth } from './synth-engine';
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
@@ -12,6 +13,7 @@ import { slideSource, glideBeats } from './note-slide';
 import { openPianoRoll, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, clearPianoRollNotes, PR_BEATS } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 initLandscape();
+initMenuPanel();
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const EASE_OUT = 'cubic-bezier(.22,1,.36,1)', EASE_SPRING = 'cubic-bezier(.34,1.56,.64,1)', EASE_INOUT = 'cubic-bezier(.65,0,.35,1)';
 const TRACK_TPL = document.querySelector('.trackheader-container').cloneNode(true);

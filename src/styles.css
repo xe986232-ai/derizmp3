@@ -977,3 +977,52 @@ body:has(.pr.is-open) .landscape-btn svg{width:14px;height:14px}
   .stage:has(.fx--open) #pianoRoll{right:300px}   /* = --fx-w panel efek */
 }
 @media (prefers-reduced-motion:reduce){#pianoRoll{transition:none}}
+
+/* ===== Tombol menu pojok kanan atas (card 3D + bevel) + panel geser gaya panel efek (menu-panel.ts) ===== */
+.menu-btn{position:fixed;z-index:500;top:calc(env(safe-area-inset-top,0px) + 6px);right:calc(env(safe-area-inset-right,0px) + 6px);width:40px;height:40px;padding:0;border:0;border-radius:14px;
+  display:grid;place-items:center;color:var(--text);cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;
+  background:linear-gradient(180deg,#363642 0%,#272731 52%,#1e1e27 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 -2px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.05),inset -1px 0 0 rgba(0,0,0,.2),0 1px 0 rgba(0,0,0,.55),0 6px 14px rgba(0,0,0,.42);
+  transition:transform .3s var(--ease-spring),box-shadow .3s ease,opacity .2s ease}
+.menu-btn::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;padding:1px;
+  background:linear-gradient(135deg,rgba(255,255,255,.28),rgba(255,255,255,.04) 34%,rgba(255,255,255,.01) 62%,rgba(255,255,255,.12));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}
+.menu-btn::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:radial-gradient(90% 120% at 15% 0%,rgba(255,255,255,.14),transparent 58%)}
+.menu-btn:hover{transform:translateY(-1px);box-shadow:inset 0 1px 0 rgba(255,255,255,.24),inset 0 -2px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.07),inset -1px 0 0 rgba(0,0,0,.2),0 1px 0 rgba(0,0,0,.55),0 10px 20px rgba(0,0,0,.5)}
+.menu-btn:active{transform:translateY(1px) scale(.96);transition-duration:.08s;
+  background:linear-gradient(180deg,#1e1e27 0%,#25252f 100%);
+  box-shadow:inset 0 2px 5px rgba(0,0,0,.55),inset 0 -1px 0 rgba(255,255,255,.07),0 1px 0 rgba(0,0,0,.4)}
+.menu-btn:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.menu-btn__ic{grid-area:1/1;position:relative;z-index:3;width:20px;height:20px;transition:transform .45s var(--ease-spring),opacity .2s ease;filter:drop-shadow(0 1px 1px rgba(0,0,0,.5))}
+.menu-btn__ic--x{opacity:0;transform:rotate(-90deg) scale(.5)}
+.menu-btn.is-open .menu-btn__ic--grid{opacity:0;transform:rotate(90deg) scale(.5)}
+.menu-btn.is-open .menu-btn__ic--x{opacity:1;transform:none}
+/* tombol layar penuh bergeser ke kiri tombol menu (saat piano roll terbuka aturan khususnya di atas tetap berlaku) */
+.landscape-btn{right:calc(env(safe-area-inset-right,0px) + 54px)}
+/* piano roll terbuka: tombol X piano roll ada di pojok yang sama, jadi tombol menu disembunyikan */
+body:has(.pr.is-open) .menu-btn{opacity:0;pointer-events:none;transform:scale(.8)}
+
+.mp{position:fixed;z-index:480;top:0;right:0;bottom:0;width:min(300px,84vw);pointer-events:none;overflow:hidden}
+.mp--open{pointer-events:auto}
+.mp:not(.mp--open){visibility:hidden}
+.mp--ready:not(.mp--open){transition:visibility 0s linear .45s}
+.mp__panel{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--panel);border-left:1px solid var(--line);transform:translateX(100%)}
+.mp--open .mp__panel{transform:none;box-shadow:-14px 0 32px rgba(0,0,0,.45)}
+.mp--ready .mp__panel{transition:transform .45s var(--ease-out)}
+.mp__head{display:flex;align-items:center;height:56px;flex:none;padding:0 18px;border-bottom:1px solid var(--line)}
+.mp__title{margin:0;font-size:14px;font-weight:600;letter-spacing:.2px}
+.mp__body{flex:1;min-height:0;overflow:auto;padding:18px 16px 24px;display:flex;flex-direction:column;gap:12px}
+.mp__card{position:relative;padding:16px;border-radius:18px;background-color:var(--card);color:var(--text);box-shadow:var(--bevel)}
+.mp__card::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;padding:1px;
+  background:linear-gradient(135deg,rgba(255,255,255,.17),rgba(255,255,255,.035) 32%,rgba(255,255,255,.01) 62%,rgba(255,255,255,.08));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}
+.mp__hint{margin:0;font-size:13px;color:var(--muted)}
+/* isi panel masuk satu per satu dari kanan, sama seperti panel efek */
+.mp__item{opacity:0;transform:translateX(28px)}
+.mp--open .mp__item{opacity:1;transform:none}
+.mp--ready .mp__item{transition:opacity .15s ease,transform .25s var(--ease-out)}
+.mp--ready.mp--open .mp__item{transition:opacity .35s ease calc(var(--i,0)*70ms + 140ms),transform .55s var(--ease-out) calc(var(--i,0)*70ms + 140ms)}
+@media (prefers-reduced-motion:reduce){.menu-btn,.menu-btn__ic,.mp,.mp__panel,.mp__item{transition:none!important}}
