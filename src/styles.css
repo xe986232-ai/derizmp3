@@ -826,11 +826,10 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .fxc--deriz .deriz__up:hover{background:linear-gradient(180deg,#4a4a5c,#2b2b38)}
 /* layar + knob di baris pertama, bar geser tepat di bawah layar; knob baru tinggal ditambah ke .deriz__knobs */
 .deriz__row{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:14px;row-gap:9px;align-items:center}
-.deriz__row .deriz__stage{grid-column:1;grid-row:1;min-width:0}
-.deriz__knobs{grid-column:2;grid-row:1;display:flex;align-items:center;justify-content:center}
-.deriz__speed{grid-column:1;grid-row:3;display:flex;justify-content:center;gap:28px}   /* Speed + Pitch berdampingan di bawah bar geser, di tengah lebar canvas */
-.deriz__knobs .fxc__cell,.deriz__speed .fxc__cell{justify-content:center;gap:7px}
-.deriz__knobs .fxc__label,.deriz__speed .fxc__label{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#8a8aa0}
+.deriz__row .deriz__stage{grid-column:1/-1;grid-row:2;min-width:0}   /* canvas di bawah knob, selebar kartu */
+.deriz__knobs{grid-column:1/-1;grid-row:1;display:flex;align-items:center;justify-content:center;gap:34px}   /* Speed, Pitch, Volume berjajar di atas canvas */
+.deriz__knobs .fxc__cell{justify-content:center;gap:7px}
+.deriz__knobs .fxc__label{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#8a8aa0}
 /* knob logam cekung: serasi dengan LED power, tombol tutup & faceplate (bukan knob datar seperti Reverb / EQ) */
 .fxc--deriz .fxk{width:50px;height:50px;border-radius:50%;border:1px solid rgba(255,255,255,.12);box-shadow:none}
 .fxc--deriz .fxk .knob-inner{border-radius:50%;background:radial-gradient(circle at 36% 28%,#3a3a48 0%,#1c1c25 58%,#101016 100%);box-shadow:none}
@@ -842,7 +841,7 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .fxc--deriz .fxk .knob-input:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:50%}
 .fxc--deriz.is-off .fxk .circle{stroke:#4a4a5c;filter:none}
 /* tombol Ganti: pil cekung serasi dengan tombol tutup (X) & LED power: cincin gelap + kilap tipis; hanya teks, tanpa ikon */
-.fxc--deriz .deriz__swap:not([hidden]){grid-column:2;grid-row:2;justify-self:center;align-self:center;display:inline-flex;align-items:center;justify-content:center;height:22px;margin:-5px 0;padding:0 15px;border:0;border-radius:999px;
+.fxc--deriz .deriz__swap:not([hidden]){grid-column:2;grid-row:3;justify-self:center;align-self:center;display:inline-flex;align-items:center;justify-content:center;height:22px;margin:-5px 0;padding:0 15px;border:0;border-radius:999px;
   background:radial-gradient(120% 140% at 36% 22%,#33333f 0%,#1c1c25 60%,#111118 100%);color:#c4c4d6;font:inherit;font-size:11px;font-weight:700;line-height:1;letter-spacing:.08em;text-transform:uppercase;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.14),inset 0 -1px 2px rgba(0,0,0,.6),0 0 0 2px #0a0a0f,0 0 0 3px rgba(255,255,255,.08);
   transition:color .2s ease,box-shadow .2s ease,transform .15s ease}
@@ -861,7 +860,7 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 
 /* ---------- DERIZ: zoom canvas (tombol + / - / reset, bar navigasi saat di-zoom) ---------- */
 /* bar geser di bawah canvas (tempat khusus, di luar layar): alur tersembunyi gaya layar kaca, pegangan logam seperti tombol card */
-.deriz__nav{position:relative;grid-column:1;grid-row:2;height:12px;border-radius:6px;overflow:hidden;touch-action:none;cursor:pointer;background:#0b0b12;
+.deriz__nav{position:relative;grid-column:1;grid-row:3;height:12px;border-radius:6px;overflow:hidden;touch-action:none;cursor:pointer;background:#0b0b12;
   box-shadow:inset 0 2px 5px rgba(0,0,0,.85),inset 0 0 0 1px rgba(255,255,255,.07),0 1px 0 rgba(255,255,255,.08);transition:opacity .25s ease}
 .deriz__nav.is-idle{opacity:.4;pointer-events:none}
 .deriz__thumb{position:absolute;top:2px;bottom:2px;min-width:14px;border-radius:4px;background:linear-gradient(180deg,#4a4a5c,#2b2b38);
@@ -885,8 +884,11 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .derizov .fxc--deriz{padding:10px 14px 10px 18px}
 .derizov .fxc--deriz .deriz__stage{height:84px}
 .deriz__kb{display:none}
-.derizov .deriz__kb{display:block;margin-top:8px;--kh:54px;--bh:32px;--kc:#5b3de8}
+.derizov .deriz__kb{display:block;margin-top:14px;--kh:54px;--bh:32px;--kc:#5b3de8}
 .derizov .deriz__keys{width:100%;margin:0;border-radius:0 0 7px 7px}
+/* pembatas tipis 3D antara plugin dan keyboard: rel logam kecil (kilap atas, tepi gelap bawah) */
+.derizov .deriz__kb::before{content:"";display:block;height:5px;border-radius:3px 3px 0 0;background:linear-gradient(180deg,#4a4a5c 0%,#2a2a35 45%,#101016 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.28),inset 0 -1px 0 rgba(0,0,0,.7),0 -1px 0 #0a0a0f}
 .derizov .deriz__keys .keys{width:100%}
 .derizov .deriz__keys .whitekey{border-radius:0 0 5px 5px;box-shadow:inset 0 -3px 0 rgba(0,0,0,.12)}
 .derizov .deriz__keys .blackkey{border-radius:0 0 4px 4px}
