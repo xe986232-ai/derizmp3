@@ -913,3 +913,16 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .landscape-btn:hover,.landscape-btn:focus-visible{opacity:1;border-color:var(--accent)}
 .landscape-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .landscape-btn svg{width:18px;height:18px}
+
+/* Toolbar piano roll diperkecil (lebih banyak ruang untuk grid nada, terutama di HP landscape) */
+.pr__bar{gap:6px;padding:4px 8px}
+.pr__grp,.pr__snap{height:28px;gap:1px;padding:0 3px;border-radius:10px}
+.pr__btn{width:24px;height:24px;border-radius:8px}
+.pr__more{width:26px;height:26px;border-radius:9px}
+.pr__snap{gap:6px;padding:0 10px;font-size:11px}
+.pr__lbl{font-size:9px;padding:0 3px 0 5px}
+.pr__bar svg,.pr__back svg{width:14px;height:14px}
+.pr__led{width:6px;height:6px}
+/* tombol layar penuh: saat piano roll terbuka, kecil dan bergeser ke kiri tombol X supaya tidak menimpanya */
+body:has(.pr.is-open) .landscape-btn{width:26px;height:26px;top:calc(env(safe-area-inset-top,0px) + 5px);right:calc(env(safe-area-inset-right,0px) + 52px)}
+body:has(.pr.is-open) .landscape-btn svg{width:14px;height:14px}
