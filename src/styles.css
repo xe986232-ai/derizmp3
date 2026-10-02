@@ -170,7 +170,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .track-menu--colors{min-width:0}
 .track-menu--colors .track-menu__swatches{display:grid;grid-template-columns:repeat(4,28px);gap:10px;padding:10px;max-width:none}
 .track-menu--colors .track-menu__swatch{width:28px;height:28px}
-.pan-tip{position:fixed;z-index:60;padding:8px 12px;background:#f3f3f6;color:#16161d;border-radius:10px;font-size:14px;font-weight:500;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.4);pointer-events:none}
+.pan-tip{position:fixed;z-index:400;padding:8px 12px;background:#f3f3f6;color:#16161d;border-radius:10px;font-size:14px;font-weight:500;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.4);pointer-events:none}
 .pan-tip[hidden]{display:none}
 
 /* ===== ANIMASI ===== */
