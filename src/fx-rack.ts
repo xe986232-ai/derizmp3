@@ -295,7 +295,8 @@ export function initFxRack(): FxRack {
   }
 
   // plugin instrumen (mis. Supersaw): ditambahkan otomatis saat track synth dibuat, selalu di paling atas, hanya satu per track
-  function addInstrument(track: string, type: FxType): void {
+  function addInstrument(trackId: string | number, type: FxType): void {
+    const track = String(trackId);   // id track dari dataset selalu string; kunci Map harus sama
     const rack = racks.get(track) ?? [];
     if (rack.some(f => f.type === type)) return;
     const d = defOf(type), v: Record<string, number> = {};
