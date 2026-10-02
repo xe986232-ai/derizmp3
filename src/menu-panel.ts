@@ -47,8 +47,9 @@ export function initMenuPanel(): MenuPanel {
       '<header class="mp__head mp__item" style="--i:0"><h2 class="mp__title">Menu</h2></header>' +
       '<div class="mp__body">' +
         '<div class="mp__card mp__item mp__save" style="--i:1">' +
-          '<button type="button" class="mp__savebtn" aria-label="Simpan project"><span>SAVE</span></button>' +
-          '<p class="mp__hint">Simpan project ke browser ini.</p>' +
+          '<button type="button" class="mp__savebtn" aria-label="Simpan project">' +
+            '<svg class="mp__ring" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" pathLength="100"/></svg><span>SAVE</span></button>' +
+          '<p class="mp__hint">Ketuk: simpan sebagai project baru.<br>Tahan: simpan perubahan ke project yang sedang dibuka.</p>' +
         '</div>' +
         '<div class="mp__card mp__item" style="--i:2">' +
           '<div class="mp__sub"><span>File project</span><button type="button" class="mp__imp">Buka .json</button></div>' +
@@ -171,7 +172,44 @@ export function initMenuPanel(): MenuPanel {
       busy = false; okBtn.disabled = false;
     }
   };
-  panel.querySelector('.mp__savebtn')!.addEventListener('click', () => { void openOv(); });
+  // Tahan SAVE: timpa project yang sedang dibuka dengan perubahan terbaru (tanpa buat project baru).
+  // Kalau belum ada project aktif, tahan = sama seperti ketuk (minta nama project baru).
+  const HOLD_MS = 700;
+  const saveBtn = panel.querySelector('.mp__savebtn') as HTMLButtonElement;
+  let holdT = 0, held = false, quickBusy = false;
+  const quickSave = async (): Promise<void> => {
+    if (!io) { say('Project belum siap, coba lagi sebentar'); return; }
+    if (!curName || !(await projectExists(curName).catch(() => false))) { void openOv(); return; }
+    if (quickBusy) return;
+    quickBusy = true;
+    try {
+      const snap = io.snapshot();
+      await saveProject({name: curName, savedAt: Date.now(), data: snap.data, clips: snap.clips});
+      if (!(await loadProject(curName))) throw new Error('verifikasi gagal');
+      await refresh();
+      say('✓ Perubahan tersimpan: ' + curName);
+      saveBtn.classList.add('is-saved'); setTimeout(() => saveBtn.classList.remove('is-saved'), 900);
+    } catch (err) { console.error(err); say('Gagal menyimpan (penyimpanan browser penuh atau diblokir).'); }
+    quickBusy = false;
+  };
+  const cancelHold = (): void => { clearTimeout(holdT); saveBtn.classList.remove('is-holding'); };
+  saveBtn.style.setProperty('--hold', HOLD_MS + 'ms');
+  saveBtn.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    held = false; cancelHold();
+    saveBtn.classList.add('is-holding');
+    holdT = window.setTimeout(() => {
+      held = true; saveBtn.classList.remove('is-holding');
+      if (navigator.vibrate) navigator.vibrate(30);
+      void quickSave();
+    }, HOLD_MS);
+  });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => saveBtn.addEventListener(t, cancelHold));
+  saveBtn.addEventListener('contextmenu', e => e.preventDefault());   // tahan di HP jangan memunculkan menu konteks
+  saveBtn.addEventListener('click', () => {
+    if (held) { held = false; return; }   // klik setelah tahan sudah ditangani quickSave
+    void openOv();
+  });
   ov.querySelector('.svov__back')!.addEventListener('pointerdown', () => { if (!busy) closeOv(); });
   ov.addEventListener('click', e => {
     const a = (e.target as HTMLElement).closest('[data-a]')?.getAttribute('data-a');
