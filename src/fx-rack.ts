@@ -129,12 +129,11 @@ const DERIZ_PAD = 6;   // jarak kiri/kanan canvas: garis start di 0 / 1 dan ujun
 function derizHtml(fx: Fx): string {
   const z = fx.deriz;
   return `<div class="fxc__knobs deriz"><div class="fxc__cell deriz__cell"><div class="deriz__row">` +
-    `<div class="deriz__stage${z ? ' has-audio' : ''}${z && z.zoom > 1.001 ? ' is-zoomed' : ''}${z && z.busy !== undefined ? ' is-busy' : ''}" style="--s:${z ? visS(z).toFixed(4) : 0}"><canvas class="deriz__canvas" role="img" aria-label="Spektrogram audio DERIZ"></canvas>` +
+    `<div class="deriz__stage${z ? ' has-audio' : ''}${z && z.busy !== undefined ? ' is-busy' : ''}" style="--s:${z ? visS(z).toFixed(4) : 0}"><canvas class="deriz__canvas" role="img" aria-label="Spektrogram audio DERIZ"></canvas>` +
     `<div class="deriz__start" role="slider" tabindex="0" aria-label="Garis start" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${z ? z.start.toFixed(4) : 0}" aria-valuetext="${posText(z)}"></div>` +
-    `<div class="deriz__zoom" role="group" aria-label="Zoom waveform"><button type="button" class="deriz__zb" data-z="out" aria-label="Perkecil" title="Perkecil">&minus;</button><button type="button" class="deriz__zb" data-z="in" aria-label="Perbesar" title="Perbesar">+</button></div>` +
-    `<div class="deriz__nav" aria-hidden="true"><i class="deriz__thumb"${z ? ` style="left:${(z.view * 100).toFixed(3)}%;width:${(100 / z.zoom).toFixed(3)}%"` : ''}></i></div>` +
     `<button type="button" class="deriz__up">${ICON_UP}<span>Upload audio</span></button><i class="deriz__scan" aria-hidden="true"></i><i class="deriz__glass" aria-hidden="true"></i></div>` +
-    `<div class="deriz__knobs">${defOf('deriz').params.map(p => cellHtml(defOf('deriz'), fx, p)).join('')}</div></div>` +
+    `<div class="deriz__knobs">${defOf('deriz').params.map(p => cellHtml(defOf('deriz'), fx, p)).join('')}</div>` +
+    `<div class="deriz__nav${z && z.zoom > 1.001 ? '' : ' is-idle'}" aria-hidden="true"><i class="deriz__thumb"${z ? ` style="left:${(z.view * 100).toFixed(3)}%;width:${(100 / z.zoom).toFixed(3)}%"` : ''}></i></div></div>` +
     `<div class="fxc__label deriz__meta"><span class="deriz__pos">${posText(z)}</span>` +
     `<span class="deriz__dur"${z ? '' : ' hidden'}>${z ? fmtDur(z.dur) : ''}</span>` +
     `<button type="button" class="deriz__swap"${z ? '' : ' hidden'}>${ICON_SWAP}<span>Ganti</span></button></div>` +
@@ -146,10 +145,10 @@ const setBusy = (stage: HTMLElement, on: boolean): void => { stage.classList.tog
 
 function updateZoomUi(card: HTMLElement, z: DerizData | undefined): void {
   const stage = card.querySelector<HTMLElement>('.deriz__stage')!;
-  stage.classList.toggle('is-zoomed', !!z && z.zoom > 1.001);
   stage.style.setProperty('--s', z ? visS(z).toFixed(4) : '0');
+  card.querySelector('.deriz__nav')?.classList.toggle('is-idle', !z || z.zoom <= 1.001);   // bar di bawah canvas: aktif hanya saat di-zoom
   const th = card.querySelector<HTMLElement>('.deriz__thumb');
-  if (th && z) { th.style.left = (z.view * 100).toFixed(3) + '%'; th.style.width = (100 / z.zoom).toFixed(3) + '%'; }
+  if (th) { th.style.left = (z ? z.view * 100 : 0).toFixed(3) + '%'; th.style.width = (z ? 100 / z.zoom : 100).toFixed(3) + '%'; }
 }
 
 function updateDerizUi(card: HTMLElement, fx: Fx): void {
@@ -815,7 +814,6 @@ export function initFxRack(host: () => AudioHost): FxRack {
   let sd: { stage: HTMLElement; card: HTMLElement; fx: Fx; sx: number; off: number; drag: boolean } | null = null;
   onRoots('pointerdown', e => {
     const stage = (e.target as Element).closest<HTMLElement>('.deriz__stage.has-audio'); if (!stage || (e.pointerType === 'mouse' && e.button !== 0)) return;
-    if ((e.target as Element).closest('.deriz__zoom, .deriz__nav')) return;   // tombol zoom / bar navigasi punya penanganan sendiri
     if (e.pointerType === 'touch') {
       touches.set(e.pointerId, e.clientX);
       if (touches.size === 2) { startPinch(stage); return; }   // dua jari = cubit untuk zoom
@@ -841,7 +839,7 @@ export function initFxRack(host: () => AudioHost): FxRack {
   onRoots('pointerup', endStart);
   onRoots('pointercancel', endStart);
   onRoots('dblclick', e => {
-    const stage = (e.target as Element).closest<HTMLElement>('.deriz__stage.has-audio'); if (!stage || (e.target as Element).closest('.deriz__zoom, .deriz__nav')) return;
+    const stage = (e.target as Element).closest<HTMLElement>('.deriz__stage.has-audio'); if (!stage) return;
     const card = stage.closest<HTMLElement>('.fxc'), fx = card && find(card);
     if (card && fx?.deriz) setStart(card, fx, 0, 900);
   });
@@ -883,11 +881,6 @@ export function initFxRack(host: () => AudioHost): FxRack {
   });
   const endTouch = (e: PointerEvent): void => { touches.delete(e.pointerId); if (touches.size < 2) pinch = null; };
   onRoots('pointerup', endTouch); onRoots('pointercancel', endTouch);
-  onRoots('click', e => {
-    const b = (e.target as Element).closest<HTMLElement>('.deriz__zb'); if (!b) return;
-    const card = b.closest<HTMLElement>('.fxc'), fx = card && find(card), z = fx?.deriz; if (!card || !fx || !z) return;
-    setView(card, fx, z.zoom * (b.dataset.z === 'in' ? 2 : .5), z.view + .5 / z.zoom, .5);   // zoom ke tengah jendela
-  });
   onRoots('wheel', e => {
     const stage = (e.target as Element).closest<HTMLElement>('.deriz__stage.has-audio'); if (!stage) return;
     const card = stage.closest<HTMLElement>('.fxc'), fx = card && find(card), z = fx?.deriz; if (!card || !fx || !z) return;
@@ -909,10 +902,12 @@ export function initFxRack(host: () => AudioHost): FxRack {
   onRoots('pointerdown', e => {
     const nav = (e.target as Element).closest<HTMLElement>('.deriz__nav'); if (!nav || (e.pointerType === 'mouse' && e.button !== 0)) return;
     const card = nav.closest<HTMLElement>('.fxc'), fx = card && find(card); if (!card || !fx?.deriz) return;
-    nd = { card, fx, nav }; nav.setPointerCapture(e.pointerId); e.preventDefault(); navTo(e.clientX);
+    if (nav.classList.contains('is-idle')) return;   // belum di-zoom: tidak ada yang digeser
+    nd = { card, fx, nav }; nav.classList.add('is-dragging'); nav.setPointerCapture(e.pointerId); e.preventDefault(); navTo(e.clientX);
   });
   onRoots('pointermove', e => { if (nd) navTo(e.clientX); });
-  onRoots('pointerup', () => { nd = null; }); onRoots('pointercancel', () => { nd = null; });
+  const endNav = (): void => { nd?.nav.classList.remove('is-dragging'); nd = null; };
+  onRoots('pointerup', endNav); onRoots('pointercancel', endNav);
 
   // ---------- DERIZ: card miring 3D mengikuti kursor + kilau mengikuti arah cahaya (mouse saja; mati saat reduced-motion / drag garis start) ----------
   const untilt = (c: HTMLElement): void => { c.classList.remove('is-tilting'); c.style.setProperty('--rx', '0deg'); c.style.setProperty('--ry', '0deg'); c.style.setProperty('--mx', '50%'); c.style.setProperty('--my', '0%'); };

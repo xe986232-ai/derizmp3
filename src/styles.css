@@ -827,10 +827,10 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 /* tombol upload: kunci logam gelap */
 .fxc--deriz .deriz__up{background:linear-gradient(180deg,#3d3d4c,#242430);color:#ececf4;border:1px solid rgba(255,255,255,.08);box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 3px 8px rgba(0,0,0,.5)}
 .fxc--deriz .deriz__up:hover{background:linear-gradient(180deg,#4a4a5c,#2b2b38)}
-/* baris layar + knob: layar melebar, knob di kanan; knob baru tinggal ditambah ke .deriz__knobs */
-.deriz__row{display:flex;align-items:stretch;gap:14px}
-.deriz__row .deriz__stage{flex:1;min-width:0}
-.deriz__knobs{flex:none;display:flex;align-items:center;gap:12px}
+/* layar + knob di baris pertama, bar geser tepat di bawah layar; knob baru tinggal ditambah ke .deriz__knobs */
+.deriz__row{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:14px;row-gap:9px;align-items:center}
+.deriz__row .deriz__stage{grid-column:1;grid-row:1;min-width:0}
+.deriz__knobs{grid-column:2;grid-row:1;display:flex;align-items:center;gap:12px}
 .deriz__knobs .fxc__cell{justify-content:center;gap:7px}
 .deriz__knobs .fxc__label{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#8a8aa0;text-shadow:0 -1px 0 rgba(0,0,0,.7)}
 /* knob logam cekung: serasi dengan LED power, tombol tutup & faceplate (bukan knob datar seperti Reverb / EQ) */
@@ -866,16 +866,15 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 @media (prefers-reduced-motion:reduce){.deriz__stage.is-busy .deriz__scan{animation:none;opacity:0}.deriz__stage.is-busy .deriz__canvas{opacity:.5}}
 
 /* ---------- DERIZ: zoom canvas (tombol + / - / reset, bar navigasi saat di-zoom) ---------- */
-.deriz__zoom{position:absolute;right:6px;top:6px;z-index:5;display:none;align-items:center;gap:1px;padding:2px;border-radius:8px;background:rgba(9,9,15,.72);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),0 2px 6px rgba(0,0,0,.4)}
-.deriz__stage.has-audio .deriz__zoom{display:flex}
-.deriz__zb{min-width:22px;height:22px;padding:0 5px;border:0;border-radius:6px;background:transparent;color:#d8d8e6;font:inherit;font-size:12px;line-height:1;font-variant-numeric:tabular-nums;cursor:pointer;transition:background-color .15s ease}
-.deriz__zb:hover{background:rgba(255,255,255,.1)}
-.deriz__zb:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-@media (pointer:coarse){.deriz__zb{height:28px;min-width:28px}}
-.deriz__nav{position:absolute;left:6px;right:6px;bottom:2px;height:16px;z-index:5;display:none;touch-action:none;cursor:pointer}
-.deriz__stage.is-zoomed .deriz__nav{display:block}
-.deriz__nav::before{content:"";position:absolute;left:0;right:0;top:50%;height:4px;margin-top:-2px;border-radius:2px;background:rgba(255,255,255,.1)}
-.deriz__thumb{position:absolute;top:50%;height:4px;min-width:8px;margin-top:-2px;border-radius:2px;background:var(--accent);box-shadow:0 0 6px var(--accent)}
+/* bar geser di bawah canvas (tempat khusus, di luar layar): alur tersembunyi gaya layar kaca, pegangan logam seperti tombol card */
+.deriz__nav{position:relative;grid-column:1;grid-row:2;height:12px;border-radius:6px;overflow:hidden;touch-action:none;cursor:pointer;background:#0b0b12;
+  box-shadow:inset 0 2px 5px rgba(0,0,0,.85),inset 0 0 0 1px rgba(255,255,255,.07),0 1px 0 rgba(255,255,255,.08);transition:opacity .25s ease}
+.deriz__nav.is-idle{opacity:.4;pointer-events:none}
+.deriz__thumb{position:absolute;top:2px;bottom:2px;min-width:14px;border-radius:4px;background:linear-gradient(180deg,#4a4a5c,#2b2b38);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 0 0 1px #0a0a0f,0 1px 3px rgba(0,0,0,.6);transition:background .15s ease}
+.deriz__thumb::after{content:"";position:absolute;left:50%;top:2px;bottom:2px;width:2px;margin-left:-1px;border-radius:1px;background:var(--accent);box-shadow:0 0 5px var(--accent)}
+.deriz__nav:hover .deriz__thumb,.deriz__nav.is-dragging .deriz__thumb{background:linear-gradient(180deg,#5a5a70,#33333f)}
+@media (pointer:coarse){.deriz__nav{height:16px}}
 
 /* ---------- DERIZ: overlay di tengah layar ---------- */
 .fxc__pop{width:26px;height:26px;flex:none;padding:0;border:0;border-radius:50%;background:transparent;color:#9a9ab0;display:grid;place-items:center;cursor:pointer;transition:background .2s ease,color .2s ease,transform .15s ease}
