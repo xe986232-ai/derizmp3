@@ -635,7 +635,7 @@ html.is-jelly .tracklist{overflow:visible}                      /* card boleh ke
 .deriz__stage.has-audio::before{opacity:1}
 .deriz__start{display:none;position:absolute;top:0;bottom:0;left:calc(6px + var(--s,0) * (100% - 12px));width:28px;margin-left:-14px;z-index:2;outline:none;pointer-events:none}
 .deriz__stage.has-audio .deriz__start{display:block}
-.deriz__start::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;border-radius:1px;background:#fff;transition:background-color .15s ease,box-shadow .15s ease}
+.deriz__start::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:1.5px;margin-left:-.75px;border-radius:1px;background:#fff;transition:background-color .15s ease,box-shadow .15s ease}
 .deriz__start::after{content:"";position:absolute;left:50%;top:0;width:12px;height:9px;margin-left:-6px;background:#fff;clip-path:polygon(0 0,100% 0,50% 100%);transition:background-color .15s ease}
 .deriz__stage.is-dragging .deriz__start::before,.deriz__stage.is-dragging .deriz__start::after{background:#e4dcff}
 .deriz__start:focus-visible::before{box-shadow:0 0 0 2px var(--accent)}
@@ -838,10 +838,8 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .fxc--deriz .deriz__stage.is-over{box-shadow:inset 0 3px 10px rgba(0,0,0,.85),inset 0 0 0 2px var(--accent),0 0 16px var(--accent-soft)}
 .deriz__glass{position:absolute;inset:0;z-index:4;pointer-events:none;border-radius:inherit;
   background:linear-gradient(158deg,rgba(255,255,255,.11) 0,rgba(255,255,255,.025) 36%,transparent 37%),radial-gradient(130% 120% at 50% 50%,transparent 55%,rgba(0,0,0,.4) 100%)}
-.fxc--deriz .deriz__start::before{box-shadow:0 0 9px var(--accent),0 0 2px #fff}
-/* garis play: jalan dari garis start selama nada bunyi (satu garis per nada); amber supaya beda dari garis start yang putih */
-.deriz__play{position:absolute;top:0;bottom:0;left:calc(6px + var(--p,0) * (100% - 12px));width:2px;margin-left:-1px;z-index:3;pointer-events:none;border-radius:1px;background:#ffcf5a;box-shadow:0 0 8px #ffb02e,0 0 2px #fff;opacity:1}
-.deriz__play::after{content:"";position:absolute;left:50%;bottom:0;width:10px;height:8px;margin-left:-5px;background:#ffcf5a;clip-path:polygon(50% 0,100% 100%,0 100%)}
+/* garis play: garis lurus tipis kemerahan, jalan dari garis start selama nada bunyi (satu garis per nada) */
+.deriz__play{position:absolute;top:0;bottom:0;left:calc(6px + var(--p,0) * (100% - 12px));width:1px;margin-left:-.5px;z-index:3;pointer-events:none;background:#ff6b6b;opacity:1}
 .deriz__play.is-off{opacity:0}
 .deriz__play.is-end{opacity:0;transition:opacity .4s ease-out}
 /* tombol upload: kunci logam gelap */
