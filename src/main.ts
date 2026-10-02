@@ -815,7 +815,7 @@ document.querySelector('.headers-list').addEventListener('click', e => {
 });
 document.querySelectorAll('.trackheader__left-content').forEach(b => b.title = 'Tutup panel track');
 // Panel efek (kanan): lebar timeline berubah selama animasi, jadi ruler & toolbar pattern digambar ulang tiap frame
-const fxRack = initFxRack();   // isi panel efek: tombol +, card pilihan efek, dan card tiap efek (per track)
+const fxRack = initFxRack(() => ({ ctx: audio(), dest: master }));   // isi panel efek: tombol +, card pilihan efek, dan card tiap efek (per track)
 initEffectsPanel(settled => { paintRuler(settled); patBarPlace(); }, () => { closeMenu(true); closeAddMenu(true); dismissAdd(true); fxRack.closePicker(true); });
 fxRack.show(selTrack ? selTrack.closest('.trackheader-container').dataset.track : null);
 // ===== Menu "Tambahkan track" =====
