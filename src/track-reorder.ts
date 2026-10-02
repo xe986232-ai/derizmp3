@@ -168,6 +168,8 @@ export function initTrackReorder(
     if (e.button > 0 || pid !== -1) return;
     const b = (e.target as HTMLElement).closest('.trackheader__left-content') as HTMLElement | null;
     if (!b) return;
+    // Record Mode: card yang sedang dipilih dikuasai drag bebas (record-jelly.ts), jadi tahan icon tidak memicu pindah urutan
+    if (root.dataset.rec === 'on' && b.closest('.trackheader--selected')) return;
     btn = b; pid = e.pointerId; sx = e.clientX; sy = curY = e.clientY;
     suppressClick = false;
     try { b.setPointerCapture(e.pointerId); } catch { /* abaikan */ }

@@ -16,7 +16,7 @@ const MAX_TILT = 28;                   // derajat
 const LIFT = 1.06;                     // card membesar saat terangkat
 
 // elemen yang tidak boleh memulai drag (punya interaksi sendiri)
-const NO_DRAG = 'input, [role="slider"], .knob, .trackheader__pwr, .trackheader__rec-mode-button, .trackheader__more-options, .trackheader__left-content, [contenteditable="true"], .trackheader-separator';
+const NO_DRAG = 'input, [role="slider"], .knob, .trackheader__pwr, .trackheader__rec-mode-button, .trackheader__more-options, [contenteditable="true"], .trackheader-separator';
 
 export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement): void {
   const root = document.documentElement;
@@ -34,6 +34,7 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
   let nat = { l: 0, t: 0, r: 0, b: 0 };      // kotak card di posisi asal (tanpa transform)
   let suppressClick = false;
   let holdTimer = 0, lx = 0, ly = 0;         // timer tahan + posisi pointer terakhir
+  let layer: HTMLElement | null = null;      // pembungkus overlay di <body> (membawa class collapsed supaya tampilan card sama persis)
   let homeNext: Node | null = null;          // sibling setelah card di kandangnya (untuk mengembalikan posisi DOM)
   let lift = 1;
 
@@ -90,7 +91,12 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
     const col = cont.style.getPropertyValue('--track-color');
     if (col) s.setProperty('--track-color', col);
     homeNext = card.nextSibling;
-    document.body.appendChild(card);
+    layer = document.createElement('div');
+    layer.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;overflow:visible;pointer-events:none';
+    // aturan CSS panel yang dilipat ('.tracklist--collapsed .trackheader__...') bergantung pada ancestor ini
+    if (cont.closest('.tracklist--collapsed')) layer.className = 'tracklist--collapsed';
+    layer.appendChild(card);
+    document.body.appendChild(layer);
     last = performance.now();
     if (!raf) raf = requestAnimationFrame(tick);
   }
@@ -98,7 +104,8 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
   function finish(): void {
     cancelHold();
     cancelAnimationFrame(raf); raf = 0;
-    if (card && cont && card.parentNode === document.body) cont.insertBefore(card, homeNext && homeNext.parentNode === cont ? homeNext : null);
+    if (card && cont && layer && card.parentNode === layer) cont.insertBefore(card, homeNext && homeNext.parentNode === cont ? homeNext : null);
+    if (layer) { layer.remove(); layer = null; }
     homeNext = null;
     if (card) {
       const s = card.style;
