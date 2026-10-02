@@ -844,3 +844,23 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .deriz__stage.is-zoomed .deriz__nav{display:block}
 .deriz__nav::before{content:"";position:absolute;left:0;right:0;top:50%;height:4px;margin-top:-2px;border-radius:2px;background:rgba(255,255,255,.1)}
 .deriz__thumb{position:absolute;top:50%;height:4px;min-width:8px;margin-top:-2px;border-radius:2px;background:var(--accent);box-shadow:0 0 6px var(--accent)}
+
+/* ---------- DERIZ: overlay di tengah layar ---------- */
+.fxc__pop{width:26px;height:26px;flex:none;padding:0;border:0;border-radius:50%;background:transparent;color:#9a9ab0;display:grid;place-items:center;cursor:pointer;transition:background .2s ease,color .2s ease,transform .15s ease}
+.fxc__pop:hover{background:rgba(255,255,255,.1);color:#fff}
+.fxc__pop:active{transform:scale(.9)}
+.fxc-ph{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;padding:12px 14px;border-radius:14px;border:1px dashed rgba(255,255,255,.18);color:var(--muted);font-size:12px}
+.fxc-ph__btn{border:0;border-radius:999px;padding:6px 12px;background:rgba(255,255,255,.1);color:var(--text);font:inherit;font-weight:600;cursor:pointer}
+.fxc-ph__btn:hover{background:rgba(255,255,255,.18)}
+.derizov{position:fixed;inset:0;z-index:210;display:grid;place-items:center;padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom))}
+.derizov[hidden]{display:none}
+.derizov__back{position:absolute;inset:0;background:rgba(6,6,10,.64);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.derizov__win{position:relative;width:min(860px,100%);max-height:100%;outline:none}
+.derizov__x{position:absolute;top:-12px;right:-12px;z-index:5;width:34px;height:34px;padding:0;border:0;border-radius:50%;background:#fff;color:#16161d;display:grid;place-items:center;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,.5);transition:transform .15s ease}
+.derizov__x:hover{transform:scale(1.08)}
+.derizov__x:active{transform:scale(.92)}
+.derizov .fxc{margin-bottom:0;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 0 0 1px rgba(255,255,255,.05),0 40px 80px -20px rgba(0,0,0,.85)}
+.derizov .fxc--deriz{padding:18px 26px 18px 30px}
+.derizov .fxc--deriz .deriz__stage{height:clamp(190px,44vh,400px)}
+.derizov .fxc__pop{display:none}
+.derizov .fxc__title{pointer-events:none;cursor:default;font-size:15px}

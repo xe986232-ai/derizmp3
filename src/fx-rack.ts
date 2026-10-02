@@ -113,6 +113,8 @@ const cellHtml = (d: EffectDef, fx: Fx, p: Param): string => p.slider
 
 // ---------- DERIZ: canvas audio ----------
 const ICON_UP = svg('<path d="M12 16V5M7 10l5-5 5 5M5 19h14"/>', 16);
+const ICON_POP = svg('<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/>', 16);   // buka DERIZ di tengah layar
+const ICON_X = svg('<path d="M6 6l12 12M18 6L6 18"/>', 16);
 const esc = (t: string): string => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 const fmtDur = (s: number): string => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
 const fmtPos = (s: number): string => { const q = Math.round(Math.max(0, s) * 10), m = Math.floor(q / 600), r = (q % 600) / 10; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1); };   // m:ss.d
@@ -304,6 +306,7 @@ function cardHtml(fx: Fx, i: number): string {
   return `<section class="fxc${fx.on ? '' : ' is-off'}${fx.min ? ' is-min' : ''}${tabs.length ? ' has-tabs' : ''}${fx.type === 'deriz' ? ' fxc--deriz' : ''}" data-fx="${fx.id}" style="--i:${i}" aria-label="${d.name}">` +
     `<header class="fxc__head"><h3 class="fxc__name"><button type="button" class="fxc__title" aria-expanded="${!fx.min}" title="Klik untuk minimize / maximize">${d.name}</button></h3>${tabBar}` +
     `<button type="button" class="fxc__pwr" role="switch" aria-checked="${fx.on}" aria-label="${d.name} nyala / mati" title="Nyala / mati"></button>` +
+    (fx.type === 'deriz' ? `<button type="button" class="fxc__pop" aria-label="Buka DERIZ di tengah layar" title="Buka di tengah layar">${ICON_POP}</button>` : '') +
     (d.synth ? '' : `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi ${d.name}" title="Opsi">${ICON_MORE}</button>`) + `</header>` +
     `<div class="fxc__collapse"><div class="fxc__body">${body}</div></div></section>`;
 }
@@ -322,6 +325,18 @@ export function initFxRack(): FxRack {
   const topEl = addBtn.closest('.fx__top') as HTMLElement;
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // DERIZ overlay (jendela di tengah layar): kartu yang sama dipindah ke sini, jadi semua handler di bawah didaftarkan ke panel DAN overlay
+  const ov = document.createElement('div');
+  ov.className = 'derizov'; ov.hidden = true;
+  ov.innerHTML = '<div class="derizov__back"></div><div class="derizov__win" role="dialog" aria-modal="true" aria-label="DERIZ" tabindex="-1">' +
+    `<button type="button" class="derizov__x" aria-label="Tutup DERIZ" title="Tutup (Esc)">${ICON_X}</button><div class="derizov__slot"></div></div>`;
+  document.body.appendChild(ov);
+  const ovWin = ov.querySelector<HTMLElement>('.derizov__win')!, ovSlot = ov.querySelector<HTMLElement>('.derizov__slot')!;
+  function onRoots<K extends keyof HTMLElementEventMap>(type: K, fn: (e: HTMLElementEventMap[K]) => void, opt?: boolean | AddEventListenerOptions): void {
+    list.addEventListener(type, fn as EventListener, opt); ov.addEventListener(type, fn as EventListener, opt);
+  }
+  const cardById = (id: number | string): HTMLElement | null => document.querySelector<HTMLElement>(`.fxc[data-fx="${id}"]`);
+
   const fxs = () => (cur ? racks.get(cur) ?? [] : []);
   const find = (el: Element | null) => {
     const id = el?.closest<HTMLElement>('.fxc')?.dataset.fx;
@@ -334,6 +349,62 @@ export function initFxRack(): FxRack {
     if (card && fx) paintDeriz(card, fx);
   }));
   const watch = (card: Element): void => { const cv = card.querySelector('.deriz__canvas'); if (cv) ro.observe(cv); };
+
+  // ---------- DERIZ: overlay di tengah layar. Kartu aslinya dipindah ke jendela (satu instance, state tetap sinkron); di panel tinggal placeholder ----------
+  let ovOpen: { card: HTMLElement; ph: HTMLElement; opener: HTMLElement | null } | null = null;
+  let autoOpen: { track: string; id: number } | null = null;   // DERIZ baru ditambahkan: dibuka otomatis begitu track-nya terpilih
+  const onOvKey = (e: KeyboardEvent): void => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault(); e.stopPropagation();
+    closeOverlay();
+  };
+  function openOverlay(card: HTMLElement): void {
+    if (ovOpen?.card === card) return;
+    const fx = find(card); if (!fx || fx.type !== 'deriz') return;
+    if (ovOpen) closeOverlay(true);
+    closePicker(true); closeMenu(true); hideTip();
+    const ph = document.createElement('div');
+    ph.className = 'fxc-ph'; ph.dataset.fx = String(fx.id);
+    ph.innerHTML = '<span>DERIZ terbuka di tengah layar</span><button type="button" class="fxc-ph__btn">Kembalikan</button>';
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    card.replaceWith(ph);
+    fx.min = false; card.classList.remove('is-min');   // di overlay selalu terbuka penuh
+    card.querySelector('.fxc__title')?.setAttribute('aria-expanded', 'true');
+    ovSlot.replaceChildren(card);
+    ov.hidden = false;
+    ovOpen = { card, ph, opener };
+    document.addEventListener('keydown', onOvKey, true);
+    if (!reduce) {
+      ov.querySelector('.derizov__back')!.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 220, easing: 'ease-out' });
+      ovWin.animate([{ opacity: 0, transform: 'translateY(14px) scale(.94)' }, { opacity: 1, transform: 'none' }], { duration: 380, easing: 'cubic-bezier(.34,1.3,.64,1)' });
+    }
+    ovWin.focus({ preventScroll: true });
+    paintDeriz(card, fx);
+  }
+  // discard = daftar efek sedang diganti / track dihapus: kartu tidak perlu dikembalikan ke panel
+  function closeOverlay(instant = false, discard = false): void {
+    const o = ovOpen; if (!o) return;
+    ovOpen = null;
+    document.removeEventListener('keydown', onOvKey, true);
+    hideTip();
+    const finish = (): void => {
+      ov.hidden = true;
+      if (discard || !o.ph.isConnected) { o.card.querySelectorAll('canvas').forEach(c => ro.unobserve(c)); o.card.remove(); o.ph.remove(); return; }
+      o.ph.replaceWith(o.card);
+      const fx = find(o.card); if (fx) paintDeriz(o.card, fx);
+      if (o.opener?.isConnected) o.opener.focus({ preventScroll: true });
+    };
+    if (instant || reduce) { finish(); return; }
+    ov.querySelector('.derizov__back')!.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'forwards' });
+    ovWin.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(10px) scale(.95)' }], { duration: 170, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }).onfinish = finish;
+  }
+  ov.addEventListener('click', e => {
+    const t = e.target as Element;
+    if (t.classList.contains('derizov__back') || t.closest('.derizov__x')) closeOverlay();
+  });
+  ov.addEventListener('keydown', e => e.stopPropagation());   // pintasan DAW (Space, panah) tidak ikut jalan selama overlay terbuka
+  ov.addEventListener('keyup', e => e.stopPropagation());
+  onRoots('click', e => { if ((e.target as Element).closest('.fxc-ph__btn')) closeOverlay(); });
 
   // Tombol "+": di atas saat belum ada efek, pindah ke bawah daftar setelah ada efek (dengan animasi geser halus)
   function layout(animate: boolean): void {
@@ -498,6 +569,12 @@ export function initFxRack(): FxRack {
     card.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
   }
 
+  function openAuto(): void {
+    const a = autoOpen; if (!a || a.track !== cur) return;
+    autoOpen = null;
+    requestAnimationFrame(() => { const c = cardById(a.id); if (c?.isConnected && a.track === cur) openOverlay(c); });
+  }
+
   // plugin instrumen (mis. Supersaw): ditambahkan otomatis saat track synth dibuat, selalu di paling atas, hanya satu per track
   function addInstrument(trackId: string | number, type: FxType): void {
     const track = String(trackId);   // id track dari dataset selalu string; kunci Map harus sama
@@ -508,10 +585,12 @@ export function initFxRack(): FxRack {
     const fx: Fx = { id: ++seq, type, on: true, min: false, v };
     racks.set(track, [fx, ...rack]);
     applyAudio(track);
-    if (track !== cur) return;   // track lain belum dipilih: kartu digambar saat show()
+    if (type === 'deriz') autoOpen = { track, id: fx.id };   // DERIZ langsung muncul di tengah layar (overlay), bukan hanya di panel efek
+    if (track !== cur) return;   // track lain belum dipilih: kartu digambar & overlay dibuka saat show()
     list.insertAdjacentHTML('afterbegin', cardHtml(fx, 0));
     paintAll(list.firstElementChild as HTMLElement, fx);
     layout(true);
+    openAuto();
   }
 
   function removeEffect(card: HTMLElement): void {
@@ -547,7 +626,7 @@ export function initFxRack(): FxRack {
     if (!tip.hidden) showTip(el, p.fmt(v));
   };
 
-  list.addEventListener('pointerdown', e => {
+  onRoots('pointerdown', e => {
     const el = (e.target as Element).closest<HTMLElement>(CTL); if (!el || (e.pointerType === 'mouse' && e.button !== 0)) return;
     const c = ctx(el); if (!c) return;
     drag = { el, fx: c.fx, p: c.p, sx: e.clientX, sy: e.clientY, sv: c.fx.v[c.p.key], box: c.p.slider ? el.getBoundingClientRect() : null };
@@ -556,21 +635,21 @@ export function initFxRack(): FxRack {
     if (drag.box) setVal(el, c.fx, c.p, sliderVal(drag.box, e.clientY));   // slider: pegangan langsung lompat ke titik yang disentuh
     showTip(el, c.p.fmt(c.fx.v[c.p.key]));
   });
-  list.addEventListener('pointermove', e => {
+  onRoots('pointermove', e => {
     if (!drag) return;
     if (drag.box) { setVal(drag.el, drag.fx, drag.p, sliderVal(drag.box, e.clientY)); return; }
     setVal(drag.el, drag.fx, drag.p, drag.sv + ((drag.sy - e.clientY) + (e.clientX - drag.sx)) / DRAG_PX);
   });
   const endDrag = () => { if (!drag) return; drag.el.classList.remove('is-dragging'); drag = null; hideTip(); };
-  list.addEventListener('pointerup', endDrag);
-  list.addEventListener('pointercancel', endDrag);
-  list.addEventListener('lostpointercapture', endDrag);
-  list.addEventListener('dblclick', e => {
+  onRoots('pointerup', endDrag);
+  onRoots('pointercancel', endDrag);
+  onRoots('lostpointercapture', endDrag);
+  onRoots('dblclick', e => {
     const el = (e.target as Element).closest<HTMLElement>(CTL); if (!el) return;
     const c = ctx(el); if (!c) return;
     showTip(el, c.p.fmt(c.p.def), 900); setVal(el, c.fx, c.p, c.p.def);
   });
-  list.addEventListener('keydown', e => {
+  onRoots('keydown', e => {
     const el = (e.target as Element).closest<HTMLElement>(CTL); if (!el) return;
     const up = e.key === 'ArrowUp' || e.key === 'ArrowRight', down = e.key === 'ArrowDown' || e.key === 'ArrowLeft';
     if (!up && !down) return;
@@ -579,7 +658,7 @@ export function initFxRack(): FxRack {
     setVal(el, c.fx, c.p, Math.round((c.fx.v[c.p.key] + (up ? 0.02 : -0.02)) * 100) / 100);
     showTip(el, c.p.fmt(c.fx.v[c.p.key]), 900);
   });
-  list.addEventListener('blur', e => { if ((e.target as Element).matches?.(CTL) && !drag) hideTip(); }, true);
+  onRoots('blur', e => { if ((e.target as Element).matches?.(CTL) && !drag) hideTip(); }, true);
 
   // ---------- DERIZ: upload audio ke canvas (tombol, "Ganti", atau drag & drop file) ----------
   async function loadDeriz(card: HTMLElement, file: File): Promise<void> {
@@ -602,18 +681,18 @@ export function initFxRack(): FxRack {
       if (my === fx.tok) warn('File tidak bisa dibaca');
       return;
     }
-    const live = list.querySelector<HTMLElement>(`.fxc[data-fx="${fx.id}"]`);   // kartu bisa saja sudah dihapus / track diganti selama decode
+    const live = cardById(fx.id);   // kartu bisa saja sudah dihapus / track diganti selama decode
     if (!live) return;
     updateDerizUi(live, fx); paintDeriz(live, fx);
     // analisis spektrogram di latar; label menampilkan persennya, hasilnya digambar begitu selesai
-    const z = fx.deriz, cardOf = (): HTMLElement | null => list.querySelector<HTMLElement>(`.fxc[data-fx="${fx.id}"]`);
+    const z = fx.deriz, cardOf = (): HTMLElement | null => cardById(fx.id);
     if (!z) return;
     const spec = await computeSpec(z.buf, pct => { z.busy = pct; const c = cardOf(); if (c && fx.deriz === z) c.querySelector('.deriz__pos')!.textContent = posText(z); }, () => fx.deriz === z && fx.tok === my);
     if (!spec || fx.deriz !== z) return;
     z.spec = spec; z.busy = undefined;
     const c2 = cardOf(); if (c2) { updateDerizUi(c2, fx); paintDeriz(c2, fx); }
   }
-  list.addEventListener('change', e => {
+  onRoots('change', e => {
     const inp = e.target as HTMLInputElement;
     if (!inp.matches?.('.deriz__file')) return;
     const card = inp.closest<HTMLElement>('.fxc'), f = inp.files?.[0];
@@ -621,9 +700,9 @@ export function initFxRack(): FxRack {
     if (card && f) void loadDeriz(card, f);
   });
   const dropZone = (e: Event) => (e.target as Element).closest<HTMLElement>('.deriz__stage');
-  list.addEventListener('dragover', e => { const z = dropZone(e); if (!z) return; e.preventDefault(); z.classList.add('is-over'); });
-  list.addEventListener('dragleave', e => { dropZone(e)?.classList.remove('is-over'); });
-  list.addEventListener('drop', e => {
+  onRoots('dragover', e => { const z = dropZone(e); if (!z) return; e.preventDefault(); z.classList.add('is-over'); });
+  onRoots('dragleave', e => { dropZone(e)?.classList.remove('is-over'); });
+  onRoots('drop', e => {
     const z = dropZone(e); if (!z) return;
     e.preventDefault(); z.classList.remove('is-over');
     const card = z.closest<HTMLElement>('.fxc'), f = e.dataTransfer?.files?.[0];
@@ -646,7 +725,7 @@ export function initFxRack(): FxRack {
     if (tipMs >= 0) showTip(mk, fmtPos(z.start * z.dur), tipMs);
   };
   let sd: { stage: HTMLElement; card: HTMLElement; fx: Fx; sx: number; off: number; drag: boolean } | null = null;
-  list.addEventListener('pointerdown', e => {
+  onRoots('pointerdown', e => {
     const stage = (e.target as Element).closest<HTMLElement>('.deriz__stage.has-audio'); if (!stage || (e.pointerType === 'mouse' && e.button !== 0)) return;
     if ((e.target as Element).closest('.deriz__zoom, .deriz__nav')) return;   // tombol zoom / bar navigasi punya penanganan sendiri
     if (e.pointerType === 'touch') {
@@ -662,7 +741,7 @@ export function initFxRack(): FxRack {
     card.querySelector<HTMLElement>('.deriz__start')!.focus({ preventScroll: true });
     if (sd.drag) { setStart(card, fx, fracAt(stage, e.clientX + sd.off, fx.deriz), 0); e.preventDefault(); }
   });
-  list.addEventListener('pointermove', e => {
+  onRoots('pointermove', e => {
     if (sd?.drag) setStart(sd.card, sd.fx, fracAt(sd.stage, e.clientX + sd.off, sd.fx.deriz!), 0);
   });
   const endStart = (e: PointerEvent): void => {
@@ -671,14 +750,14 @@ export function initFxRack(): FxRack {
     s.stage.classList.remove('is-dragging'); hideTip();
     if (e.type === 'pointerup' && !s.drag && Math.abs(e.clientX - s.sx) < 8) setStart(s.card, s.fx, fracAt(s.stage, e.clientX, s.fx.deriz!), 900);   // tap
   };
-  list.addEventListener('pointerup', endStart);
-  list.addEventListener('pointercancel', endStart);
-  list.addEventListener('dblclick', e => {
+  onRoots('pointerup', endStart);
+  onRoots('pointercancel', endStart);
+  onRoots('dblclick', e => {
     const stage = (e.target as Element).closest<HTMLElement>('.deriz__stage.has-audio'); if (!stage || (e.target as Element).closest('.deriz__zoom, .deriz__nav')) return;
     const card = stage.closest<HTMLElement>('.fxc'), fx = card && find(card);
     if (card && fx?.deriz) setStart(card, fx, 0, 900);
   });
-  list.addEventListener('keydown', e => {
+  onRoots('keydown', e => {
     const mk = (e.target as Element).closest<HTMLElement>('.deriz__start'); if (!mk) return;
     const card = mk.closest<HTMLElement>('.fxc'), fx = card && find(card), z = fx?.deriz; if (!card || !fx || !z) return;
     const step = (e.shiftKey ? 0.05 : 0.01) / z.zoom;
@@ -707,7 +786,7 @@ export function initFxRack(): FxRack {
     const [x1, x2] = [...touches.values()];
     pinch = { card, fx, stage, d0: Math.max(24, Math.abs(x1 - x2)), z0: z.zoom, ga: fracAt(stage, (x1 + x2) / 2, z) };
   };
-  list.addEventListener('pointermove', e => {
+  onRoots('pointermove', e => {
     if (!touches.has(e.pointerId)) return;
     touches.set(e.pointerId, e.clientX);
     if (!pinch || touches.size < 2) return;
@@ -715,14 +794,14 @@ export function initFxRack(): FxRack {
     setView(pinch.card, pinch.fx, pinch.z0 * Math.max(1, Math.abs(x1 - x2)) / pinch.d0, pinch.ga, winAt(pinch.stage, (x1 + x2) / 2));   // titik di antara dua jari tetap di bawah jari
   });
   const endTouch = (e: PointerEvent): void => { touches.delete(e.pointerId); if (touches.size < 2) pinch = null; };
-  list.addEventListener('pointerup', endTouch); list.addEventListener('pointercancel', endTouch);
-  list.addEventListener('click', e => {
+  onRoots('pointerup', endTouch); onRoots('pointercancel', endTouch);
+  onRoots('click', e => {
     const b = (e.target as Element).closest<HTMLElement>('.deriz__zb, .deriz__zv'); if (!b) return;
     const card = b.closest<HTMLElement>('.fxc'), fx = card && find(card), z = fx?.deriz; if (!card || !fx || !z) return;
     if (b.classList.contains('deriz__zv')) setView(card, fx, 1, 0, 0);
     else setView(card, fx, z.zoom * (b.dataset.z === 'in' ? 2 : .5), z.view + .5 / z.zoom, .5);   // zoom ke tengah jendela
   });
-  list.addEventListener('wheel', e => {
+  onRoots('wheel', e => {
     const stage = (e.target as Element).closest<HTMLElement>('.deriz__stage.has-audio'); if (!stage) return;
     const card = stage.closest<HTMLElement>('.fxc'), fx = card && find(card), z = fx?.deriz; if (!card || !fx || !z) return;
     if (e.ctrlKey || e.metaKey) {   // Ctrl / Cmd + scroll, atau cubit di trackpad: zoom ke arah kursor
@@ -740,31 +819,32 @@ export function initFxRack(): FxRack {
     const r = nd.nav.getBoundingClientRect();
     setView(nd.card, nd.fx, nd.fx.deriz!.zoom, Math.max(0, Math.min(1, (x - r.left) / Math.max(1, r.width))), .5);
   };
-  list.addEventListener('pointerdown', e => {
+  onRoots('pointerdown', e => {
     const nav = (e.target as Element).closest<HTMLElement>('.deriz__nav'); if (!nav || (e.pointerType === 'mouse' && e.button !== 0)) return;
     const card = nav.closest<HTMLElement>('.fxc'), fx = card && find(card); if (!card || !fx?.deriz) return;
     nd = { card, fx, nav }; nav.setPointerCapture(e.pointerId); e.preventDefault(); navTo(e.clientX);
   });
-  list.addEventListener('pointermove', e => { if (nd) navTo(e.clientX); });
-  list.addEventListener('pointerup', () => { nd = null; }); list.addEventListener('pointercancel', () => { nd = null; });
+  onRoots('pointermove', e => { if (nd) navTo(e.clientX); });
+  onRoots('pointerup', () => { nd = null; }); onRoots('pointercancel', () => { nd = null; });
 
   // ---------- DERIZ: card miring 3D mengikuti kursor + kilau mengikuti arah cahaya (mouse saja; mati saat reduced-motion / drag garis start) ----------
   const untilt = (c: HTMLElement): void => { c.classList.remove('is-tilting'); c.style.setProperty('--rx', '0deg'); c.style.setProperty('--ry', '0deg'); c.style.setProperty('--mx', '50%'); c.style.setProperty('--my', '0%'); };
-  list.addEventListener('pointermove', e => {
+  onRoots('pointermove', e => {
     if (reduce || e.pointerType !== 'mouse' || sd) return;
     const card = (e.target as Element).closest<HTMLElement>('.fxc--deriz');
-    list.querySelectorAll<HTMLElement>('.fxc--deriz.is-tilting').forEach(c => { if (c !== card) untilt(c); });
+    document.querySelectorAll<HTMLElement>('.fxc--deriz.is-tilting').forEach(c => { if (c !== card) untilt(c); });
     if (!card) return;
     const r = card.getBoundingClientRect(), px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
     card.classList.add('is-tilting');
     card.style.setProperty('--ry', ((px - .5) * 7).toFixed(2) + 'deg'); card.style.setProperty('--rx', ((.5 - py) * 5).toFixed(2) + 'deg');
     card.style.setProperty('--mx', (px * 100).toFixed(1) + '%'); card.style.setProperty('--my', (py * 100).toFixed(1) + '%');
   });
-  list.addEventListener('pointerleave', () => list.querySelectorAll<HTMLElement>('.fxc--deriz.is-tilting').forEach(untilt));
+  onRoots('pointerleave', () => document.querySelectorAll<HTMLElement>('.fxc--deriz.is-tilting').forEach(untilt));
 
-  list.addEventListener('click', e => {
+  onRoots('click', e => {
     const t = e.target as Element, card = t.closest<HTMLElement>('.fxc');
     if (!card || t.matches('.deriz__file')) return;
+    if (t.closest('.fxc__pop')) { if (ovOpen?.card === card) closeOverlay(); else openOverlay(card); return; }
     if (t.closest('.deriz__up, .deriz__swap')) { card.querySelector<HTMLInputElement>('.deriz__file')!.click(); return; }
     const more = t.closest<HTMLButtonElement>('.fxc__more');
     if (more) { menu && menuBtn === more ? closeMenu() : openMenu(more, card); return; }
@@ -802,7 +882,7 @@ export function initFxRack(): FxRack {
 
   return {
     show(track) {
-      closePicker(true); closeMenu(true); hideTip(); drag = null; ro.disconnect();
+      closePicker(true); closeMenu(true); hideTip(); drag = null; closeOverlay(true, true); ro.disconnect();
       cur = track;
       addBtn.disabled = !track;
       list.replaceChildren();
@@ -811,11 +891,13 @@ export function initFxRack(): FxRack {
       list.innerHTML = fxs().map((f, i) => cardHtml(f, i)).join('');
       list.querySelectorAll<HTMLElement>('.fxc').forEach(c => { const f = find(c); if (f) paintAll(c, f); watch(c); });
       layout(false);
+      openAuto();
     },
     drop(track) {
       racks.delete(track);
+      if (autoOpen?.track === track) autoOpen = null;
       setReverb(track, null); setEq(track, null); setSupersaw(track, null);
-      if (cur === track) { closePicker(true); closeMenu(true); hideTip(); ro.disconnect(); cur = null; addBtn.disabled = true; list.replaceChildren(); layout(false); }
+      if (cur === track) { closePicker(true); closeMenu(true); hideTip(); closeOverlay(true, true); ro.disconnect(); cur = null; addBtn.disabled = true; list.replaceChildren(); layout(false); }
     },
     addInstrument,
     closePicker
