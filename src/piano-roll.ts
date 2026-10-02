@@ -369,6 +369,9 @@ export function copyPianoRollNotes(from: string, to: string, fromBeat = 0, toBea
   states.set(to, dst);
 }
 // nada milik DERIZ lain di pattern yang sama disimpan dengan kunci "<id pattern>@<id track DERIZ>"; daftar kunci tambahan itu untuk id ini
+export function dropPianoRollNotesOf(suffix: string) {   // buang semua nada berkunci "<pattern>@<suffix>" dan kabarkan perubahannya
+  for (const k of [...states.keys()]) if (k.endsWith('@' + suffix)) { states.delete(k); onChange && onChange(k); }
+}
 export const pianoRollExtraKeys = (id: string): string[] => [...states.keys()].filter(k => k.startsWith(id + '@') && states.get(k)!.notes.length);
 export function trimPianoRollNotes(id: string, toBeat: number) {   // buang / potong nada yang melewati toBeat
   const x = states.get(id); if (!x) return;

@@ -9,7 +9,7 @@ import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
 import { decodeFile, addBuffer, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
 import { slideSource, glideBeats } from './note-slide';
-import { openPianoRoll, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, PR_BEATS } from './piano-roll';
+import { openPianoRoll, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, PR_BEATS } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 initLandscape();
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -320,8 +320,8 @@ function renderPatNotes(el) {
   box.innerHTML = '<svg viewBox="0 0 ' + PR_BEATS + ' ' + rows + '" preserveAspectRatio="none" aria-hidden="true">' +
     notes.map(n => '<rect x="' + n.s + '" y="' + (top + hi - n.p + 0.1) + '" width="' + Math.max(n.l, 0.12) + '" height="0.8"/>').join('') + '</svg>';
 }
-// Banyak DERIZ bisa mengisi satu pattern: nada track pemilik pattern disimpan di kunci id pattern, nada DERIZ dari track lain di "<id>@<track DERIZ>"
-const patKey = (prId, track, ownTrack) => track === ownTrack ? prId : prId + '@' + track;
+// Banyak DERIZ bisa mengisi satu pattern: nada instrumen bawaan track pemilik pattern disimpan di kunci id pattern, nada DERIZ lain di "<id>@<id DERIZ>"
+const patKey = (prId, fxId, laneTrack) => !hasSynth(laneTrack) && fxRack.derizIds(laneTrack)[0] === fxId ? prId : prId + '@' + fxId;   // DERIZ bawaan track pemilik pattern pakai kunci polos (data lama tetap terbaca)
 const patBase = id => id.split('@')[0];
 const copyPatNotes = (from, to, a, b) => { copyPianoRollNotes(from, to, a, b); for (const k of pianoRollExtraKeys(from)) copyPianoRollNotes(k, to + k.slice(from.length), a, b); };
 const trimPatNotes = (id, beat) => { trimPianoRollNotes(id, beat); for (const k of pianoRollExtraKeys(id)) trimPianoRollNotes(k, beat); };
@@ -549,22 +549,22 @@ function editPattern() {
   renderPlayhead();
 }
 // Masuk ke pattern dari tombol titik tiga di DERIZ: piano roll yang sama, tapi nadanya milik DERIZ ini (dimainkan lewat sampler DERIZ ini)
-function enterPatternAs(el, track) {
-  const lane = el.parentElement;
+function enterPatternAs(el, fxId) {
+  const lane = el.parentElement, track = fxRack.derizTrackOf(fxId); if (track === undefined) return;
   if (!el.dataset.prId) el.dataset.prId = 'pat' + (++prSeq);
   const nm = document.getElementById('track-name-' + track), cont = document.querySelector('.trackheader-container[data-track="' + track + '"]');
   prStartBar = pl(el) / BAR_W;
   openPianoRoll({
-    id: patKey(el.dataset.prId, track, lane.dataset.track),
-    track: nm ? nm.textContent : 'Track',
+    id: patKey(el.dataset.prId, fxId, lane.dataset.track),
+    track: (nm ? nm.textContent : 'Track') + (fxRack.derizIds(track).length > 1 ? ' · ' + fxRack.derizLabel(fxId) : ''),
     pattern: el.querySelector('.pattern__title').textContent,
     color: (cont && getComputedStyle(cont).getPropertyValue('--track-color').trim()) || undefined,
   });
-  if (kbdCont && cont) openKbd(cont);   // keyboard di bawah ikut memainkan DERIZ ini
+  if (kbdCont && cont) openKbd(cont, fxId);   // keyboard di bawah ikut memainkan DERIZ ini
   renderPlayhead();
 }
 const patternBridge = {
-  list(track) {
+  list(fxId) {
     const rows = [...lanesEl.querySelectorAll('.pattern:not([data-clip])')].map(el => {
       const lane = el.parentElement, lt = lane.dataset.track, id = el.dataset.prId;
       const nm = document.getElementById('track-name-' + lt), cont = document.querySelector('.trackheader-container[data-track="' + lt + '"]');
@@ -573,13 +573,14 @@ const patternBridge = {
         trackName: nm ? nm.textContent : 'Track',
         color: (cont && getComputedStyle(cont).getPropertyValue('--track-color').trim()) || '#a66cff',
         bar: Math.round(pl(el) / BAR_W * 100) / 100 + 1,
-        notes: id ? getPianoRollNotes(patKey(id, track, lt)).length : 0,
+        notes: id ? getPianoRollNotes(patKey(id, fxId, lt)).length : 0,
         ref: el, top: lane.offsetTop, left: pl(el)
       };
     });
     return rows.sort((a, b) => a.top - b.top || a.left - b.left);
   },
-  open(row, track) { if (row.ref.isConnected) enterPatternAs(row.ref, track); }
+  open(row, fxId) { if (row.ref.isConnected) enterPatternAs(row.ref, fxId); },
+  removed(fxId) { dropPianoRollNotesOf(String(fxId)); }
 };
 lanesEl.addEventListener('dblclick', e => {   // ganti nama pattern: klik dua kali judulnya
   const t = e.target.closest && e.target.closest('.pattern__title');
@@ -696,7 +697,7 @@ function noteOn(m) {
   }
   if (tid && fxRack.hasDeriz(tid)) {   // track DERIZ: suara dari sampler-nya (audio yang di-upload), melewati efek track
     audio();
-    voices.set(m, {deriz: fxRack.derizOn(tid, m)});
+    voices.set(m, {deriz: fxRack.derizOn(tid, m, kbdFx ?? undefined)});
     return;
   }
   const ctx = audio(), t = ctx.currentTime, f = 440 * 2 ** ((m - 69) / 12);
@@ -782,7 +783,9 @@ document.addEventListener('keyup', e => { const k = e.key.toLowerCase(), m = kbd
 window.addEventListener('blur', releaseAll);
 
 // --- buka / tutup ---
-function openKbd(cont) {
+let kbdFx = null;   // DERIZ tertentu yang dimainkan keyboard (null = DERIZ pertama track)
+function openKbd(cont, fxId = null) {
+  kbdFx = fxId;
   const nm = document.getElementById('track-name-' + cont.dataset.track);
   kbdTitle.textContent = 'Keyboard · ' + (nm ? nm.textContent : 'Track');
   const cs = getComputedStyle(cont).getPropertyValue('--track-color').trim() || getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
@@ -794,7 +797,7 @@ function openKbd(cont) {
   syncKbdToggle();
 }
 function closeKbd() {
-  releaseAll(); kbdCont = null;
+  releaseAll(); kbdCont = null; kbdFx = null;
   kbdEl.classList.remove('is-open'); kbdEl.setAttribute('inert', ''); kbdEl.setAttribute('aria-hidden', 'true');
   syncKbdToggle();
 }
@@ -1001,11 +1004,11 @@ function synthPump(ctx, ahead) {
   while (synthI < synthQ.length && synthQ[synthI].when <= ahead) {
     if (synthQ[synthI].when > ctx.currentTime + .1 && performance.now() - t0 > 3) break;
     const n = synthQ[synthI++];
-    if (n.deriz) fxRack.derizPlay(n.track, n.p, n.when, n.dur, n.glides); else playNote(ctx, master, n.track, n.p, n.when, n.dur, n.glides);
+    if (n.deriz) fxRack.derizPlay(n.track, n.p, n.when, n.dur, n.glides, n.fxId); else playNote(ctx, master, n.track, n.p, n.when, n.dur, n.glides);
   }
 }
 // Nada satu pattern (kunci nada = key) dijadwalkan ke instrumen track "track"; deriz = lewat sampler DERIZ track itu
-function queueNotes(el, key, track, deriz, bs) {
+function queueNotes(el, key, track, deriz, bs, fxId) {
   const notes = getPianoRollNotes(key); if (!notes.length) return;
   const b0 = pl(el) / BAR_W * 4, b1 = (pl(el) + pw(el)) / BAR_W * 4, from = startPos * 4;
   // slide: nada slide tidak dibunyikan ulang; suara nada sumber dipanjangkan sampai akhir nada slide dan tinggi nadanya meluncur
@@ -1024,17 +1027,17 @@ function queueNotes(el, key, track, deriz, bs) {
     const e1 = {p: n.p, cur: n.p, sb: Math.max(s, from), eb: e, glides: []};
     ent.set(n, e1); list.push(e1);
   });
-  list.forEach(en => synthQ.push({track, deriz, p: en.p, when: startCtx + (en.sb - from) * bs, dur: (en.eb - en.sb) * bs,
+  list.forEach(en => synthQ.push({track, deriz, fxId, p: en.p, when: startCtx + (en.sb - from) * bs, dur: (en.eb - en.sb) * bs,
     glides: en.glides.length ? en.glides.map(g => ({when: startCtx + (g.b - from) * bs, from: g.from, to: g.to, dur: g.d * bs})) : undefined}));
 }
 function buildSynthQueue() {
   synthQ = []; synthI = 0;
   const bs = SEC_PER_BAR / 4;   // detik per ketukan
-  const derizTracks = [...document.querySelectorAll('.trackheader-container')].map(c => c.dataset.track).filter(t => !hasSynth(t) && fxRack.hasDeriz(t));
+  const derizAll = fxRack.derizAll();
   lanesEl.querySelectorAll('.pattern[data-pr-id]').forEach(el => {
-    const track = el.parentElement.dataset.track, id = el.dataset.prId, deriz = !hasSynth(track) && fxRack.hasDeriz(track);
-    if (deriz || hasSynth(track)) queueNotes(el, id, track, deriz, bs);   // instrumen milik track pattern ini
-    for (const t of derizTracks) if (t !== track) queueNotes(el, patKey(id, t, track), t, true, bs);   // DERIZ track lain yang ikut mengisi pattern ini
+    const track = el.parentElement.dataset.track, id = el.dataset.prId;
+    if (hasSynth(track)) queueNotes(el, id, track, false, bs);   // Supersaw milik track pattern ini
+    for (const d of derizAll) queueNotes(el, patKey(id, d.id, track), d.track, true, bs, d.id);   // semua DERIZ (di track mana pun) yang mengisi pattern ini
   });
   synthQ.sort((a, b) => a.when - b.when);
 }

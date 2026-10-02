@@ -16,7 +16,7 @@ type FxType = 'reverb' | 'eq' | 'supersaw' | 'deriz';
 interface DerizData { name: string; dur: number; buf: AudioBuffer; start: number; zoom: number; view: number; spec: Spec | null; busy?: number; }   // start: posisi garis start, 0..1 dari durasi; zoom >= 1: jendela terlihat = [view, view + 1/zoom] dari durasi; spec: spektrogram (null selagi dianalisis, busy = persen)
 // Spektrogram: frames x ROWS nilai dB (0..255 = -100..0 dBFS), baris 0 = frekuensi terendah (skala log); lut = palet warna yang disesuaikan dengan level puncak
 interface Spec { frames: number; hop: number; fmin: number; fmax: number; d: Uint8Array; lut: Uint32Array }   // cols: cache min/max per kolom pixel device (dihitung ulang hanya kalau lebar canvas berubah)   // start: posisi garis start, 0..1 dari durasi
-interface Fx { id: number; type: FxType; on: boolean; min: boolean; tab?: number; v: Record<string, number>; deriz?: DerizData; tok?: number; }
+interface Fx { id: number; type: FxType; on: boolean; min: boolean; extra?: boolean; tab?: number; v: Record<string, number>; deriz?: DerizData; tok?: number; }
 interface Param { key: string; label: string; hint?: string; def: number; fmt: (v: number) => string; bipolar?: boolean; slider?: boolean; tab?: string; }   // tab: nama kategori (plugin dengan tab)   // bipolar: arc dari tengah (seperti knob pan); slider: slider vertikal, bukan knob
 interface EffectDef { type: FxType; name: string; params: Param[]; synth?: boolean; }   // synth: plugin instrumen (otomatis ada di track synth)
 
@@ -55,7 +55,7 @@ const EFFECTS: EffectDef[] = [
     { key: 'speed', label: 'Speed', hint: 'Speed (kecepatan putar)', def: 0.5, bipolar: true, fmt: v => derizSpeed(v).toFixed(2) + '×' },
     { key: 'pitch', label: 'Pitch', hint: 'Pitch (nada, semitone)', def: 0.5, bipolar: true, fmt: v => { const n = derizPitch(v); return (n > 0 ? '+' : '') + n + ' st'; } },
     { key: 'volume', label: 'Volume', hint: 'Volume (level suara)', def: 0.8, fmt: pct }
-  ], synth: true },   // plugin track DERIZ: spektrogram + upload + knob; dibuat dari "+ Tambahkan track", bukan dari daftar efek
+  ], synth: true },   // plugin DERIZ: spektrogram + upload + knob; satu bawaan track DERIZ (dari "+ Tambahkan track"), sisanya bisa ditambah dari daftar efek (banyak DERIZ per track)
   {
     type: 'supersaw', name: 'Supersaw', synth: true,
     params: [
@@ -72,6 +72,7 @@ const EFFECTS: EffectDef[] = [
   }
 ];
 const defOf = (t: FxType) => EFFECTS.find(e => e.type === t)!;
+const derizNo = (id: number): number => { for (const r of racks.values()) { const k = r.filter(f => f.type === 'deriz').findIndex(f => f.id === id); if (k >= 0) return k + 1; } return 1; };   // urutan DERIZ di track-nya (1 = bawaan)
 
 const racks = new Map<string, Fx[]>();   // id track -> efek miliknya
 let cur: string | null = null, seq = 0;
@@ -301,7 +302,8 @@ function paintDeriz(card: HTMLElement, fx: Fx): void {
 const tabNames = (d: EffectDef): string[] => [...new Set(d.params.map(p => p.tab).filter((t): t is string => !!t))];
 
 function cardHtml(fx: Fx, i: number): string {
-  const d = defOf(fx.type), tabs = tabNames(d), cur = Math.min(fx.tab ?? 0, Math.max(0, tabs.length - 1));
+  const d = { ...defOf(fx.type) }; if (fx.type === 'deriz') { const no = derizNo(fx.id); if (no > 1) d.name += ' ' + no; }
+  const tabs = tabNames(d), cur = Math.min(fx.tab ?? 0, Math.max(0, tabs.length - 1));
   // plugin dengan kategori: tab di baris judul (tinggi card tetap sama dengan Reverb / EQ), tiap tab punya panel kontrolnya sendiri
   const tabBar = tabs.length
     ? `<div class="fxc__tabs" role="tablist" aria-label="Kategori ${d.name}">` +
@@ -315,7 +317,7 @@ function cardHtml(fx: Fx, i: number): string {
     (fx.type === 'deriz' ? `<button type="button" class="fxc__pat" aria-haspopup="menu" aria-expanded="false" aria-label="Pattern: pilih pattern untuk diisi DERIZ" title="Masuk ke pattern">${ICON_MORE}</button>` : '') +
     `<button type="button" class="fxc__pwr" role="switch" aria-checked="${fx.on}" aria-label="${d.name} nyala / mati" title="Nyala / mati"></button>` +
     (fx.type === 'deriz' ? `<button type="button" class="fxc__pop" aria-label="Buka DERIZ di tengah layar" title="Buka di tengah layar">${ICON_POP}</button><button type="button" class="fxc__close" aria-label="Tutup DERIZ" title="Tutup (Esc)">${ICON_X}</button>` : '') +
-    (d.synth ? '' : `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi ${d.name}" title="Opsi">${ICON_MORE}</button>`) + `</header>` +
+    (d.synth && !fx.extra ? '' : `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi ${d.name}" title="Opsi">${ICON_MORE}</button>`) + `</header>` +
     `<div class="fxc__collapse"><div class="fxc__body">${body}</div></div></section>`;
 }
 
@@ -325,8 +327,12 @@ export interface FxRack {
   addInstrument(track: string, type: 'supersaw' | 'deriz'): void;   // track synth baru: pasang plugin instrumennya (kartu di paling atas)
   closePicker(instant?: boolean): void;
   hasDeriz(track: string): boolean;   // track punya plugin DERIZ yang menyala dan sudah berisi audio
-  derizPlay(track: string, midi: number, when: number, dur: number, glides?: Array<{ when: number; to: number; dur: number }>): void;   // nada terjadwal dari piano roll (when = waktu AudioContext)
-  derizOn(track: string, midi: number): number;   // nada langsung (keyboard di bawah piano roll); mengembalikan id untuk derizOff
+  derizPlay(track: string, midi: number, when: number, dur: number, glides?: Array<{ when: number; to: number; dur: number }>, fxId?: number): void;   // nada terjadwal dari piano roll (when = waktu AudioContext); fxId kosong = DERIZ pertama yang menyala
+  derizOn(track: string, midi: number, fxId?: number): number;   // nada langsung (keyboard di bawah piano roll); mengembalikan id untuk derizOff
+  derizIds(track: string): number[];          // semua DERIZ di track ini, urut kartu (yang pertama = bawaan track)
+  derizAll(): Array<{ id: number; track: string }>;   // semua DERIZ yang menyala dan sudah berisi audio, di semua track
+  derizTrackOf(fxId: number): string | undefined;
+  derizLabel(fxId: number): string;           // "DERIZ", "DERIZ 2", ...
   derizOff(id: number): void;
   derizStop(): void;   // lepas semua nada DERIZ dan batalkan yang terjadwal
 }
@@ -336,8 +342,9 @@ export interface AudioHost { ctx: AudioContext; dest: AudioNode }
 // Jembatan ke timeline: DERIZ menampilkan daftar pattern aktif dan masuk ke salah satunya (piano roll untuk DERIZ ini di pattern itu)
 export interface PatternRow { title: string; trackName: string; color: string; bar: number; notes: number; ref: unknown }   // notes: jumlah nada milik DERIZ ini di pattern tsb; ref: pegangan milik timeline
 export interface PatternBridge {
-  list(track: string): PatternRow[];          // semua pattern instrumen di timeline, urut dari atas ke bawah lalu kiri ke kanan
-  open(row: PatternRow, track: string): void; // masuk ke pattern: buka piano roll untuk DERIZ milik track ini
+  list(fxId: number): PatternRow[];           // semua pattern instrumen di timeline, urut dari atas ke bawah lalu kiri ke kanan (notes = nada milik DERIZ fxId)
+  open(row: PatternRow, fxId: number): void;  // masuk ke pattern: buka piano roll untuk DERIZ ini
+  removed(fxId: number): void;                // DERIZ dihapus: buang nadanya dari semua pattern
 }
 
 export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxRack {
@@ -485,11 +492,11 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     }).catch(err => console.error(err));
   }
   // ---------- DERIZ dari piano roll: nada terjadwal (playback) dan nada langsung (keyboard), tanpa overlay ----------
-  const derizOf = (track: string): Fx | undefined => racks.get(track)?.find(f => f.type === 'deriz' && f.on && f.deriz);
+  const derizOf = (track: string, fxId?: number): Fx | undefined => racks.get(track)?.find(f => f.type === 'deriz' && f.on && f.deriz && (fxId === undefined || f.id === fxId));
   const derizStart = (z: DerizData): number => Math.floor(Math.min(z.start * z.dur, Math.max(0, z.dur - 0.01)) * z.buf.sampleRate);
   const liveRel = new Set<number>();   // nada langsung yang dilepas sebelum sampler siap
-  function derizPlay(track: string, midi: number, when: number, dur: number, glides?: Array<{ when: number; to: number; dur: number }>): void {
-    const fx = derizOf(track); if (!fx) return;
+  function derizPlay(track: string, midi: number, when: number, dur: number, glides?: Array<{ when: number; to: number; dur: number }>, fxId?: number): void {
+    const fx = derizOf(track, fxId); if (!fx) return;
     const { ctx, dest } = host(), id = ++kbSeq;
     derizSynth(fx, ctx).then(s => {
       const z = fx.deriz; if (!z) return;
@@ -500,8 +507,8 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
       s.noteOff(id, at + Math.max(0.01, dur));
     }).catch(err => console.error(err));
   }
-  function derizOn(track: string, midi: number): number {
-    const fx = derizOf(track); if (!fx) return 0;
+  function derizOn(track: string, midi: number, fxId?: number): number {
+    const fx = derizOf(track, fxId); if (!fx) return 0;
     const { ctx, dest } = host(), id = ++kbSeq;
     derizSynth(fx, ctx).then(s => {
       if (liveRel.delete(id)) return;   // sudah dilepas selagi sampler disiapkan
@@ -613,13 +620,13 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     if (pick || !cur) return;
     closeMenu(true);
     const have = new Set(fxs().map(f => f.type));
-    const choices = EFFECTS.filter(d => !d.synth);   // plugin instrumen tidak dipilih manual
+    const choices = EFFECTS.filter(d => !d.synth || d.type === 'deriz');   // plugin instrumen tidak dipilih manual, kecuali DERIZ (boleh banyak)
     const el = document.createElement('div');
     el.className = 'fx-pick';
     el.setAttribute('role', 'menu');
     el.setAttribute('aria-label', 'Pilih efek');
     el.innerHTML = choices.map((d, k) => {
-      const used = have.has(d.type);
+      const used = d.type !== 'deriz' && have.has(d.type);
       return `<button type="button" role="menuitem" class="fx-pick__item" data-type="${d.type}" style="--i:${k}"${used ? ' disabled title="Sudah ditambahkan"' : ''}>` +
         `<span>${d.name}</span></button>`;
     }).join('');
@@ -701,9 +708,10 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   // ---------- DERIZ: menu pattern (tombol titik tiga di kiri indikator nyala/mati) ----------
   function openPatMenu(btn: HTMLButtonElement): void {
     if (!patterns || !cur) return;
-    const track = cur;
+    const fx = find(btn); if (!fx) return;
+    const fxId = fx.id;
     closePicker(true); closeMenu(true); hideTip();
-    const rows = patterns.list(track);
+    const rows = patterns.list(fxId);
     const el = document.createElement('div');
     el.className = 'track-menu fx-menu fx-pats';
     el.setAttribute('role', 'menu');
@@ -725,7 +733,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
       txt.append(t1, t2);
       b.append(dot, txt);
       if (row.notes) { const c = document.createElement('em'); c.className = 'fx-pats__count'; c.textContent = row.notes + ' nada'; b.appendChild(c); }
-      b.addEventListener('click', () => { closeMenu(true); closeOverlay(true); patterns.open(row, track); });
+      b.addEventListener('click', () => { closeMenu(true); closeOverlay(true); patterns.open(row, fxId); });
       el.appendChild(b);
     }
     document.body.appendChild(el);
@@ -757,6 +765,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     const d = defOf(type), v: Record<string, number> = {};
     d.params.forEach(p => { v[p.key] = p.def; });
     const fx: Fx = { id: ++seq, type, on: true, min: false, v };
+    if (type === 'deriz') { fx.extra = true; autoOpen = { track: cur, id: fx.id }; }   // DERIZ tambahan: bisa dihapus, langsung terbuka di tengah layar seperti DERIZ bawaan
     racks.set(cur, [...fxs(), fx]);
     applyAudio(cur);
     list.insertAdjacentHTML('beforeend', cardHtml(fx, 0));
@@ -765,6 +774,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     watch(card);
     layout(true);
     card.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
+    openAuto();
   }
 
   function openAuto(): void {
@@ -792,8 +802,12 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   }
 
   function removeEffect(card: HTMLElement): void {
-    const fx = find(card); if (!fx || !cur || defOf(fx.type).synth) return;
+    const fx = find(card); if (!fx || !cur || (defOf(fx.type).synth && !fx.extra)) return;
     hideTip();
+    if (fx.type === 'deriz') {   // lepas sampler-nya dan buang nadanya di semua pattern
+      const e = synths.get(fx.id); if (e) { synths.delete(fx.id); void e.p.then(x => x.dispose(), () => { /* gagal dibuat */ }); }
+      patterns?.removed(fx.id);
+    }
     racks.set(cur, fxs().filter(f => f !== fx));
     applyAudio(cur);
     if (pick) closePicker(true);
@@ -1101,6 +1115,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
       openAuto();
     },
     drop(track) {
+      for (const f of racks.get(track) ?? []) if (f.type === 'deriz') patterns?.removed(f.id);
       racks.delete(track);
       if (autoOpen?.track === track) autoOpen = null;
       setReverb(track, null); setEq(track, null); setSupersaw(track, null);
@@ -1109,6 +1124,10 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     addInstrument,
     closePicker,
     hasDeriz: track => !!derizOf(track),
-    derizPlay, derizOn, derizOff, derizStop
+    derizPlay, derizOn, derizOff, derizStop,
+    derizIds: track => (racks.get(track) ?? []).filter(f => f.type === 'deriz').map(f => f.id),
+    derizAll: () => [...racks.entries()].flatMap(([track, r]) => r.filter(f => f.type === 'deriz' && f.on && f.deriz).map(f => ({ id: f.id, track }))),
+    derizTrackOf: fxId => { for (const [track, r] of racks) if (r.some(f => f.id === fxId)) return track; return undefined; },
+    derizLabel: fxId => { const n = derizNo(fxId); return n > 1 ? 'DERIZ ' + n : 'DERIZ'; }
   };
 }
