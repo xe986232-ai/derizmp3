@@ -826,10 +826,11 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .fxc--deriz .deriz__up:hover{background:linear-gradient(180deg,#4a4a5c,#2b2b38)}
 /* layar + knob di baris pertama, bar geser tepat di bawah layar; knob baru tinggal ditambah ke .deriz__knobs */
 .deriz__row{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:14px;row-gap:9px;align-items:center}
-.deriz__row .deriz__stage{grid-column:1/-1;grid-row:2;min-width:0}   /* canvas di bawah knob, selebar kartu */
-.deriz__knobs{grid-column:1/-1;grid-row:1;display:flex;align-items:center;justify-content:center;gap:34px}   /* Speed, Pitch, Volume berjajar di atas canvas */
-.deriz__knobs .fxc__cell{justify-content:center;gap:7px}
-.deriz__knobs .fxc__label{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#8a8aa0}
+.deriz__row .deriz__stage{grid-column:1;grid-row:2;min-width:0}   /* canvas di bawah knob Speed + Pitch */
+.deriz__knobs{grid-column:1;grid-row:1;display:flex;align-items:center;justify-content:center;gap:34px}   /* Speed + Pitch berjajar di atas canvas */
+.deriz__vol{grid-column:2;grid-row:2;display:flex;align-items:center;justify-content:center}   /* Volume tetap di kanan canvas */
+.deriz__knobs .fxc__cell,.deriz__vol .fxc__cell{justify-content:center;gap:7px}
+.deriz__knobs .fxc__label,.deriz__vol .fxc__label{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#8a8aa0}
 /* knob logam cekung: serasi dengan LED power, tombol tutup & faceplate (bukan knob datar seperti Reverb / EQ) */
 .fxc--deriz .fxk{width:50px;height:50px;border-radius:50%;border:1px solid rgba(255,255,255,.12);box-shadow:none}
 .fxc--deriz .fxk .knob-inner{border-radius:50%;background:radial-gradient(circle at 36% 28%,#3a3a48 0%,#1c1c25 58%,#101016 100%);box-shadow:none}
