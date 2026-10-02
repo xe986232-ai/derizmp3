@@ -90,8 +90,8 @@ const snapRound = (b: number) => { if (!snapOn) return b; const s = gridStep(); 
 const snapFloor = (b: number) => { if (!snapOn) return b; const s = gridStep(); return Math.floor(b / s + 1e-9) * s; };
 
 // ---------- gambar ----------
-function fit(c: HTMLCanvasElement, w: number, h: number) {
-  const dpr = window.devicePixelRatio || 1;
+function fit(c: HTMLCanvasElement, w: number, h: number, cap = 8) {
+  const dpr = Math.min(window.devicePixelRatio || 1, cap);   // cap: canvas grid yang lebar dibatasi (jumlah pixel di HP 3x turun ~55%)
   const pw = Math.max(1, Math.round(w * dpr)), ph = Math.max(1, Math.round(h * dpr));
   if (c.width !== pw || c.height !== ph) { c.width = pw; c.height = ph; }
   c.style.width = w + 'px'; c.style.height = h + 'px';
@@ -102,6 +102,7 @@ function fit(c: HTMLCanvasElement, w: number, h: number) {
 
 // garis vertikal bertingkat: bar > ketukan > 1/2 > 1/4 > 1/8
 const LEVELS: Array<[number, number]> = [[4, 0.42], [1, 0.2], [0.5, 0.11], [0.25, 0.08], [0.125, 0.06]];
+const LEVEL_FILL = LEVELS.map(l => 'rgba(255,255,255,' + l[1] + ')');
 function eachVLine(sx: number, vw: number, fn: (x: number, beat: number, level: number) => void) {
   for (let li = 0; li < LEVELS.length; li++) {
     const step = LEVELS[li][0];
@@ -130,9 +131,9 @@ function drawHandle(c: CanvasRenderingContext2D, n: Note, sx: number, sy: number
   c.fillStyle = '#fff'; c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.fill();
 }
 
-function drawGrid() {
+function drawGrid(zoomOnly = false) {   // zoomOnly: frame ini hanya zoom, note tidak berubah -> lewati deteksi note baru / hilang
   const vw = sc.clientWidth, vh = sc.clientHeight;
-  const c = fit(gc, vw, vh), sx = sc.scrollLeft, sy = sc.scrollTop;
+  const c = fit(gc, vw, vh, 2), sx = sc.scrollLeft, sy = sc.scrollTop;
   c.fillStyle = '#101016'; c.fillRect(0, 0, vw, vh);
   const xr = Math.min(vw, total * ppb - sx);
   const r0 = Math.max(0, Math.floor(sy / rowH)), r1 = Math.min(ROWS - 1, Math.floor((sy + vh) / rowH));
@@ -144,19 +145,19 @@ function drawGrid() {
       c.fillStyle = p % 12 === 0 ? 'rgba(255,255,255,.22)' : 'rgba(255,255,255,.05)';
       c.fillRect(0, Math.round(y + rowH) - 1, xr, 1);
     }
-    eachVLine(sx, vw, (x, _b, li) => { c.fillStyle = 'rgba(255,255,255,' + LEVELS[li][1] + ')'; c.fillRect(x - 0.5, 0, 1, vh); });
+    eachVLine(sx, vw, (x, _b, li) => { c.fillStyle = LEVEL_FILL[li]; c.fillRect(x - 0.5, 0, 1, vh); });
     // garis akhir pattern
     const ex = Math.round(total * ppb - sx);
     if (ex >= 0 && ex <= vw) { c.fillStyle = color; c.fillRect(ex - 1, 0, 2, vh); }
   }
   // nada
   const now = performance.now(); let animating = false;
-  if (!REDUCE) {                                // deteksi note baru / hilang sejak gambar terakhir (mencakup undo, hapus, erase)
+  if (!REDUCE && !zoomOnly) {                   // deteksi note baru / hilang sejak gambar terakhir (mencakup undo, hapus, erase)
     const cur = new Set(st.notes.map(n => n.id));
     for (const n of st.notes) if (!lastDrawn.has(n.id) || (selected.has(n.id) && !lastSel.has(n.id))) born.set(n.id, now);   // baru dibuat / baru dipilih -> bulatan pop
     for (const [id, n] of lastDrawn) if (!cur.has(id)) ghosts.push({n, t0: now, h: lastSel.has(id)});
   }
-  lastDrawn = new Map(st.notes.map(n => [n.id, {...n}])); lastSel = new Set(selected);
+  if (!zoomOnly) { lastDrawn = new Map(st.notes.map(n => [n.id, {...n}])); lastSel = new Set(selected); }
   const fs = Math.min(11, rowH - 4);
   c.font = '600 ' + fs + 'px system-ui,sans-serif'; c.textBaseline = 'middle';
   const visible = (n: Note) => {
@@ -189,8 +190,11 @@ function drawGrid() {
   }
 }
 
+let keysSig = '', rulerSig = '';   // tanda masukan gambar terakhir: kalau sama, tidak digambar ulang (mis. pinch horizontal tidak menyentuh keys)
 function drawKeys() {
   const vh = sc.clientHeight, sy = sc.scrollTop;
+  const sig = sy + '|' + rowH + '|' + vh + '|' + hoverP + '|' + showNoteNames + '|' + color + '|' + (window.devicePixelRatio || 1);
+  if (sig === keysSig) return; keysSig = sig;
   const c = fit(kc, KEY_W, vh);
   c.fillStyle = '#e9eaf0'; c.fillRect(0, 0, KEY_W, vh);
   const r0 = Math.max(0, Math.floor(sy / rowH)), r1 = Math.min(ROWS - 1, Math.floor((sy + vh) / rowH));
@@ -208,6 +212,8 @@ function drawKeys() {
 
 function drawRuler() {
   const vw = sc.clientWidth, sx = sc.scrollLeft;
+  const sig = sx + '|' + ppb + '|' + vw + '|' + color + '|' + (window.devicePixelRatio || 1);
+  if (sig === rulerSig) return; rulerSig = sig;
   const c = fit(rc, vw, RULER_H);
   c.fillStyle = '#1e1e26'; c.fillRect(0, 0, vw, RULER_H);
   c.font = '11px system-ui,sans-serif'; c.textBaseline = 'top';
@@ -252,7 +258,7 @@ function placeSelBar() {
 // ---------- playhead (garis + kepala di penggaris, ikut posisi playhead timeline) ----------
 function placePlayhead() {
   if (!phDom) return;
-  const x = phBeat * ppb - sc.scrollLeft;
+  const x = phBeat * ppb - curL();
   const vis = phBeat >= 0 && phBeat <= total && x >= -5 && x <= sc.clientWidth + 5;
   phDom.style.visibility = vis ? 'visible' : 'hidden';
   if (vis) phDom.style.translate = x + 'px 0';
@@ -287,7 +293,23 @@ export function trimPianoRollNotes(id: string, toBeat: number) {   // buang / po
   x.notes = x.notes.filter(n => n.s < toBeat - 1e-9).map(n => ({...n, l: Math.min(n.l, toBeat - n.s)}));
 }
 
-function redraw() { drawGrid(); drawKeys(); drawRuler(); placeSelBar(); placePlayhead(); notifyChange(); }
+// Zoom (pinch 2 jari / wheel) bisa memicu ratusan event per detik. Dulu tiap event menulis lebar ruang scroll + scrollLeft + scrollTop
+// langsung (beberapa layout paksa per event). Sekarang event hanya mencatat target; DOM ditulis SEKALI per frame di redraw().
+let zoomPend: {l: number; t: number} | null = null, zoomFrame = false;
+const curL = () => (zoomPend ? zoomPend.l : sc.scrollLeft), curT = () => (zoomPend ? zoomPend.t : sc.scrollTop);   // posisi scroll efektif (termasuk zoom yang belum ditulis)
+function flushZoom() {
+  if (!zoomPend) return;
+  const z = zoomPend; zoomPend = null;
+  applySize(); sc.scrollLeft = z.l; sc.scrollTop = z.t;
+}
+function redraw() {
+  flushZoom();
+  const zo = zoomFrame; zoomFrame = false;
+  drawGrid(zo); drawKeys(); drawRuler(); placeSelBar(); placePlayhead();
+  // notifyChange membuat JSON seluruh note: di frame zoom ditunda (note tidak berubah), supaya tidak ikut membebani gesture
+  if (zo) { window.clearTimeout(notifyT); notifyT = window.setTimeout(notifyChange, 250); } else notifyChange();
+}
+let notifyT = 0;
 function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; redraw(); }); }
 
 // ---------- ukuran & zoom ----------
@@ -297,14 +319,12 @@ function applySize() {
 }
 function setZoomAt(nppb: number, nrow: number, vx: number, vy: number, beatAt: number, rowAt: number) {
   ppb = clamp(nppb, PPB_MIN, PPB_MAX); rowH = clamp(nrow, ROW_MIN, ROW_MAX);
-  applySize();
-  sc.scrollLeft = Math.max(0, beatAt * ppb - vx);
-  sc.scrollTop = Math.max(0, rowAt * rowH - vy);
+  zoomPend = {l: Math.max(0, beatAt * ppb - vx), t: Math.max(0, rowAt * rowH - vy)}; zoomFrame = true;
   schedule();
 }
 function zoomBy(fx: number, fy: number) {
   const vw = sc.clientWidth, vh = sc.clientHeight;
-  setZoomAt(ppb * fx, rowH * fy, vw / 2, vh / 2, (sc.scrollLeft + vw / 2) / ppb, (sc.scrollTop + vh / 2) / rowH);
+  setZoomAt(ppb * fx, rowH * fy, vw / 2, vh / 2, (curL() + vw / 2) / ppb, (curT() + vh / 2) / rowH);
 }
 
 // ---------- operasi data ----------
@@ -437,7 +457,7 @@ function onDown(e: PointerEvent) {
     const [a, b] = [...ptrs.values()];
     const r = gc.getBoundingClientRect();
     const mx = (a.x + b.x) / 2 - r.left, my = (a.y + b.y) / 2 - r.top;
-    pinch = {d0x: Math.abs(a.x - b.x), d0y: Math.abs(a.y - b.y), ppb0: ppb, row0: rowH, beat0: (sc.scrollLeft + mx) / ppb, rowPos0: (sc.scrollTop + my) / rowH};
+    pinch = {d0x: Math.abs(a.x - b.x), d0y: Math.abs(a.y - b.y), ppb0: ppb, row0: rowH, beat0: (curL() + mx) / ppb, rowPos0: (curT() + my) / rowH};
     return;
   }
   if (ptrs.size > 2 || pinch) return;
@@ -609,7 +629,7 @@ function onWheel(e: WheelEvent) {
   e.preventDefault();
   const r = gc.getBoundingClientRect(), vx = e.clientX - r.left, vy = e.clientY - r.top;
   const f = Math.exp(-e.deltaY * (e.ctrlKey ? 0.012 : 0.006));
-  const beat = (sc.scrollLeft + vx) / ppb, rowPos = (sc.scrollTop + vy) / rowH;
+  const beat = (curL() + vx) / ppb, rowPos = (curT() + vy) / rowH;
   if (e.altKey) setZoomAt(ppb, rowH * f, vx, vy, beat, rowPos); else setZoomAt(ppb * f, rowH, vx, vy, beat, rowPos);
 }
 
@@ -826,6 +846,7 @@ export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.
   const mid = st.notes.length ? st.notes.reduce((a, n) => a + n.p, 0) / st.notes.length : 62;   // mulai di sekitar C4
   sc.scrollLeft = 0; sc.scrollTop = Math.max(0, (P_MAX - mid) * rowH - vh / 2);
   resetAnim(); selBarOn = false; selBar.hidden = true;
+  keysSig = rulerSig = ''; zoomPend = null; zoomFrame = false;
   setTool('draw'); updateUI(); redraw();
 }
 
