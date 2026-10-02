@@ -120,8 +120,7 @@ const ICON_X = svg('<path d="M6 6l12 12M18 6L6 18"/>', 16);
 const esc = (t: string): string => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 const fmtDur = (s: number): string => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
 const fmtPos = (s: number): string => { const q = Math.round(Math.max(0, s) * 10), m = Math.floor(q / 600), r = (q % 600) / 10; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1); };   // m:ss.d
-const posText = (z: DerizData | undefined): string => (z ? (z.busy !== undefined ? 'Menganalisis ' + z.busy + '%' : 'Start ' + fmtPos(z.start * z.dur)) : 'Belum ada audio');
-const zoomText = (z: DerizData | undefined): string => (z ? (z.zoom < 10 ? String(Math.round(z.zoom * 10) / 10) : String(Math.round(z.zoom))) : '1') + '×';
+const posText = (z: DerizData | undefined): string => (z ? (z.busy !== undefined ? '' : 'Start ' + fmtPos(z.start * z.dur)) : 'Belum ada audio')   // selagi dimuat / dianalisis: tanpa teks, animasi ada di dalam canvas;
 const visS = (z: DerizData): number => (z.start - z.view) * z.zoom;   // posisi garis start dalam jendela yang terlihat (bisa di luar 0..1 saat di-zoom)
 const DERIZ_PAD = 6;   // jarak kiri/kanan canvas: garis start di 0 / 1 dan ujung waveform sejajar, pegangan tidak terpotong
 
@@ -129,11 +128,11 @@ const DERIZ_PAD = 6;   // jarak kiri/kanan canvas: garis start di 0 / 1 dan ujun
 function derizHtml(fx: Fx): string {
   const z = fx.deriz;
   return `<div class="fxc__knobs deriz"><div class="fxc__cell deriz__cell"><div class="deriz__row">` +
-    `<div class="deriz__stage${z ? ' has-audio' : ''}${z && z.zoom > 1.001 ? ' is-zoomed' : ''}" style="--s:${z ? visS(z).toFixed(4) : 0}"><canvas class="deriz__canvas" role="img" aria-label="Spektrogram audio DERIZ"></canvas>` +
+    `<div class="deriz__stage${z ? ' has-audio' : ''}${z && z.zoom > 1.001 ? ' is-zoomed' : ''}${z && z.busy !== undefined ? ' is-busy' : ''}" style="--s:${z ? visS(z).toFixed(4) : 0}"><canvas class="deriz__canvas" role="img" aria-label="Spektrogram audio DERIZ"></canvas>` +
     `<div class="deriz__start" role="slider" tabindex="0" aria-label="Garis start" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${z ? z.start.toFixed(4) : 0}" aria-valuetext="${posText(z)}"></div>` +
-    `<div class="deriz__zoom" role="group" aria-label="Zoom waveform"><button type="button" class="deriz__zb" data-z="out" aria-label="Perkecil" title="Perkecil">&minus;</button><button type="button" class="deriz__zv" aria-label="Reset zoom" title="Reset zoom">${zoomText(z)}</button><button type="button" class="deriz__zb" data-z="in" aria-label="Perbesar" title="Perbesar">+</button></div>` +
+    `<div class="deriz__zoom" role="group" aria-label="Zoom waveform"><button type="button" class="deriz__zb" data-z="out" aria-label="Perkecil" title="Perkecil">&minus;</button><button type="button" class="deriz__zb" data-z="in" aria-label="Perbesar" title="Perbesar">+</button></div>` +
     `<div class="deriz__nav" aria-hidden="true"><i class="deriz__thumb"${z ? ` style="left:${(z.view * 100).toFixed(3)}%;width:${(100 / z.zoom).toFixed(3)}%"` : ''}></i></div>` +
-    `<button type="button" class="deriz__up">${ICON_UP}<span>Upload audio</span></button><i class="deriz__glass" aria-hidden="true"></i></div>` +
+    `<button type="button" class="deriz__up">${ICON_UP}<span>Upload audio</span></button><i class="deriz__scan" aria-hidden="true"></i><i class="deriz__glass" aria-hidden="true"></i></div>` +
     `<div class="deriz__knobs">${defOf('deriz').params.map(p => cellHtml(defOf('deriz'), fx, p)).join('')}</div></div>` +
     `<div class="fxc__label deriz__meta"><span class="deriz__pos">${posText(z)}</span>` +
     `<span class="deriz__dur"${z ? '' : ' hidden'}>${z ? fmtDur(z.dur) : ''}</span>` +
@@ -142,11 +141,12 @@ function derizHtml(fx: Fx): string {
     `<input type="file" class="deriz__file" accept="${AUDIO_ACCEPT}" hidden></div></div>`;
 }
 
+const setBusy = (stage: HTMLElement, on: boolean): void => { stage.classList.toggle('is-busy', on); stage.setAttribute('aria-busy', String(on)); };   // animasi pemuatan di dalam canvas
+
 function updateZoomUi(card: HTMLElement, z: DerizData | undefined): void {
   const stage = card.querySelector<HTMLElement>('.deriz__stage')!;
   stage.classList.toggle('is-zoomed', !!z && z.zoom > 1.001);
   stage.style.setProperty('--s', z ? visS(z).toFixed(4) : '0');
-  const zv = card.querySelector<HTMLElement>('.deriz__zv'); if (zv) zv.textContent = zoomText(z);
   const th = card.querySelector<HTMLElement>('.deriz__thumb');
   if (th && z) { th.style.left = (z.view * 100).toFixed(3) + '%'; th.style.width = (100 / z.zoom).toFixed(3) + '%'; }
 }
@@ -155,6 +155,7 @@ function updateDerizUi(card: HTMLElement, fx: Fx): void {
   const z = fx.deriz;
   card.querySelector('.deriz__stage')!.classList.toggle('has-audio', !!z);
   card.querySelector('.deriz__stage')!.classList.remove('is-loading');
+  setBusy(card.querySelector<HTMLElement>('.deriz__stage')!, !!z && z.busy !== undefined);
   card.querySelector('.deriz__pos')!.textContent = posText(z);
   updateZoomUi(card, z);
   const dur = card.querySelector<HTMLElement>('.deriz__dur')!, swap = card.querySelector<HTMLElement>('.deriz__swap')!;
@@ -751,13 +752,13 @@ export function initFxRack(host: () => AudioHost): FxRack {
     const fx = find(card); if (!fx) return;
     const stage = card.querySelector<HTMLElement>('.deriz__stage')!, name = card.querySelector<HTMLElement>('.deriz__pos')!;
     const warn = (msg: string): void => {   // pesan singkat di baris label, lalu kembali ke keadaan semula
-      stage.classList.remove('is-loading', 'is-shake'); void stage.offsetWidth; stage.classList.add('is-shake');
+      setBusy(stage, false); stage.classList.remove('is-loading', 'is-shake'); void stage.offsetWidth; stage.classList.add('is-shake');
       name.textContent = msg;
       window.setTimeout(() => { if (card.isConnected) updateDerizUi(card, fx); }, 2400);
     };
     if (!isAudio(file)) { warn('Bukan file audio'); return; }
     const my = fx.tok = (fx.tok ?? 0) + 1;   // upload yang lebih baru membatalkan yang lama
-    stage.classList.add('is-loading'); name.textContent = 'Memuat…';
+    stage.classList.add('is-loading'); setBusy(stage, true); name.textContent = '';
     try {
       const buf = await decodeStandalone(file);
       if (my !== fx.tok) return;
@@ -770,10 +771,10 @@ export function initFxRack(host: () => AudioHost): FxRack {
     const live = cardById(fx.id);   // kartu bisa saja sudah dihapus / track diganti selama decode
     if (!live) return;
     updateDerizUi(live, fx); paintDeriz(live, fx);
-    // analisis spektrogram di latar; label menampilkan persennya, hasilnya digambar begitu selesai
+    // analisis spektrogram di latar (animasi di canvas tetap jalan), hasilnya digambar begitu selesai
     const z = fx.deriz, cardOf = (): HTMLElement | null => cardById(fx.id);
     if (!z) return;
-    const spec = await computeSpec(z.buf, pct => { z.busy = pct; const c = cardOf(); if (c && fx.deriz === z) c.querySelector('.deriz__pos')!.textContent = posText(z); }, () => fx.deriz === z && fx.tok === my);
+    const spec = await computeSpec(z.buf, pct => { z.busy = pct; }, () => fx.deriz === z && fx.tok === my);
     if (!spec || fx.deriz !== z) return;
     z.spec = spec; z.busy = undefined;
     const c2 = cardOf(); if (c2) { updateDerizUi(c2, fx); paintDeriz(c2, fx); }
@@ -882,10 +883,9 @@ export function initFxRack(host: () => AudioHost): FxRack {
   const endTouch = (e: PointerEvent): void => { touches.delete(e.pointerId); if (touches.size < 2) pinch = null; };
   onRoots('pointerup', endTouch); onRoots('pointercancel', endTouch);
   onRoots('click', e => {
-    const b = (e.target as Element).closest<HTMLElement>('.deriz__zb, .deriz__zv'); if (!b) return;
+    const b = (e.target as Element).closest<HTMLElement>('.deriz__zb'); if (!b) return;
     const card = b.closest<HTMLElement>('.fxc'), fx = card && find(card), z = fx?.deriz; if (!card || !fx || !z) return;
-    if (b.classList.contains('deriz__zv')) setView(card, fx, 1, 0, 0);
-    else setView(card, fx, z.zoom * (b.dataset.z === 'in' ? 2 : .5), z.view + .5 / z.zoom, .5);   // zoom ke tengah jendela
+    setView(card, fx, z.zoom * (b.dataset.z === 'in' ? 2 : .5), z.view + .5 / z.zoom, .5);   // zoom ke tengah jendela
   });
   onRoots('wheel', e => {
     const stage = (e.target as Element).closest<HTMLElement>('.deriz__stage.has-audio'); if (!stage) return;
