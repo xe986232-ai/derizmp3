@@ -967,3 +967,13 @@ body:has(.pr.is-open) .landscape-btn svg{width:14px;height:14px}
 .fx-pats__empty{padding:10px 12px;font-size:12px;font-weight:600;letter-spacing:.04em;color:#8a8a9a;text-align:center}
 @media (prefers-reduced-motion:reduce){.fxc__pat,.fx-pats,.fx-pats__item{transition:none!important;animation:none!important}}
 .derizov .fxc__more{display:none}   /* Duplicate / Delete hanya dari kartu di panel efek */
+
+/* Panah panel efek di dalam piano roll: piano roll menutupi seluruh .stage (z-index 30), jadi panel efek + panahnya
+   diangkat di atasnya. Layar lebar: piano roll menyisakan lebar panel saat terbuka (grid ikut menyempit), panah tetap
+   menempel di tepi kanan saat tertutup. Layar sempit: panel menimpa piano roll seperti di timeline. */
+.stage:has(#pianoRoll.is-open) .fx{z-index:40}
+@media (min-width:641px){
+  #pianoRoll{transition:opacity .2s ease,transform .24s var(--ease-out),right .45s var(--ease-out)}
+  .stage:has(.fx--open) #pianoRoll{right:300px}   /* = --fx-w panel efek */
+}
+@media (prefers-reduced-motion:reduce){#pianoRoll{transition:none}}
