@@ -30,6 +30,8 @@ const pct = (v: number): string => Math.round(v * 100) + '%';
 const fmtSec = (s: number): string => (s < 1 ? Math.round(s * 1000) + ' ms' : s.toFixed(2) + ' s');
 const fmtHz = (hz: number): string => (hz >= 1000 ? (hz / 1000).toFixed(1) + ' kHz' : Math.round(hz) + ' Hz');
 
+const derizSpeed = (v: number): number => 2 ** ((v - 0.5) * 2);   // knob Speed: tengah = 1×, kiri 0.5×, kanan 2× (kecepatan putar sampler; nada ikut berubah seperti kaset)
+
 const EFFECTS: EffectDef[] = [
   {
     type: 'reverb', name: 'Reverb',
@@ -46,7 +48,7 @@ const EFFECTS: EffectDef[] = [
       { key: 'high', label: 'High', def: 0.5, bipolar: true, fmt: fmtDb }
     ]
   },
-  { type: 'deriz', name: 'DERIZ', params: [], synth: true },   // plugin track DERIZ: spektrogram + upload (tanpa knob); dibuat dari "+ Tambahkan track", bukan dari daftar efek
+  { type: 'deriz', name: 'DERIZ', params: [{ key: 'speed', label: 'Speed', def: 0.5, bipolar: true, fmt: v => derizSpeed(v).toFixed(2) + '×' }], synth: true },   // plugin track DERIZ: spektrogram + upload + knob; dibuat dari "+ Tambahkan track", bukan dari daftar efek
   {
     type: 'supersaw', name: 'Supersaw', synth: true,
     params: [
@@ -126,12 +128,13 @@ const DERIZ_PAD = 6;   // jarak kiri/kanan canvas: garis start di 0 / 1 dan ujun
 // Tinggi isi sama dengan card knob (Reverb / EQ): canvas 72 px (= tinggi knob) + satu baris label, dalam wadah .fxc__knobs yang sama.
 function derizHtml(fx: Fx): string {
   const z = fx.deriz;
-  return `<div class="fxc__knobs deriz"><div class="fxc__cell deriz__cell">` +
+  return `<div class="fxc__knobs deriz"><div class="fxc__cell deriz__cell"><div class="deriz__row">` +
     `<div class="deriz__stage${z ? ' has-audio' : ''}${z && z.zoom > 1.001 ? ' is-zoomed' : ''}" style="--s:${z ? visS(z).toFixed(4) : 0}"><canvas class="deriz__canvas" role="img" aria-label="Spektrogram audio DERIZ"></canvas>` +
     `<div class="deriz__start" role="slider" tabindex="0" aria-label="Garis start" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${z ? z.start.toFixed(4) : 0}" aria-valuetext="${posText(z)}"></div>` +
     `<div class="deriz__zoom" role="group" aria-label="Zoom waveform"><button type="button" class="deriz__zb" data-z="out" aria-label="Perkecil" title="Perkecil">&minus;</button><button type="button" class="deriz__zv" aria-label="Reset zoom" title="Reset zoom">${zoomText(z)}</button><button type="button" class="deriz__zb" data-z="in" aria-label="Perbesar" title="Perbesar">+</button></div>` +
     `<div class="deriz__nav" aria-hidden="true"><i class="deriz__thumb"${z ? ` style="left:${(z.view * 100).toFixed(3)}%;width:${(100 / z.zoom).toFixed(3)}%"` : ''}></i></div>` +
     `<button type="button" class="deriz__up">${ICON_UP}<span>Upload audio</span></button><i class="deriz__glass" aria-hidden="true"></i></div>` +
+    `<div class="deriz__knobs">${defOf('deriz').params.map(p => cellHtml(defOf('deriz'), fx, p)).join('')}</div></div>` +
     `<div class="fxc__label deriz__meta"><span class="deriz__pos">${posText(z)}</span>` +
     `<span class="deriz__dur"${z ? '' : ' hidden'}>${z ? fmtDur(z.dur) : ''}</span>` +
     `<button type="button" class="deriz__swap"${z ? '' : ' hidden'}>Ganti</button></div>` +
@@ -440,12 +443,15 @@ export function initFxRack(host: () => AudioHost): FxRack {
     if (!fx || !z || !fx.on || !cur || kbVoices.has(m)) return;
     const { ctx, dest } = host(); if (ctx.state === 'suspended') void ctx.resume();
     const src = ctx.createBufferSource(), g = ctx.createGain(), t = ctx.currentTime;
-    src.buffer = z.buf; src.playbackRate.value = 2 ** ((m - KROOT) / 12);
+    src.buffer = z.buf; src.playbackRate.value = 2 ** ((m - KROOT) / 12) * derizSpeed(fx.v.speed);
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.9, t + 0.006);
     src.connect(g); g.connect(trackInput(ctx, dest, cur));
     src.start(t, Math.min(z.start * z.dur, Math.max(0, z.dur - 0.01)));
     src.onended = () => { src.disconnect(); g.disconnect(); if (kbVoices.get(m)?.src === src) kbVoices.delete(m); };
     kbVoices.set(m, { src, g, ctx });
+  }
+  function kbRetune(fx: Fx): void {   // knob Speed diputar saat nada sedang ditahan: kecepatan ikut berubah mulus
+    kbVoices.forEach((v, m) => v.src.playbackRate.setTargetAtTime(2 ** ((m - KROOT) / 12) * derizSpeed(fx.v.speed), v.ctx.currentTime, 0.02));
   }
   function kbOff(m: number): void {
     const v = kbVoices.get(m); if (!v) return;
@@ -702,6 +708,7 @@ export function initFxRack(host: () => AudioHost): FxRack {
     fx.v[p.key] = v;
     paintCtl(el, v, p, defOf(fx.type).name);
     if (cur) applyAudio(cur);
+    if (fx.type === 'deriz' && p.key === 'speed') kbRetune(fx);
     if (!tip.hidden) showTip(el, p.fmt(v));
   };
 

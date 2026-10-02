@@ -827,6 +827,22 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 /* tombol upload: kunci logam gelap */
 .fxc--deriz .deriz__up{background:linear-gradient(180deg,#3d3d4c,#242430);color:#ececf4;border:1px solid rgba(255,255,255,.08);box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 3px 8px rgba(0,0,0,.5)}
 .fxc--deriz .deriz__up:hover{background:linear-gradient(180deg,#4a4a5c,#2b2b38)}
+/* baris layar + knob: layar melebar, knob di kanan; knob baru tinggal ditambah ke .deriz__knobs */
+.deriz__row{display:flex;align-items:stretch;gap:14px}
+.deriz__row .deriz__stage{flex:1;min-width:0}
+.deriz__knobs{flex:none;display:flex;align-items:center;gap:12px}
+.deriz__knobs .fxc__cell{justify-content:center;gap:7px}
+.deriz__knobs .fxc__label{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#8a8aa0;text-shadow:0 -1px 0 rgba(0,0,0,.7)}
+/* knob logam cekung: serasi dengan LED power, tombol tutup & faceplate (bukan knob datar seperti Reverb / EQ) */
+.fxc--deriz .fxk{width:50px;height:50px;border-radius:50%;box-shadow:0 0 0 2px #0a0a0f,0 0 0 3px rgba(255,255,255,.1),0 5px 9px rgba(0,0,0,.55)}
+.fxc--deriz .fxk .knob-inner{border-radius:50%;background:radial-gradient(circle at 36% 28%,#3a3a48 0%,#1c1c25 58%,#101016 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.6)}
+.fxc--deriz .fxk .circle-bg{stroke:#0a0a0f;stroke-width:3.4}
+.fxc--deriz .fxk .circle{stroke:var(--accent);stroke-width:3.4;filter:drop-shadow(0 0 3px var(--accent))}
+.fxc--deriz .fxk .circle-inner{fill:none}
+.fxc--deriz .fxk .circle-inner-stroke{stroke:rgba(255,255,255,.08)}
+.fxc--deriz .fxk .knob-pos{stroke:#fff;stroke-width:2.6;filter:drop-shadow(0 0 2px var(--accent))}
+.fxc--deriz .fxk .knob-input:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:50%}
+.fxc--deriz.is-off .fxk .circle{stroke:#4a4a5c;filter:none}
 /* readout posisi ala LCD */
 .fxc--deriz .deriz__pos,.fxc--deriz .deriz__dur{color:var(--accent);text-shadow:0 0 8px var(--accent-soft)}
 .fxc--deriz .deriz__meta{padding-top:3px}
