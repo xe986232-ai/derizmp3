@@ -722,26 +722,20 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     closePicker(true); closeMenu(true); hideTip();
     const rows = patterns.list(fxId);
     const el = document.createElement('div');
-    el.className = 'track-menu fx-menu fx-pats';
+    el.className = 'fx-pats';
     el.setAttribute('role', 'menu');
-    const head = document.createElement('div');
-    head.className = 'fx-pats__head'; head.textContent = 'Pattern aktif';
-    el.appendChild(head);
     if (!rows.length) {
       const empty = document.createElement('div');
-      empty.className = 'fx-pats__empty'; empty.textContent = 'Belum ada pattern. Klik area kosong di timeline untuk menambah.';
+      empty.className = 'fx-pats__empty'; empty.textContent = 'Belum ada pattern';
       el.appendChild(empty);
     }
     for (const row of rows) {
       const b = document.createElement('button');
-      b.type = 'button'; b.setAttribute('role', 'menuitem'); b.className = 'track-menu__item fx-pats__item';
-      const dot = document.createElement('i'); dot.className = 'track-menu__dot'; dot.style.background = row.color;
-      const txt = document.createElement('span'); txt.className = 'fx-pats__txt';
-      const t1 = document.createElement('b'); t1.textContent = row.title;
-      const t2 = document.createElement('small'); t2.textContent = row.trackName + ' · bar ' + row.bar;
-      txt.append(t1, t2);
-      b.append(dot, txt);
-      if (row.notes) { const c = document.createElement('em'); c.className = 'fx-pats__count'; c.textContent = row.notes + ' nada'; b.appendChild(c); }
+      b.type = 'button'; b.setAttribute('role', 'menuitem'); b.className = 'fx-pats__item';
+      b.setAttribute('aria-label', row.title + ', ' + row.trackName + ', bar ' + row.bar);   // detail hanya untuk pembaca layar, tidak tampil
+      const dot = document.createElement('i'); dot.className = 'fx-pats__dot'; dot.style.setProperty('--c', row.color);
+      const t = document.createElement('span'); t.className = 'fx-pats__name'; t.textContent = row.title;
+      b.append(dot, t);
       b.addEventListener('click', () => { closeMenu(true); closeOverlay(true); patterns.open(row, fxId); });
       el.appendChild(b);
     }
