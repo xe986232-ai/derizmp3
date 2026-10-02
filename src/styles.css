@@ -839,6 +839,11 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .deriz__glass{position:absolute;inset:0;z-index:4;pointer-events:none;border-radius:inherit;
   background:linear-gradient(158deg,rgba(255,255,255,.11) 0,rgba(255,255,255,.025) 36%,transparent 37%),radial-gradient(130% 120% at 50% 50%,transparent 55%,rgba(0,0,0,.4) 100%)}
 .fxc--deriz .deriz__start::before{box-shadow:0 0 9px var(--accent),0 0 2px #fff}
+/* garis play: jalan dari garis start selama nada bunyi (satu garis per nada); amber supaya beda dari garis start yang putih */
+.deriz__play{position:absolute;top:0;bottom:0;left:calc(6px + var(--p,0) * (100% - 12px));width:2px;margin-left:-1px;z-index:3;pointer-events:none;border-radius:1px;background:#ffcf5a;box-shadow:0 0 8px #ffb02e,0 0 2px #fff;opacity:1}
+.deriz__play::after{content:"";position:absolute;left:50%;bottom:0;width:10px;height:8px;margin-left:-5px;background:#ffcf5a;clip-path:polygon(50% 0,100% 100%,0 100%)}
+.deriz__play.is-off{opacity:0}
+.deriz__play.is-end{opacity:0;transition:opacity .4s ease-out}
 /* tombol upload: kunci logam gelap */
 .fxc--deriz .deriz__up{background:linear-gradient(180deg,#3d3d4c,#242430);color:#ececf4;border:1px solid rgba(255,255,255,.08);box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 3px 8px rgba(0,0,0,.5)}
 .fxc--deriz .deriz__up:hover{background:linear-gradient(180deg,#4a4a5c,#2b2b38)}

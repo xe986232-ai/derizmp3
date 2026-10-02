@@ -498,12 +498,52 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
       s.routeTo(trackInput(ctx, dest, track)); s.setBuffer(z2.buf);
       const [sp, pi, vo] = derizArgs(fx);
       s.noteOn(id, m - KROOT, Math.floor(Math.min(z2.start * z2.dur, Math.max(0, z2.dur - 0.01)) * z2.buf.sampleRate), sp, pi, vo);
+      headBegin(id, fx, ctx, ctx.currentTime);
     }).catch(err => console.error(err));
   }
   // ---------- DERIZ dari piano roll: nada terjadwal (playback) dan nada langsung (keyboard), tanpa overlay ----------
   const derizOf = (track: string, fxId?: number): Fx | undefined => racks.get(track)?.find(f => f.type === 'deriz' && f.on && f.deriz && (fxId === undefined || f.id === fxId));
   const derizStart = (z: DerizData): number => Math.floor(Math.min(z.start * z.dur, Math.max(0, z.dur - 0.01)) * z.buf.sampleRate);
   const liveRel = new Set<number>();   // nada langsung yang dilepas sebelum sampler siap
+  // ---------- DERIZ: garis play di canvas. Garis start tetap di tempatnya; tiap nada yang bunyi menggambar satu garis play yang berjalan dari garis start ----------
+  // Posisi sumber maju sebesar Speed x waktu nyata (tuts / Pitch tidak memengaruhi, sama seperti di worklet). Garis berhenti saat tuts dilepas
+  // (atau nada di piano roll selesai), atau saat sample habis, lalu memudar. Akor = beberapa garis sekaligus.
+  interface PlayHead { fx: Fx; ctx: AudioContext; t0: number; tEnd: number; pos: number; last: number; el: HTMLElement | null }   // pos: 0..1 dari durasi audio; t0 / tEnd: waktu AudioContext
+  const heads = new Map<number, PlayHead>();
+  let headRaf = 0;
+  const headTime = (ctx: AudioContext): number => ctx.currentTime - (ctx.outputLatency || ctx.baseLatency || 0);   // garis mengikuti yang terdengar, bukan yang dijadwalkan
+  function headBegin(id: number, fx: Fx, ctx: AudioContext, at: number, tEnd = Infinity): void {
+    const z = fx.deriz; if (!z) return;
+    heads.set(id, { fx, ctx, t0: at, tEnd, pos: Math.min(z.start * z.dur, Math.max(0, z.dur - 0.01)) / z.dur, last: at, el: null });
+    if (!headRaf) headRaf = requestAnimationFrame(headTick);
+  }
+  const headEnd = (id: number): void => { const h = heads.get(id); if (h) h.tEnd = Math.min(h.tEnd, h.ctx.currentTime); };
+  function headFinish(h: PlayHead): void {
+    const el = h.el; if (!el) return;
+    el.classList.add('is-end'); window.setTimeout(() => el.remove(), 450);
+  }
+  function headTick(): void {
+    headRaf = 0;
+    for (const [id, h] of heads) {
+      const z = h.fx.deriz, now = headTime(h.ctx);
+      if (!z) { headFinish(h); heads.delete(id); continue; }
+      const t = Math.min(now, h.tEnd);
+      if (t > h.last) { h.pos = Math.min(1, h.pos + (t - h.last) * derizSpeed(h.fx.v.speed) / z.dur); h.last = t; }   // Speed dibaca tiap frame: knob diputar saat nada ditahan ikut terasa
+      const stage = cardById(h.fx.id)?.querySelector<HTMLElement>('.deriz__stage') ?? null;   // kartu bisa di panel atau di overlay; kalau tidak terlihat, posisi tetap dihitung
+      if (stage && (!h.el || h.el.parentElement !== stage)) {
+        h.el?.remove();
+        const el = document.createElement('i'); el.className = 'deriz__play is-off'; el.setAttribute('aria-hidden', 'true');
+        stage.appendChild(el); h.el = el;
+      }
+      if (h.el) {
+        const p = (h.pos - z.view) * z.zoom;   // posisi di jendela yang terlihat (sama dengan garis start)
+        h.el.style.setProperty('--p', p.toFixed(4));
+        h.el.classList.toggle('is-off', now < h.t0 || p < -0.002 || p > 1.002);
+      }
+      if (now >= h.tEnd || h.pos >= 1) { headFinish(h); heads.delete(id); }
+    }
+    if (heads.size) headRaf = requestAnimationFrame(headTick);
+  }
   function derizPlay(track: string, midi: number, when: number, dur: number, glides?: Array<{ when: number; to: number; dur: number }>, fxId?: number): void {
     const fx = derizOf(track, fxId); if (!fx) return;
     const { ctx, dest } = host(), id = ++kbSeq;
@@ -514,6 +554,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
       s.noteOn(id, midi - KROOT, derizStart(z), sp, pi, vo, at);
       if (glides) for (const g of glides) s.glide(id, g.to - KROOT, Math.max(g.when, at), g.dur);
       s.noteOff(id, at + Math.max(0.01, dur));
+      headBegin(id, fx, ctx, at, at + Math.max(0.01, dur));
     }).catch(err => console.error(err));
   }
   function derizOn(track: string, midi: number, fxId?: number): number {
@@ -525,23 +566,30 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
       s.routeTo(trackInput(ctx, dest, track)); s.setBuffer(z.buf);
       const [sp, pi, vo] = derizArgs(fx);
       s.noteOn(id, midi - KROOT, derizStart(z), sp, pi, vo);
+      headBegin(id, fx, ctx, ctx.currentTime);
     }).catch(err => console.error(err));
     return id;
   }
   function derizOff(id: number): void {
     if (!id) return;
+    headEnd(id);
     liveRel.add(id);
     let sent = false;
     for (const e of synths.values()) if (e.s) { e.s.noteOff(id); sent = true; }
     if (sent) liveRel.delete(id);
   }
-  function derizStop(): void { for (const e of synths.values()) e.s?.releaseAll(); liveRel.clear(); }
+  function derizStop(): void {
+    for (const e of synths.values()) e.s?.releaseAll();
+    liveRel.clear();
+    for (const [id, h] of heads) { if (h.t0 > h.ctx.currentTime) { heads.delete(id); h.el?.remove(); } else h.tEnd = Math.min(h.tEnd, h.ctx.currentTime); }   // yang belum mulai dibatalkan, yang jalan berhenti di tempat
+  }
   function kbParams(fx: Fx): void {   // knob Speed / Pitch / Volume diputar saat nada ditahan: ikut berubah mulus
     const s = synths.get(fx.id)?.s; if (s) s.params(...derizArgs(fx));
   }
   function kbOff(m: number): void {
     const v = kbVoices.get(m); if (!v) return;
     kbVoices.delete(m);
+    headEnd(v.id);
     for (const e of synths.values()) e.s?.noteOff(v.id);
   }
   const kbPress = (m: number): void => { kbOn(m); const k = kbKeyEl(m); if (k) { k.classList.add('pressed'); k.classList.remove('unpressed'); } };
