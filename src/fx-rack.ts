@@ -1,14 +1,17 @@
 // Isi panel efek: tombol "+" bulat putih (di atas saat kosong, pindah ke bawah setelah ada efek), card gelap (gaya card track)
 // untuk memilih efek, dan satu card per efek. Parameter diatur dengan knob seperti knob pan di channel mixer.
 // Efek disimpan per track (kunci = id track); panel selalu menampilkan efek milik track yang sedang dipilih.
-// Saat ini baru ada Reverb. Efek baru cukup ditambah ke EFFECTS (ikon, nama, parameter) dan ke applyAudio().
+// Selain efek (Reverb, Equalizer) ada plugin instrumen (Supersaw): kartunya otomatis muncul di paling atas saat track synth dibuat,
+// memakai knob + slider vertikal, dan tidak bisa dihapus / tidak muncul di daftar pilihan efek.
+// Efek / plugin baru cukup ditambah ke EFFECTS (nama, parameter) dan ke applyAudio().
 
 import { setReverb, setEq, reverbSeconds, eqDb } from './audio-engine';
+import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } from './synth-engine';
 
-type FxType = 'reverb' | 'eq';
+type FxType = 'reverb' | 'eq' | 'supersaw';
 interface Fx { id: number; type: FxType; on: boolean; min: boolean; v: Record<string, number>; }
-interface Param { key: string; label: string; def: number; fmt: (v: number) => string; bipolar?: boolean; }   // bipolar: arc dari tengah (seperti knob pan)
-interface EffectDef { type: FxType; name: string; params: Param[]; }
+interface Param { key: string; label: string; def: number; fmt: (v: number) => string; bipolar?: boolean; slider?: boolean; }   // bipolar: arc dari tengah (seperti knob pan); slider: slider vertikal, bukan knob
+interface EffectDef { type: FxType; name: string; params: Param[]; synth?: boolean; }   // synth: plugin instrumen (otomatis ada di track synth)
 
 const svg = (inner: string, size = 20) =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
@@ -16,6 +19,10 @@ const svg = (inner: string, size = 20) =>
 const ICON_MORE = svg('<circle cx="5" cy="12" r="1.9" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.9" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.9" fill="currentColor" stroke="none"/>', 18);
 
 const fmtDb = (v: number): string => { const d = Math.round(eqDb(v) * 10) / 10; return (d > 0 ? '+' : '') + d.toFixed(1) + ' dB'; };
+
+const pct = (v: number): string => Math.round(v * 100) + '%';
+const fmtSec = (s: number): string => (s < 1 ? Math.round(s * 1000) + ' ms' : s.toFixed(2) + ' s');
+const fmtHz = (hz: number): string => (hz >= 1000 ? (hz / 1000).toFixed(1) + ' kHz' : Math.round(hz) + ' Hz');
 
 const EFFECTS: EffectDef[] = [
   {
@@ -32,6 +39,19 @@ const EFFECTS: EffectDef[] = [
       { key: 'mid', label: 'Mid', def: 0.5, bipolar: true, fmt: fmtDb },
       { key: 'high', label: 'High', def: 0.5, bipolar: true, fmt: fmtDb }
     ]
+  },
+  {
+    type: 'supersaw', name: 'Supersaw', synth: true,
+    params: [
+      { key: 'detune', label: 'Detune', def: 0.45, fmt: v => Math.round(detuneCents(v)) + ' ct' },
+      { key: 'mix', label: 'Mix', def: 0.6, fmt: pct },
+      { key: 'cutoff', label: 'Cutoff', def: 0.78, fmt: v => fmtHz(cutoffHz(v)) },
+      { key: 'reso', label: 'Reso', def: 0.15, slider: true, fmt: pct },
+      { key: 'attack', label: 'Atk', def: 0.05, slider: true, fmt: v => fmtSec(attackSec(v)) },
+      { key: 'decay', label: 'Dec', def: 0.4, slider: true, fmt: v => fmtSec(decaySec(v)) },
+      { key: 'sustain', label: 'Sus', def: 0.7, slider: true, fmt: pct },
+      { key: 'release', label: 'Rel', def: 0.35, slider: true, fmt: v => fmtSec(releaseSec(v)) }
+    ]
   }
 ];
 const defOf = (t: FxType) => EFFECTS.find(e => e.type === t)!;
@@ -41,9 +61,10 @@ let cur: string | null = null, seq = 0;
 
 function applyAudio(track: string): void {
   const rack = racks.get(track) ?? [];
-  const r = rack.find(f => f.type === 'reverb'), e = rack.find(f => f.type === 'eq');
+  const r = rack.find(f => f.type === 'reverb'), e = rack.find(f => f.type === 'eq'), s = rack.find(f => f.type === 'supersaw');
   setReverb(track, r ? { on: r.on, mix: r.v.mix, size: r.v.size } : null);
   setEq(track, e ? { on: e.on, low: e.v.low, mid: e.v.mid, high: e.v.high } : null);
+  setSupersaw(track, s ? { on: s.on, detune: s.v.detune, mix: s.v.mix, cutoff: s.v.cutoff, reso: s.v.reso, attack: s.v.attack, decay: s.v.decay, sustain: s.v.sustain, release: s.v.release } : null);
 }
 
 // ---------- knob (struktur & kelas sama dengan knob pan di channel mixer, tapi satu arah: 0 → 1) ----------
@@ -66,22 +87,35 @@ function paintKnob(el: HTMLElement, v: number, p: Param, name: string): void {
   el.setAttribute('aria-valuetext', `${name} ${p.label} ${p.fmt(v)}`);
 }
 
+// slider vertikal: isi & posisi pegangan dikendalikan lewat variabel CSS --v (0..1)
+function paintSlider(el: HTMLElement, v: number, p: Param, name: string): void {
+  el.style.setProperty('--v', v.toFixed(3));
+  el.setAttribute('aria-valuenow', v.toFixed(3));
+  el.setAttribute('aria-valuetext', `${name} ${p.label} ${p.fmt(v)}`);
+}
+const paintCtl = (el: HTMLElement, v: number, p: Param, name: string): void => (p.slider ? paintSlider : paintKnob)(el, v, p, name);
+const CTL = '.knob-input, .vsl';   // knob atau slider vertikal
+
 function cardHtml(fx: Fx, i: number): string {
   const d = defOf(fx.type);
-  const cells = d.params.map(p =>
+  const sliders = d.params.filter(p => p.slider).map(p =>
+    `<div class="fxc__cell"><div role="slider" tabindex="0" class="vsl" data-k="${p.key}" aria-orientation="vertical" aria-label="${d.name} ${p.label}" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${fx.v[p.key]}">` +
+    `<span class="vsl__fill"></span><span class="vsl__thumb"></span></div><span class="fxc__label">${p.label}</span></div>`).join('');
+  const cells = d.params.filter(p => !p.slider).map(p =>
     `<div class="fxc__cell"><div class="knob fxk"><div class="knob-inner">` +
     `<div role="slider" tabindex="0" class="knob-input" data-k="${p.key}" aria-label="${d.name} ${p.label}" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${fx.v[p.key]}">` +
     `<div class="knobwheel">${knobSvg}</div></div></div></div><span class="fxc__label">${p.label}</span></div>`).join('');
   return `<section class="fxc${fx.on ? '' : ' is-off'}${fx.min ? ' is-min' : ''}" data-fx="${fx.id}" style="--i:${i}" aria-label="${d.name}">` +
     `<header class="fxc__head"><h3 class="fxc__name"><button type="button" class="fxc__title" aria-expanded="${!fx.min}" title="Klik untuk minimize / maximize">${d.name}</button></h3>` +
     `<button type="button" class="fxc__pwr" role="switch" aria-checked="${fx.on}" aria-label="${d.name} nyala / mati" title="Nyala / mati"></button>` +
-    `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi ${d.name}" title="Opsi">${ICON_MORE}</button></header>` +
-    `<div class="fxc__collapse"><div class="fxc__body"><div class="fxc__knobs">${cells}</div></div></div></section>`;
+    (d.synth ? '' : `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi ${d.name}" title="Opsi">${ICON_MORE}</button>`) + `</header>` +
+    `<div class="fxc__collapse"><div class="fxc__body"><div class="fxc__knobs">${cells}</div>${sliders ? `<div class="fxc__sliders">${sliders}</div>` : ''}</div></div></section>`;
 }
 
 export interface FxRack {
   show(track: string | null): void;   // tampilkan efek milik track ini (null = tidak ada track terpilih)
   drop(track: string): void;          // track dihapus: buang efeknya
+  addInstrument(track: string, type: 'supersaw'): void;   // track synth baru: pasang plugin instrumennya (kartu di paling atas)
   closePicker(instant?: boolean): void;
 }
 
@@ -152,11 +186,12 @@ export function initFxRack(): FxRack {
     if (pick || !cur) return;
     closeMenu(true);
     const have = new Set(fxs().map(f => f.type));
+    const choices = EFFECTS.filter(d => !d.synth);   // plugin instrumen tidak dipilih manual
     const el = document.createElement('div');
     el.className = 'fx-pick';
     el.setAttribute('role', 'menu');
     el.setAttribute('aria-label', 'Pilih efek');
-    el.innerHTML = EFFECTS.map((d, k) => {
+    el.innerHTML = choices.map((d, k) => {
       const used = have.has(d.type);
       return `<button type="button" role="menuitem" class="fx-pick__item" data-type="${d.type}" style="--i:${k}"${used ? ' disabled title="Sudah ditambahkan"' : ''}>` +
         `<span>${d.name}</span></button>`;
@@ -239,9 +274,9 @@ export function initFxRack(): FxRack {
   // ---------- kartu efek ----------
   const paintAll = (card: HTMLElement, fx: Fx) => {
     const d = defOf(fx.type);
-    card.querySelectorAll<HTMLElement>('.knob-input').forEach(k => {
+    card.querySelectorAll<HTMLElement>(CTL).forEach(k => {
       const p = d.params.find(x => x.key === k.dataset.k)!;
-      paintKnob(k, fx.v[p.key], p, d.name);
+      paintCtl(k, fx.v[p.key], p, d.name);
     });
   };
 
@@ -259,8 +294,23 @@ export function initFxRack(): FxRack {
     card.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
   }
 
+  // plugin instrumen (mis. Supersaw): ditambahkan otomatis saat track synth dibuat, selalu di paling atas, hanya satu per track
+  function addInstrument(track: string, type: FxType): void {
+    const rack = racks.get(track) ?? [];
+    if (rack.some(f => f.type === type)) return;
+    const d = defOf(type), v: Record<string, number> = {};
+    d.params.forEach(p => { v[p.key] = p.def; });
+    const fx: Fx = { id: ++seq, type, on: true, min: false, v };
+    racks.set(track, [fx, ...rack]);
+    applyAudio(track);
+    if (track !== cur) return;   // track lain belum dipilih: kartu digambar saat show()
+    list.insertAdjacentHTML('afterbegin', cardHtml(fx, 0));
+    paintAll(list.firstElementChild as HTMLElement, fx);
+    layout(true);
+  }
+
   function removeEffect(card: HTMLElement): void {
-    const fx = find(card); if (!fx || !cur) return;
+    const fx = find(card); if (!fx || !cur || defOf(fx.type).synth) return;
     hideTip();
     racks.set(cur, fxs().filter(f => f !== fx));
     applyAudio(cur);
@@ -277,7 +327,8 @@ export function initFxRack(): FxRack {
   }
 
   // ---------- knob: drag (atas/kanan = naik), panah keyboard, dobel klik = reset ke nilai awal ----------
-  let drag: { el: HTMLElement; fx: Fx; p: Param; sx: number; sy: number; sv: number } | null = null;
+  let drag: { el: HTMLElement; fx: Fx; p: Param; sx: number; sy: number; sv: number; box: DOMRect | null } | null = null;
+  const sliderVal = (box: DOMRect, y: number): number => 1 - (y - box.top - 7) / Math.max(1, box.height - 14);   // 7 px = setengah tinggi pegangan
   const ctx = (el: HTMLElement) => {
     const fx = find(el); if (!fx) return null;
     const p = defOf(fx.type).params.find(x => x.key === el.dataset.k)!;
@@ -286,21 +337,23 @@ export function initFxRack(): FxRack {
   const setVal = (el: HTMLElement, fx: Fx, p: Param, n: number) => {
     const v = Math.max(0, Math.min(1, n));
     fx.v[p.key] = v;
-    paintKnob(el, v, p, defOf(fx.type).name);
+    paintCtl(el, v, p, defOf(fx.type).name);
     if (cur) applyAudio(cur);
     if (!tip.hidden) showTip(el, p.fmt(v));
   };
 
   list.addEventListener('pointerdown', e => {
-    const el = (e.target as Element).closest<HTMLElement>('.knob-input'); if (!el || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const el = (e.target as Element).closest<HTMLElement>(CTL); if (!el || (e.pointerType === 'mouse' && e.button !== 0)) return;
     const c = ctx(el); if (!c) return;
-    drag = { el, fx: c.fx, p: c.p, sx: e.clientX, sy: e.clientY, sv: c.fx.v[c.p.key] };
+    drag = { el, fx: c.fx, p: c.p, sx: e.clientX, sy: e.clientY, sv: c.fx.v[c.p.key], box: c.p.slider ? el.getBoundingClientRect() : null };
     el.classList.add('is-dragging'); el.setPointerCapture(e.pointerId); e.preventDefault();
     el.focus({ preventScroll: true });
+    if (drag.box) setVal(el, c.fx, c.p, sliderVal(drag.box, e.clientY));   // slider: pegangan langsung lompat ke titik yang disentuh
     showTip(el, c.p.fmt(c.fx.v[c.p.key]));
   });
   list.addEventListener('pointermove', e => {
     if (!drag) return;
+    if (drag.box) { setVal(drag.el, drag.fx, drag.p, sliderVal(drag.box, e.clientY)); return; }
     setVal(drag.el, drag.fx, drag.p, drag.sv + ((drag.sy - e.clientY) + (e.clientX - drag.sx)) / DRAG_PX);
   });
   const endDrag = () => { if (!drag) return; drag.el.classList.remove('is-dragging'); drag = null; hideTip(); };
@@ -308,12 +361,12 @@ export function initFxRack(): FxRack {
   list.addEventListener('pointercancel', endDrag);
   list.addEventListener('lostpointercapture', endDrag);
   list.addEventListener('dblclick', e => {
-    const el = (e.target as Element).closest<HTMLElement>('.knob-input'); if (!el) return;
+    const el = (e.target as Element).closest<HTMLElement>(CTL); if (!el) return;
     const c = ctx(el); if (!c) return;
     showTip(el, c.p.fmt(c.p.def), 900); setVal(el, c.fx, c.p, c.p.def);
   });
   list.addEventListener('keydown', e => {
-    const el = (e.target as Element).closest<HTMLElement>('.knob-input'); if (!el) return;
+    const el = (e.target as Element).closest<HTMLElement>(CTL); if (!el) return;
     const up = e.key === 'ArrowUp' || e.key === 'ArrowRight', down = e.key === 'ArrowDown' || e.key === 'ArrowLeft';
     if (!up && !down) return;
     const c = ctx(el); if (!c) return;
@@ -321,7 +374,7 @@ export function initFxRack(): FxRack {
     setVal(el, c.fx, c.p, Math.round((c.fx.v[c.p.key] + (up ? 0.02 : -0.02)) * 100) / 100);
     showTip(el, c.p.fmt(c.fx.v[c.p.key]), 900);
   });
-  list.addEventListener('blur', e => { if ((e.target as Element).matches?.('.knob-input') && !drag) hideTip(); }, true);
+  list.addEventListener('blur', e => { if ((e.target as Element).matches?.(CTL) && !drag) hideTip(); }, true);
 
   list.addEventListener('click', e => {
     const t = e.target as Element, card = t.closest<HTMLElement>('.fxc');
@@ -365,9 +418,10 @@ export function initFxRack(): FxRack {
     },
     drop(track) {
       racks.delete(track);
-      setReverb(track, null); setEq(track, null);
+      setReverb(track, null); setEq(track, null); setSupersaw(track, null);
       if (cur === track) { closePicker(true); closeMenu(true); hideTip(); cur = null; addBtn.disabled = true; list.replaceChildren(); layout(false); }
     },
+    addInstrument,
     closePicker
   };
 }

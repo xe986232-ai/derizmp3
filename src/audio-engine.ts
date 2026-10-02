@@ -104,6 +104,10 @@ export function setTrackVolume(track: string, pct: number): void {
   if (g) g.gain.setTargetAtTime(pctToLin(pct), g.context.currentTime, .02);
 }
 
+export function trackInput(ctx: AudioContext, dest: AudioNode, track: string): GainNode {   // titik masuk jalur track (fader -> efek -> out); dipakai juga oleh synth
+  return trackGain(ctx, dest, track);
+}
+
 function trackGain(ctx: AudioContext, dest: AudioNode, track: string): GainNode {
   let g = gains.get(track);
   if (!g || g.context !== ctx) {

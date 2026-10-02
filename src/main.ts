@@ -3,6 +3,7 @@ import { openAudioUploadCard } from './audio-upload-card';
 import { initEffectsPanel } from './effects-panel';
 import { initTrackMeters } from './track-meters';
 import { initFxRack } from './fx-rack';
+import { hasSynth, startVoice, releaseVoice, playNote, stopAllSynth } from './synth-engine';
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
 import { decodeFile, addBuffer, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
@@ -646,6 +647,12 @@ function audio() {
 }
 function noteOn(m) {
   if (voices.has(m)) return;
+  const tid = kbdCont && kbdCont.dataset.track;
+  if (tid && hasSynth(tid)) {   // track synth (Supersaw): suara dari plugin-nya, melewati efek track
+    const ctx = audio();
+    voices.set(m, {synth: startVoice(ctx, master, tid, m, ctx.currentTime)});
+    return;
+  }
   const ctx = audio(), t = ctx.currentTime, f = 440 * 2 ** ((m - 69) / 12);
   const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter(), g2 = ctx.createGain();
   o1.type = 'triangle'; o1.frequency.value = f;
@@ -660,6 +667,7 @@ function noteOff(m) {
   const v = voices.get(m); if (!v) return;
   voices.delete(m);
   const t = actx.currentTime;
+  if ('synth' in v) { releaseVoice(v.synth, t); return; }
   v.g.gain.cancelScheduledValues(t); v.g.gain.setValueAtTime(v.g.gain.value, t); v.g.gain.setTargetAtTime(0, t, .07);
   v.o1.stop(t + .5); v.o2.stop(t + .5);
 }
@@ -872,6 +880,7 @@ function addTrack(t) {
   lanesEl.insertBefore(lane, lanesEl.querySelector('.playhead'));
   initRec(cont); initSliders(cont); initKnobs(cont); initMore(cont);
   cont.querySelector('.trackheader__left-content').title = panelCollapsed() ? 'Buka panel track' : 'Tutup panel track';
+  if (t.n === 'Supersaw') fxRack.addInstrument(id, 'supersaw');   // plugin synth otomatis muncul di panel efek track ini
   selectTrack(cont);
   if (!REDUCE) {
     const H = lane.offsetHeight, o = {duration:520, easing:EASE_OUT, fill:'backwards'};
@@ -918,9 +927,33 @@ function tick() {
   playRaf = requestAnimationFrame(tick);
 }
 // Scheduler metronome: tiap 25 ms menjadwalkan klik ketukan yang jatuh dalam 120 ms ke depan (pakai jam AudioContext)
+// Nada synth dari piano roll: antrean terurut waktu, dijadwalkan bersama klik metronome (lookahead yang sama)
+let synthQ = [], synthI = 0;
+function synthPump(ctx, ahead) {
+  while (synthI < synthQ.length && synthQ[synthI].when <= ahead) {
+    const n = synthQ[synthI++];
+    playNote(ctx, master, n.track, n.p, n.when, n.dur);
+  }
+}
+function buildSynthQueue() {
+  synthQ = []; synthI = 0;
+  const bs = SEC_PER_BAR / 4;   // detik per ketukan
+  lanesEl.querySelectorAll('.pattern[data-pr-id]').forEach(el => {
+    const track = el.parentElement.dataset.track; if (!hasSynth(track)) return;
+    const b0 = pl(el) / BAR_W * 4, b1 = (pl(el) + pw(el)) / BAR_W * 4, from = startPos * 4;
+    getPianoRollNotes(el.dataset.prId).forEach(n => {
+      const s = b0 + n.s, e = Math.min(s + n.l, b1);
+      if (e <= from + 1e-6 || s >= b1) return;
+      const sb = Math.max(s, from);
+      synthQ.push({track, p: n.p, when: startCtx + (sb - from) * bs, dur: (e - sb) * bs});
+    });
+  });
+  synthQ.sort((a, b) => a.when - b.when);
+}
 function metroPump() {
   if (!playing) return;
   const ctx = actx, ahead = ctx.currentTime + .12;
+  synthPump(ctx, ahead);
   for (;;) {
     const t = startCtx + (nextBeat / 4 - startPos) * SEC_PER_BAR;
     if (t > ahead) break;
@@ -942,6 +975,7 @@ function scheduleClips(countIn) {
     track: p.parentElement.dataset.track, clip: +p.dataset.clip,
     startBar: pl(p) / BAR_W, endBar: (pl(p) + pw(p)) / BAR_W, offsetSec: +p.dataset.off || 0}));
   playClips(ctx, master, clips, posBars, SEC_PER_BAR, startCtx);
+  stopAllSynth(ctx); buildSynthQueue(); synthPump(ctx, ctx.currentTime + .12);
 }
 function startPlay() {
   if (playing) return;
@@ -950,7 +984,7 @@ function startPlay() {
   playRaf = requestAnimationFrame(tick); syncTransportUI();
 }
 function pausePlay() {
-  playing = false; cancelAnimationFrame(playRaf); playRaf = 0; stopClips(actx); clearInterval(metroTimer); metroTimer = 0; metroCancel(actx, true); metroUI.beat(-1); syncTransportUI();
+  playing = false; cancelAnimationFrame(playRaf); playRaf = 0; stopClips(actx); stopAllSynth(actx); synthQ = []; clearInterval(metroTimer); metroTimer = 0; metroCancel(actx, true); metroUI.beat(-1); syncTransportUI();
 }
 const togglePlay = () => playing ? pausePlay() : startPlay();
 function toStart() {
