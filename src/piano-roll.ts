@@ -10,10 +10,11 @@ export interface PianoRollOpts {
   color?: string;
 }
 
-interface Note { id: number; p: number; s: number; l: number; }   // p: MIDI, s/l: dalam ketukan
+interface Note { id: number; p: number; s: number; l: number; sl?: boolean; }   // p: MIDI, s/l: dalam ketukan
 interface State { notes: Note[]; nextId: number; }
 type Tool = 'draw' | 'select' | 'erase' | 'pan';
 
+import { slideSource, glideBeats } from './note-slide';
 const P_MIN = 24, P_MAX = 108, ROWS = P_MAX - P_MIN + 1;   // C1..C8
 const KEY_W = 64, RULER_H = 32, BEATS_PER_BAR = 4, BARS = 8;   // grid selalu 8 bar (nomor 1..8)
 const PPB_MIN = 8, PPB_MAX = 480, ROW_MIN = 10, ROW_MAX = 40;
@@ -49,7 +50,7 @@ let menuOpen: () => boolean = () => false;
 // elemen
 let sc!: HTMLElement, space!: HTMLElement, gc!: HTMLCanvasElement, gclip!: HTMLElement, kc!: HTMLCanvasElement, rc!: HTMLCanvasElement;
 let phDom!: HTMLElement, phBeat = -1;   // playhead: posisi dalam ketukan relatif ke awal pattern (<0 = tersembunyi)
-let btnUndo!: HTMLButtonElement, btnRedo!: HTMLButtonElement, selBar!: HTMLElement, btnPaste!: HTMLButtonElement;
+let btnUndo!: HTMLButtonElement, btnRedo!: HTMLButtonElement, selBar!: HTMLElement, btnPaste!: HTMLButtonElement, btnSlide!: HTMLButtonElement;
 
 // state editor
 let st: State = {notes: [], nextId: 1};
@@ -121,7 +122,11 @@ function drawNoteBody(c: CanvasRenderingContext2D, n: Note, sx: number, sy: numb
   const x = n.s * ppb - sx, w = Math.max(3, n.l * ppb), y = (P_MAX - n.p) * rowH - sy;
   c.fillStyle = color; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 3); c.fill();
   if (sel) { c.fillStyle = 'rgba(255,255,255,.35)'; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 3); c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.stroke(); }
-  if (w > 30 && rowH >= 14) { c.fillStyle = 'rgba(0,0,0,.65)'; c.fillText(pname(n.p), x + 5, y + rowH / 2 + 0.5); }
+  if (n.sl) {   // slide: lebih terang + tanda panah miring di kiri
+    c.fillStyle = 'rgba(255,255,255,.3)'; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 3); c.fill();
+    if (w > 18 && rowH >= 12) { c.strokeStyle = 'rgba(0,0,0,.7)'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(x + 5, y + rowH - 5); c.lineTo(x + 12, y + 5); c.stroke(); }
+  }
+  if (w > (n.sl ? 44 : 30) && rowH >= 14) { c.fillStyle = 'rgba(0,0,0,.65)'; c.fillText(pname(n.p), x + (n.sl ? 17 : 5), y + rowH / 2 + 0.5); }
 }
 // bulatan putih di LUAR ujung kanan note (tidak menyentuh badan note); k = skala animasi
 function drawHandle(c: CanvasRenderingContext2D, n: Note, sx: number, sy: number, k: number) {
@@ -183,6 +188,14 @@ function drawGrid(zoomOnly = false) {
     return !(x + w + 2 * handleR() + 8 < 0 || x > vw || y + rowH < 0 || y > vh);
   };
   for (const n of st.notes) if (visible(n)) drawNoteBody(c, n, sx, sy, selected.has(n.id));
+  for (const n of st.notes) {   // jalur luncuran: dari tinggi nada sumber ke tinggi nada slide
+    if (!n.sl) continue;
+    const src = slideSource(st.notes, n); if (!src) continue;
+    const x0 = n.s * ppb - sx, x1 = (n.s + glideBeats(n)) * ppb - sx;
+    if (x1 < 0 || x0 > vw) continue;
+    c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = 1.5; c.beginPath();
+    c.moveTo(x0, (P_MAX - src.p + 0.5) * rowH - sy); c.lineTo(x1, (P_MAX - n.p + 0.5) * rowH - sy); c.stroke();
+  }
   for (const n of st.notes) {
     if (!selected.has(n.id) || !visible(n)) continue;   // bulatan panjang/pendek hanya di note yang dipilih
     let k = 1;
@@ -262,6 +275,7 @@ function placeSelBar() {
   const x0 = Math.min(...sel.map(n => n.s)) * ppb - sx, x1 = Math.max(...sel.map(n => n.s + n.l)) * ppb - sx;
   const y0 = (P_MAX - Math.max(...sel.map(n => n.p))) * rowH - sy, y1 = (P_MAX - Math.min(...sel.map(n => n.p)) + 1) * rowH - sy;
   if (x1 < 0 || x0 > vw || y1 < 0 || y0 > vh) { selBar.hidden = true; selBarOn = false; return; }   // seluruh pilihan di luar layar
+  btnSlide.classList.toggle('is-on', sel.every(n => n.sl));   // tombol menyala kalau semua nada terpilih sudah slide
   const wasHidden = selBar.hidden; selBar.hidden = false;
   const bw = selBar.offsetWidth, bh = selBar.offsetHeight || 46;
   const ix0 = Math.max(x0, 0), ix1 = Math.min(x1, vw);
@@ -308,9 +322,9 @@ function notifyChange() {
   if (sn !== notified) { notified = sn; onChange(curKey); }
 }
 export const PR_BEATS = total;   // lebar grid piano roll (ketukan)
-export function getPianoRollNotes(id: string): Array<{p: number; s: number; l: number}> {
+export function getPianoRollNotes(id: string): Array<{p: number; s: number; l: number; sl?: boolean}> {
   const x = states.get(id);
-  return x ? x.notes.map(n => ({p: n.p, s: n.s, l: n.l})) : [];
+  return x ? x.notes.map(n => (n.sl ? {p: n.p, s: n.s, l: n.l, sl: true} : {p: n.p, s: n.s, l: n.l})) : [];
 }
 // salin nada dari satu pattern ke pattern lain (rentang ketukan [fromBeat, toBeat), digeser supaya mulai dari 0)
 export function copyPianoRollNotes(from: string, to: string, fromBeat = 0, toBeat = Infinity) {
@@ -318,7 +332,7 @@ export function copyPianoRollNotes(from: string, to: string, fromBeat = 0, toBea
   const dst: State = {notes: [], nextId: 1};
   for (const n of src.notes) {
     const a = Math.max(n.s, fromBeat), b = Math.min(n.s + n.l, toBeat);
-    if (b > a + 1e-9) dst.notes.push({id: dst.nextId++, p: n.p, s: a - fromBeat, l: b - a});
+    if (b > a + 1e-9) dst.notes.push({id: dst.nextId++, p: n.p, s: a - fromBeat, l: b - a, ...(n.sl ? {sl: true} : {})});
   }
   states.set(to, dst);
 }
@@ -437,11 +451,11 @@ function deleteSelected() {
   selected.clear(); updateUI(); schedule();
 }
 // salin / tempel nada (clipboard dibagi antar pattern; posisi disimpan relatif ke nada paling kiri)
-let clip: Array<{p: number; s: number; l: number}> = [];
+let clip: Array<{p: number; s: number; l: number; sl?: boolean}> = [];
 function copySelected() {
   if (!selected.size) return;
   const sel = st.notes.filter(n => selected.has(n.id)), s0 = Math.min(...sel.map(n => n.s));
-  clip = sel.map(n => ({p: n.p, s: n.s - s0, l: n.l}));
+  clip = sel.map(n => ({p: n.p, s: n.s - s0, l: n.l, ...(n.sl ? {sl: true} : {})}));
   updateUI(); flashBtn('copy');
 }
 function pasteNotes() {
@@ -453,11 +467,18 @@ function pasteNotes() {
   let at = sel.length ? snapRound(Math.max(...sel.map(n => n.s + n.l))) : snapFloor(sc.scrollLeft / ppb);
   if (at + span > total + 1e-9) { if (sel.length) return shakeSelBar(); at = total - span; }
   pushUndo();
-  const made = clip.map(c => ({id: st.nextId++, p: c.p, s: at + c.s, l: c.l}));
+  const made = clip.map(c => ({id: st.nextId++, p: c.p, s: at + c.s, l: c.l, ...(c.sl ? {sl: true} : {})}));
   st.notes.push(...made);
   selected = new Set(made.map(n => n.id));
   updateUI(); schedule();
   sc.scrollLeft = clamp(sc.scrollLeft, Math.max(0, (at + span) * ppb - sc.clientWidth + 60), at * ppb);   // pastikan hasil tempel terlihat
+}
+function toggleSlide() {   // semua nada terpilih: kalau sudah slide semua -> matikan, selain itu -> nyalakan
+  if (!selected.size) return;
+  const sel = st.notes.filter(n => selected.has(n.id)), all = sel.every(n => n.sl);
+  pushUndo();
+  for (const n of sel) { if (all) delete n.sl; else n.sl = true; }
+  updateUI(); schedule(); flashBtn('slide');
 }
 function selectAll() { selected = new Set(st.notes.map(n => n.id)); updateUI(); schedule(); }
 function nudge(dB: number, dP: number) {
@@ -878,7 +899,7 @@ function build(): HTMLElement {
   phDom = el.querySelector<HTMLElement>('.pr__ph')!;
   selBar = el.querySelector<HTMLElement>('.pr__main')!.appendChild(document.createElement('div'));
   selBar.className = 'pat-bar pr__sel'; selBar.hidden = true; selBar.setAttribute('role', 'toolbar'); selBar.setAttribute('aria-label', 'Aksi nada');
-  ([['copy', 'Copy', 'Salin nada (Ctrl+C)', copySelected], ['del', 'Delete', 'Hapus nada (Del)', deleteSelected], ['paste', 'Paste', 'Tempel nada (Ctrl+V)', pasteNotes]] as const)
+  ([['copy', 'Copy', 'Salin nada (Ctrl+C)', copySelected], ['del', 'Delete', 'Hapus nada (Del)', deleteSelected], ['paste', 'Paste', 'Tempel nada (Ctrl+V)', pasteNotes], ['slide', 'Slide', 'Slide: nada sebelumnya meluncur ke nada ini', toggleSlide]] as const)
     .forEach(([act, txt, label, fn], i) => {
       const b = document.createElement('button');
       b.className = 'pat-btn'; b.type = 'button'; b.dataset.sel = act; b.textContent = txt;
@@ -887,6 +908,7 @@ function build(): HTMLElement {
       selBar.appendChild(b);
     });
   btnPaste = selBar.querySelector<HTMLButtonElement>('[data-sel="paste"]')!;
+  btnSlide = selBar.querySelector<HTMLButtonElement>('[data-sel="slide"]')!;
   btnPaste.disabled = clip.length === 0;
 
   const snapBtn = el.querySelector<HTMLButtonElement>('.pr__snap')!;

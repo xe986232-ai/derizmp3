@@ -324,7 +324,7 @@ export interface FxRack {
   addInstrument(track: string, type: 'supersaw' | 'deriz'): void;   // track synth baru: pasang plugin instrumennya (kartu di paling atas)
   closePicker(instant?: boolean): void;
   hasDeriz(track: string): boolean;   // track punya plugin DERIZ yang menyala dan sudah berisi audio
-  derizPlay(track: string, midi: number, when: number, dur: number): void;   // nada terjadwal dari piano roll (when = waktu AudioContext)
+  derizPlay(track: string, midi: number, when: number, dur: number, glides?: Array<{ when: number; to: number; dur: number }>): void;   // nada terjadwal dari piano roll (when = waktu AudioContext)
   derizOn(track: string, midi: number): number;   // nada langsung (keyboard di bawah piano roll); mengembalikan id untuk derizOff
   derizOff(id: number): void;
   derizStop(): void;   // lepas semua nada DERIZ dan batalkan yang terjadwal
@@ -480,7 +480,7 @@ export function initFxRack(host: () => AudioHost): FxRack {
   const derizOf = (track: string): Fx | undefined => racks.get(track)?.find(f => f.type === 'deriz' && f.on && f.deriz);
   const derizStart = (z: DerizData): number => Math.floor(Math.min(z.start * z.dur, Math.max(0, z.dur - 0.01)) * z.buf.sampleRate);
   const liveRel = new Set<number>();   // nada langsung yang dilepas sebelum sampler siap
-  function derizPlay(track: string, midi: number, when: number, dur: number): void {
+  function derizPlay(track: string, midi: number, when: number, dur: number, glides?: Array<{ when: number; to: number; dur: number }>): void {
     const fx = derizOf(track); if (!fx) return;
     const { ctx, dest } = host(), id = ++kbSeq;
     derizSynth(fx, ctx).then(s => {
@@ -488,6 +488,7 @@ export function initFxRack(host: () => AudioHost): FxRack {
       s.routeTo(trackInput(ctx, dest, track)); s.setBuffer(z.buf);
       const [sp, pi, vo] = derizArgs(fx), at = Math.max(when, ctx.currentTime);
       s.noteOn(id, midi - KROOT, derizStart(z), sp, pi, vo, at);
+      if (glides) for (const g of glides) s.glide(id, g.to - KROOT, Math.max(g.when, at), g.dur);
       s.noteOff(id, at + Math.max(0.01, dur));
     }).catch(err => console.error(err));
   }

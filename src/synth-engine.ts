@@ -84,9 +84,16 @@ export function releaseVoice(v: Voice | null, at: number): void {
 }
 
 // Nada terjadwal (dari piano roll): mulai di `when`, lepas setelah `dur` detik.
-export function playNote(ctx: AudioContext, dest: AudioNode, track: string, midi: number, when: number, dur: number): void {
+export interface Glide { when: number; from: number; to: number; dur: number }   // meluncur dari MIDI `from` ke `to` mulai `when` (waktu AudioContext) selama `dur` detik
+const midiHz = (m: number): number => 440 * Math.pow(2, (m - 69) / 12);
+export function playNote(ctx: AudioContext, dest: AudioNode, track: string, midi: number, when: number, dur: number, glides?: Glide[]): void {
   const v = startVoice(ctx, dest, track, midi, when);
-  if (v) releaseVoice(v, when + Math.max(0.01, dur));
+  if (!v) return;
+  if (glides) for (const g of glides) {
+    const t = Math.max(g.when, v.t0), d = Math.max(0.01, g.dur);
+    v.oscs.forEach(o => { o.frequency.setValueAtTime(midiHz(g.from), t); o.frequency.exponentialRampToValueAtTime(midiHz(g.to), t + d); });
+  }
+  releaseVoice(v, when + Math.max(0.01, dur));
 }
 
 function kill(v: Voice, now: number): void {

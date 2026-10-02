@@ -37,13 +37,14 @@ class DerizSampler extends AudioWorkletProcessor {
   }
   msg(m) {
     if (m.t === 'buf') { this.pend = []; this.setBuf(m); }
-    else if (m.t === 'on' || m.t === 'off') { if (m.at && m.at > currentTime) this.pend.push(m); else this.apply(m); }
+    else if (m.t === 'on' || m.t === 'off' || m.t === 'glide') { if (m.at && m.at > currentTime) this.pend.push(m); else this.apply(m); }
     else if (m.t === 'p') { this.speed = m.speed; this.pitch = m.pitch; this.vol = m.vol; }
     else if (m.t === 'relall') { this.pend = []; for (const v of this.voices) v.rel = true; }
     else if (m.t === 'kill') { this.voices = []; this.pend = []; }
   }
   apply(m) {
     if (m.t === 'on') { this.speed = m.speed; this.pitch = m.pitch; this.vol = m.vol; this.start(m); }
+    else if (m.t === 'glide') { for (const v of this.voices) if (v.id === m.id) { v.gf = v.semis; v.gt = m.semis; v.g0 = m.at || currentTime; v.gd = Math.max(0.005, m.dur); } }
     else { for (const v of this.voices) if (v.id === m.id) v.rel = true; }
   }
   // jalankan perintah terjadwal yang jatuh tempo di blok audio ini (ketelitian satu blok = 128 sampel, sekitar 2,7 ms)
@@ -238,6 +239,7 @@ class DerizSampler extends AudioWorkletProcessor {
     const g0 = this.volS; this.volS += (this.vol - this.volS) * 0.25; const g1 = this.volS;
     for (let vi = this.voices.length - 1; vi >= 0; vi--) {
       const v = this.voices[vi], mask = v.size - 1, TL = v.T[0], TR = v.T[1];
+      if (v.gd) { const f = Math.min(1, Math.max(0, (currentTime - v.g0) / v.gd)); v.semis = v.gf + (v.gt - v.gf) * f; if (f >= 1) v.gd = 0; }   // slide: tinggi nada meluncur linear (dalam semiton)
       const rhoT = Math.pow(2, (v.semis + this.pitch) / 12) * this.bufRate / sampleRate;
       v.rho += (rhoT - v.rho) * 0.3;
       // rho > 1 (nada naik): baca dengan kernel sinc yang frekuensi potongnya 0.85/rho (pita transisi filter muat di bawah Nyquist keluaran) (low-pass sebelum decimate) -> tidak ada aliasing
@@ -319,6 +321,7 @@ export class DerizSynth {
     this.node.port.postMessage({ t: 'on', id, semis, start, speed, pitch, vol, at });
   }
   noteOff(id: number, at = 0): void { this.node.port.postMessage({ t: 'off', id, at }); }
+  glide(id: number, semis: number, at: number, dur: number): void { this.node.port.postMessage({ t: 'glide', id, semis, at, dur }); }   // slide: meluncur ke `semis` mulai `at` selama `dur` detik
   releaseAll(): void { this.node.port.postMessage({ t: 'relall' }); }   // lepas semua nada (peluruhan halus) dan batalkan yang terjadwal
   params(speed: number, pitch: number, vol: number): void { this.node.port.postMessage({ t: 'p', speed, pitch, vol }); }
 

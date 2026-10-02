@@ -8,6 +8,7 @@ import { hasSynth, startVoice, releaseVoice, playNote, stopAllSynth } from './sy
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
 import { decodeFile, addBuffer, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
+import { slideSource, glideBeats } from './note-slide';
 import { openPianoRoll, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, PR_BEATS } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 initLandscape();
@@ -941,7 +942,7 @@ let synthQ = [], synthI = 0;
 function synthPump(ctx, ahead) {
   while (synthI < synthQ.length && synthQ[synthI].when <= ahead) {
     const n = synthQ[synthI++];
-    if (n.deriz) fxRack.derizPlay(n.track, n.p, n.when, n.dur); else playNote(ctx, master, n.track, n.p, n.when, n.dur);
+    if (n.deriz) fxRack.derizPlay(n.track, n.p, n.when, n.dur, n.glides); else playNote(ctx, master, n.track, n.p, n.when, n.dur, n.glides);
   }
 }
 function buildSynthQueue() {
@@ -950,12 +951,24 @@ function buildSynthQueue() {
   lanesEl.querySelectorAll('.pattern[data-pr-id]').forEach(el => {
     const track = el.parentElement.dataset.track, deriz = !hasSynth(track) && fxRack.hasDeriz(track); if (!deriz && !hasSynth(track)) return;
     const b0 = pl(el) / BAR_W * 4, b1 = (pl(el) + pw(el)) / BAR_W * 4, from = startPos * 4;
-    getPianoRollNotes(el.dataset.prId).forEach(n => {
+    // slide: nada slide tidak dibunyikan ulang; suara nada sumber dipanjangkan sampai akhir nada slide dan tinggi nadanya meluncur
+    const notes = getPianoRollNotes(el.dataset.prId).sort((a, b) => a.s - b.s), ent = new Map();
+    const list = [];
+    notes.forEach(n => {
       const s = b0 + n.s, e = Math.min(s + n.l, b1);
       if (e <= from + 1e-6 || s >= b1) return;
-      const sb = Math.max(s, from);
-      synthQ.push({track, deriz, p: n.p, when: startCtx + (sb - from) * bs, dur: (e - sb) * bs});
+      const src = slideSource(notes, n), en = src && ent.get(src);
+      if (en) {
+        ent.set(n, en); en.eb = Math.max(en.eb, e);
+        if (s <= from) { en.p = n.p; en.cur = n.p; en.glides = []; }   // mulai main di tengah / setelah luncuran: langsung di tinggi nada akhir
+        else { en.glides.push({b: s, from: en.cur, to: n.p, d: Math.min(glideBeats(n), e - s)}); en.cur = n.p; }
+        return;
+      }
+      const e1 = {p: n.p, cur: n.p, sb: Math.max(s, from), eb: e, glides: []};
+      ent.set(n, e1); list.push(e1);
     });
+    list.forEach(en => synthQ.push({track, deriz, p: en.p, when: startCtx + (en.sb - from) * bs, dur: (en.eb - en.sb) * bs,
+      glides: en.glides.length ? en.glides.map(g => ({when: startCtx + (g.b - from) * bs, from: g.from, to: g.to, dur: g.d * bs})) : undefined}));
   });
   synthQ.sort((a, b) => a.when - b.when);
 }
