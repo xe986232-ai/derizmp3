@@ -125,15 +125,17 @@ const visS = (z: DerizData): number => (z.start - z.view) * z.zoom;   // posisi 
 const DERIZ_PAD = 6;   // jarak kiri/kanan canvas: garis start di 0 / 1 dan ujung waveform sejajar, pegangan tidak terpotong
 
 // Tinggi isi sama dengan card knob (Reverb / EQ): canvas 72 px (= tinggi knob) + satu baris label, dalam wadah .fxc__knobs yang sama.
+const dKnob = (fx: Fx, key: string): string => cellHtml(defOf('deriz'), fx, defOf('deriz').params.find(p => p.key === key)!);   // satu knob DERIZ berdasarkan key
 function derizHtml(fx: Fx): string {
   const z = fx.deriz;
   return `<div class="fxc__knobs deriz"><div class="fxc__cell deriz__cell"><div class="deriz__row">` +
     `<div class="deriz__stage${z ? ' has-audio' : ''}${z && z.busy !== undefined ? ' is-busy' : ''}" style="--s:${z ? visS(z).toFixed(4) : 0}"><canvas class="deriz__canvas" role="img" aria-label="Spektrogram audio DERIZ"></canvas>` +
     `<div class="deriz__start" role="slider" tabindex="0" aria-label="Garis start" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${z ? z.start.toFixed(4) : 0}" aria-valuetext="${posText(z)}"></div>` +
     `<button type="button" class="deriz__up">${ICON_UP}<span>Upload audio</span></button><i class="deriz__scan" aria-hidden="true"></i><i class="deriz__glass" aria-hidden="true"></i></div>` +
-    `<div class="deriz__knobs">${defOf('deriz').params.map(p => cellHtml(defOf('deriz'), fx, p)).join('')}</div>` +
+    `<div class="deriz__knobs">${dKnob(fx, 'volume')}</div>` +
     `<div class="deriz__nav${z && z.zoom > 1.001 ? '' : ' is-idle'}" aria-hidden="true"><i class="deriz__thumb"${z ? ` style="left:${(z.view * 100).toFixed(3)}%;width:${(100 / z.zoom).toFixed(3)}%"` : ''}></i></div>` +
-    `<button type="button" class="deriz__swap"${z ? '' : ' hidden'}>Ganti</button></div>` +
+    `<button type="button" class="deriz__swap"${z ? '' : ' hidden'}>Ganti</button>` +
+    `<div class="deriz__speed">${dKnob(fx, 'speed')}</div></div>` +
     `<div class="deriz__kb"><div class="keyboardkeyboardcontroller deriz__keys"><div class="keys"></div></div></div>` +
     `<input type="file" class="deriz__file" accept="${AUDIO_ACCEPT}" hidden></div></div>`;
 }

@@ -827,17 +827,18 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 /* layar + knob di baris pertama, bar geser tepat di bawah layar; knob baru tinggal ditambah ke .deriz__knobs */
 .deriz__row{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:14px;row-gap:9px;align-items:center}
 .deriz__row .deriz__stage{grid-column:1;grid-row:1;min-width:0}
-.deriz__knobs{grid-column:2;grid-row:1;display:flex;align-items:center;gap:12px}
-.deriz__knobs .fxc__cell{justify-content:center;gap:7px}
-.deriz__knobs .fxc__label{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#8a8aa0;text-shadow:0 -1px 0 rgba(0,0,0,.7)}
+.deriz__knobs{grid-column:2;grid-row:1;display:flex;align-items:center;justify-content:center}
+.deriz__speed{grid-column:1;grid-row:3;display:flex;justify-content:center}   /* Speed: di bawah bar geser, di tengah lebar canvas */
+.deriz__knobs .fxc__cell,.deriz__speed .fxc__cell{justify-content:center;gap:7px}
+.deriz__knobs .fxc__label,.deriz__speed .fxc__label{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#8a8aa0}
 /* knob logam cekung: serasi dengan LED power, tombol tutup & faceplate (bukan knob datar seperti Reverb / EQ) */
-.fxc--deriz .fxk{width:50px;height:50px;border-radius:50%;box-shadow:0 0 0 2px #0a0a0f,0 0 0 3px rgba(255,255,255,.1),0 5px 9px rgba(0,0,0,.55)}
-.fxc--deriz .fxk .knob-inner{border-radius:50%;background:radial-gradient(circle at 36% 28%,#3a3a48 0%,#1c1c25 58%,#101016 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.6)}
+.fxc--deriz .fxk{width:50px;height:50px;border-radius:50%;border:1px solid rgba(255,255,255,.12);box-shadow:none}
+.fxc--deriz .fxk .knob-inner{border-radius:50%;background:radial-gradient(circle at 36% 28%,#3a3a48 0%,#1c1c25 58%,#101016 100%);box-shadow:none}
 .fxc--deriz .fxk .circle-bg{stroke:#0a0a0f;stroke-width:3.4}
-.fxc--deriz .fxk .circle{stroke:var(--accent);stroke-width:3.4;filter:drop-shadow(0 0 3px var(--accent))}
+.fxc--deriz .fxk .circle{stroke:var(--accent);stroke-width:3.4;filter:none}
 .fxc--deriz .fxk .circle-inner{fill:none}
 .fxc--deriz .fxk .circle-inner-stroke{stroke:rgba(255,255,255,.08)}
-.fxc--deriz .fxk .knob-pos{stroke:#fff;stroke-width:2.6;filter:drop-shadow(0 0 2px var(--accent))}
+.fxc--deriz .fxk .knob-pos{stroke:#fff;stroke-width:2.6;filter:none}
 .fxc--deriz .fxk .knob-input:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:50%}
 .fxc--deriz.is-off .fxk .circle{stroke:#4a4a5c;filter:none}
 /* tombol Ganti: pil cekung serasi dengan tombol tutup (X) & LED power: cincin gelap + kilap tipis; hanya teks, tanpa ikon */
