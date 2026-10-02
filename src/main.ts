@@ -3,6 +3,7 @@ import { openAudioUploadCard } from './audio-upload-card';
 import { initEffectsPanel } from './effects-panel';
 import { initTrackMeters } from './track-meters';
 import { initFxRack } from './fx-rack';
+import { initRecordJelly } from './record-jelly';
 import { initLandscape } from './landscape';
 import { initMenuPanel, setProjectIO } from './menu-panel';
 import { hasSynth, startVoice, releaseVoice, playNote, stopAllSynth } from './synth-engine';
@@ -862,6 +863,7 @@ function selectTrack(cont) {
   fxRack.show(cont.dataset.track);   // panel efek ikut pindah ke track terpilih
   if (kbdEl.classList.contains('is-open')) openKbd(cont);   // keyboard yang sudah terbuka ikut pindah ke track terpilih
 }
+initRecordJelly(document.querySelector('.headers-list'), document.querySelector('.workspace'));   // Record Mode: card track terpilih bisa digoyang (drag + kenyal + rotasi)
 document.querySelector('.headers-list').addEventListener('pointerdown', e => {
   const c = e.target.closest('.trackheader-container');
   if (c) selectTrack(c);

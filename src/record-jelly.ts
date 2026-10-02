@@ -1,0 +1,171 @@
+// Record Mode: card track yang terpilih bisa di-drag ke mana saja dan digoyang.
+// Fisikanya spring (kenyal): card mengikuti jari/kursor dengan sedikit tertinggal, miring (rotasi) mengikuti
+// arah gerak, melar sedikit searah kecepatan (jelly), lalu dilepas -> memantul balik ke tempat asal.
+// Hanya aktif saat html[data-rec="on"] dan hanya untuk track yang sedang dipilih.
+
+const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// spring: k = kekakuan, c = redaman (c kecil -> lebih kenyal / goyang lebih lama)
+const POS_DRAG = { k: 260, c: 21 };    // saat dipegang: ikut pointer, sedikit lag
+const POS_FREE = { k: 150, c: 9 };     // saat dilepas: balik ke asal sambil memantul
+const ROT = { k: 210, c: 10 };         // rotasi: berayun
+const DRAG_START_PX = 5;               // geser minimal sebelum dianggap drag (supaya klik biasa tetap jalan)
+const MAX_TILT = 28;                   // derajat
+const LIFT = 1.035;                    // card sedikit membesar saat dipegang
+
+// elemen yang tidak boleh memulai drag (punya interaksi sendiri)
+const NO_DRAG = 'input, [role="slider"], .knob, .trackheader__pwr, .trackheader__rec-mode-button, .trackheader__more-options, [contenteditable="true"], .trackheader-separator';
+
+export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement): void {
+  const root = document.documentElement;
+  const recOn = (): boolean => root.dataset.rec === 'on';
+
+  let card: HTMLElement | null = null;       // .trackheader yang sedang bergerak
+  let cont: HTMLElement | null = null;       // .trackheader-container (tidak ikut bertransform = patokan posisi asli)
+  let raf = 0, last = 0;
+  let pointerId = -1, held = false, pending = false;
+  let x = 0, y = 0, vx = 0, vy = 0;          // offset card dari posisi asal + kecepatan (px, px/s)
+  let rot = 0, rv = 0;                       // rotasi (derajat) + kecepatan sudut
+  let tx = 0, ty = 0;                        // target posisi saat dipegang
+  let p0x = 0, p0y = 0, o0x = 0, o0y = 0;    // titik pointer awal + offset card saat diambil
+  let gx = 0, gy = 0;                        // titik pegang relatif ke tengah card (-1..1)
+  let nat = { l: 0, t: 0, r: 0, b: 0 };      // kotak card di posisi asal (tanpa transform)
+  let suppressClick = false;
+  let lift = 1;
+
+  const selected = (): HTMLElement | null => headersList.querySelector('.trackheader--selected');
+
+  function measureNatural(): void {
+    if (!card) return;
+    const r = card.getBoundingClientRect();
+    // rect saat ini = posisi asal + offset (rotasi/scale berpusat di tengah, jadi pusatnya tetap pusat + offset)
+    const cx = r.left + r.width / 2 - x, cy = r.top + r.height / 2 - y;
+    const w = card.offsetWidth, h = card.offsetHeight;
+    nat = { l: cx - w / 2, t: cy - h / 2, r: cx + w / 2, b: cy + h / 2 };
+  }
+
+  function clampTarget(): void {
+    const ws = workspace.getBoundingClientRect(), m = 6;
+    const minX = ws.left + m - nat.l, maxX = ws.right - m - nat.r;
+    const minY = ws.top + m - nat.t, maxY = ws.bottom - m - nat.b;
+    tx = Math.min(Math.max(tx, Math.min(minX, 0)), Math.max(maxX, 0));
+    ty = Math.min(Math.max(ty, Math.min(minY, 0)), Math.max(maxY, 0));
+  }
+
+  function start(): void {
+    if (!card || !cont) return;
+    root.classList.add('is-jelly');
+    cont.classList.add('is-jelly');
+    card.classList.add('is-jelly');
+    card.style.transition = 'none';
+    last = performance.now();
+    if (!raf) raf = requestAnimationFrame(tick);
+  }
+
+  function finish(): void {
+    cancelAnimationFrame(raf); raf = 0;
+    if (card) { card.style.transform = ''; card.style.transition = ''; card.classList.remove('is-jelly'); }
+    if (cont) cont.classList.remove('is-jelly');
+    root.classList.remove('is-jelly');
+    card = cont = null;
+    x = y = vx = vy = rot = rv = 0; lift = 1;
+    held = pending = false; pointerId = -1;
+  }
+
+  function step(dt: number): void {
+    const P = held ? POS_DRAG : POS_FREE;
+    const ox = held ? tx : 0, oy = held ? ty : 0;
+    // posisi
+    vx += (P.k * (ox - x) - P.c * vx) * dt;
+    vy += (P.k * (oy - y) - P.c * vy) * dt;
+    x += vx * dt; y += vy * dt;
+    // rotasi: target miring mengikuti kecepatan horizontal; titik pegang di atas/bawah membalik arah ayunan
+    // seperti menarik kartu dari ujungnya. Saat dilepas target 0 -> berayun balik.
+    const sign = gy >= 0 ? 1 : -1;
+    const tilt = held
+      ? Math.max(-MAX_TILT, Math.min(MAX_TILT, vx * 0.014 * sign + vy * 0.01 * gx * -1))
+      : 0;
+    rv += (ROT.k * (tilt - rot) - ROT.c * rv) * dt;
+    rot += rv * dt;
+    lift += ((held ? LIFT : 1) - lift) * Math.min(1, dt * 14);
+  }
+
+  function paint(): void {
+    if (!card) return;
+    const sp = Math.hypot(vx, vy);
+    const s = Math.min(sp / 2600, 0.2);                 // melar searah gerak, memipih tegak lurus
+    const a = Math.atan2(vy, vx) * 180 / Math.PI;
+    card.style.transform =
+      'translate3d(' + x.toFixed(2) + 'px,' + y.toFixed(2) + 'px,0) rotate(' + rot.toFixed(2) + 'deg) ' +
+      'rotate(' + a.toFixed(1) + 'deg) scale(' + ((1 + s) * lift).toFixed(4) + ',' + ((1 - s * 0.6) * lift).toFixed(4) + ') rotate(' + (-a).toFixed(1) + 'deg)';
+  }
+
+  function tick(now: number): void {
+    raf = 0;
+    if (!card) return;
+    let dt = Math.min((now - last) / 1000, 1 / 30); last = now;
+    for (let i = 0; i < 2; i++) step(dt / 2);          // 2 sub-step supaya spring stabil
+    if (held) { measureNatural(); clampTarget(); }
+    paint();
+    const settled = !held && Math.abs(x) < 0.15 && Math.abs(y) < 0.15 && Math.abs(vx) < 1 && Math.abs(vy) < 1 && Math.abs(rot) < 0.1 && Math.abs(rv) < 1;
+    if (settled) { finish(); return; }
+    raf = requestAnimationFrame(tick);
+  }
+
+  // ===== input =====
+  headersList.addEventListener('pointerdown', e => {
+    if (!recOn() || e.button > 0 || pointerId !== -1) return;
+    const target = e.target as HTMLElement;
+    if (target.closest(NO_DRAG)) return;
+    const th = target.closest('.trackheader') as HTMLElement | null;
+    const sel = selected();
+    if (!th || th !== sel) return;                      // hanya track yang sedang dipilih
+    if (card && card !== th) finish();
+    card = th; cont = th.closest('.trackheader-container') as HTMLElement;
+    pointerId = e.pointerId; pending = true; held = false;
+    p0x = e.clientX; p0y = e.clientY; o0x = x; o0y = y;
+    const r = th.getBoundingClientRect();
+    gx = Math.max(-1, Math.min(1, (e.clientX - (r.left + r.width / 2)) / (r.width / 2)));
+    gy = Math.max(-1, Math.min(1, (e.clientY - (r.top + r.height / 2)) / (r.height / 2)));
+    try { th.setPointerCapture(e.pointerId); } catch { /* abaikan */ }
+  });
+
+  headersList.addEventListener('pointermove', e => {
+    if (e.pointerId !== pointerId || !card) return;
+    const dx = e.clientX - p0x, dy = e.clientY - p0y;
+    if (pending) {
+      if (Math.hypot(dx, dy) < DRAG_START_PX) return;
+      pending = false; held = true; suppressClick = true;
+      if (e.pointerType === 'touch') { try { navigator.vibrate?.(8); } catch { /* abaikan */ } }
+      measureNatural(); start();
+    }
+    if (!held) return;
+    e.preventDefault();
+    tx = o0x + dx; ty = o0y + dy;
+    if (REDUCE) { x = tx; y = ty; vx = vy = rot = rv = 0; clampTarget(); x = tx; y = ty; paint(); }
+  });
+
+  const release = (e: PointerEvent): void => {
+    if (e.pointerId !== pointerId) return;
+    try { card && card.releasePointerCapture(e.pointerId); } catch { /* abaikan */ }
+    pointerId = -1;
+    if (pending) { pending = false; card = cont = null; return; }   // cuma klik biasa
+    held = false;
+    // lempar: kecepatan terakhir dipertahankan, jadi card melenting sebelum kembali
+    if (REDUCE) { finish(); return; }
+    if (!raf) { last = performance.now(); raf = requestAnimationFrame(tick); }
+    setTimeout(() => { suppressClick = false; }, 0);
+  };
+  headersList.addEventListener('pointerup', release);
+  headersList.addEventListener('pointercancel', release);
+
+  // setelah drag, klik yang menyusul (mis. tombol ikon instrumen -> buka/tutup panel) dibuang
+  headersList.addEventListener('click', e => {
+    if (suppressClick) { e.stopPropagation(); e.preventDefault(); suppressClick = false; }
+  }, true);
+
+  // ganti track / Record Mode dimatikan -> hentikan goyangan
+  document.addEventListener('recmodechange', () => { if (!recOn() && card) finish(); });
+  new MutationObserver(() => { if (card && card !== selected()) finish(); })
+    .observe(headersList, { subtree: true, attributes: true, attributeFilter: ['class'] });
+}
