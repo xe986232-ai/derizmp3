@@ -30,6 +30,7 @@ const pct = (v: number): string => Math.round(v * 100) + '%';
 const fmtSec = (s: number): string => (s < 1 ? Math.round(s * 1000) + ' ms' : s.toFixed(2) + ' s');
 const fmtHz = (hz: number): string => (hz >= 1000 ? (hz / 1000).toFixed(1) + ' kHz' : Math.round(hz) + ' Hz');
 
+const derizVol = (v: number | undefined): number => (v ?? 0.8) * 1.125;   // knob Volume: default 80% = penguatan 0.9 (sama seperti sebelumnya), 100% = 1.125
 const derizSpeed = (v: number): number => 2 ** ((v - 0.5) * 2);   // knob Speed: tengah = 1×, kiri 0.5×, kanan 2× (kecepatan putar sampler; nada ikut berubah seperti kaset)
 
 const EFFECTS: EffectDef[] = [
@@ -48,7 +49,7 @@ const EFFECTS: EffectDef[] = [
       { key: 'high', label: 'High', def: 0.5, bipolar: true, fmt: fmtDb }
     ]
   },
-  { type: 'deriz', name: 'DERIZ', params: [{ key: 'speed', label: 'Speed', def: 0.5, bipolar: true, fmt: v => derizSpeed(v).toFixed(2) + '×' }], synth: true },   // plugin track DERIZ: spektrogram + upload + knob; dibuat dari "+ Tambahkan track", bukan dari daftar efek
+  { type: 'deriz', name: 'DERIZ', params: [{ key: 'speed', label: 'Speed', def: 0.5, bipolar: true, fmt: v => derizSpeed(v).toFixed(2) + '×' }, { key: 'volume', label: 'Volume', def: 0.8, fmt: pct }], synth: true },   // plugin track DERIZ: spektrogram + upload + knob; dibuat dari "+ Tambahkan track", bukan dari daftar efek
   {
     type: 'supersaw', name: 'Supersaw', synth: true,
     params: [
@@ -438,7 +439,7 @@ export function initFxRack(host: () => AudioHost): FxRack {
     const { ctx, dest } = host(); if (ctx.state === 'suspended') void ctx.resume();
     const src = ctx.createBufferSource(), g = ctx.createGain(), t = ctx.currentTime;
     src.buffer = z.buf; src.playbackRate.value = 2 ** ((m - KROOT) / 12) * derizSpeed(fx.v.speed);
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.9, t + 0.006);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(derizVol(fx.v.volume), t + 0.006);
     src.connect(g); g.connect(trackInput(ctx, dest, cur));
     src.start(t, Math.min(z.start * z.dur, Math.max(0, z.dur - 0.01)));
     src.onended = () => { src.disconnect(); g.disconnect(); if (kbVoices.get(m)?.src === src) kbVoices.delete(m); };
@@ -446,6 +447,9 @@ export function initFxRack(host: () => AudioHost): FxRack {
   }
   function kbRetune(fx: Fx): void {   // knob Speed diputar saat nada sedang ditahan: kecepatan ikut berubah mulus
     kbVoices.forEach((v, m) => v.src.playbackRate.setTargetAtTime(2 ** ((m - KROOT) / 12) * derizSpeed(fx.v.speed), v.ctx.currentTime, 0.02));
+  }
+  function kbVolume(fx: Fx): void {   // knob Volume diputar saat nada sedang ditahan: level ikut berubah mulus
+    kbVoices.forEach(v => v.g.gain.setTargetAtTime(derizVol(fx.v.volume), v.ctx.currentTime, 0.02));
   }
   function kbOff(m: number): void {
     const v = kbVoices.get(m); if (!v) return;
@@ -703,6 +707,7 @@ export function initFxRack(host: () => AudioHost): FxRack {
     paintCtl(el, v, p, defOf(fx.type).name);
     if (cur) applyAudio(cur);
     if (fx.type === 'deriz' && p.key === 'speed') kbRetune(fx);
+    if (fx.type === 'deriz' && p.key === 'volume') kbVolume(fx);
     if (!tip.hidden) showTip(el, p.fmt(v));
   };
 
