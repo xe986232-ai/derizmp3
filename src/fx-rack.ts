@@ -361,10 +361,12 @@ export function initFxRack(host: () => AudioHost): FxRack {
     e.preventDefault(); e.stopPropagation();
     closeOverlay();
   };
+  const clearOvAnim = (): void => ov.getAnimations({ subtree: true }).forEach(an => an.cancel());
   function openOverlay(card: HTMLElement): void {
     if (ovOpen?.card === card) return;
     const fx = find(card); if (!fx || fx.type !== 'deriz') return;
     if (ovOpen) closeOverlay(true);
+    clearOvAnim();   // animasi tutup sebelumnya (fill: forwards) jangan menahan opacity 0 di buka berikutnya
     closePicker(true); closeMenu(true); hideTip();
     const ph = document.createElement('div');
     ph.className = 'fxc-ph'; ph.dataset.fx = String(fx.id);
@@ -393,7 +395,7 @@ export function initFxRack(host: () => AudioHost): FxRack {
     document.removeEventListener('keydown', onOvKey, true);
     hideTip();
     const finish = (): void => {
-      ov.hidden = true;
+      if (!ovOpen) { ov.hidden = true; clearOvAnim(); }   // kalau sudah dibuka lagi selagi animasi tutup jalan, jangan disembunyikan
       if (discard || !o.ph.isConnected) { o.card.querySelectorAll('canvas').forEach(c => ro.unobserve(c)); o.card.remove(); o.ph.remove(); return; }
       o.ph.replaceWith(o.card);
       const fx = find(o.card); if (fx) paintDeriz(o.card, fx);
