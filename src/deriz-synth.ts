@@ -3,14 +3,16 @@
 //
 // Algoritma (jalan di AudioWorklet, polifonik):
 //   1. Time-stretch WSOLA (waveform similarity overlap-add) dengan overlap 75%, jendela Hann ternormalisasi.
-//      Posisi tiap frame dicari (kasar -> halus, korelasi silang ternormalisasi pada mono)
-//      yang paling nyambung dengan lanjutan alami frame sebelumnya, jadi sambungan tidak terdengar.
-//      Panjang frame menyesuaikan nada (nada rendah = frame lebih panjang, supaya memuat beberapa periode gelombang).
+//      Posisi tiap frame dicari (kasar -> halus -> SUB-SAMPEL, korelasi silang ternormalisasi pada mono, templat 3 hop)
+//      yang paling nyambung dengan lanjutan alami frame sebelumnya. Penyelarasan pecahan sampel penting untuk nada tinggi:
+//      periode gelombang jarang bulat, dan galat pembulatan membuat harmonik atas bergeser fase di tiap sambungan (terdengar kasar / robot).
+//      Panjang frame menyesuaikan nada: rendah = lebih panjang (memuat beberapa periode); tinggi = lebih panjang juga
+//      (hop frame setelah di-resample naik tidak menjadi dengung).
 //   2. Penjaga transien: awal ketukan / petikan (onset) dideteksi dari lonjakan energi. Saat stretch, onset TIDAK ikut
 //      diulang atau melebar: frame dipotong tepat sebelum onset, lalu dimulai ulang tepat di onset dengan crossfade 2 ms.
-//      Hasilnya serangan tetap tajam di kecepatan / nada berapa pun.
-//   3. Pitch shift: hasil stretch dibaca ulang dengan interpolasi Hermite (kubik 4 titik) pada laju = rasioNada
-//      (rasioNada = 2^((tuts - C4 + Pitch) / 12)). Kecepatan bersih di sample = Speed, tidak tergantung nada.
+//   3. Pitch shift: hasil stretch dibaca ulang pada laju = rasioNada (rasioNada = 2^((tuts - C4 + Pitch) / 12)).
+//      Nada turun: interpolasi Hermite 4 titik. Nada NAIK: kernel sinc berjendela Blackman (16 lobus) dengan frekuensi potong
+//      0.85/rasio, jadi low-pass terjadi SEBELUM decimate dan harmonik atas tidak terlipat (aliasing) melewati Nyquist.
 //   4. Limiter lembut di keluaran supaya akor (banyak nada sekaligus) tidak pecah.
 //
 // Pesan ke prosesor: buf (data sample), on / off (nada), p (parameter live), kill (hentikan semua).
@@ -21,6 +23,13 @@ class DerizSampler extends AudioWorkletProcessor {
     super();
     this.ch = null; this.mono = null; this.len = 0; this.bufRate = sampleRate; this.ons = [];
     this.wins = new Map();
+    // tabel kernel sinc berjendela Blackman (HW lobus tiap sisi, TR entri per lobus) untuk resampling anti-alias saat nada naik
+    this.HW = 8; this.TR = 512;
+    const tn = this.HW * this.TR + 2; this.sinc = new Float32Array(tn);
+    for (let i = 0; i < tn; i++) {
+      const x = i / this.TR, px = Math.PI * x, sc = x < 1e-9 ? 1 : Math.sin(px) / px, u = x / this.HW;
+      this.sinc[i] = u >= 1 ? 0 : sc * (0.42 + 0.5 * Math.cos(Math.PI * u) + 0.08 * Math.cos(2 * Math.PI * u));
+    }
     this.voices = [];
     this.speed = 1; this.pitch = 0; this.vol = 0.9; this.volS = 0.9;
     this.port.onmessage = e => this.msg(e.data);
@@ -75,7 +84,8 @@ class DerizSampler extends AudioWorkletProcessor {
     if (!this.ch) return;
     const rate = this.bufRate, size = 1 << 15;
     const P0 = Math.pow(2, (m.semis + this.pitch) / 12);
-    const N = 4 * Math.max(8, Math.round(Math.min(0.07, Math.max(0.03, 0.04 / Math.sqrt(P0))) * rate / 4));
+    const dur = P0 < 1 ? 0.04 / Math.sqrt(P0) : 0.04 * Math.pow(P0, 0.35);   // rendah: muat beberapa periode; tinggi: hop lebih panjang supaya modulasi frame (x rasio nada) tidak jadi dengung
+    const N = 4 * Math.max(8, Math.round(Math.min(0.085, Math.max(0.03, dur)) * rate / 4));
     const start = Math.max(0, m.start);
     let oi = 0; while (oi < this.ons.length && this.ons[oi] < start + 0.01 * rate) oi++;   // onset persis di awal = bagian dari frame pertama
     this.voices.push({
@@ -85,22 +95,62 @@ class DerizSampler extends AudioWorkletProcessor {
       env: 0, rel: false, atk: 1 / (0.002 * sampleRate), relK: Math.exp(-1 / (0.04 * sampleRate))
     });
   }
-  // cari posisi frame terbaik di sekitar c0: kasar (langkah 4) lalu halus (langkah 1), korelasi silang ternormalisasi
+  // interpolasi kubik (Catmull-Rom) pada array x di posisi pecahan pos (batas dijaga)
+  cub(x, pos) {
+    const L = x.length, i = Math.floor(pos), f = pos - i;
+    const xm = x[i > 0 ? i - 1 : 0], x0 = x[i], x1 = x[i + 1 < L ? i + 1 : L - 1], x2 = x[i + 2 < L ? i + 2 : L - 1];
+    return ((((x2 - xm) * 0.5 + (x0 - x1) * 1.5) * f + (xm - 2.5 * x0 + 2 * x1 - 0.5 * x2)) * f + (x1 - xm) * 0.5) * f + x0;
+  }
+  // cari posisi frame terbaik di sekitar c0: kasar (langkah 16, stride 8) lalu halus (langkah 1, stride 4), korelasi silang ternormalisasi,
+  // lalu SUB-SAMPEL (parabola di puncak korelasi). Hasil: this.fr = bagian pecahan (-0.5..0.5), return = bagian bulat.
+  // Templat = lanjutan alami frame sebelumnya (posisi pecahan tp) sepanjang 3 hop; ada sedikit bias ke posisi nominal
+  // supaya posisi tidak melompat antar periode yang sama bagusnya (mengurangi flutter).
   search(c0, tp, N, Hs) {
-    const x = this.mono, L = this.len, maxC = L - N, M = 2 * Hs, W = Hs;
+    const x = this.mono, L = this.len, maxC = L - N, W = Hs;
+    this.fr = 0;
+    const tI = Math.floor(tp), tf = tp - tI;
+    let M = 3 * Hs; if (tI + M + 3 > L) M = L - tI - 3;
     const cc = Math.max(0, Math.min(maxC, c0));
-    if (tp + M > L) return cc;
+    if (M < Hs) return cc;
+    if (!this.tm || this.tm.length < M) this.tm = new Float32Array(M + 64);
+    const tm = this.tm;
+    if (tf < 1e-4) for (let j = 0; j < M; j++) tm[j] = x[tI + j];
+    else for (let j = 0; j < M; j++) { const q = tI + j; tm[j] = this.cub(x, q + tf); }
     const lo = Math.max(0, c0 - W), hi = Math.min(maxC, c0 + W);
     const score = (cand, step) => {
       let dot = 0, en = 1e-9;
-      for (let j = 0; j < M; j += step) { const s = x[cand + j]; dot += s * x[tp + j]; en += s * s; }
+      for (let j = 0; j < M; j += step) { const s = x[cand + j]; dot += s * tm[j]; en += s * s; }
       return dot / Math.sqrt(en);
     };
+    const bias = (cand) => 1 - 0.06 * Math.abs(cand - c0) / W;
     let best = -1e30, bc = cc;
-    for (let cand = lo; cand <= hi; cand += 4) { const sc = score(cand, 4); if (sc > best) { best = sc; bc = cand; } }
+    for (let cand = lo; cand <= hi; cand += 16) { const sc = score(cand, 8) * bias(cand); if (sc > best) { best = sc; bc = cand; } }
     best = -1e30; let fc = bc;
-    for (let cand = Math.max(lo, bc - 3); cand <= Math.min(hi, bc + 3); cand++) { const sc = score(cand, 2); if (sc > best) { best = sc; fc = cand; } }
+    for (let cand = Math.max(lo, bc - 16); cand <= Math.min(hi, bc + 16); cand++) { const sc = score(cand, 4) * bias(cand); if (sc > best) { best = sc; fc = cand; } }
+    if (fc > 1 && fc < maxC - 3) {
+      // sub-sampel: skor langsung di posisi pecahan (interpolasi kubik), bagi dua lima kali (resolusi akhir ~1/32 sampel)
+      const scoreF = (pos, st) => {
+        const b0 = Math.floor(pos), f = pos - b0, f2 = f * f, f3 = f2 * f;
+        const k0 = -0.5 * f3 + f2 - 0.5 * f, k1 = 1.5 * f3 - 2.5 * f2 + 1, k2 = -1.5 * f3 + 2 * f2 + 0.5 * f, k3 = 0.5 * f3 - 0.5 * f2;
+        let dot = 0, en = 1e-9;
+        for (let j = 0; j < M; j += st) { const q = b0 + j, s = k0 * x[q - 1] + k1 * x[q] + k2 * x[q + 1] + k3 * x[q + 2]; dot += s * tm[j]; en += s * s; }
+        return dot / Math.sqrt(en);
+      };
+      let pc = fc, ps = scoreF(fc, 2), step = 0.5;
+      for (let it = 0; it < 5; it++) {
+        const st = it < 3 ? 2 : 1;
+        if (it === 3) ps = scoreF(pc, 1);
+        const a1 = scoreF(pc - step, st), a2 = scoreF(pc + step, st);
+        if (a1 > ps && a1 >= a2) { ps = a1; pc -= step; } else if (a2 > ps) { ps = a2; pc += step; }
+        step *= 0.5;
+      }
+      const fr = pc - fc; if (fr > -0.75 && fr < 0.75) this.fr = fr;
+    }
     return fc;
+  }
+  frameBuf(N) {
+    if (!this.fbs || this.fbs[0].length < N) this.fbs = [new Float32Array(N), new Float32Array(N)];
+    return this.fbs;
   }
   // satu frame WSOLA ke buffer T milik voice
   gen(v) {
@@ -109,7 +159,7 @@ class DerizSampler extends AudioWorkletProcessor {
     const { W, S } = this.getWin(N);
     const P = Math.pow(2, (v.semis + this.pitch) / 12), a = this.speed / P;   // a = maju di sample per frame sintesis (satuan sample)
     const maxC = L - N;
-    let c, mode = 0;   // 0 normal, 1 frame pertama, 2 mulai ulang di onset
+    let c, fr = 0, mode = 0;   // 0 normal, 1 frame pertama, 2 mulai ulang di onset
     if (v.first) { c = Math.min(maxC, Math.round(v.nom)); mode = 1; }
     else {
       v.nom += Hs * a;
@@ -117,9 +167,21 @@ class DerizSampler extends AudioWorkletProcessor {
       if (v.oi < ons.length && ons[v.oi] - pre <= v.nom) {
         c = Math.max(0, Math.min(maxC, ons[v.oi] - pre)); v.nom = c; v.oi++; mode = 2;
       } else {
-        c = this.search(Math.round(v.nom), v.prev + Hs, N, Hs);
-        if (v.oi < ons.length) c = Math.min(c, ons[v.oi] - pre - 1);
-        c = Math.max(0, c);
+        c = this.search(Math.round(v.nom), v.prev + Hs, N, Hs); fr = this.fr;
+        if (v.oi < ons.length) { const cm = ons[v.oi] - pre - 1; if (c + (fr < 0 ? -1 : 0) + N + 3 > cm + N) { /* dekat onset */ } if (c > cm) { c = cm; fr = 0; } }
+        if (c < 0) { c = 0; fr = 0; }
+        if (c < 3 || c + N + 4 >= L) fr = 0;   // pinggir sample: tanpa pecahan
+      }
+    }
+    // frame sumber dengan posisi pecahan c+fr (interpolasi kubik); tanpa pecahan = salinan langsung
+    const fb = this.frameBuf(N);
+    for (let q = 0; q < 2; q++) {
+      const src = this.ch[q] || this.ch[0], o = fb[q];
+      if (fr === 0) { for (let i = 0; i < N; i++) o[i] = src[c + i]; }
+      else {
+        const b0 = fr < 0 ? c - 1 : c, f = fr < 0 ? 1 + fr : fr, f2 = f * f, f3 = f2 * f;
+        const k0 = -0.5 * f3 + f2 - 0.5 * f, k1 = 1.5 * f3 - 2.5 * f2 + 1, k2 = -1.5 * f3 + 2 * f2 + 0.5 * f, k3 = 0.5 * f3 - 0.5 * f2;
+        for (let i = 0; i < N; i++) { const j = b0 + i; o[i] = k0 * src[j - 1] + k1 * src[j] + k2 * src[j + 1] + k3 * src[j + 2]; }
       }
     }
     // potong frame tepat sebelum onset berikutnya supaya serangan tidak bocor lebih awal / terulang
@@ -140,19 +202,19 @@ class DerizSampler extends AudioWorkletProcessor {
       v.vEnd = 0;
     }
     for (let q = 0; q < 2; q++) {
-      const src = this.ch[q] || this.ch[0], T = v.T[q];
+      const src = fb[q], T = v.T[q];
       if (mode === 1) {
-        for (let i = 0; i < N; i++) T[(wpos + i) & mask] = src[c + i] * S[i] * taper(i);
+        for (let i = 0; i < N; i++) T[(wpos + i) & mask] = src[i] * S[i] * taper(i);
       } else if (mode === 2) {
-        for (let i = 0; i < K; i++) T[(wpos + i) & mask] += src[c + i] * S[i] * taper(i) * (i / K);
-        for (let i = K; i < N; i++) T[(wpos + i) & mask] = src[c + i] * S[i] * taper(i);
+        for (let i = 0; i < K; i++) T[(wpos + i) & mask] += src[i] * S[i] * taper(i) * (i / K);
+        for (let i = K; i < N; i++) T[(wpos + i) & mask] = src[i] * S[i] * taper(i);
       } else {
         const add = N - Hs;
-        for (let i = 0; i < add; i++) T[(wpos + i) & mask] += src[c + i] * W[i] * taper(i);
-        for (let i = add; i < N; i++) T[(wpos + i) & mask] = src[c + i] * W[i] * taper(i);
+        for (let i = 0; i < add; i++) T[(wpos + i) & mask] += src[i] * W[i] * taper(i);
+        for (let i = add; i < N; i++) T[(wpos + i) & mask] = src[i] * W[i] * taper(i);
       }
     }
-    v.prev = c; v.first = false;
+    v.prev = c + fr; v.first = false;
     v.vEnd = Math.max(v.vEnd, wpos + Math.min(N, lim));
     v.w = wpos + Hs; v.cEnd = wpos + Hs;
     if (c >= maxC || v.nom >= maxC) { v.last = true; v.cEnd = wpos + N; }   // sample habis: sisa ekor ikut dimainkan (sudah memudar)
@@ -165,18 +227,32 @@ class DerizSampler extends AudioWorkletProcessor {
       const v = this.voices[vi], mask = v.size - 1, TL = v.T[0], TR = v.T[1];
       const rhoT = Math.pow(2, (v.semis + this.pitch) / 12) * this.bufRate / sampleRate;
       v.rho += (rhoT - v.rho) * 0.3;
-      const need = v.rd + v.rho * n + 4;
+      // rho > 1 (nada naik): baca dengan kernel sinc yang frekuensi potongnya 0.85/rho (pita transisi filter muat di bawah Nyquist keluaran) (low-pass sebelum decimate) -> tidak ada aliasing
+      // rho <= 1: Hermite 4 titik (tidak perlu filter)
+      const rr = v.rho, aa = rr > 1, fc = aa ? 0.85 / Math.min(rr, 8) : 1, hh = aa ? Math.ceil(this.HW / fc) : 2, sk = this.sinc, TRf = this.TR * fc, lim = this.HW * this.TR;
+      const need = v.rd + v.rho * n + hh + 4;
       while (!v.last && v.cEnd < need) this.gen(v);
       let dead = false;
       for (let i = 0; i < n; i++) {
         const pos = v.rd, i0 = Math.floor(pos);
-        if (pos >= v.cEnd - 3) { dead = true; break; }
-        const f = pos - i0, jm = (i0 - 1) & mask, j0 = i0 & mask, j1 = (i0 + 1) & mask, j2 = (i0 + 2) & mask;
-        // interpolasi Hermite 4 titik
-        let xm = TL[jm], x0 = TL[j0], x1 = TL[j1], x2 = TL[j2];
-        const sl = ((((x2 - xm) * 0.5 + (x0 - x1) * 1.5) * f + (xm - 2.5 * x0 + 2 * x1 - 0.5 * x2)) * f + (x1 - xm) * 0.5) * f + x0;
-        xm = TR[jm]; x0 = TR[j0]; x1 = TR[j1]; x2 = TR[j2];
-        const sr = ((((x2 - xm) * 0.5 + (x0 - x1) * 1.5) * f + (xm - 2.5 * x0 + 2 * x1 - 0.5 * x2)) * f + (x1 - xm) * 0.5) * f + x0;
+        if (pos >= v.cEnd - hh - 1) { dead = true; break; }
+        const f = pos - i0;
+        let sl, sr;
+        if (aa) {
+          // kernel simetris: sisi kiri (t <= 0) dan kanan (t >= 1), jarak bertambah TRf per tap; bobot dari tabel (terdekat), gain pita lolos = fc
+          sl = 0; sr = 0;
+          let d = f * TRf, k;
+          for (let t = 0; t >= 1 - hh; t--) { k = (d + 0.5) | 0; if (k >= lim) break; const w = sk[k], j = (i0 + t) & mask; sl += w * TL[j]; sr += w * TR[j]; d += TRf; }
+          d = (1 - f) * TRf;
+          for (let t = 1; t <= hh; t++) { k = (d + 0.5) | 0; if (k >= lim) break; const w = sk[k], j = (i0 + t) & mask; sl += w * TL[j]; sr += w * TR[j]; d += TRf; }
+          sl *= fc; sr *= fc;
+        } else {
+          const jm = (i0 - 1) & mask, j0 = i0 & mask, j1 = (i0 + 1) & mask, j2 = (i0 + 2) & mask;
+          let xm = TL[jm], x0 = TL[j0], x1 = TL[j1], x2 = TL[j2];
+          sl = ((((x2 - xm) * 0.5 + (x0 - x1) * 1.5) * f + (xm - 2.5 * x0 + 2 * x1 - 0.5 * x2)) * f + (x1 - xm) * 0.5) * f + x0;
+          xm = TR[jm]; x0 = TR[j0]; x1 = TR[j1]; x2 = TR[j2];
+          sr = ((((x2 - xm) * 0.5 + (x0 - x1) * 1.5) * f + (xm - 2.5 * x0 + 2 * x1 - 0.5 * x2)) * f + (x1 - xm) * 0.5) * f + x0;
+        }
         if (!v.rel) { if (v.env < 1) v.env = Math.min(1, v.env + v.atk); } else v.env *= v.relK;
         const g = v.env * (g0 + (g1 - g0) * i / n);
         oL[i] += sl * g; oR[i] += sr * g;
