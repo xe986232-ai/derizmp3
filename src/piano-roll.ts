@@ -274,6 +274,7 @@ function drawRuler() {
 
 // ---------- menu bulat di atas / bawah note terpilih (gaya sama dengan menu pattern di timeline) ----------
 let selBarOn = false;
+let barOff = false;   // true setelah note selesai di-DRAG (pindah / ubah panjang): menu tidak muncul; baru muncul lagi kalau note di-KLIK
 function flashBtn(act: string) {
   const b = selBar.querySelector<HTMLElement>('[data-sel="' + act + '"]'); if (!b || REDUCE) return;
   b.animate([{transform: 'scale(1)'}, {transform: 'scale(1.18)'}, {transform: 'scale(1)'}], {duration: 240, easing: 'ease-out'});
@@ -282,7 +283,7 @@ function shakeSelBar() { selBar.classList.remove('is-shake'); void selBar.offset
 function placeSelBar() {
   if (!selBar) return;
   const dragging = !!g && g.kind !== 'pan' && g.kind !== 'tapdraw';   // saat menyeret / seleksi kotak, menu disembunyikan dulu
-  const sel = selected.size && !dragging ? st.notes.filter(n => selected.has(n.id)) : [];
+  const sel = selected.size && !dragging && !barOff ? st.notes.filter(n => selected.has(n.id)) : [];
   if (!sel.length) { selBar.hidden = true; selBarOn = false; return; }
   const vw = sc.clientWidth, vh = sc.clientHeight, sx = sc.scrollLeft, sy = sc.scrollTop;
   const x0 = Math.min(...sel.map(n => n.s)) * ppb - sx, x1 = Math.max(...sel.map(n => n.s + n.l)) * ppb - sx;
@@ -613,6 +614,7 @@ function onDown(e: PointerEvent) {
   if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
   ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
   gc.setPointerCapture(e.pointerId);
+  barOff = false;   // sentuhan baru: klik note = menu muncul lagi
   if (ptrs.size === 2) {                       // pinch: batalkan apa pun yang sedang digambar
     if (g) cancelGesture();
     const [a, b] = [...ptrs.values()];
@@ -703,6 +705,7 @@ function onMove(e: PointerEvent) {
     return;
   }
   g.x = x; g.y = y;
+  if ((g.kind === 'move' || g.kind === 'resize') && !g.moved && Math.hypot(e.clientX - g.cx, e.clientY - g.cy) > (e.pointerType === 'touch' ? 8 : 5)) g.moved = true;   // sudah digeser = drag, bukan klik
   if (g.kind === 'tapdraw' && !g.moved && Math.hypot(e.clientX - g.cx, e.clientY - g.cy) > (g.touch ? 8 : 5)) {
     g.moved = true; clearTimeout(g.timer); g.timer = undefined;       // gerak sebelum ditahan: bukan blok
     if (g.touch) g.kind = 'pan';                                      // sentuh: scroll
@@ -774,6 +777,7 @@ function onUp(e: PointerEvent) {
         if (n) lastLen = n.l;
       }
     }
+    if ((g.kind === 'move' || g.kind === 'resize') && g.moved) barOff = true;   // habis drag note: jangan tampilkan menu
     if (g.kind === 'resize') rel = {id: g.anchor!.id, t0: performance.now()};
     if (g.kind === 'new' || g.kind === 'resize') {
       const id = g.anchor!.id, n = st.notes.find(q => q.id === id);
