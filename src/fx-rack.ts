@@ -4,9 +4,10 @@
 // Selain efek (Reverb, Equalizer) ada plugin instrumen (Supersaw): kartunya otomatis muncul di paling atas saat track synth dibuat,
 // memakai knob + slider vertikal, dan tidak bisa dihapus / tidak muncul di daftar pilihan efek.
 // Efek / plugin baru cukup ditambah ke EFFECTS (nama, parameter) dan ke applyAudio().
-// DERIZ: plugin dengan canvas audio (spektrogram, zoom) + upload file; tahap ini baru menampilkan audio, belum memproses suara.
+// DERIZ: plugin sampler dengan canvas audio (spektrogram, zoom) + upload file; nada (tuts + Pitch) dan kecepatan (Speed) terpisah (deriz-synth.ts).
 
 import { setReverb, setEq, reverbSeconds, eqDb, decodeStandalone, trackInput } from './audio-engine';
+import { DerizSynth } from './deriz-synth';
 import { isAudio, ACCEPT as AUDIO_ACCEPT } from './audio-upload-card';
 import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } from './synth-engine';
 
@@ -32,7 +33,7 @@ const fmtHz = (hz: number): string => (hz >= 1000 ? (hz / 1000).toFixed(1) + ' k
 
 const derizVol = (v: number | undefined): number => (v ?? 0.8) * 1.125;   // knob Volume: default 80% = penguatan 0.9 (sama seperti sebelumnya), 100% = 1.125
 const derizPitch = (v: number | undefined): number => Math.round(((v ?? 0.5) - 0.5) * 24);   // knob Pitch: tengah = 0, kiri -12, kanan +12 semitone (bulat)
-const derizSpeed = (v: number): number => 2 ** ((v - 0.5) * 2);   // knob Speed: tengah = 1×, kiri 0.5×, kanan 2× (kecepatan putar sampler; nada ikut berubah seperti kaset)
+const derizSpeed = (v: number): number => 2 ** ((v - 0.5) * 2);   // knob Speed: tengah = 1×, kiri 0.5×, kanan 2× (kecepatan sample saja; nada tidak ikut berubah, diatur tuts + Pitch)
 
 const EFFECTS: EffectDef[] = [
   {
@@ -396,6 +397,8 @@ export function initFxRack(host: () => AudioHost): FxRack {
   function closeOverlay(instant = false, discard = false): void {
     const o = ovOpen; if (!o) return;
     kbReleaseAll();
+    const fid = find(o.card)?.id;
+    if (fid !== undefined) window.setTimeout(() => { const e = synths.get(fid); if (e && !ovOpen) { synths.delete(fid); void e.p.then(x => x.dispose(), () => { /* gagal dibuat */ }); } }, 800);   // lepas worklet setelah ekor suara habis
     ovOpen = null;
     document.removeEventListener('keydown', onOvKey, true);
     hideTip();
@@ -421,7 +424,9 @@ export function initFxRack(host: () => AudioHost): FxRack {
   // ---------- DERIZ: keyboard di bawah plugin (gaya keyboard bawah). Sampler: audio yang di-upload dimainkan dengan pitch sesuai tuts, mulai dari garis start; C4 = nada asli ----------
   const KROOT = 60, KBASE = 48, KOCT = 3, NW = 7 * KOCT, WPC = [0, 2, 4, 5, 7, 9, 11], BLK = [0, 1, 3, 4, 5];   // tetap 3 oktaf: C3 sampai B5 (21 tuts putih), tanpa ganti oktaf; BLK: tuts putih (C D F G A) yang punya tuts hitam di kanannya
   const KMAP: Record<string, number> = { z: 0, s: 1, x: 2, d: 3, c: 4, v: 5, g: 6, b: 7, h: 8, n: 9, j: 10, m: 11, ',': 12, l: 13, '.': 14, '1': 15, q: 16, w: 17, '3': 18, e: 19, '4': 20, r: 21, '5': 22, t: 23, y: 24, '7': 25, u: 26, '8': 27, i: 28, o: 29, '0': 30, p: 31 };
-  const kbVoices = new Map<number, { src: AudioBufferSourceNode; g: GainNode; ctx: AudioContext }>();
+  const kbVoices = new Map<number, { id: number }>();   // tuts yang sedang ditahan -> id nada di worklet
+  const synths = new Map<number, { ctx: AudioContext; p: Promise<DerizSynth>; s?: DerizSynth }>();   // satu sampler worklet per plugin DERIZ (dibuat saat overlay dibuka)
+  let kbSeq = 0;
   const kbPtr = new Map<number, number>(), kbKeysDown = new Map<string, number>();
   const kbCard = (): HTMLElement | null => ovOpen?.card ?? null;
   const kbKeyEl = (m: number): HTMLElement | null => kbCard()?.querySelector<HTMLElement>(`.deriz__keys [data-midi="${m}"]`) ?? null;
@@ -440,31 +445,39 @@ export function initFxRack(host: () => AudioHost): FxRack {
     }
     keys.innerHTML = h;
   }
-  const derizRate = (m: number, fx: Fx): number => 2 ** ((m - KROOT + derizPitch(fx.v.pitch)) / 12) * derizSpeed(fx.v.speed);   // laju putar: nada tuts + Pitch (semitone) x Speed
+  // Sampler (AudioWorklet, lihat deriz-synth.ts): tuts hanya mengubah NADA; kecepatan sample hanya diatur knob Speed.
+  function derizSynth(fx: Fx, ctx: AudioContext): Promise<DerizSynth> {
+    let e = synths.get(fx.id);
+    if (!e || e.ctx !== ctx) {
+      void e?.p.then(x => x.dispose(), () => { /* gagal dibuat */ });
+      const made = { ctx, p: DerizSynth.create(ctx) } as { ctx: AudioContext; p: Promise<DerizSynth>; s?: DerizSynth };
+      made.p.then(x => { made.s = x; }, () => { if (synths.get(fx.id) === made) synths.delete(fx.id); });
+      synths.set(fx.id, made); e = made;
+    }
+    return e.p;
+  }
+  const derizArgs = (fx: Fx): [number, number, number] => [derizSpeed(fx.v.speed), derizPitch(fx.v.pitch), derizVol(fx.v.volume)];
   function kbOn(m: number): void {
     const fx = ovOpen ? find(ovOpen.card) : undefined, z = fx?.deriz;
     if (!fx || !z || !fx.on || !cur || kbVoices.has(m)) return;
     const { ctx, dest } = host(); if (ctx.state === 'suspended') void ctx.resume();
-    const src = ctx.createBufferSource(), g = ctx.createGain(), t = ctx.currentTime;
-    src.buffer = z.buf; src.playbackRate.value = derizRate(m, fx);
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(derizVol(fx.v.volume), t + 0.006);
-    src.connect(g); g.connect(trackInput(ctx, dest, cur));
-    src.start(t, Math.min(z.start * z.dur, Math.max(0, z.dur - 0.01)));
-    src.onended = () => { src.disconnect(); g.disconnect(); if (kbVoices.get(m)?.src === src) kbVoices.delete(m); };
-    kbVoices.set(m, { src, g, ctx });
+    const id = ++kbSeq, track = cur;
+    kbVoices.set(m, { id });
+    derizSynth(fx, ctx).then(s => {
+      const z2 = fx.deriz;
+      if (kbVoices.get(m)?.id !== id || !z2) return;   // sudah dilepas selagi sampler disiapkan
+      s.routeTo(trackInput(ctx, dest, track)); s.setBuffer(z2.buf);
+      const [sp, pi, vo] = derizArgs(fx);
+      s.noteOn(id, m - KROOT, Math.floor(Math.min(z2.start * z2.dur, Math.max(0, z2.dur - 0.01)) * z2.buf.sampleRate), sp, pi, vo);
+    }).catch(err => console.error(err));
   }
-  function kbRetune(fx: Fx): void {   // knob Speed diputar saat nada sedang ditahan: kecepatan ikut berubah mulus
-    kbVoices.forEach((v, m) => v.src.playbackRate.setTargetAtTime(derizRate(m, fx), v.ctx.currentTime, 0.02));
-  }
-  function kbVolume(fx: Fx): void {   // knob Volume diputar saat nada sedang ditahan: level ikut berubah mulus
-    kbVoices.forEach(v => v.g.gain.setTargetAtTime(derizVol(fx.v.volume), v.ctx.currentTime, 0.02));
+  function kbParams(fx: Fx): void {   // knob Speed / Pitch / Volume diputar saat nada ditahan: ikut berubah mulus
+    const s = synths.get(fx.id)?.s; if (s) s.params(...derizArgs(fx));
   }
   function kbOff(m: number): void {
     const v = kbVoices.get(m); if (!v) return;
     kbVoices.delete(m);
-    const t = v.ctx.currentTime;
-    v.g.gain.cancelScheduledValues(t); v.g.gain.setValueAtTime(v.g.gain.value, t); v.g.gain.setTargetAtTime(0, t, 0.04);
-    try { v.src.stop(t + 0.3); } catch { /* sudah berhenti */ }
+    for (const e of synths.values()) e.s?.noteOff(v.id);
   }
   const kbPress = (m: number): void => { kbOn(m); const k = kbKeyEl(m); if (k) { k.classList.add('pressed'); k.classList.remove('unpressed'); } };
   const kbRelease = (m: number): void => { kbOff(m); const k = kbKeyEl(m); if (k) { k.classList.remove('pressed'); k.classList.add('unpressed'); } };
@@ -714,8 +727,7 @@ export function initFxRack(host: () => AudioHost): FxRack {
     fx.v[p.key] = v;
     paintCtl(el, v, p, defOf(fx.type).name);
     if (cur) applyAudio(cur);
-    if (fx.type === 'deriz' && (p.key === 'speed' || p.key === 'pitch')) kbRetune(fx);
-    if (fx.type === 'deriz' && p.key === 'volume') kbVolume(fx);
+    if (fx.type === 'deriz') kbParams(fx);
     if (!tip.hidden) showTip(el, p.fmt(v));
   };
 
