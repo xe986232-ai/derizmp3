@@ -639,8 +639,8 @@ let actx = null, master = null; const voices = new Map();
 function audio() {
   if (!actx) {
     actx = new (window.AudioContext || window.webkitAudioContext)();
-    master = actx.createGain(); master.gain.value = .5;
-    const comp = actx.createDynamicsCompressor(); master.connect(comp); comp.connect(actx.destination);
+    master = actx.createGain(); master.gain.value = 1;   // unity gain: suara asli, tanpa kompresor/limiter
+    master.connect(actx.destination);
   }
   if (actx.state === 'suspended') actx.resume();
   return actx;
