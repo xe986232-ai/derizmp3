@@ -315,7 +315,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 html[data-rec="on"] .lane.is-rec-dim{filter:blur(6px) brightness(.75)}
 html[data-rec="on"] .pat-bar{display:none}   /* menu bulat di atas pattern disembunyikan saat Record Mode */
 /* ===== RECORD MODE: card track terpilih bisa digoyang (src/record-jelly.ts) ===== */
-html[data-rec="on"] .trackheader--selected{touch-action:none;cursor:grab;will-change:transform}
+html[data-rec="on"] .trackheader--selected{touch-action:none;cursor:grab;will-change:transform;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 html[data-rec="on"] .trackheader--selected :is(input,.knob,[role="slider"]){cursor:auto}
 html.is-jelly .tracklist{overflow:visible}                      /* card boleh keluar dari kolom daftar track selama bergerak */
 .trackheader-container.is-jelly{z-index:60}

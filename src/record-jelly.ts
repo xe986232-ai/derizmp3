@@ -1,6 +1,7 @@
 // Record Mode: card track yang terpilih bisa di-drag ke mana saja dan digoyang.
 // Fisikanya spring (kenyal): card mengikuti jari/kursor dengan sedikit tertinggal, miring (rotasi) mengikuti
 // arah gerak, melar sedikit searah kecepatan (jelly), lalu dilepas -> memantul balik ke tempat asal.
+// Cara pakai: klik + TAHAN card (350ms) -> card terangkat jadi overlay (dipindah ke <body>), lalu bebas dibawa ke mana saja.
 // Hanya aktif saat html[data-rec="on"] dan hanya untuk track yang sedang dipilih.
 
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -9,9 +10,10 @@ const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const POS_DRAG = { k: 260, c: 21 };    // saat dipegang: ikut pointer, sedikit lag
 const POS_FREE = { k: 150, c: 9 };     // saat dilepas: balik ke asal sambil memantul
 const ROT = { k: 210, c: 10 };         // rotasi: berayun
-const DRAG_START_PX = 5;               // geser minimal sebelum dianggap drag (supaya klik biasa tetap jalan)
+const HOLD_MS = 350;                   // tahan segini lama -> card "terangkat" jadi overlay, lalu bebas dibawa ke mana saja
+const HOLD_SLOP = 10;                  // geser lebih dari ini sebelum waktunya = batal (bukan tahan)
 const MAX_TILT = 28;                   // derajat
-const LIFT = 1.035;                    // card sedikit membesar saat dipegang
+const LIFT = 1.06;                     // card membesar saat terangkat
 
 // elemen yang tidak boleh memulai drag (punya interaksi sendiri)
 const NO_DRAG = 'input, [role="slider"], .knob, .trackheader__pwr, .trackheader__rec-mode-button, .trackheader__more-options, .trackheader__left-content, [contenteditable="true"], .trackheader-separator';
@@ -31,6 +33,7 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
   let gx = 0, gy = 0;                        // titik pegang relatif ke tengah card (-1..1)
   let nat = { l: 0, t: 0, r: 0, b: 0 };      // kotak card di posisi asal (tanpa transform)
   let suppressClick = false;
+  let holdTimer = 0, lx = 0, ly = 0;         // timer tahan + posisi pointer terakhir
   let homeNext: Node | null = null;          // sibling setelah card di kandangnya (untuk mengembalikan posisi DOM)
   let lift = 1;
 
@@ -77,6 +80,7 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
   }
 
   function finish(): void {
+    cancelHold();
     cancelAnimationFrame(raf); raf = 0;
     if (card && cont && card.parentNode === document.body) cont.insertBefore(card, homeNext && homeNext.parentNode === cont ? homeNext : null);
     homeNext = null;
@@ -134,6 +138,17 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
     raf = requestAnimationFrame(tick);
   }
 
+  // klik tahan selesai: card terangkat jadi overlay (lepas dari kandang) dan langsung bisa dibawa kemana saja
+  function pickUp(): void {
+    if (!pending || !card) return;
+    pending = false; held = true; suppressClick = true;
+    p0x = lx; p0y = ly; o0x = x; o0y = y; tx = x; ty = y;
+    try { navigator.vibrate?.(12); } catch { /* abaikan */ }
+    measureNatural(); start();
+    if (REDUCE) paint();
+  }
+  const cancelHold = (): void => { clearTimeout(holdTimer); holdTimer = 0; };
+
   // ===== input =====
   headersList.addEventListener('pointerdown', e => {
     if (!recOn() || e.button > 0 || pointerId !== -1) return;
@@ -149,26 +164,33 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
     const r = th.getBoundingClientRect();
     gx = Math.max(-1, Math.min(1, (e.clientX - (r.left + r.width / 2)) / (r.width / 2)));
     gy = Math.max(-1, Math.min(1, (e.clientY - (r.top + r.height / 2)) / (r.height / 2)));
+    lx = e.clientX; ly = e.clientY;
     try { th.setPointerCapture(e.pointerId); } catch { /* abaikan */ }
+    clearTimeout(holdTimer);
+    holdTimer = window.setTimeout(pickUp, HOLD_MS);   // klik + tahan -> card jadi overlay
   });
 
   document.addEventListener('pointermove', e => {
     if (e.pointerId !== pointerId || !card) return;
-    const dx = e.clientX - p0x, dy = e.clientY - p0y;
+    lx = e.clientX; ly = e.clientY;
     if (pending) {
-      if (Math.hypot(dx, dy) < DRAG_START_PX) return;
-      pending = false; held = true; suppressClick = true;
-      if (e.pointerType === 'touch') { try { navigator.vibrate?.(8); } catch { /* abaikan */ } }
-      measureNatural(); start();
+      // masih menunggu tahan: geser terlalu jauh = bukan tahan, batalkan
+      if (Math.hypot(lx - p0x, ly - p0y) > HOLD_SLOP) {
+        cancelHold(); pending = false;
+        try { card.releasePointerCapture(e.pointerId); } catch { /* abaikan */ }
+        pointerId = -1; card = cont = null;
+      }
+      return;
     }
     if (!held) return;
     e.preventDefault();
-    tx = o0x + dx; ty = o0y + dy;
+    tx = o0x + (lx - p0x); ty = o0y + (ly - p0y);
     if (REDUCE) { x = tx; y = ty; vx = vy = rot = rv = 0; clampTarget(); x = tx; y = ty; paint(); }
   });
 
   const release = (e: PointerEvent): void => {
     if (e.pointerId !== pointerId) return;
+    cancelHold();
     try { card && card.releasePointerCapture(e.pointerId); } catch { /* abaikan */ }
     pointerId = -1;
     if (pending) { pending = false; card = cont = null; return; }   // cuma klik biasa
@@ -185,6 +207,9 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
   headersList.addEventListener('click', e => {
     if (suppressClick) { e.stopPropagation(); e.preventDefault(); suppressClick = false; }
   }, true);
+
+  // tahan lama di HP memicu menu konteks / seleksi teks: matikan untuk card yang dipilih saat Record Mode
+  headersList.addEventListener('contextmenu', e => { if (recOn() && (e.target as HTMLElement).closest('.trackheader--selected')) e.preventDefault(); });
 
   // ganti track / Record Mode dimatikan -> hentikan goyangan
   document.addEventListener('recmodechange', () => { if (!recOn() && card) finish(); });
