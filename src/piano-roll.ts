@@ -620,57 +620,121 @@ function setTool(t: Tool) {
   gc.style.cursor = t === 'pan' ? 'grab' : t === 'select' ? 'default' : 'crosshair';
 }
 
-// ---------- menu pengaturan (titik tiga): tampilan saja, belum ada logika ----------
+// ---------- menu pengaturan (titik tiga): card berlapis seperti menu track di mixer ----------
+// card 1: View + Note Key  ->  klik View: card 2 (Color + Style)  ->  klik Color: card 3 (pilihan warna)
 let showNoteNames = false;   // Note Key: tampilkan nama semua nada (C, C#, D, D#, ...) di keyboard kiri; mati = hanya C
+const PR_COLORS = ['#5b3de8', '#2f7bff', '#14b8a6', '#3fbf5f', '#ff9f1c', '#ff4d8d', '#ef4444', '#facc15'];   // sama dengan pilihan warna track di mixer
+const CHEV = '<svg class="track-menu__chev" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M6.045 20.89a1.164 1.164 0 0 0 1.639.174l5.05-4.079 5.048-4.078a1.164 1.164 0 0 0 0-1.813l-5.049-4.078-5.049-4.078A1.165 1.165 0 1 0 6.22 4.75l4.488 3.625L15.196 12l-4.488 3.625L6.22 19.25a1.166 1.166 0 0 0-.175 1.64Z"/></svg>';
+const mico = (d: string) => '<svg class="pr__mico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+const MICO = {
+  view: mico('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
+  keys: mico('<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16M15 4v16"/>'),
+  style: mico('<path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19z"/>'),
+};
+
 function buildSettingsMenu(el: HTMLElement) {
   const more = el.querySelector<HTMLButtonElement>('.pr__more')!;
-  const menu = document.createElement('div');
-  menu.className = 'pr__menu'; menu.setAttribute('role', 'menu'); menu.setAttribute('aria-label', 'Pengaturan piano roll');
-  menu.innerHTML =
-    '<div class="pr__mwrap">' +
-      '<button type="button" class="pr__mitem pr__mitem--view" role="menuitem" aria-haspopup="true" aria-expanded="false"><span>View</span>' + ICON.chev + '</button>' +
-      '<div class="pr__sub" role="menu" aria-label="View">' +
-        '<button type="button" class="pr__mitem" role="menuitem"><span>Color</span></button>' +
-        '<button type="button" class="pr__mitem" role="menuitem"><span>Style</span></button>' +
-      '</div>' +
-    '</div>' +
-    '<div class="pr__msep"></div>' +
-    '<button type="button" class="pr__mitem pr__mtoggle" role="menuitemcheckbox" aria-checked="false"><span>Note Key</span><i class="pr__sw" aria-hidden="true"></i></button>';
-  el.appendChild(menu);
+  const reduce = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let cards: HTMLElement[] = [];   // [card utama, card View, card warna]
 
-  const viewBtn = menu.querySelector<HTMLButtonElement>('.pr__mitem--view')!;
-  const sub = menu.querySelector<HTMLElement>('.pr__sub')!;
-  const setSub = (on: boolean) => { viewBtn.setAttribute('aria-expanded', String(on)); sub.classList.toggle('is-open', on); };
-  const setMenu = (on: boolean) => {
-    if (on) {
-      const r = more.getBoundingClientRect(), er = el.getBoundingClientRect();
-      menu.style.left = Math.max(8, r.left - er.left) + 'px';
-      menu.style.top = (r.bottom - er.top + 8) + 'px';
-    } else setSub(false);
-    menu.classList.toggle('is-open', on);
-    more.setAttribute('aria-expanded', String(on));
+  const fade = (c: HTMLElement) => {
+    if (reduce()) { c.remove(); return; }
+    c.style.pointerEvents = 'none';
+    c.animate([{opacity: 1, transform: 'scale(1)'}, {opacity: 0, transform: 'scale(.9) translateY(-4px)'}],
+      {duration: 160, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards'}).onfinish = () => c.remove();
   };
-  more.setAttribute('aria-haspopup', 'menu'); more.setAttribute('aria-expanded', 'false');
-  more.addEventListener('click', () => setMenu(!menu.classList.contains('is-open')));
-  viewBtn.addEventListener('click', () => setSub(!sub.classList.contains('is-open')));
-  const keyBtn = menu.querySelector<HTMLButtonElement>('.pr__mtoggle')!;
-  keyBtn.addEventListener('click', () => {
-    showNoteNames = !showNoteNames;
-    keyBtn.setAttribute('aria-checked', String(showNoteNames));
-    schedule();   // gambar ulang keyboard kiri
-  });
+  const dropFrom = (level: number) => {
+    cards.splice(level).forEach(fade);
+    const items = cards.map(c => c.querySelector<HTMLElement>('[aria-expanded]'));
+    items.forEach((it, i) => it && it.setAttribute('aria-expanded', String(i < cards.length - 1)));
+  };
+  const closeAll = () => { cards.splice(0).forEach(fade); more.setAttribute('aria-expanded', 'false'); };
 
-  // klik di luar menu: tutup menu (klik di area canvas tidak ikut menggambar nada)
+  const makeCard = (extra: string, html: string) => {
+    const c = document.createElement('div');
+    c.className = 'track-menu pr-menu ' + extra; c.setAttribute('role', 'menu'); c.innerHTML = html;
+    document.body.appendChild(c); cards.push(c);
+    return c;
+  };
+  // card di sebelah kanan card induk (kalau tidak muat: kiri; kalau layar sempit: bertumpuk di atas induk)
+  const placeSub = (c: HTMLElement, parent: HTMLElement, item: HTMLElement) => {
+    const mr = parent.getBoundingClientRect(), ir = item.getBoundingClientRect(), w = c.offsetWidth, h = c.offsetHeight;
+    let left = mr.right + 4, top = ir.top - 6, origin = 'left top';
+    if (left + w > innerWidth - 8) {
+      if (mr.left - w - 4 >= 8) { left = mr.left - w - 4; origin = 'right top'; }
+      else { left = Math.max(8, Math.min(mr.left, innerWidth - w - 8)); top = mr.bottom + 6; }   // layar sempit: card ditumpuk ke bawah
+    }
+    c.style.left = left + 'px';
+    c.style.top = Math.max(8, Math.min(top, innerHeight - h - 8)) + 'px';
+    c.style.transformOrigin = origin;
+  };
+
+  const openColors = (parent: HTMLElement, item: HTMLElement) => {
+    const c = makeCard('track-menu--colors',
+      '<div class="track-menu__swatches">' +
+      PR_COLORS.map((col, i) => '<button type="button" class="track-menu__swatch" data-c="' + col + '" style="background:' + col + ';--i:' + i + '" aria-label="Warna ' + col + '"></button>').join('') +
+      '</div>');
+    placeSub(c, parent, item);
+    item.setAttribute('aria-expanded', 'true');
+    c.addEventListener('click', e => {
+      const sw = (e.target as HTMLElement).closest<HTMLElement>('.track-menu__swatch');
+      if (!sw) return;
+      color = sw.dataset.c!;
+      root!.style.setProperty('--pr-color', color);
+      schedule();
+      closeAll();
+    });
+  };
+
+  const openView = (parent: HTMLElement, item: HTMLElement) => {
+    const c = makeCard('',
+      '<button type="button" role="menuitem" class="track-menu__item" data-act="color" aria-expanded="false">' +
+        '<span class="track-menu__dot" style="background:' + color + '"></span><span>Color</span>' + CHEV + '</button>' +
+      '<button type="button" role="menuitem" class="track-menu__item" data-act="style">' + MICO.style + '<span>Style</span></button>');
+    placeSub(c, parent, item);
+    item.setAttribute('aria-expanded', 'true');
+    c.addEventListener('click', e => {
+      const it = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
+      if (!it || it.dataset.act !== 'color') return;   // Style: tampilan saja
+      if (cards.length > 2) dropFrom(2); else openColors(c, it);
+    });
+  };
+
+  const openMain = () => {
+    const c = makeCard('',
+      '<button type="button" role="menuitem" class="track-menu__item" data-act="view" aria-expanded="false">' + MICO.view + '<span>View</span>' + CHEV + '</button>' +
+      '<button type="button" role="menuitemcheckbox" class="track-menu__item pr__mtoggle" data-act="notekey" aria-checked="' + showNoteNames + '">' + MICO.keys + '<span>Note Key</span><i class="pr__sw" aria-hidden="true"></i></button>');
+    const r = more.getBoundingClientRect();
+    c.style.left = Math.max(8, Math.min(r.left, innerWidth - c.offsetWidth - 8)) + 'px';
+    c.style.top = (r.bottom + 8) + 'px';
+    c.style.transformOrigin = 'left top';
+    more.setAttribute('aria-expanded', 'true');
+    c.addEventListener('click', e => {
+      const it = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
+      if (!it) return;
+      if (it.dataset.act === 'view') { if (cards.length > 1) dropFrom(1); else openView(c, it); }
+      else if (it.dataset.act === 'notekey') {
+        showNoteNames = !showNoteNames;
+        it.setAttribute('aria-checked', String(showNoteNames));
+        schedule();   // gambar ulang keyboard kiri
+      }
+    });
+  };
+
+  more.setAttribute('aria-haspopup', 'menu'); more.setAttribute('aria-expanded', 'false');
+  more.addEventListener('click', () => { if (cards.length) closeAll(); else openMain(); });
+
+  // klik di luar menu: tutup semua card (klik di area canvas tidak ikut menggambar nada)
   document.addEventListener('pointerdown', e => {
-    if (!menu.classList.contains('is-open')) return;
+    if (!cards.length) return;
     const t = e.target as Node;
-    if (menu.contains(t) || more.contains(t)) return;
-    setMenu(false);
+    if (cards.some(c => c.contains(t)) || more.contains(t)) return;
+    closeAll();
     if (el.querySelector('.pr__main')!.contains(t)) { e.stopPropagation(); e.preventDefault(); }
   }, true);
 
-  closeMenu = () => setMenu(false);
-  menuOpen = () => menu.classList.contains('is-open');
+  closeMenu = closeAll;
+  menuOpen = () => cards.length > 0;
 }
 
 function build(): HTMLElement {

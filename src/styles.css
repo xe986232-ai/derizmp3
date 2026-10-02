@@ -716,53 +716,22 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 @keyframes pr-led{0%,100%{box-shadow:0 0 5px 1px rgba(74,222,128,.55),inset 0 -1px 0 rgba(0,0,0,.25)}50%{box-shadow:0 0 10px 3px rgba(74,222,128,.9),inset 0 -1px 0 rgba(0,0,0,.25)}}
 @media (prefers-reduced-motion:reduce){.pr__bar>*,.pr__more svg circle,.pr__led{animation:none!important}.pr__back svg,.pr__btn[data-act] svg{transition:none}}
 
-/* menu pengaturan piano roll (titik tiga): card liquid + bevel, tampilan saja */
+/* menu pengaturan piano roll (titik tiga): memakai gaya card .track-menu dari mixer */
 .pr__more[aria-expanded="true"]{background:rgba(255,255,255,.1)}
 .pr__more svg{transition:transform .35s var(--ease-spring)}
 .pr__more[aria-expanded="true"] svg{transform:rotate(90deg)}
-.pr__menu,.pr__sub{position:absolute;border-radius:18px;background-color:var(--card);color:var(--text);box-shadow:var(--bevel),0 18px 40px rgba(0,0,0,.45);
-  opacity:0;visibility:hidden;pointer-events:none;transform-origin:0 0}
-.pr__menu::before,.pr__sub::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;padding:1px;z-index:2;
-  background:linear-gradient(135deg,rgba(255,255,255,.17),rgba(255,255,255,.035) 32%,rgba(255,255,255,.01) 62%,rgba(255,255,255,.08));
-  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
-  mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}
-.pr__menu{z-index:40;width:236px;padding:8px;transform:translateY(-8px) scale(.92);
-  transition:opacity .18s ease,transform .3s var(--ease-spring),visibility 0s linear .3s}
-.pr__menu.is-open{opacity:1;visibility:visible;pointer-events:auto;transform:none;transition-delay:0s}
-.pr__menu>*{position:relative;z-index:3}
-.pr__mwrap{position:relative}
-.pr__sub{left:calc(100% + 14px);top:-8px;z-index:4;min-width:160px;padding:8px;transform:translateX(-12px) scale(.94);
-  transition:opacity .18s ease,transform .3s var(--ease-spring),visibility 0s linear .3s}
-.pr__sub.is-open{opacity:1;visibility:visible;pointer-events:auto;transform:none;transition-delay:0s}
-.pr__sub>*{position:relative;z-index:3}
-.pr__mitem{width:100%;height:40px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 12px;border:0;border-radius:12px;background:transparent;color:var(--text);font:inherit;font-size:14px;font-weight:600;text-align:left;cursor:pointer;
-  transition:background-color .2s ease,transform .25s var(--ease-spring)}
-.pr__mitem:hover,.pr__mitem[aria-expanded="true"]{background:rgba(255,255,255,.09)}
-.pr__mitem:active{transform:scale(.97);transition-duration:.08s}
-.pr__mitem:focus-visible,.pr__mitem svg{width:16px;height:16px;flex:none;color:var(--muted);transition:transform .3s var(--ease-spring),color .2s ease}
-.pr__mitem:hover svg{transform:translateX(2px);color:var(--text)}
-.pr__mitem[aria-expanded="true"] svg{transform:translateX(3px);color:var(--text)}
-.pr__msep{height:1px;margin:6px 8px;background:var(--line)}
+.pr-menu{z-index:60}
+.pr__mico{flex:none;color:var(--muted);transition:color .2s ease}
+.track-menu__item:hover .pr__mico{color:var(--text)}
 /* toggle tunggal Note Key */
+.pr-menu .pr__sw{margin-left:auto}
 .pr__sw{position:relative;flex:none;width:34px;height:20px;border-radius:999px;background:#3a3a46;box-shadow:inset 0 1px 2px rgba(0,0,0,.5);transition:background-color .25s ease,box-shadow .25s ease}
 .pr__sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#e8e8f0;box-shadow:0 1px 3px rgba(0,0,0,.45);transition:transform .3s var(--ease-spring),width .2s ease}
 .pr__mtoggle:active .pr__sw::after{width:20px}
 .pr__mtoggle[aria-checked="true"] .pr__sw{background:#4ade80;box-shadow:0 0 8px 1px rgba(74,222,128,.55),inset 0 -1px 0 rgba(0,0,0,.2)}
 .pr__mtoggle[aria-checked="true"] .pr__sw::after{transform:translateX(14px)}
 .pr__mtoggle[aria-checked="true"]:active .pr__sw::after{transform:translateX(10px)}
-/* isi menu muncul berurutan */
-.pr__menu.is-open .pr__mwrap,.pr__menu.is-open .pr__menu.is-open .pr__sub.is-open .pr__mitem{animation:pr-item .3s var(--ease-out) backwards}
-.pr__sub.is-open .pr__mitem:nth-child(2){animation-delay:.05s}
-@keyframes pr-item{from{opacity:0;transform:translateY(-6px) scale(.9)}to{opacity:1;transform:none}}
-/* layar sempit: submenu View terbuka ke bawah di dalam card */
-@media (max-width:560px){
-  .pr__sub{position:static;min-width:0;max-height:0;overflow:hidden;padding:0 0 0 12px;border-radius:0;background:none;box-shadow:none;transform:none;
-    transition:max-height .32s var(--ease-out),opacity .2s ease,visibility 0s linear .32s}
-  .pr__sub::before{display:none}
-  .pr__sub.is-open{max-height:100px}
-  .pr__mitem[aria-expanded="true"] svg,.pr__mitem--view[aria-expanded="true"]:hover svg{transform:rotate(90deg)}
-}
-@media (prefers-reduced-motion:reduce){.pr__menu,.pr__sub,.pr__menu *,.pr__more svg{animation:none!important;transition:none!important}}
+@media (prefers-reduced-motion:reduce){.pr__more svg,.pr__sw,.pr__sw::after{transition:none!important}}
 
 /* area utama: penggaris atas, piano kiri, grid (scroll native) */
 .pr__main{position:relative;flex:1;min-height:0;display:grid;grid-template-columns:64px minmax(0,1fr);grid-template-rows:32px minmax(0,1fr);background:#101016}
