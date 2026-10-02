@@ -214,7 +214,13 @@ function openMenu(btn) {
   menu = document.createElement('div');
   menu.className = 'track-menu';
   menu.setAttribute('role', 'menu');
+  const rnLane = document.querySelector('.lane[data-track="' + cont.dataset.track + '"]');
+  const rnPats = rnLane ? [...rnLane.querySelectorAll('.pattern')].sort((a, b) => pl(a) - pl(b)) : [];
+  const rnTarget = lastPat && rnPats.includes(lastPat) ? lastPat : rnPats[0] || null;   // pattern terakhir dipilih di track ini, kalau tidak ada: yang paling kiri
   menu.innerHTML =
+    '<button role="menuitem" class="track-menu__item" data-act="rename"' + (rnTarget ? '' : ' disabled title="Track ini belum punya pattern"') + '>' +
+      '<span class="soundtrap-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.9 2.9a2.4 2.4 0 0 1 3.4 0l.8.8a2.4 2.4 0 0 1 0 3.4L8.9 19.3a2 2 0 0 1-.9.5l-4.4 1.1a.8.8 0 0 1-1-1L3.7 15.5a2 2 0 0 1 .5-.9L16.9 2.9Zm1.7 1.7L6 17.2l-.6 2.4 2.4-.6L20.4 6.4l-1.8-1.8Z"/></svg></span>' +
+      '<span>Ganti nama pattern</span></button>' +
     '<button role="menuitem" class="track-menu__item track-menu__item--danger" data-act="delete">' +
       '<span class="soundtrap-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5.397 9.652a1.166 1.166 0 0 0-1.165 1.165V21.71a1.165 1.165 0 0 0 1.165 1.165h13.206a1.166 1.166 0 0 0 1.165-1.165V10.817a1.165 1.165 0 0 0-2.33 0v9.728H6.562v-9.728a1.165 1.165 0 0 0-1.165-1.165Zm8.545-8.527h-3.884a1.165 1.165 0 1 0 0 2.33h3.884a1.165 1.165 0 0 0 0-2.33Z"/><path d="M11.223 17.05v-6.215a1.165 1.165 0 0 0-2.33 0v6.214a1.165 1.165 0 0 0 2.33 0Zm3.884 0v-6.215a1.165 1.165 0 1 0-2.33 0v6.214a1.165 1.165 0 0 0 2.33 0Zm3.496-12.041H5.397a1.165 1.165 0 1 0 0 2.33h13.206a1.165 1.165 0 1 0 0-2.33Z"/></svg></span>' +
       '<span>Delete track</span></button>' +
@@ -240,6 +246,12 @@ function openMenu(btn) {
       const lane = document.querySelector('.lane[data-track="' + cont.dataset.track + '"]');
       removeTrack(cont, lane);
       closeMenu();
+    } else if (it.dataset.act === 'rename') {
+      closeMenu(true);
+      if (!rnTarget || !rnTarget.isConnected) return;
+      selectPattern(rnTarget);
+      rnTarget.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: REDUCE ? 'auto' : 'smooth'});
+      setTimeout(() => { if (rnTarget.isConnected) renamePattern(rnTarget); }, 30);
     } else {
       openColors(cont, it);
     }
@@ -416,7 +428,9 @@ lanesEl.addEventListener('pointerdown', e => {
 // Seleksi pattern (outline putih) + resize lewat bulatan di kanan
 let selPat = null;
 function handleSide(el) { el.classList.toggle('handle-inside', pl(el) + pw(el) > W - 40); }
+let lastPat = null;   // pattern terakhir yang dipilih (dipakai menu titik tiga: klik tombolnya melepas pilihan, jadi perlu diingat)
 function selectPattern(el) {
+  if (el) lastPat = el;
   if (selPat === el) return;
   if (selPat) selPat.classList.remove('is-selected');
   selPat = el;
@@ -610,8 +624,8 @@ lanesEl.addEventListener('dblclick', e => {   // ganti nama pattern: klik dua ka
   const t = e.target.closest && e.target.closest('.pattern__title');
   if (t && selPat && selPat.contains(t)) renamePattern();
 });
-function renamePattern() {   // ubah nama pattern langsung di judulnya
-  const el = selPat; if (!el) return;
+function renamePattern(target) {   // ubah nama pattern langsung di judulnya
+  const el = target || selPat; if (!el) return;
   const t = el.querySelector('.pattern__title'), old = t.textContent;
   t.contentEditable = 'true'; t.spellcheck = false; t.focus();
   const rg = document.createRange(); rg.selectNodeContents(t);
