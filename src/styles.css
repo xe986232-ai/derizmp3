@@ -907,3 +907,8 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .derizov .fxc__close:hover{color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 -1px 2px rgba(0,0,0,.6),0 0 0 2px #0a0a0f,0 0 0 3px var(--accent),0 0 12px var(--accent-soft)}
 .derizov .fxc__close:active{transform:scale(.9)}
 .derizov .fxc__close:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+/* saklar mesin sampler DERIZ: Natural (koreksi formant) / Klasik */
+.deriz__mode{flex:none;margin-left:10px;padding:2px 9px;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(255,255,255,.04);color:#cfcfe0;font:inherit;font-size:11px;line-height:16px;cursor:pointer;transition:background-color .15s ease,border-color .15s ease,color .15s ease}
+.deriz__mode[aria-pressed="true"]{border-color:var(--accent);color:#fff;background:var(--accent-soft)}
+.deriz__mode:hover{border-color:var(--accent)}
+.deriz__mode:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
