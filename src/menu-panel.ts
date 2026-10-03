@@ -95,7 +95,7 @@ export function initMenuPanel(): MenuPanel {
           '</div>' +
           '<div class="mp__card mp__item mp__set" style="--i:4">' +
             '<div class="mp__row">' +
-              '<span class="mp__row__t"><b>Record Mode</b><small>Track terpilih fokus, track lain di-blur</small></span>' +
+              '<span class="mp__row__t"><b>Record Mode</b><small>Pilih pattern: track lain di-blur</small></span>' +
               '<button type="button" class="mp__switch" role="switch" aria-checked="false" aria-label="Record Mode" data-rec><i></i></button>' +
             '</div>' +
           '</div>' +

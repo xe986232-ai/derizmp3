@@ -439,6 +439,7 @@ function selectPattern(el) {
   selPat = el;
   if (el) { handleSide(el); el.classList.add('is-selected'); }
   patBarShow(el);
+  syncRecFocus();   // Record Mode: blur lane lain hanya saat ada pattern terpilih
 }
 document.addEventListener('pointerup', () => { if (selPat) setTimeout(() => selPat && handleSide(selPat), 330); });
 lanesEl.addEventListener('pointerdown', e => {
@@ -864,9 +865,10 @@ initRec(document); initSliders(document); initKnobs(document); initMore(document
 // ===== Pilih track: klik card atau lane-nya (tidak membuka keyboard), efek glass hanya di track yang dipilih =====
 let selTrack = document.querySelector('.trackheader--selected');
 // Record Mode: semua lane di timeline di-blur kecuali lane track yang dipilih
+// Blur baru aktif saat ADA PATTERN TERPILIH (default Record Mode tanpa blur); yang tetap jelas = lane track pattern itu
 function syncRecFocus() {
-  const on = recOn(), cur = selTrack && selTrack.closest('.trackheader-container');
-  const id = cur ? cur.dataset.track : null;
+  const on = recOn() && !!selPat;
+  const id = selPat && selPat.parentElement ? selPat.parentElement.dataset.track : null;
   lanesEl.querySelectorAll('.lane').forEach(l => l.classList.toggle('is-rec-dim', on && id != null && l.dataset.track !== id));
 }
 document.addEventListener('recmodechange', () => { patBarShow(selPat); syncRecFocus(); });
