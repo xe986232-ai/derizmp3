@@ -226,6 +226,9 @@ function openMenu(btn) {
     '<button role="menuitem" class="track-menu__item" data-act="rename"' + (rnTarget ? '' : ' disabled title="Track ini belum punya pattern"') + '>' +
       '<span class="soundtrap-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.9 2.9a2.4 2.4 0 0 1 3.4 0l.8.8a2.4 2.4 0 0 1 0 3.4L8.9 19.3a2 2 0 0 1-.9.5l-4.4 1.1a.8.8 0 0 1-1-1L3.7 15.5a2 2 0 0 1 .5-.9L16.9 2.9Zm1.7 1.7L6 17.2l-.6 2.4 2.4-.6L20.4 6.4l-1.8-1.8Z"/></svg></span>' +
       '<span>Ganti nama pattern</span></button>' +
+    '<button role="menuitem" class="track-menu__item" data-act="duplicate"' + (cont.dataset.ins === 'Automation' ? ' disabled title="Track Automation tidak bisa diduplikat"' : '') + '>' +
+      '<span class="soundtrap-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8.5 2.5h9A3 3 0 0 1 20.5 5.5v9a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-9a3 3 0 0 1 3-3Zm0 2a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-9Z"/><path d="M3.5 8.5a1 1 0 0 1 1 1v8a2 2 0 0 0 2 2h8a1 1 0 1 1 0 2h-8a4 4 0 0 1-4-4v-8a1 1 0 0 1 1-1Z"/></svg></span>' +
+      '<span>Duplicate track</span></button>' +
     '<button role="menuitem" class="track-menu__item track-menu__item--danger" data-act="delete">' +
       '<span class="soundtrap-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5.397 9.652a1.166 1.166 0 0 0-1.165 1.165V21.71a1.165 1.165 0 0 0 1.165 1.165h13.206a1.166 1.166 0 0 0 1.165-1.165V10.817a1.165 1.165 0 0 0-2.33 0v9.728H6.562v-9.728a1.165 1.165 0 0 0-1.165-1.165Zm8.545-8.527h-3.884a1.165 1.165 0 1 0 0 2.33h3.884a1.165 1.165 0 0 0 0-2.33Z"/><path d="M11.223 17.05v-6.215a1.165 1.165 0 0 0-2.33 0v6.214a1.165 1.165 0 0 0 2.33 0Zm3.884 0v-6.215a1.165 1.165 0 1 0-2.33 0v6.214a1.165 1.165 0 0 0 2.33 0Zm3.496-12.041H5.397a1.165 1.165 0 1 0 0 2.33h13.206a1.165 1.165 0 1 0 0-2.33Z"/></svg></span>' +
       '<span>Delete track</span></button>' +
@@ -247,7 +250,10 @@ function openMenu(btn) {
   menu.addEventListener('click', e => {
     const it = e.target.closest('[data-act]');
     if (!it) return;
-    if (it.dataset.act === 'delete') {
+    if (it.dataset.act === 'duplicate') {
+      closeMenu(true);
+      duplicateTrack(cont);
+    } else if (it.dataset.act === 'delete') {
       const lane = document.querySelector('.lane[data-track="' + cont.dataset.track + '"]');
       removeTrack(cont, lane);
       closeMenu();
@@ -1088,6 +1094,57 @@ function addTrack(t) {
     lane.animate([{height:'0px'},{height:H + 'px'}], o).onfinish = () => { lane.style.overflow = ''; };
   }
   setTimeout(() => cont.scrollIntoView({block:'nearest', inline:'nearest', behavior:'smooth'}), 300);
+}
+// Duplicate track (menu titik tiga): salinan muncul tepat di bawah track asal, lengkap dengan nama (+ nomor), warna, volume, pan, on/off,
+// efek (Reverb / EQ / Filter / Supersaw), semua DERIZ (audio, garis start, knob), serta pattern + nadanya + audio clip.
+// Salinan pattern memakai data nada sendiri (diedit terpisah dari aslinya); audio clip memakai buffer yang sama (tidak berubah, jadi aman dibagi).
+function duplicateTrack(src) {
+  const sid = src.dataset.track, sLane = lanesEl.querySelector('.lane[data-track="' + sid + '"]');
+  if (!sLane || src.dataset.ins === 'Automation') return;
+  const sName = document.getElementById('track-name-' + sid).textContent;
+  const base = sName.replace(/\s+\d+$/, ''), used = new Set([...document.querySelectorAll('.trackheader__track-name-button span')].map(x => x.textContent));
+  let n = 2; while (used.has(base + ' ' + n)) n++;
+  const name = base + ' ' + n, color = src.style.getPropertyValue('--track-color') || COLORS[0];
+  const sPwr = src.querySelector('.trackheader__pwr'), sVol = src.querySelector('input[type=range]'), sPan = src.querySelector('.knob-input');
+  const derizSrc = fxRack.derizIds(sid), derizState = fxRack.derizExport(sid), fxs = fxRack.fxExport(sid);
+  const pats = [...sLane.querySelectorAll('.pattern')].sort((a, b) => pl(a) - pl(b));
+  const pans = sPan ? Math.round((+sPan.getAttribute('aria-valuenow') - 0.5) / 0.02) : 0;
+
+  addTrack({n: src.dataset.ins || 'Drums', c: color});
+  const id = String(trackSeq);
+  const cont = document.querySelector('.trackheader-container[data-track="' + id + '"]'), lane = lanesEl.querySelector('.lane[data-track="' + id + '"]');
+  src.after(cont); sLane.after(lane);   // addTrack menaruh di paling bawah: pindahkan ke tepat di bawah track asal (card + lane)
+  document.getElementById('track-name-' + id).textContent = name;
+  cont.querySelector('.trackheader__track-name-button').title = name;
+  const vol = cont.querySelector('input[type=range]');
+  if (vol && sVol) { vol.setAttribute('aria-label', 'Volume, ' + name); vol.value = sVol.value; vol.dispatchEvent(new Event('input', {bubbles: true})); }
+  const pan = cont.querySelector('.knob-input');
+  if (pan && pans) { const key = pans > 0 ? 'ArrowRight' : 'ArrowLeft'; for (let i = Math.abs(pans); i > 0; i--) pan.dispatchEvent(new KeyboardEvent('keydown', {key, bubbles: true, cancelable: true})); }
+  panTip.hidden = true;
+
+  // DERIZ: pertama = bawaan track, sisanya lewat addDeriz (sama seperti membuka project)
+  while (fxRack.derizIds(id).length < derizSrc.length) { const k = fxRack.derizIds(id).length; if (k === 0) fxRack.addInstrument(id, 'deriz'); else fxRack.addDeriz(id); if (fxRack.derizIds(id).length === k) break; }
+  derizState.forEach((st, i) => { if (fxRack.derizIds(id)[i] !== undefined) fxRack.derizImport(id, i, st); });
+  if (fxs.length) fxRack.fxImport(id, fxs);
+  if (sPwr && sPwr.getAttribute('aria-checked') === 'false') cont.querySelector('.trackheader__pwr').click();
+
+  // pattern: posisi, lebar, judul, audio clip, dan nada (nada DERIZ track asal dipetakan ke DERIZ ke-i di track baru)
+  const newDz = fxRack.derizIds(id);
+  for (const p of pats) {
+    const el = createPattern(lane, {start: pl(p), width: pw(p)}, clipOf(p, 0));
+    el.querySelector('.pattern__title').textContent = p.querySelector('.pattern__title').textContent;
+    const pid = p.dataset.prId; if (!pid) continue;
+    const nid = 'pat' + (++prSeq); el.dataset.prId = nid;
+    copyPianoRollNotes(pid, nid);
+    for (const k of pianoRollExtraKeys(pid)) {
+      const fx = +k.slice(pid.length + 1), i = derizSrc.indexOf(fx);   // DERIZ milik track ini -> pasangannya di track baru; DERIZ track lain tetap
+      const to = i >= 0 ? newDz[i] : fx;
+      if (to !== undefined) copyPianoRollNotes(k, nid + '@' + to);
+    }
+    renderPatNotes(el);
+  }
+  selectTrack(cont);
+  toast('Track diduplikat: ' + name);
 }
 const addTrackBtn = document.querySelector('.addtrack');
 addTrackBtn.setAttribute('aria-haspopup', 'dialog');
