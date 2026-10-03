@@ -37,9 +37,44 @@ const knobHtml = (k: KnobKey): string =>
   `<div class="mpcs__knob is-off" title="${KNOBS[k].tip}"><div class="knob fxk"><div class="knob-inner"><div role="slider" tabindex="0" class="knob-input" data-kn="${k}" aria-label="${KNOBS[k].label}" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${DEFAULT_CONTROLS[k]}"><div class="knobwheel">${knobSvg}</div></div></div></div>` +
   `<span class="mpcs__lbl">${KNOBS[k].label}</span><output>${Math.round(DEFAULT_CONTROLS[k] * 100)}%</output></div>`;
 
+interface Peaks { mn: Float32Array; mx: Float32Array; norm: number }
 interface Session {
   name: string; sr: number; dur: number; pt: PitchTrack; notes: Note[];
-  orig: AudioBuffer; out: AudioBuffer | null; lo: number; hi: number; ref: number;
+  orig: AudioBuffer; out: AudioBuffer | null; lo: number; hi: number; ref: number; pk: Peaks;
+}
+
+// Waveform: sample dipecah per kolom pixel, tiap kolom diambil min/max-nya (semua channel digabung), lalu digambar sebagai SATU polygon solid yang menyambung.
+// Supaya cepat saat knob diputar / scroll, min/max per blok 64 sample dihitung sekali saat audio dimuat; kolom tinggal menggabungkan blok.
+const PK_BLOCK = 64;
+function buildPeaks(buf: AudioBuffer): Peaks {
+  const chs = Array.from({ length: buf.numberOfChannels }, (_, c) => buf.getChannelData(c));
+  const n = buf.length, nb = Math.max(1, Math.ceil(n / PK_BLOCK));
+  const mn = new Float32Array(nb), mx = new Float32Array(nb);
+  let peak = 0;
+  for (let b = 0; b < nb; b++) {
+    let lo = 1, hi = -1; const e = Math.min(n, (b + 1) * PK_BLOCK);
+    for (const d of chs) for (let i = b * PK_BLOCK; i < e; i++) { const v = d[i]; if (v < lo) lo = v; if (v > hi) hi = v; }
+    if (e <= b * PK_BLOCK) { lo = 0; hi = 0; }
+    mn[b] = lo; mx[b] = hi; peak = Math.max(peak, -lo, hi);
+  }
+  return { mn, mx, norm: peak > 1e-4 ? 1 / peak : 1 };   // dinormalkan ke puncak sample: rekaman pelan tetap kelihatan bentuknya
+}
+function peakRange(p: Peaks, sr: number, t0: number, t1: number, out: number[]): void {
+  const nb = p.mn.length, b0 = Math.floor(t0 * sr / PK_BLOCK);
+  if (b0 >= nb || t1 <= 0) { out[0] = 0; out[1] = 0; return; }
+  const b1 = Math.min(nb - 1, Math.max(b0, Math.ceil(t1 * sr / PK_BLOCK) - 1));
+  let lo = 1, hi = -1;
+  for (let b = Math.max(0, b0); b <= b1; b++) { if (p.mn[b] < lo) lo = p.mn[b]; if (p.mx[b] > hi) hi = p.mx[b]; }
+  out[0] = lo; out[1] = hi;
+}
+// satu polygon solid: sisi atas kiri->kanan, lalu sisi bawah kanan->kiri (kolom selalu tersambung, tanpa persegi terpisah)
+function fillColumns(c: CanvasRenderingContext2D, x0: number, step: number, tops: Float32Array, bots: Float32Array, n: number): void {
+  if (n < 1) return;
+  c.beginPath(); c.moveTo(x0, bots[0]);
+  for (let i = 0; i < n; i++) c.lineTo(x0 + i * step + step / 2, bots[i]);
+  c.lineTo(x0 + n * step, bots[n - 1]);
+  for (let i = n - 1; i >= 0; i--) c.lineTo(x0 + i * step + step / 2, tops[i]);
+  c.lineTo(x0, tops[0]); c.closePath(); c.fill();
 }
 
 let root: HTMLElement | null = null, openFn: (() => void) | null = null;
@@ -203,14 +238,19 @@ function build(): void {
     const d = Math.min(2, devicePixelRatio || 1);
     if (ov.width !== Math.round(w * d) || ov.height !== Math.round(h * d)) { ov.width = Math.round(w * d); ov.height = Math.round(h * d); }
     go.setTransform(d, 0, 0, d, 0, 0); go.clearRect(0, 0, w, h);
-    const key = S.name + '|' + S.pt.rms.length + '|' + w;
-    if (key !== ovKey || !ovProf) {
-      ovKey = key; ovProf = new Float32Array(w);
-      const nF = S.pt.rms.length;
-      for (let f = 0; f < nF; f++) { const px = Math.min(w - 1, Math.floor(f / nF * w)), v = Math.min(1, S.pt.rms[f] / S.ref); if (v > ovProf[px]) ovProf[px] = v; }
+    const key = S.name + '|' + S.pk.mn.length + '|' + w + '|' + h;
+    if (key !== ovKey || !ovProf) {   // atas & bawah polygon per pixel (min/max sample), dihitung ulang hanya kalau ukuran berubah / sample baru
+      ovKey = key; ovProf = new Float32Array(w * 2);
+      const r = [0, 0], mid = h / 2, amp = h * .45;
+      for (let px = 0; px < w; px++) {
+        peakRange(S.pk, S.sr, px / w * S.dur, (px + 1) / w * S.dur, r);
+        let yt = mid - r[1] * S.pk.norm * amp, yb = mid - r[0] * S.pk.norm * amp;
+        if (yb - yt < 1.5) { yt = mid - .75; yb = mid + .75; }
+        ovProf[px] = yt; ovProf[w + px] = yb;
+      }
     }
     go.fillStyle = 'rgba(214,60,130,.35)';
-    for (let px = 0; px < w; px++) { const a = ovProf[px] * h * .45; go.fillRect(px, h / 2 - a, 1, a * 2 + 1); }
+    fillColumns(go, 0, 1, ovProf.subarray(0, w), ovProf.subarray(w, w * 2), w);
     const rows = S.hi - S.lo + 1, hopSec = S.pt.hop / S.pt.sr;
     go.fillStyle = '#ffc857';
     for (const n of S.notes) go.fillRect(n.s * hopSec / S.dur * w, (S.hi + .5 - n.target) / rows * h - 1.5, Math.max(2, (n.e - n.s) * hopSec / S.dur * w), 3);
@@ -236,7 +276,7 @@ function build(): void {
     g.clearRect(0, 0, W, H);
     drawKeys(); drawOv();
     if (!S) return;
-    const { lo, hi, pt, notes } = S, hopSec = pt.hop / pt.sr;
+    const { lo, hi, pt, notes, pk, sr } = S, hopSec = pt.hop / pt.sr;
     const sc = shiftCurve(pt, notes, undefined, kv);   // geseran per frame persis seperti yang dirender (target, knob, drift, vibrato), jadi garis = yang terdengar
     // baris semiton
     for (let m = lo; m <= hi; m++) {
@@ -248,19 +288,31 @@ function build(): void {
     g.font = '9px system-ui,sans-serif'; g.textBaseline = 'top';
     for (let s = 0; s <= S.dur; s++) { const x = Math.round(xOf(s)) + .5; g.fillStyle = 'rgba(255,255,255,.06)'; g.fillRect(x, 0, 1, H); g.fillStyle = '#6c6c7c'; g.fillText(s + 's', x + 3, 2); }
     // nada
-    const bw = Math.max(1.2, hopSec * pps + .6);
     notes.forEach((nt, i) => {
       const x0 = xOf((nt.s - .5) * hopSec), x1 = xOf((nt.e - .5) * hopSec), yc = yOf(nt.target);
       const on = i === sel;
       g.fillStyle = on ? 'rgba(255,92,160,.30)' : 'rgba(255,92,160,.16)';
       g.strokeStyle = on ? '#fff' : 'rgba(255,92,160,.7)'; g.lineWidth = on ? 1.5 : 1;
       g.beginPath(); g.roundRect(x0, yc - rowH * .5, Math.max(4, x1 - x0), rowH, Math.min(5, rowH / 2)); g.fill(); g.stroke();
-      // amplitudo (ungu) mengikuti pitch hasil
-      g.fillStyle = 'rgba(214,60,130,.85)';
-      for (let f = nt.s; f < nt.e; f++) {
-        if (!pt.f0[f]) continue;
-        const m = 69 + 12 * Math.log2(pt.f0[f] / 440) + sc[f], h = Math.min(1, pt.rms[f] / S!.ref) * rowH * .42 + .5;
-        g.fillRect(xOf(f * hopSec - hopSec / 2), yOf(m) - h, bw, h * 2);
+      // waveform sample asli (min/max per kolom pixel, satu polygon solid) mengikuti garis pitch hasil
+      const nF = nt.e - nt.s, cy = new Float32Array(nF); let last = NaN;
+      for (let i = 0; i < nF; i++) { const f = nt.s + i; cy[i] = pt.f0[f] ? yOf(69 + 12 * Math.log2(pt.f0[f] / 440) + sc[f]) : NaN; }
+      for (let i = 0; i < nF; i++) { if (cy[i] === cy[i]) last = cy[i]; else cy[i] = last; }   // frame tanpa pitch: pakai titik sebelumnya
+      for (let i = nF - 1, nx = NaN; i >= 0; i--) { if (cy[i] === cy[i]) nx = cy[i]; else cy[i] = nx; }
+      if (nF > 0 && cy[0] === cy[0]) {
+        const px = 1 / dpr, xa = Math.max(0, Math.floor(x0 * dpr) / dpr), xb = Math.min(W, x1), n = Math.ceil((xb - xa) / px);
+        const tops = new Float32Array(Math.max(0, n)), bots = new Float32Array(Math.max(0, n)), r = [0, 0], half = rowH * .46 * .92;
+        for (let i = 0; i < n; i++) {
+          const x = xa + i * px;
+          peakRange(pk, sr, x / pps, (x + px) / pps, r);
+          const fi = Math.max(0, Math.min(nF - 1, x / pps / hopSec - nt.s)), i0 = Math.floor(fi), i1 = Math.min(nF - 1, i0 + 1);
+          const m = cy[i0] + (cy[i1] - cy[i0]) * (fi - i0);
+          let yt = m - r[1] * pk.norm * half, yb = m - r[0] * pk.norm * half;
+          if (yb - yt < 2 * px) { yt = m - px; yb = m + px; }   // minimal 2 pixel supaya bagian senyap tetap terlihat
+          tops[i] = yt; bots[i] = yb;
+        }
+        g.fillStyle = 'rgba(214,60,130,.9)';
+        fillColumns(g, xa, px, tops, bots, n);
       }
       // pitch asli (redup, hanya kalau digeser) dan pitch hasil (oranye)
       const line = (add: number | Float32Array, style: string, w: number): void => {
@@ -305,7 +357,7 @@ function build(): void {
         if (hi - lo > 84) { const c = (hi + lo) >> 1; lo = c - 42; hi = c + 42; }
       }
       const sorted = Array.from(pt.rms).sort((a, b) => a - b);
-      S = { name: f.name.replace(/\.[^.]+$/, ''), sr: buf.sampleRate, dur: buf.duration, pt, notes, orig: buf, out: null, lo, hi, ref: sorted[Math.floor(sorted.length * .95)] || 0.1 };
+      S = { name: f.name.replace(/\.[^.]+$/, ''), sr: buf.sampleRate, dur: buf.duration, pt, notes, orig: buf, out: null, lo, hi, ref: sorted[Math.floor(sorted.length * .95)] || 0.1, pk: buildPeaks(buf) };
       sel = -1; dirty = true; playPos = 0; ph.style.transform = 'translateX(0)';
       pps = Math.max(40, Math.min(220, scroll.clientWidth / Math.max(1, buf.duration)));
       scroll.scrollLeft = 0; layout(); info(); enable(true);
