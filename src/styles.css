@@ -1326,6 +1326,9 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs__btn--pri{border-color:transparent;background:#fff;color:#111}
 .mpcs__btn--pri:hover:not(:disabled){background:#e9e9f2}
 .mpcs__ico{width:32px;padding:0}
+.mpcs__ctl{display:inline-flex;align-items:center;gap:6px;flex:none;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);color:var(--muted);font-size:11px;font-weight:600}
+.mpcs__ctl input{width:64px;accent-color:var(--accent)}
+.mpcs__ctl:has(input:disabled){opacity:.4}
 .mpcs__zoom{display:flex;gap:6px;margin-left:auto;padding-left:6px}
 .mpcs__seg{display:inline-flex;flex:none;border:1px solid var(--line);border-radius:9px;overflow:hidden}
 .mpcs__seg button{height:30px;padding:0 12px;border:0;background:none;color:var(--muted);font-size:12px;font-weight:600;transition:background .2s,color .2s}

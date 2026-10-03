@@ -4,7 +4,7 @@
 // Inti DSP ada di mpcs-dsp.ts (murni), jalan di mpcs-worker.ts.
 
 import { ACCEPT as AUDIO_ACCEPT, isAudio } from './audio-upload-card';
-import { encodeWav, toMono, type Note, type PitchTrack } from './mpcs-dsp';
+import { encodeWav, snapTargets, toMono, type Note, type PitchTrack } from './mpcs-dsp';
 
 const svg = (inner: string, size = 18): string =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
@@ -62,6 +62,8 @@ function build(): void {
         '<div class="mpcs__seg" role="group" aria-label="Sumber putar"><button type="button" data-m="out" class="is-on">Hasil</button><button type="button" data-m="orig">Asli</button></div>' +
         '<button type="button" class="mpcs__btn" data-a="snap" disabled>Snap semua</button>' +
         '<button type="button" class="mpcs__btn" data-a="reset" disabled>Reset</button>' +
+        '<label class="mpcs__ctl" title="Variasi lambat pitch asli yang dipertahankan (0 = diratakan ke target). Berlaku untuk nada terpilih, atau semua nada kalau belum ada yang dipilih"><span>Drift</span><input type="range" min="0" max="100" value="100" data-k="drift" disabled></label>' +
+        '<label class="mpcs__ctl" title="Vibrato yang dipertahankan (0 = vibrato dibuang). Berlaku untuk nada terpilih, atau semua nada kalau belum ada yang dipilih"><span>Vibrato</span><input type="range" min="0" max="100" value="100" data-k="vib" disabled></label>' +
         `<button type="button" class="mpcs__btn" data-a="wav" disabled>${ICON.dl}<span>WAV</span></button>` +
         `<span class="mpcs__zoom"><button type="button" class="mpcs__btn mpcs__ico" data-a="zout" aria-label="Perkecil" disabled>${ICON.minus}</button><button type="button" class="mpcs__btn mpcs__ico" data-a="zin" aria-label="Perbesar" disabled>${ICON.plus}</button></span>` +
       '</div>' +
@@ -88,6 +90,7 @@ function build(): void {
   const file = el.querySelector<HTMLInputElement>('.mpcs__file')!;
   const btn = (a: string): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`.mpcs__bar [data-a="${a}"]`)!;
   const g = cv.getContext('2d')!, gk = keys.getContext('2d')!;
+  const ctl = (k: 'drift' | 'vib'): HTMLInputElement => el.querySelector<HTMLInputElement>(`.mpcs__bar [data-k="${k}"]`)!;
 
   let S: Session | null = null, sel = -1, pps = 100, W = 0, H = 0, rowH = 12, dpr = 1;
   let ac: AudioContext | null = null, src: AudioBufferSourceNode | null = null, playing = false, playPos = 0, t0 = 0, raf = 0, mode: 'out' | 'orig' = 'out';
@@ -173,10 +176,10 @@ function build(): void {
   // ---------- status ----------
   function info(): void {
     if (!S) { stat.textContent = ''; return; }
-    if (sel >= 0) { const n = S.notes[sel]; stat.textContent = noteName(n.midi) + (Math.round((n.midi - Math.round(n.midi)) * 100) ? ' ' + fmtShift(n.midi - Math.round(n.midi)) : '') + ' → ' + noteName(n.target) + '  (' + fmtShift(n.target - n.midi) + ')'; }
+    if (sel >= 0) { const n = S.notes[sel]; ctl('drift').value = String(Math.round((n.drift ?? 1) * 100)); ctl('vib').value = String(Math.round((n.vib ?? 1) * 100)); stat.textContent = noteName(n.midi) + (Math.round((n.midi - Math.round(n.midi)) * 100) ? ' ' + fmtShift(n.midi - Math.round(n.midi)) : '') + ' → ' + noteName(n.target) + '  (' + fmtShift(n.target - n.midi) + ')'; }
     else stat.textContent = S.notes.length ? S.notes.length + ' nada terdeteksi' : 'Tidak ada nada terdeteksi';
   }
-  function enable(on: boolean): void { ['play', 'snap', 'reset', 'wav', 'zin', 'zout'].forEach(a => { btn(a).disabled = !on; }); }
+  function enable(on: boolean): void { ['play', 'snap', 'reset', 'wav', 'zin', 'zout'].forEach(a => { btn(a).disabled = !on; }); ctl('drift').disabled = !on; ctl('vib').disabled = !on; }
   function setBusy(on: boolean): void { busy.hidden = !on; }
 
   // ---------- muat & analisis ----------
@@ -284,8 +287,15 @@ function build(): void {
   cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
 
   // ---------- tombol ----------
-  const snapAll = (): void => { if (!S) return; S.notes.forEach(n => { n.target = Math.round(n.midi); }); edit(); };
-  const resetAll = (): void => { if (!S) return; S.notes.forEach(n => { n.target = n.midi; }); edit(); };
+  const snapAll = (): void => { if (!S) return; snapTargets(S.notes); edit(); };   // snap ke semiton dengan hysteresis: pitch di perbatasan dua nada tidak bikin target loncat-loncat
+  const resetAll = (): void => { if (!S) return; S.notes.forEach(n => { n.target = n.midi; delete n.drift; delete n.vib; }); ctl('drift').value = '100'; ctl('vib').value = '100'; edit(); };
+  el.querySelector('.mpcs__bar')!.addEventListener('input', e => {   // kontrol ekspresi: drift / vibrato
+    const t = e.target as HTMLInputElement, k = t.dataset.k as 'drift' | 'vib' | undefined;
+    if (!k || !S) return;
+    const v = Number(t.value) / 100, list = sel >= 0 ? [S.notes[sel]] : S.notes;
+    list.forEach(n => { if (v >= 0.995) delete n[k]; else n[k] = v; });
+    dirty = true; ver++; if (playing) restartPlay();
+  });
   const zoom = (k: number): void => {
     if (!S) return;
     const c = (scroll.scrollLeft + scroll.clientWidth / 2) / pps; pps = Math.max(20, Math.min(600, pps * k));
