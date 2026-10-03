@@ -1313,7 +1313,7 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs__win{--accent:#ff5c9e;--accent-soft:rgba(255,92,158,.3);--rx:0deg;--ry:0deg;--mx:50%;--my:0%;
   --pink:linear-gradient(180deg,#e04583 0%,#c3235f 46%,#9a1550 100%);
   --brush-pink:repeating-linear-gradient(90deg,rgba(255,255,255,.075) 0 1px,rgba(60,0,25,.07) 1px 2px);
-  position:relative;display:flex;flex-direction:column;width:min(640px,100%);height:min(400px,100%);border-radius:14px;overflow:hidden;outline:none;color:#fff;
+  position:relative;display:flex;flex-direction:column;width:min(720px,100%);height:min(400px,100%);border-radius:14px;overflow:hidden;outline:none;color:#fff;
   background:#240c18;border:1px solid #14050c;
   transform:perspective(1100px) rotateX(var(--rx)) rotateY(var(--ry));transition:transform .45s var(--ease-out),box-shadow .3s ease;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 40px 80px -20px rgba(0,0,0,.85),0 2px 0 #0a0307}
@@ -1388,7 +1388,7 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs__up:disabled{cursor:default;opacity:.75}
 .mpcs__up:focus-visible{outline:2px solid #fff;outline-offset:3px}
 .mpcs__up span{overflow:hidden;text-overflow:ellipsis}
-.mpcs__ups{display:flex;gap:6px;flex:none;width:124px}   /* ruang bekas satu tombol Upload dibagi dua: Upload + Select all, supaya knob dan tombol play tidak bergeser */
+.mpcs__ups{display:flex;gap:6px;flex:none;width:180px}   /* tiga tombol kecil sebaris: Upload, Select all, Cut. Kartu dilebarkan (720px, tetap dibatasi 100% layar) supaya baris ini muat tanpa membungkus */
 .mpcs__ups .mpcs__up{flex:1 1 0;min-width:0;flex-direction:column;gap:1px;padding:0 3px;font-size:8.5px;letter-spacing:.03em}
 .mpcs__ups .mpcs__up svg{width:14px;height:14px}
 .mpcs__up.mpcs__all.is-on,.mpcs__up.mpcs__all.is-on:hover:not(:disabled){background:linear-gradient(180deg,#ff6aa8,#e0458a 55%,#b32a68);border-color:#fff}   /* Select all aktif */
@@ -1418,6 +1418,6 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs__play.is-on{box-shadow:inset 0 1px 0 rgba(255,255,255,.3),inset 0 -3px 5px rgba(0,0,0,.5),0 0 0 3px #4a0a25,0 0 0 4px #fff,0 0 16px rgba(255,255,255,.55),0 5px 0 #3a0820,0 10px 12px -4px rgba(0,0,0,.65)}
 .mpcs__play:disabled{opacity:.5;cursor:default}
 .mpcs__play:focus-visible{outline:2px solid #fff;outline-offset:6px}
-@media (max-height:520px){.mpcs__win{width:min(480px,100%);height:min(300px,100%)}.mpcs__head{min-height:34px;padding-top:4px;padding-bottom:4px}.mpcs__mid{padding:8px 10px;gap:5px}.mpcs__ov{height:22px}.mpcs__bar{padding:6px 12px 9px}}
+@media (max-height:520px){.mpcs__win{width:min(580px,100%);height:min(300px,100%)}.mpcs__head{min-height:34px;padding-top:4px;padding-bottom:4px}.mpcs__mid{padding:8px 10px;gap:5px}.mpcs__ov{height:22px}.mpcs__bar{padding:6px 12px 9px}}
 @media (max-width:420px){.mpcs__win{height:min(520px,100%)}.mpcs__bar{gap:10px 12px}.mpcs__ups{order:1;flex:1 1 auto;width:auto}.mpcs__play{order:2}.mpcs__knobs{display:flex;order:3;flex:1 0 100%;justify-content:center;gap:20px}.mpcs__lcd{max-width:none}.mpcs__title{letter-spacing:.2em}}   /* HP portrait: upload + play satu baris, tiga knob di baris bawahnya */
 @media (prefers-reduced-motion:reduce){.mpcs__win{transform:none!important;transition:none!important}.mpcs__busy i{animation:none;width:100%}.mpcs__up,.mpcs__play,.mpcs__close,.mpcs__drag,.mpcs__knob{transition:none}}

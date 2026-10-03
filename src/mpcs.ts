@@ -15,6 +15,7 @@ const ICON = {
   pause: svg('<rect x="6" y="5" width="4.5" height="14" rx="1.2" fill="currentColor" stroke="none"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2" fill="currentColor" stroke="none"/>', 22),
   close: svg('<path d="M6 6l12 12M18 6L6 18"/>', 12),
   drag: svg('<circle cx="9" cy="6" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.7" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.7" fill="currentColor" stroke="none"/>', 14),
+  cut: svg('<circle cx="6" cy="6.5" r="2.6"/><circle cx="6" cy="17.5" r="2.6"/><path d="M8.2 8l11 8.5M8.2 16l11-8.5"/>', 16),
   all: svg('<rect x="4" y="4" width="16" height="16" rx="2.5" stroke-dasharray="3.2 3"/><path d="M8.5 12.2l2.4 2.4 4.6-5"/>', 16)
 };
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -120,6 +121,7 @@ function build(): void {
         '<div class="mpcs__ups">' +
           `<button type="button" class="mpcs__up" data-a="up" title="Upload audio">${ICON.up}<span>Upload</span></button>` +
           `<button type="button" class="mpcs__up mpcs__all" data-a="all" aria-pressed="false" title="Pilih semua nada, lalu ketuk satu tuts piano di kiri untuk meratakan semuanya ke nada itu" disabled>${ICON.all}<span>Select all</span></button>` +
+          `<button type="button" class="mpcs__up mpcs__cut" data-a="cut" title="Potong nada tepat di posisi playhead (garis putih): satu nada jadi dua, tiap potongan bisa digeser sendiri" disabled>${ICON.cut}<span>Cut</span></button>` +
         '</div>' +
         `<div class="mpcs__knobs">${KNOB_KEYS.map(knobHtml).join('')}</div>` +
         `<button type="button" class="mpcs__play" data-a="play" aria-label="Putar" disabled>${ICON.play}</button>` +
@@ -324,6 +326,7 @@ function build(): void {
         g.fillStyle = '#e0458a';
         fillColumns(g, xa, px, tops, bots, n);
       }
+      if (i > 0 && notes[i - 1].e >= nt.s && x1 - x0 > 6) { g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(Math.round(x0), yc - rowH * .5, 1, rowH); }   // garis potongan: nada ini menempel tepat di nada sebelumnya
       // pitch asli (redup, hanya kalau digeser) dan pitch hasil (oranye)
       const line = (add: number | Float32Array, style: string, w: number): void => {
         g.strokeStyle = style; g.lineWidth = w; g.beginPath();
@@ -347,6 +350,25 @@ function build(): void {
     all = on && !!S && S.notes.length > 0; if (all) sel = -1;
     paintAll(); draw(); info();
   }
+  // Cut: nada yang sedang dilewati playhead dipecah jadi dua tepat di posisi playhead. Kedua potongan mewarisi pitch asli (midi), target, dan pengaturan nada induknya,
+  // jadi suara tidak berubah sampai salah satu potongan digeser. Batas potongan = frame terdekat dari playhead; sisa minimal MIN_CUT frame di tiap sisi.
+  const MIN_CUT = 3;
+  function cutAtPlayhead(): void {
+    if (!S) return;
+    const hopSec = S.pt.hop / S.pt.sr, c = Math.round(playPos / hopSec + .5);   // kebalikan dari x = (frame - .5) * hopSec yang dipakai gambar nada
+    const i = S.notes.findIndex(n => c - n.s >= MIN_CUT && n.e - c >= MIN_CUT);
+    if (i < 0) {
+      const near = S.notes.some(n => c > n.s && c < n.e);
+      stat.textContent = near ? 'Terlalu dekat ujung nada, geser playhead' : 'Tidak ada nada di playhead';
+      window.setTimeout(info, 1800); return;
+    }
+    const a = S.notes[i], b: Note = { ...a, s: c };
+    a.e = c; S.notes.splice(i + 1, 0, b);
+    if (all) { all = false; paintAll(); }
+    sel = i + 1;   // potongan kanan langsung terpilih, siap digeser
+    edit();
+  }
+
   keys.addEventListener('pointerdown', e => {
     if (!S || !all) return;
     e.preventDefault();
@@ -364,7 +386,7 @@ function build(): void {
     else stat.textContent = S.notes.length ? S.notes.length + ' nada terdeteksi' : 'Tidak ada nada terdeteksi';
   }
   function enable(on: boolean): void {
-    btn('play').disabled = !on; btn('all').disabled = !on; dragBtn.disabled = !on; win.classList.toggle('is-off', !on);
+    btn('play').disabled = !on; btn('all').disabled = !on; btn('cut').disabled = !on; dragBtn.disabled = !on; win.classList.toggle('is-off', !on);
     KNOB_KEYS.forEach(k => { knobEl[k].closest('.mpcs__knob')!.classList.toggle('is-off', !on); });
   }
   function setBusy(on: boolean): void { busy.hidden = !on; }
@@ -539,7 +561,7 @@ function build(): void {
   // ---------- tombol ----------
   el.addEventListener('click', e => {
     const b = (e.target as Element).closest<HTMLButtonElement>('.mpcs__bar button'); if (!b || b.disabled) return;
-    if (b.dataset.a === 'up') file.click(); else if (b.dataset.a === 'all') setAll(!all); else if (b.dataset.a === 'play') { if (playing) stopPlay(); else void startPlay(); }
+    if (b.dataset.a === 'up') file.click(); else if (b.dataset.a === 'all') setAll(!all); else if (b.dataset.a === 'cut') cutAtPlayhead(); else if (b.dataset.a === 'play') { if (playing) stopPlay(); else void startPlay(); }
   });
   empty.querySelector('button')!.addEventListener('click', () => file.click());
   file.addEventListener('change', () => { const f = file.files?.[0]; file.value = ''; if (f) void load(f); });
