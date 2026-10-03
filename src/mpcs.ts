@@ -203,7 +203,7 @@ function build(): void {
     dpr = Math.min(2, devicePixelRatio || 1);
     viewH = stage.clientHeight;
     const rows = S ? S.hi - S.lo + 1 : 1;
-    rowH = S ? Math.max(30, viewH / rows) : 12;   // baris tidak dipepatkan lagi: kalau rentang nada lebar, kanvas jadi lebih tinggi dan di-scroll
+    rowH = S ? Math.max(24, viewH / rows) : 12;   // baris tidak dipepatkan lagi: kalau rentang nada lebar, kanvas jadi lebih tinggi dan di-scroll
     H = S ? Math.round(rowH * rows) : viewH;
     const viewW = scroll.clientWidth;
     W = S ? Math.max(viewW, Math.ceil(S.dur * pps)) : viewW;

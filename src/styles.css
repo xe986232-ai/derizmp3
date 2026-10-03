@@ -1313,7 +1313,7 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs__win{--accent:#ff5c9e;--accent-soft:rgba(255,92,158,.3);--rx:0deg;--ry:0deg;--mx:50%;--my:0%;
   --pink:linear-gradient(180deg,#e04583 0%,#c3235f 46%,#9a1550 100%);
   --brush-pink:repeating-linear-gradient(90deg,rgba(255,255,255,.075) 0 1px,rgba(60,0,25,.07) 1px 2px);
-  position:relative;display:flex;flex-direction:column;width:min(1120px,100%);height:min(680px,100%);border-radius:14px;overflow:hidden;outline:none;color:#fff;
+  position:relative;display:flex;flex-direction:column;width:min(640px,100%);height:min(400px,100%);border-radius:14px;overflow:hidden;outline:none;color:#fff;
   background:#240c18;border:1px solid #14050c;
   transform:perspective(1100px) rotateX(var(--rx)) rotateY(var(--ry));transition:transform .45s var(--ease-out),box-shadow .3s ease;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 40px 80px -20px rgba(0,0,0,.85),0 2px 0 #0a0307}
@@ -1348,7 +1348,7 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
     repeating-linear-gradient(90deg,rgba(255,255,255,.4) 0 1px,rgba(0,0,0,.045) 1px 3px),
     linear-gradient(180deg,#e6e6ea 0%,#c4c4ca 55%,#acacb3 100%);
   box-shadow:inset 0 2px 5px rgba(0,0,0,.35)}
-.mpcs__ov{display:block;flex:none;width:100%;height:48px;border:0;border-radius:6px;background:linear-gradient(180deg,#07070a,#15151b);box-shadow:inset 0 2px 5px rgba(0,0,0,.95),0 0 0 1px #2a2a30,0 1px 0 1px rgba(255,255,255,.55);touch-action:none;cursor:pointer}
+.mpcs__ov{display:block;flex:none;width:100%;height:34px;border:0;border-radius:6px;background:linear-gradient(180deg,#07070a,#15151b);box-shadow:inset 0 2px 5px rgba(0,0,0,.95),0 0 0 1px #2a2a30,0 1px 0 1px rgba(255,255,255,.55);touch-action:none;cursor:pointer}
 .mpcs__ov[hidden]{display:none}
 .mpcs__stage{position:relative;flex:1;display:flex;min-height:70px;border-radius:8px;overflow:hidden;background:linear-gradient(180deg,#07070a,#15151b);box-shadow:0 0 0 1px #2a2a30,0 1px 0 1px rgba(255,255,255,.55)}
 .mpcs__stage::after{content:"";position:absolute;inset:0;z-index:3;border-radius:inherit;pointer-events:none;box-shadow:inset 0 3px 10px rgba(0,0,0,.9),inset 0 0 0 1px rgba(255,255,255,.06)}
@@ -1404,6 +1404,6 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs__play.is-on{box-shadow:inset 0 1px 0 rgba(255,255,255,.3),inset 0 -3px 5px rgba(0,0,0,.5),0 0 0 3px #4a0a25,0 0 0 4px #fff,0 0 16px rgba(255,255,255,.55),0 5px 0 #3a0820,0 10px 12px -4px rgba(0,0,0,.65)}
 .mpcs__play:disabled{opacity:.5;cursor:default}
 .mpcs__play:focus-visible{outline:2px solid #fff;outline-offset:6px}
-@media (max-height:520px){.mpcs__win{height:min(330px,100%)}.mpcs__head{min-height:34px;padding-top:4px;padding-bottom:4px}.mpcs__mid{padding:8px 10px;gap:5px}.mpcs__ov{height:22px}.mpcs__bar{padding:6px 12px 9px}}
+@media (max-height:520px){.mpcs__win{width:min(480px,100%);height:min(300px,100%)}.mpcs__head{min-height:34px;padding-top:4px;padding-bottom:4px}.mpcs__mid{padding:8px 10px;gap:5px}.mpcs__ov{height:22px}.mpcs__bar{padding:6px 12px 9px}}
 @media (max-width:420px){.mpcs__win{height:min(520px,100%)}.mpcs__bar{gap:10px 12px}.mpcs__up{order:1;flex:1 1 auto;min-width:0}.mpcs__play{order:2}.mpcs__knobs{display:flex;order:3;flex:1 0 100%;justify-content:center;gap:20px}.mpcs__lcd{max-width:none}.mpcs__title{letter-spacing:.2em}}   /* HP portrait: upload + play satu baris, tiga knob di baris bawahnya */
 @media (prefers-reduced-motion:reduce){.mpcs__win{transform:none!important;transition:none!important}.mpcs__busy i{animation:none;width:100%}.mpcs__up,.mpcs__play,.mpcs__close,.mpcs__knob{transition:none}}
