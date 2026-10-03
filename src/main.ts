@@ -905,7 +905,7 @@ kbdKeys.addEventListener('pointerup', upPtr); kbdKeys.addEventListener('pointerc
 const kbdDown = new Map();   // e.key -> midi (supaya pelepasan tetap benar walau oktaf berganti)
 const typing = t => t && (t.isContentEditable || t.matches && t.matches('textarea, input:not([type="range"])'));
 document.addEventListener('keydown', e => {
-  if (!kbdEl.classList.contains('is-open') || e.ctrlKey || e.metaKey || e.altKey || typing(e.target)) return;
+  if (!kbdEl.classList.contains('is-open') || dockCollapsed() || e.ctrlKey || e.metaKey || e.altKey || typing(e.target)) return;
   const k = e.key.toLowerCase();
   if (!(k in KMAP)) return;
   e.preventDefault();
@@ -925,7 +925,8 @@ function openKbd(cont, fxId = null) {
   kbdEl.style.setProperty('--kc', cs);
   const wasOpen = kbdEl.classList.contains('is-open');
   kbdCont = cont;
-  kbdEl.classList.add('is-open'); kbdEl.removeAttribute('inert'); kbdEl.setAttribute('aria-hidden', 'false');
+  kbdEl.classList.add('is-open');
+  if (!dockCollapsed()) { kbdEl.removeAttribute('inert'); kbdEl.setAttribute('aria-hidden', 'false'); }
   if (!wasOpen) { buildKeys(true); setTimeout(() => cont.isConnected && cont.scrollIntoView({block: 'nearest', behavior: 'smooth'}), 400); }
   syncKbdToggle();
 }
@@ -934,19 +935,86 @@ function closeKbd() {
   kbdEl.classList.remove('is-open'); kbdEl.setAttribute('inert', ''); kbdEl.setAttribute('aria-hidden', 'true');
   syncKbdToggle();
 }
-// keyboard hanya dibuka / ditutup manual lewat panah di card transport (tidak lagi otomatis saat track diklik)
+// ===== Panel bawah (card transport + keyboard) =====
+// - Panah di kanan card: menutup SELURUH panel bawah (hanya panah yang tersisa); ditekan lagi untuk membukanya.
+// - Seret card transport ke atas / bawah: mengatur tinggi keyboard (di bawah ambang tertentu keyboard menutup sendiri).
 const kbdToggle = document.getElementById('kbdToggle');
+const dockBar = document.getElementById('dockBar'), dockClip = document.getElementById('dockClip'), dockCard = document.getElementById('dockCard');
+const kbdInner = kbdEl.querySelector('.kbd__inner');
+const dockCollapsed = () => dockBar.classList.contains('is-collapsed');
 function syncKbdToggle() {
-  const open = kbdEl.classList.contains('is-open'), t = open ? 'Tutup keyboard' : 'Buka keyboard';
+  const open = !dockCollapsed(), t = open ? 'Tutup panel bawah' : 'Buka panel bawah';
   kbdToggle.setAttribute('aria-expanded', String(open));
   kbdToggle.setAttribute('aria-label', t); kbdToggle.title = t;
 }
-function toggleKbd() {
-  if (kbdEl.classList.contains('is-open')) { closeKbd(); return; }
+function setDock(open) {
+  dockBar.classList.toggle('is-collapsed', !open);
+  document.documentElement.classList.toggle('dock-collapsed', !open);
+  dockClip.toggleAttribute('inert', !open);   // card tersembunyi: tombolnya tidak bisa difokus / ditekan
+  if (!open) { releaseAll(); kbdEl.setAttribute('inert', ''); kbdEl.setAttribute('aria-hidden', 'true'); }
+  else if (kbdEl.classList.contains('is-open')) { kbdEl.removeAttribute('inert'); kbdEl.setAttribute('aria-hidden', 'false'); }
+  syncKbdToggle();
+}
+kbdToggle.addEventListener('click', () => setDock(dockCollapsed()));
+
+// tinggi keyboard = bar 44px + tuts + 12px; tuts tidak ikut mengecil saat ditarik (hanya terpotong seperti laci)
+const KBD_BAR = 44, KBD_PAD = 12, KBD_MIN = 120, KBD_SNAP_CLOSE = 80;
+const kbdMaxH = () => Math.max(KBD_MIN, Math.min(380, Math.round(window.innerHeight * 0.55)));
+function setKbdHeight(h) {
+  const kh = Math.max(Math.round(h) - KBD_BAR - KBD_PAD, 60), rs = document.documentElement.style;
+  rs.setProperty('--kbd-h', Math.round(h) + 'px');
+  rs.setProperty('--kh', kh + 'px');
+  rs.setProperty('--bh', Math.round(kh * 0.613) + 'px');
+}
+function openKbdForSelected() {
   const cont = (selTrack && selTrack.closest('.trackheader-container')) || document.querySelector('.trackheader-container');
   if (cont) openKbd(cont);   // keyboard memainkan track yang sedang dipilih
+  return !!cont;
 }
-kbdToggle.addEventListener('click', toggleKbd);
+let dockDrag = null;
+// listener gerak dipasang di window selama jari / mouse menekan card, supaya seretan cepat yang keluar dari card tetap terbaca
+dockCard.addEventListener('pointerdown', e => {
+  if ((e.pointerType === 'mouse' && e.button !== 0) || dockDrag) return;
+  const h0 = kbdEl.classList.contains('is-open') ? kbdInner.offsetHeight : 0;
+  dockDrag = {id: e.pointerId, y0: e.clientY, h0, h: h0, moved: false};
+  window.addEventListener('pointermove', onDockMove);
+  window.addEventListener('pointerup', endDockDrag);
+  window.addEventListener('pointercancel', endDockDrag);
+});
+function onDockMove(e) {
+  const d = dockDrag; if (!d || e.pointerId !== d.id) return;
+  const dy = d.y0 - e.clientY;
+  if (!d.moved) {
+    if (Math.abs(dy) < 8) return;   // di bawah 8px dianggap ketukan biasa (tombol tetap bisa ditekan)
+    if (!kbdEl.classList.contains('is-open')) {
+      kbdEl.classList.add('is-dragging'); setKbdHeight(0);
+      if (!openKbdForSelected()) { kbdEl.classList.remove('is-dragging'); stopDockListeners(); dockDrag = null; return; }
+    }
+    d.moved = true;
+    kbdEl.classList.add('is-dragging');
+    document.documentElement.classList.add('is-dock-dragging');
+  }
+  d.h = Math.max(0, Math.min(kbdMaxH(), d.h0 + dy));
+  setKbdHeight(d.h);
+}
+function stopDockListeners() {
+  window.removeEventListener('pointermove', onDockMove);
+  window.removeEventListener('pointerup', endDockDrag);
+  window.removeEventListener('pointercancel', endDockDrag);
+}
+function endDockDrag(e) {
+  const d = dockDrag; if (!d || e.pointerId !== d.id) return;
+  dockDrag = null; stopDockListeners();
+  if (!d.moved) return;
+  const stop = ev => { ev.stopPropagation(); ev.preventDefault(); };   // seretan tidak boleh ikut menekan tombol di bawah jari
+  window.addEventListener('click', stop, {capture: true, once: true});
+  setTimeout(() => window.removeEventListener('click', stop, true), 60);
+  document.documentElement.classList.remove('is-dock-dragging');
+  kbdEl.classList.remove('is-dragging');
+  if (d.h < KBD_SNAP_CLOSE) closeKbd();
+  else setKbdHeight(Math.max(d.h, KBD_MIN));
+}
+window.addEventListener('resize', () => { if (kbdEl.classList.contains('is-open') && kbdInner.offsetHeight > kbdMaxH()) setKbdHeight(kbdMaxH()); });
 kbdOctDown.addEventListener('click', () => { kbdOct--; buildKeys(); });
 kbdOctUp.addEventListener('click', () => { kbdOct++; buildKeys(); });
 window.addEventListener('resize', () => { if (kbdEl.classList.contains('is-open') && whitesFit() !== kbdN) buildKeys(); });

@@ -431,6 +431,17 @@ html[data-theme="jembut"] .lane{background-image:
 .kbd-toggle svg{display:block;width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;
   transition:transform .42s var(--ease-spring)}
 .kbd-toggle[aria-expanded="true"] svg{transform:rotate(180deg)}
+/* panel bawah (card transport + keyboard): panah di kanan menutup / membuka seluruhnya; saat tertutup hanya panah yang tersisa */
+.transportbar{position:relative;display:grid;justify-content:stretch;grid-template-rows:1fr;transition:grid-template-rows .32s var(--ease-out)}
+.transportbar.is-collapsed{grid-template-rows:0fr}
+.dock-clip{min-height:0;overflow:hidden}
+.studioheader__transport-controls-mobile{touch-action:none;cursor:ns-resize;user-select:none;-webkit-user-select:none}
+.studioheader__transport-controls-mobile button{cursor:pointer}
+.transportbar.is-collapsed .kbd-toggle{top:auto;bottom:8px;margin:0;z-index:30;background:var(--card);box-shadow:var(--bevel),0 2px 10px rgba(0,0,0,.45)}
+.kbd.is-dragging{transition:none}
+html.dock-collapsed .kbd.is-open{height:0;border-top-width:0}
+html.is-dock-dragging,html.is-dock-dragging *{cursor:ns-resize !important;user-select:none;-webkit-user-select:none}
+@media (prefers-reduced-motion:reduce){.transportbar{transition:none}}
 @media (prefers-reduced-motion:reduce){.kbd-toggle svg{transition:none}}
 /* transport: tombol play/jeda tepat di tengah card, ikon lain mendampingi di kiri dan kanan */
 .transport-controls{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;width:100%}
