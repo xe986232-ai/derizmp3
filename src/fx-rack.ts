@@ -8,6 +8,7 @@
 
 import { setReverb, setEq, setFilter, setDeesser, reverbSeconds, eqDb, filterMode, filterHz, deesserHz, deesserThr, deesserMaxDb, decodeStandalone, trackInput } from './audio-engine';
 import { DerizSynth } from './deriz-synth';
+import { openMpcs } from './mpcs';
 import { isAudio, ACCEPT as AUDIO_ACCEPT } from './audio-upload-card';
 import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } from './synth-engine';
 import { velGain } from './velocity';
@@ -767,13 +768,15 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     closeMenu(true);
     const have = new Set(fxs().map(f => f.type));
     // halaman Plugin: hanya DERIZ (boleh banyak; Supersaw otomatis ada di track synth). Halaman Effect: Reverb, EQ, Filter, dll.
-    const choices = EFFECTS.filter(d => page === 'plugin' ? d.type === 'deriz' : !d.synth);
+    // MPCS = jendela editor pitch (bukan kartu di rack): langsung dibuka dari sini
+    const choices: Array<{ type: FxType | 'mpcs'; name: string }> = EFFECTS.filter(d => page === 'plugin' ? d.type === 'deriz' : !d.synth);
+    if (page === 'plugin') choices.push({ type: 'mpcs', name: 'MPCS' });
     const el = document.createElement('div');
     el.className = 'fx-pick';
     el.setAttribute('role', 'menu');
     el.setAttribute('aria-label', page === 'plugin' ? 'Pilih plugin' : 'Pilih efek');
     el.innerHTML = choices.map((d, k) => {
-      const used = d.type !== 'deriz' && have.has(d.type);
+      const used = d.type !== 'deriz' && d.type !== 'mpcs' && have.has(d.type);
       return `<button type="button" role="menuitem" class="fx-pick__item" data-type="${d.type}" style="--i:${k}"${used ? ' disabled title="Sudah ditambahkan"' : ''}>` +
         `<span>${d.name}</span></button>`;
     }).join('');
@@ -790,6 +793,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     el.addEventListener('click', e => {
       const b = (e.target as Element).closest<HTMLButtonElement>('.fx-pick__item');
       if (!b || b.disabled) return;
+      if (b.dataset.type === 'mpcs') { closePicker(true); openMpcs(); return; }   // fokus pindah ke jendela MPCS
       addEffect(b.dataset.type as FxType);
       closePicker();
       addBtn.focus({ preventScroll: true });

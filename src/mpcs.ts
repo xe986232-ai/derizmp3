@@ -1,6 +1,6 @@
 // MPCS (Manual Pitch Correct Sample): jendela editor pitch ala Melodyne, bergaya plugin DERIZ (faceplate logam 3D). Tahap 1 (starter):
 //   upload audio -> analisis di Worker -> blok nada di piano roll -> seret blok ke atas / bawah (snap semiton) -> knob Trans / Variation / Center -> putar hasil.
-// Tombol buka sengaja tidak ada di daftar efek: jendela hanya terbuka lewat ketukan beruntun pada judul panel "Effects".
+// Dibuka lewat tombol + di halaman Plugin pada panel efek (pilih "MPCS"); tidak ada kartunya di daftar efek.
 // Inti DSP ada di mpcs-dsp.ts (murni), jalan di mpcs-worker.ts.
 
 import { ACCEPT as AUDIO_ACCEPT, isAudio } from './audio-upload-card';
@@ -87,19 +87,8 @@ function fillColumns(c: CanvasRenderingContext2D, x0: number, step: number, tops
 
 let root: HTMLElement | null = null, openFn: (() => void) | null = null;
 
-export function initMpcs(): void {
-  const title = document.querySelector<HTMLElement>('.fx__title');
-  if (!title) return;
-  title.style.userSelect = 'none'; title.style.touchAction = 'manipulation'; title.style.setProperty('-webkit-tap-highlight-color', 'transparent');
-  let taps = 0, last = 0;
-  title.addEventListener('click', () => {
-    const t = performance.now();
-    taps = t - last > 900 ? 1 : taps + 1; last = t;
-    if (taps >= 7) { taps = 0; navigator.vibrate?.(18); open(); }
-  });
-}
-
-function open(): void {
+// Dibuka dari tombol + di halaman Plugin pada panel efek (fx-rack.ts): pilih "MPCS" di card pilihan.
+export function openMpcs(): void {
   if (!root) build();
   openFn?.();
 }

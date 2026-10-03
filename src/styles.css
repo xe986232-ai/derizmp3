@@ -1351,7 +1351,7 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 }
 @media (prefers-reduced-motion:reduce){.transportbar .metro-btn.is-beat,.transportbar .hist-btn.is-tap{animation:none}}
 
-/* ---------- MPCS (Manual Pitch Correct Sample): editor pitch bergaya plugin hardware (panel magenta logam sikat, panel tengah perak, layar hitam), dibuka lewat ketukan beruntun pada judul panel efek ---------- */
+/* ---------- MPCS (Manual Pitch Correct Sample): editor pitch bergaya plugin hardware (panel magenta logam sikat, panel tengah perak, layar hitam), dibuka dari tombol + di halaman Plugin pada panel efek ---------- */
 .mpcs{position:fixed;inset:0;z-index:220;display:grid;place-items:center;padding:max(12px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom))}
 .mpcs[hidden]{display:none}
 .mpcs__back{position:absolute;inset:0;background:rgba(8,8,12,.5)}
