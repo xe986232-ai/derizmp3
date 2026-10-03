@@ -246,20 +246,48 @@ function drawGrid(zoomOnly = false) {
 }
 
 let keysSig = '', rulerSig = '';   // tanda masukan gambar terakhir: kalau sama, tidak digambar ulang (mis. pinch horizontal tidak menyentuh keys)
+// Keyboard di kiri grid: gaya sama dengan keyboard DERIZ (tuts putih gradasi + bibir gelap di ujung depan, tuts hitam gradasi
+// gelap bersudut membulat dengan bayangan, tuts tertekan berwarna track), hanya diputar 90 derajat: pangkal tuts di kiri, ujung depan di kanan (sisi grid).
+const KEYS_BG = '#17171e', KEY_WHITE_A = '#fbfbfd', KEY_WHITE_B = '#e4e4ec', KEY_BLACK_A = '#2c2c38', KEY_BLACK_B = '#0e0e13', KEY_LABEL = '#8a8a9a';
+function keyPath(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, rr: number) {   // sudut kiri lurus (terpotong tepi canvas), sudut kanan membulat
+  c.beginPath(); c.moveTo(x, y); c.lineTo(x + w - rr, y); c.arcTo(x + w, y, x + w, y + rr, rr);
+  c.lineTo(x + w, y + h - rr); c.arcTo(x + w, y + h, x + w - rr, y + h, rr); c.lineTo(x, y + h); c.closePath();
+}
 function drawKeys() {
   const vh = sc.clientHeight, sy = curT();
   const sig = sy + '|' + rowH + '|' + vh + '|' + hoverP + '|' + showNoteNames + '|' + color + '|' + (window.devicePixelRatio || 1);
   if (sig === keysSig) return; keysSig = sig;
-  const c = fit(kc, KEY_W, vh);
-  c.fillStyle = '#e9eaf0'; c.fillRect(0, 0, KEY_W, vh);
-  const r0 = Math.max(0, Math.floor(sy / rowH)), r1 = Math.min(ROWS - 1, Math.floor((sy + vh) / rowH));
+  const c = fit(kc, KEY_W, vh), dpr = Math.min(window.devicePixelRatio || 1, 8);
+  c.fillStyle = KEYS_BG; c.fillRect(0, 0, KEY_W, vh);
+  const r0 = Math.max(0, Math.floor(sy / rowH) - 1), r1 = Math.min(ROWS - 1, Math.floor((sy + vh) / rowH) + 1);
+  const KW = KEY_W - 2, BL = KW * (showNoteNames ? 0.5 : 0.62);   // panjang tuts putih / hitam (nama nada tampil: tuts hitam dipendekkan supaya label tidak tertutup)
+  const gw = c.createLinearGradient(0, 0, KW, 0); gw.addColorStop(0, KEY_WHITE_A); gw.addColorStop(1, KEY_WHITE_B);
+  const gb = c.createLinearGradient(0, 0, BL, 0); gb.addColorStop(0, KEY_BLACK_A); gb.addColorStop(1, KEY_BLACK_B);
+  // 1) tuts putih: tiap tuts mengisi barisnya sendiri + setengah baris tuts hitam di atas / bawahnya (seperti piano asli), jarak 1px antar tuts
+  for (let r = r0; r <= r1; r++) {
+    const p = P_MAX - r; if (isBlack(p)) continue;
+    const y = r * rowH - sy, top = y + (isBlack(p + 1) ? -rowH / 2 : 0) + 0.5, bot = y + rowH + (isBlack(p - 1) ? rowH / 2 : 0) - 0.5;
+    const dn = p === hoverP, x = dn ? 1 : 0, h = bot - top, rr = Math.min(5, h / 2.5);
+    c.save(); keyPath(c, x, top, KW, h, rr); c.fillStyle = dn ? color : gw; c.fill(); c.clip();
+    c.fillStyle = dn ? 'rgba(0,0,0,.2)' : 'rgba(0,0,0,.12)'; c.fillRect(x + KW - (dn ? 2 : 3), top, 3, h);   // bibir gelap di ujung depan tuts
+    c.restore();
+  }
+  // 2) tuts hitam di atasnya, dengan bayangan jatuh ke arah ujung depan (kanan)
+  for (let r = r0; r <= r1; r++) {
+    const p = P_MAX - r; if (!isBlack(p)) continue;
+    const y = r * rowH - sy + 1, h = rowH - 2, dn = p === hoverP, x = dn ? 1 : 0, rr = Math.min(4, h / 2.5);
+    c.save(); c.shadowColor = 'rgba(0,0,0,.5)'; c.shadowBlur = 5 * dpr; c.shadowOffsetX = 3 * dpr; c.shadowOffsetY = 0;
+    keyPath(c, x, y, BL, h, rr); c.fillStyle = dn ? color : gb; c.fill();
+    c.restore();
+    c.save(); keyPath(c, x, y, BL, h, rr); c.clip();
+    c.fillStyle = dn ? 'rgba(255,255,255,.12)' : 'rgba(255,255,255,.07)'; c.fillRect(x + BL - (dn ? 2 : 3), y, 3, h);
+    c.restore();
+  }
+  // 3) nama nada (tiap C, tuts yang disentuh, atau semua kalau Tampilkan Nama Nada aktif)
   c.font = '600 10px system-ui,sans-serif'; c.textBaseline = 'middle'; c.textAlign = 'right';
   for (let r = r0; r <= r1; r++) {
     const p = P_MAX - r, y = r * rowH - sy;
-    if (p === hoverP) { c.fillStyle = color; c.fillRect(0, y, KEY_W, rowH); }
-    c.fillStyle = 'rgba(0,0,0,.18)'; c.fillRect(0, Math.round(y + rowH) - 1, KEY_W, 1);
-    if (isBlack(p)) { c.fillStyle = p === hoverP ? '#0e0e12' : '#1a1a21'; c.fillRect(0, y + 1, KEY_W * (showNoteNames ? 0.5 : 0.62), rowH - 2); }   // nama nada tampil: tuts hitam dipendekkan supaya label tidak tertutup
-    if (p % 12 === 0 || p === hoverP || (showNoteNames && rowH >= 11)) { c.fillStyle = p === hoverP ? '#fff' : '#555566'; c.fillText(pname(p), KEY_W - 6, y + rowH / 2 + 0.5); }
+    if (p % 12 === 0 || p === hoverP || (showNoteNames && rowH >= 11)) { c.fillStyle = p !== hoverP ? KEY_LABEL : isBlack(p) ? '#16161d' : '#fff'; c.fillText(pname(p), KW - 5, y + rowH / 2 + 0.5); }   // tuts hitam tertekan: label jatuh di bagian putih, jadi gelap
   }
   c.textAlign = 'start';
   c.fillStyle = '#33333f'; c.fillRect(KEY_W - 1, 0, 1, vh);
