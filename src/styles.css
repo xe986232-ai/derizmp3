@@ -16,7 +16,8 @@ button{font:inherit;color:inherit;cursor:pointer}
 /* top bar */
 
 /* workspace */
-.workspace{flex:1;overflow:auto;position:relative;display:flex;align-items:flex-start}
+.workspace{flex:1;overflow:auto;position:relative;display:flex;align-items:flex-start;scrollbar-width:none;-ms-overflow-style:none}
+.workspace::-webkit-scrollbar{display:none}   /* scrollbar putih di kanan & bawah timeline disembunyikan (scroll tetap jalan) */
 .tracklist{position:sticky;left:0;z-index:5;width:282px;flex:none;min-height:100%;background:var(--panel);border-right:1px solid var(--line);padding-top:48px}
 .headers-list{position:relative}
 .trackheader-container{position:relative;height:var(--lane);border-bottom:1px solid var(--line)}
