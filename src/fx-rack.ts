@@ -340,7 +340,7 @@ export interface DerizSaved { on: boolean; v: Record<string, number>; z?: { name
 export interface AutoTarget { track: string; fxId: number; key: string; fxName: string; label: string }
 export interface AutoParamInfo { fxName: string; label: string; def: number; bipolar: boolean; fmt(v: number): string }
 // Keadaan satu efek non-DERIZ (Reverb, EQ, Filter, Supersaw) untuk file project
-export interface FxSaved { type: string; on: boolean; v: Record<string, number> }
+export interface FxSaved { type: string; on: boolean; v: Record<string, number>; min?: boolean; tab?: number; at?: number }   // min: kartu diminimize; tab: tab Supersaw yang terbuka; at: urutan kartu di track (DERIZ ikut dihitung)
 
 export interface FxRack {
   onTouch(cb: (t: AutoTarget) => void): void;   // dipanggil tiap pengguna memutar knob / slider (bukan saat automation berjalan)
@@ -1276,9 +1276,9 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     return { type: fx.type, i: rack.filter(f => f.type === fx.type).findIndex(f => f.id === fxId) };
   };
   const fxFind = (track: string, type: string, i: number): number | undefined => (racks.get(track) ?? []).filter(f => f.type === type)[i]?.id;
-  const fxExport = (track: string): FxSaved[] => (racks.get(track) ?? []).filter(f => f.type !== 'deriz').map(f => ({ type: f.type, on: f.on, v: { ...f.v } }));
+  const fxExport = (track: string): FxSaved[] => (racks.get(track) ?? []).flatMap((f, at) => f.type === 'deriz' ? [] : [{ type: f.type, on: f.on, v: { ...f.v }, at, ...(f.min ? { min: true } : {}), ...(f.tab ? { tab: f.tab } : {}) }]);
   function fxImport(track: string, list: FxSaved[]): void {   // dipanggil saat membuka project (track-nya sudah dibuat; Supersaw bawaan track sudah ada)
-    const cnt = new Map<string, number>();
+    const cnt = new Map<string, number>(), placed = new Map<Fx, number | undefined>();
     for (const st of list) {
       const type = st.type as FxType, d = EFFECTS.find(e => e.type === type); if (!d || type === 'deriz') continue;
       const k = cnt.get(type) ?? 0; cnt.set(type, k + 1);
@@ -1290,6 +1290,16 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
         racks.set(track, [...(racks.get(track) ?? []), fx]);
       }
       fx.on = st.on !== false; fx.v = { ...fx.v, ...st.v };
+      fx.min = !!st.min; if (typeof st.tab === 'number') fx.tab = st.tab;
+      placed.set(fx, st.at);
+    }
+    // urutan kartu seperti saat disimpan: efek menempati posisi `at`-nya, sisa posisi diisi kartu lain (DERIZ dll.) sesuai urutan sekarang
+    const rack = racks.get(track) ?? [];
+    if (placed.size && rack.length) {
+      const out: (Fx | undefined)[] = new Array(rack.length).fill(undefined);
+      for (const [f, at] of placed) if (typeof at === 'number' && at >= 0 && at < out.length && !out[at]) out[at] = f;
+      const rest = rack.filter(f => !out.includes(f));
+      racks.set(track, out.map(f => f ?? rest.shift()!));
     }
     applyAudio(track);
     if (cur === track) api.show(track);
