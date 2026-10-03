@@ -17,17 +17,18 @@ const hz = (m: number): number => 440 * 2 ** ((m - 69) / 12);
 function rng(seed: number): () => number { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
 interface N { t0: number; t1: number; midi: number }
-interface Sc { name: string; notes: N[]; glide: number; scoop: number; scoopMs: number; fall: number; fallMs: number; vibHz: number; vibC: number; drift: number; breath?: number }
+interface Sc { name: string; notes: N[]; glide: number; scoop: number; scoopMs: number; fall: number; fallMs: number; vibHz: number; vibC: number; drift: number; breath?: number; ovs?: number; ovsMs?: number; cons?: number; onsetNoise?: number; ramp?: number }   // ovs: lonjakan pitch di awal kata (semiton, meluruh dalam ovsMs); cons: level konsonan berisik di jeda antar kata
 
 // kontur pitch asli (MIDI): pusat nada + luncuran antar nada bersambung + scoop + jatuhan + vibrato + drift
 function synth(sc: Sc): { x: Float32Array; ideal: Float64Array; voiced: Uint8Array } {
-  const N0 = Math.round((sc.notes[sc.notes.length - 1].t1 + 0.3) * SR), midi = new Float64Array(N0), ideal = new Float64Array(N0), voiced = new Uint8Array(N0), amp = new Float64Array(N0), x = new Float32Array(N0);
+  const N0 = Math.round((sc.notes[sc.notes.length - 1].t1 + 0.3) * SR), midi = new Float64Array(N0), ideal = new Float64Array(N0), voiced = new Uint8Array(N0), amp = new Float64Array(N0), x = new Float32Array(N0), cons = new Float64Array(N0), age = new Float64Array(N0).fill(9);
   const ns = sc.notes, cont = (a: N, b: N): boolean => Math.abs(a.t1 - b.t0) < 1e-6;
   for (const n of ns) { const s = Math.round(n.t0 * SR), e = Math.round(n.t1 * SR); for (let t = s; t < e; t++) { midi[t] = n.midi; ideal[t] = Math.round(n.midi); voiced[t] = 1; } }
   for (let i = 0; i + 1 < ns.length; i++) if (cont(ns[i], ns[i + 1])) {
     const c = Math.round(ns[i].t1 * SR), h = Math.round(sc.glide / 2 * SR);
     for (let k = -h; k < h; k++) { const u = (k + h) / (2 * h), s = u * u * (3 - 2 * u); midi[c + k] = ns[i].midi + (ns[i + 1].midi - ns[i].midi) * s; }
   }
+  if (sc.cons) for (let i = 0; i + 1 < ns.length; i++) { const a = Math.round(ns[i].t1 * SR), b = Math.round(ns[i + 1].t0 * SR); if (b > a && (b - a) / SR < 0.15) for (let t = a; t < b; t++) cons[t] = sc.cons * Math.sin(Math.PI * (t - a) / (b - a)); }
   let chain = 0;
   for (let i = 0; i < ns.length; i++) {
     if (i > 0 && !cont(ns[i - 1], ns[i])) chain = i;
@@ -37,18 +38,21 @@ function synth(sc: Sc): { x: Float32Array; ideal: Float64Array; voiced: Uint8Arr
       const tt = t / SR - c0, ts = (t - s) / SR, te = (e - t) / SR;
       midi[t] += (sc.vibC / 100) * Math.sin(2 * Math.PI * sc.vibHz * tt) * Math.min(1, tt / 0.25) + (sc.drift / 100) * Math.sin(2 * Math.PI * 0.9 * tt + 1);
       if (startsNew && sc.scoop && ts < sc.scoopMs / 1000) { const u = ts / (sc.scoopMs / 1000); midi[t] += -sc.scoop * (1 - u * u * (3 - 2 * u)); }
+      if (startsNew && sc.ovs && ts < (sc.ovsMs ?? 40) / 1000) { const u = ts / ((sc.ovsMs ?? 40) / 1000); midi[t] += sc.ovs * (1 - u) * (1 - u); }
       if (endsHere && sc.fall && te < sc.fallMs / 1000) { const u = te / (sc.fallMs / 1000); midi[t] += -sc.fall * (1 - u * u * (3 - 2 * u)); }
-      let v = 1; if (startsNew && ts < 0.015) v = ts / 0.015; if (endsHere && te < 0.03) v = Math.min(v, te / 0.03); amp[t] = v;
+      if (startsNew) age[t] = ts;
+      let v = 1; const rp = sc.ramp ?? 0.015; if (startsNew && ts < rp) v = (ts / rp) ** (sc.ramp ? 2 : 1); if (endsHere && te < 0.03) v = Math.min(v, te / 0.03); amp[t] = v;
     }
   }
   const r = rng(5), g = (): number => Math.sqrt(-2 * Math.log(r() + 1e-12)) * Math.cos(2 * Math.PI * r());
   let ph = 0, jt = 0, pk = 0;
   for (let t = 0; t < N0; t++) {
-    if (!voiced[t]) { x[t] = 0.003 * g(); continue; }
-    jt = 0.99 * jt + 0.0003 * g(); const f = hz(midi[t]) * (1 + jt); ph += 2 * Math.PI * f / SR;
+    if (!voiced[t]) { x[t] = (0.003 + cons[t]) * g(); continue; }
+    // awal kata kasar: jitter + napas (creaky / konsonan bersuara)
+    jt = 0.99 * jt + 0.0003 * g(); const onz = sc.onsetNoise && age[t] < 0.04 ? sc.onsetNoise * (1 - age[t] / 0.04) : 0; if (onz) jt = 0.9 * jt + 0.004 * onz * g(); const f = hz(midi[t]) * (1 + jt); ph += 2 * Math.PI * f / SR;
     let v = 0; const K = Math.floor(0.45 * SR / f);
     for (let k = 1; k <= K; k++) v += Math.sin(k * ph) * k ** -1.1 * (1 + 2 * Math.exp(-(((k * f - 800) / 350) ** 2)));
-    x[t] = (v + (sc.breath ?? 0.03) * g()) * amp[t]; pk = Math.max(pk, Math.abs(x[t]));
+    x[t] = (v + ((sc.breath ?? 0.03) + 1.5 * onz) * g()) * amp[t]; pk = Math.max(pk, Math.abs(x[t]));
   }
   for (let t = 0; t < N0; t++) x[t] *= 0.5 / pk;
   return { x, ideal, voiced };
@@ -70,11 +74,19 @@ function measure(y: Float32Array, t: number, hzExp: number): number | null {
 const sc1: N[] = [{ t0: 0.2, t1: 0.9, midi: 60.3 }, { t0: 1.1, t1: 1.8, midi: 63.7 }, { t0: 2.0, t1: 2.7, midi: 65.25 }];
 const sc2: N[] = [{ t0: 0.2, t1: 0.7, midi: 57.4 }, { t0: 0.7, t1: 1.2, midi: 61.8 }, { t0: 1.2, t1: 1.7, midi: 64.25 }, { t0: 1.7, t1: 2.3, midi: 60.3 }, { t0: 2.3, t1: 2.8, midi: 58.75 }];
 const sc3: N[] = [{ t0: 0.2, t1: 0.65, midi: 62.25 }, { t0: 0.65, t1: 1.1, midi: 65.2 }, { t0: 1.3, t1: 2.3, midi: 67.3 }, { t0: 2.5, t1: 2.9, midi: 64.2 }];
+const words: N[] = [{ t0: 0.2, t1: 0.65, midi: 62.3 }, { t0: 0.73, t1: 1.2, midi: 62.3 }, { t0: 1.3, t1: 1.9, midi: 64.2 }, { t0: 1.97, t1: 2.45, midi: 60.8 }, { t0: 2.5, t1: 3.0, midi: 60.8 }];
 const scenarios: Sc[] = [
   { name: 'scoop+jatuh', notes: sc1, glide: 0.06, scoop: 1.8, scoopMs: 130, fall: 1.2, fallMs: 140, vibHz: 5.5, vibC: 35, drift: 12 },
   { name: 'scoop lebar 3st', notes: sc1, glide: 0.06, scoop: 3.0, scoopMs: 180, fall: 2.0, fallMs: 200, vibHz: 5.2, vibC: 30, drift: 15 },
   { name: 'legato 150ms', notes: sc2, glide: 0.15, scoop: 0, scoopMs: 0, fall: 0, fallMs: 0, vibHz: 5.5, vibC: 30, drift: 10 },
   { name: 'legato+scoop+jatuh', notes: sc2, glide: 0.12, scoop: 1.5, scoopMs: 120, fall: 1.5, fallMs: 150, vibHz: 5, vibC: 40, drift: 12 },
+  { name: 'kata: lonjakan 2st', notes: words, glide: 0.06, scoop: 0, scoopMs: 0, fall: 0.8, fallMs: 80, vibHz: 5.5, vibC: 30, drift: 10, ovs: 2.0, ovsMs: 45, cons: 0.5 },
+  { name: 'kata: scoop+konsonan', notes: words, glide: 0.06, scoop: 1.5, scoopMs: 60, fall: 0.8, fallMs: 80, vibHz: 5.5, vibC: 30, drift: 10, cons: 0.7 },
+  { name: 'kata: lonjakan 3st', notes: words, glide: 0.06, scoop: 0, scoopMs: 0, fall: 1.5, fallMs: 100, vibHz: 5, vibC: 35, drift: 12, ovs: 3.0, ovsMs: 60, cons: 0.6, breath: 0.08 },
+  { name: 'kata: onset kasar', notes: words, glide: 0.06, scoop: 0, scoopMs: 0, fall: 1.0, fallMs: 90, vibHz: 5.5, vibC: 30, drift: 10, ovs: 2.5, ovsMs: 50, cons: 0.6, onsetNoise: 1 },
+  { name: 'kata: onset kasar 2', notes: words, glide: 0.06, scoop: 1.2, scoopMs: 50, fall: 1.0, fallMs: 90, vibHz: 5, vibC: 35, drift: 12, ovs: 1.5, ovsMs: 40, cons: 0.8, onsetNoise: 2, breath: 0.06 },
+  { name: 'kata: onset lambat', notes: words, glide: 0.06, scoop: 0, scoopMs: 0, fall: 1.0, fallMs: 90, vibHz: 5.5, vibC: 30, drift: 10, ovs: 2.5, ovsMs: 60, cons: 0.4, ramp: 0.06 },
+  { name: 'kata: onset lambat 2', notes: words, glide: 0.06, scoop: 1.0, scoopMs: 50, fall: 1.0, fallMs: 90, vibHz: 5, vibC: 35, drift: 12, ovs: 2.0, ovsMs: 50, cons: 0.6, ramp: 0.08, onsetNoise: 1 },
   { name: 'campur', notes: sc3, glide: 0.1, scoop: 2.0, scoopMs: 150, fall: 1.0, fallMs: 120, vibHz: 6, vibC: 45, drift: 15, breath: 0.08 }
 ];
 
@@ -85,6 +97,7 @@ console.log('MPCS kelurusan (Center 100 / Variation 0 / Transition 0): ' + modPa
 console.log('skenario'.padEnd(20) + 'nada'.padEnd(7) + 'rms'.padStart(7) + 'p95'.padStart(7) + 'max'.padStart(7) + 'slide40ms'.padStart(11) + 'edge'.padStart(7) + '  (sen)');
 for (const sc of scenarios) {
   const { x, ideal, voiced } = synth(sc), r = dsp.analyze(x, SR); dsp.snapTargets(r.notes);
+  if (process.env.DBG === '3' && sc.name.startsWith(process.env.SC ?? 'zz')) { let l = ''; for (let i = 0; i < r.pt.f0.length; i++) { const t = i * r.pt.hop / SR; if (t > 0.55 && t < 0.95) l += (t.toFixed(3) + ':' + (r.pt.f0[i] ? (69 + 12 * Math.log2(r.pt.f0[i] / 440)).toFixed(2) : '0') + ' '); } console.log(l); }
   if (process.env.DBG === '2') console.log('  ' + sc.name + ' nada: ' + r.notes.map((n: any) => (n.s * r.pt.hop / SR).toFixed(2) + '-' + (n.e * r.pt.hop / SR).toFixed(2) + ' m' + n.midi.toFixed(2) + '>' + n.target).join(' | '));
   const y: Float32Array = dsp.render(x, r.pt, r.notes, 12, 45, CTL), N0 = x.length, step = Math.round(0.005 * SR);
   // awal / akhir rangkaian bernada + awal / akhir tiap nada (untuk metrik edge)

@@ -259,7 +259,37 @@ export function analyze(x: Float32Array, sr: number, onProgress?: (p: number) =>
   }
 
   const pt: PitchTrack = { sr, hop, f0, rms, env };
-  return { pt, notes: segment(pt) };
+  const notes = segment(pt);
+  extendEdges(x, pt, notes);
+  return { pt, notes };
+}
+
+// ---------- perpanjang tepi nada ke bagian bersuara yang belum terlacak ----------
+// Di awal kata (konsonan bersuara, suara serak) dan di ujung nada (rilis), tracker baru "menyala" beberapa frame setelah sinyal sebenarnya sudah periodik. Frame itu
+// berada di luar nada sehingga audio aslinya lewat TANPA koreksi, termasuk lonjakan pitch awal kata, lalu di-crossfade ke bagian terkoreksi: itu yang terdengar
+// sebagai lonjakan kencang di pergantian kata. Di sini tepi nada digeser sampai ~35 ms ke frame yang masih periodik (autokorelasi di periode nada > 0.7) dan cukup keras.
+// Frame konsonan (gesek / letup, tidak periodik) tidak lolos uji ini sehingga tidak ikut dikoreksi.
+function extendEdges(x: Float32Array, pt: PitchTrack, notes: Note[]): void {
+  const { sr, hop, f0, rms } = pt, frames = f0.length, MAXEXT = Math.max(2, Math.round(0.035 * sr / hop));
+  const periodic = (k: number, hzN: number, ref: number): boolean => {
+    if (k < 0 || k >= frames || f0[k] > 0 || rms[k] < 0.12 * ref) return false;
+    const T = sr / hzN, W = Math.max(Math.round(2 * T), 96), c = Math.round(k * hop), a = c - (W >> 1);
+    if (a < 0 || a + W + Math.ceil(T * 1.04) + 2 >= x.length) return false;
+    let best = 0;
+    for (let lag = Math.floor(T * 0.97); lag <= Math.ceil(T * 1.03); lag++) {
+      let sc = 0, e0 = 0, e1 = 0;
+      for (let i = 0; i < W; i++) { const p = x[a + i], q = x[a + i + lag]; sc += p * q; e0 += p * p; e1 += q * q; }
+      best = Math.max(best, sc / Math.sqrt(e0 * e1 + 1e-12));
+    }
+    return best > 0.7;
+  };
+  const order = notes.slice().sort((p, q) => p.s - q.s);
+  for (let i = 0; i < order.length; i++) {
+    const nt = order[i], hzN = hzOf(nt.midi), prevE = i > 0 ? order[i - 1].e : 0, nextS = i + 1 < order.length ? order[i + 1].s : frames;
+    let ref = 0; for (let u = nt.s; u < nt.e; u++) ref = Math.max(ref, rms[u]);
+    for (let n = 0; n < MAXEXT && nt.s - 1 >= prevE && periodic(nt.s - 1, hzN, ref); n++) nt.s--;
+    for (let n = 0; n < MAXEXT && nt.e < nextS && periodic(nt.e, hzN, ref); n++) nt.e++;
+  }
 }
 
 // ---------- segmentasi: bagian bernada -> daftar nada ----------
@@ -400,7 +430,8 @@ export function segment(pt: PitchTrack): Note[] {
   };
   const ornOk = (frag: Note[], N: Note, sgn: number): boolean => frag.every(f => Math.abs(f.midi - N.midi) <= (frag.length > 1 ? 4.2 : 2.2)) ||
     (frag.length === 1 && Math.abs(frag[0].midi - N.midi) <= 3.4 && sweep(frag[0]) * sgn >= 0.6);   // sgn = +1 kalau menuju N naik (scoop), -1 kalau turun (jatuhan)
-  const isLong = (nt: Note): boolean => nt.e - nt.s > SHORT;
+  const LONGMIN = Math.max(SHORT + 1, Math.round(0.13 * pt.sr / pt.hop));   // nada >= ~130 ms dianggap nada sungguhan; potongan yang lebih pendek + menyapu = luncuran / ornamen awal kata
+  const isLong = (nt: Note): boolean => nt.e - nt.s >= LONGMIN;
   for (let guard = 0, changed = true; changed && guard < 200; guard++) {
     changed = false;
     // (1) luncuran antara dua nada panjang
@@ -419,6 +450,17 @@ export function segment(pt: PitchTrack): Note[] {
       for (let u = frag[0].s; u < frag[frag.length - 1].e; u++) if (mid[u] > 0 && (mid[u] - cut) * dir >= 0) { bnd = u; break; }
       if (bnd < 0) bnd = Math.round((frag[0].s + frag[frag.length - 1].e) / 2);
       A.e = bnd; B.s = bnd; notes.splice(k + 1, j - k - 1); changed = true;
+    }
+    if (changed) continue;
+    // (1b) lembah / tonjolan antara dua nada panjang yang pitch-nya SAMA: biasanya jembatan di jeda konsonan antar kata (tracker menambal celah dengan
+    //      pitch yang turun lalu naik lagi). Potongan itu bukan nada: dibagi dua ke nada kiri dan kanan, jadi sambungan antar kata tetap lurus.
+    for (let k = 0; k < notes.length && !changed; k++) {
+      const A = notes[k]; if (!isLong(A)) continue;
+      let j = k + 1; while (j < notes.length && !isLong(notes[j]) && near(notes[j - 1], notes[j])) j++;
+      if (j === k + 1 || j >= notes.length || !near(notes[j - 1], notes[j])) continue;
+      const B = notes[j], frag = notes.slice(k + 1, j), a = frag[0].s, b = frag[frag.length - 1].e;
+      if (b - a > CHAINMAX || Math.abs(B.midi - A.midi) >= 0.6 || !frag.every(f => Math.abs(f.midi - A.midi) <= 3.4)) continue;
+      const mdp = Math.round((a + b) / 2); A.e = mdp; B.s = mdp; notes.splice(k + 1, j - k - 1); changed = true;
     }
     if (changed) continue;
     // (2a) scoop di awal rangkaian: potongan pendek menanjak ke nada panjang
@@ -548,7 +590,7 @@ function slowPart(dev: Float64Array, fps: number): Float64Array {
 
 // kurva geseran (semiton) satu kelompok nada bersambung: bagian tetap per nada (dihaluskan di zona transisi) + koreksi drift / vibrato per nada.
 // Dipakai BERSAMA oleh render() dan tampilan (shiftCurve) supaya garis yang digambar = yang terdengar.
-function groupShift(g: Note[], f0: Float32Array, hop: number, sr: number, R: Ctl): { gs: number; sh: Float64Array } | null {
+function groupShift(g: Note[], f0: Float32Array, hop: number, sr: number, R: Ctl): { gs: number; sh: Float64Array; ab: Float64Array; aw: Float64Array } | null {
   const gs = g[0].s, ge = g[g.length - 1].e, L = ge - gs, fps = sr / hop;
   if (L < 2) return null;
   const Z = Math.max(1, Math.round(R.transMs / 1000 * sr / hop)) | 1, zh = (Z - 1) / 2;   // lebar zona transisi (frame, ganjil)
@@ -593,7 +635,14 @@ function groupShift(g: Note[], f0: Float32Array, hop: number, sr: number, R: Ctl
     // yaitu selisih antara pusat nada yang dihaluskan dan yang tajam (rho = 1 -> suku ini nol, hasil sama seperti sebelumnya)
     if (jw && jw[f] > 0 && has[f]) sh[f] += jw[f] * (1 - rhoF[f]) * (smooth(mstep, f) - mstep[f]);
   }
-  return { gs, sh };
+  // Nada yang variasinya dimatikan total (drift = vibrato = 0) punya pitch hasil yang SUDAH diketahui tanpa tracker: pusat nada (yang dihaluskan di zona transisi).
+  // Memakai pitch absolut ini (loop terbuka) menggantikan "f0 tracker dikurangi deviasi tracker" (loop tertutup): di awal kata, frame bergelap-konsonan, frame
+  // tanpa pitch yang ditambal interpolasi, atau saat deviasi terpotong batas +-5 semiton, kesalahan tracker tidak lagi ikut terbawa jadi lonjakan.
+  const ab = new Float64Array(L), aw = new Float64Array(L);
+  for (const nt of g) { if ((nt.drift ?? 1) * R.variation === 0 && (nt.vib ?? 1) * R.variation === 0) for (let f = nt.s; f < nt.e; f++) aw[f - gs] = 1; }
+  for (let f = 1; f < L; f++) if (!has[f]) aw[f] = aw[f - 1];
+  for (let f = 0; f < L; f++) if (aw[f]) ab[f] = smooth(step, f) + mstep[f] + (jw && jw[f] > 0 ? jw[f] * (1 - rhoF[f]) * (smooth(mstep, f) - mstep[f]) : 0);
+  return { gs, sh, ab, aw };
 }
 
 // nada yang bersambung (celah <= 3 frame) dirender sebagai satu rangkaian supaya geseran bisa berubah mulus di perbatasan
@@ -606,7 +655,7 @@ function groupNotes(notes: Note[]): Note[][] {
 // geseran (semiton) per frame pitch-track, persis seperti yang dipakai render(): pitch hasil di frame f = midi(f0[f]) + hasil[f]. Untuk menggambar garis hasil.
 export function shiftCurve(pt: PitchTrack, notes: Note[], transMs = 45, ctl?: Partial<Controls>): Float32Array {
   const out = new Float32Array(pt.f0.length), R = resolveCtl(ctl, transMs);
-  for (const g of groupNotes(notes)) { const r = groupShift(g, pt.f0, pt.hop, pt.sr, R); if (r) for (let f = 0; f < r.sh.length; f++) out[r.gs + f] = r.sh[f]; }
+  for (const g of groupNotes(notes)) { const r = groupShift(g, pt.f0, pt.hop, pt.sr, R); if (r) for (let f = 0; f < r.sh.length; f++) { const h = pt.f0[r.gs + f]; out[r.gs + f] = h > 0 && r.aw[f] > 0 ? (1 - r.aw[f]) * r.sh[f] + r.aw[f] * (r.ab[f] - midiOf(h)) : r.sh[f]; } }
   return out;
 }
 
@@ -621,9 +670,7 @@ export function render(x: Float32Array, pt: PitchTrack, notes: Note[], fadeMs = 
     // 1) kurva geseran (dibagi dengan tampilan lewat groupShift)
     const gsh = groupShift(g, f0, hop, sr, R);
     if (!gsh) continue;
-    const sh = gsh.sh;
-    let peak = 0; for (let f = 0; f < L; f++) peak = Math.max(peak, Math.abs(sh[f]));
-    if (peak < 0.005) continue;
+    const sh = gsh.sh, ab = gsh.ab, aw = gsh.aw;
 
     // 2) f0 di grup: frame tanpa pitch diisi interpolasi (log) supaya F(t) selalu ada
     const fg = new Float64Array(L); let any = false;
@@ -636,11 +683,13 @@ export function render(x: Float32Array, pt: PitchTrack, notes: Note[], fadeMs = 
       if (p >= 0 && q < L) fg[f] = Math.exp(Math.log(fg[p]) + (Math.log(fg[q]) - Math.log(fg[p])) * (f - p) / (q - p));
       else fg[f] = p >= 0 ? fg[p] : fg[q];
     }
+    let peak = 0; for (let f = 0; f < L; f++) peak = Math.max(peak, Math.abs(aw[f] > 0 ? (1 - aw[f]) * sh[f] + aw[f] * (ab[f] - midiOf(fg[f])) : sh[f]));
+    if (peak < 0.005) continue;
     const at = (arr: Float64Array, t: number): number => {
       const fp = Math.min(L - 1, Math.max(0, t / hop - gs)), i0 = Math.floor(fp), i1 = Math.min(L - 1, i0 + 1);
       return arr[i0] + (arr[i1] - arr[i0]) * (fp - i0);
     };
-    const F = (t: number): number => at(fg, t), S = (t: number): number => at(sh, t);
+    const F = (t: number): number => at(fg, t), S = (t: number): number => at(sh, t), AW = (t: number): number => at(aw, t), AB = (t: number): number => at(ab, t);
 
     const Ls = Math.round((gs - 0.5) * hop), Le = Math.round((ge - 0.5) * hop);
     const a = Math.max(0, Ls - hf), b = Math.min(n, Le + hf);
@@ -654,7 +703,7 @@ export function render(x: Float32Array, pt: PitchTrack, notes: Note[], fadeMs = 
     let ts = a, k = 0;
     while (ts < b) {
       while (k + 1 < marks.length && Math.abs(marks[k + 1] - ts) <= Math.abs(marks[k] - ts)) k++;
-      const mk = marks[k], Ta = sr / F(mk), Ts = sr / (F(ts) * 2 ** (S(ts) / 12)), half = Math.max(2, Math.round(Ta)), gain = Ts / Ta;
+      const mk = marks[k], Ta = sr / F(mk), Ts = sr / hzOf((1 - AW(ts)) * (midiOf(F(ts)) + S(ts)) + AW(ts) * AB(ts)), half = Math.max(2, Math.round(Ta)), gain = Ts / Ta;
       const c = Math.floor(ts), fr = ts - c;
       for (let j = -half; j <= half + 1; j++) {
         const idx = c + j - a; if (idx < 0 || idx >= y.length) continue;
