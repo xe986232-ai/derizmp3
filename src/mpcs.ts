@@ -12,7 +12,8 @@ const ICON = {
   up: svg('<path d="M12 16V5M7 10l5-5 5 5M5 19h14"/>', 16),
   play: svg('<path d="M8 5l12 7-12 7z" fill="currentColor" stroke="none"/>', 22),
   pause: svg('<rect x="6" y="5" width="4.5" height="14" rx="1.2" fill="currentColor" stroke="none"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2" fill="currentColor" stroke="none"/>', 22),
-  close: svg('<path d="M6 6l12 12M18 6L6 18"/>', 12)
+  close: svg('<path d="M6 6l12 12M18 6L6 18"/>', 12),
+  all: svg('<rect x="4" y="4" width="16" height="16" rx="2.5" stroke-dasharray="3.2 3"/><path d="M8.5 12.2l2.4 2.4 4.6-5"/>', 16)
 };
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const BLACK = new Set([1, 3, 6, 8, 10]);
@@ -115,6 +116,7 @@ function build(): void {
       '</div>' +
       '<div class="mpcs__bar">' +
         `<button type="button" class="mpcs__up" data-a="up">${ICON.up}<span>Upload audio</span></button>` +
+        `<button type="button" class="mpcs__up mpcs__all" data-a="all" aria-pressed="false" title="Pilih semua nada, lalu ketuk satu tuts piano di kiri untuk meratakan semuanya ke nada itu" disabled>${ICON.all}<span>Select all</span></button>` +
         `<div class="mpcs__knobs">${KNOB_KEYS.map(knobHtml).join('')}</div>` +
         `<button type="button" class="mpcs__play" data-a="play" aria-label="Putar" disabled>${ICON.play}</button>` +
       '</div>' +
@@ -174,7 +176,7 @@ function build(): void {
     });
   });
 
-  let S: Session | null = null, sel = -1, pps = 100, W = 0, H = 0, viewH = 0, rowH = 12, dpr = 1;
+  let S: Session | null = null, sel = -1, all = false, pps = 100, W = 0, H = 0, viewH = 0, rowH = 12, dpr = 1;
   let ac: AudioContext | null = null, src: AudioBufferSourceNode | null = null, playing = false, playPos = 0, t0 = 0, raf = 0, mode: 'out' | 'orig' = 'out';
   let dirty = false, rendering = false, ver = 0, worker: Worker | null = null, jobId = 0;
   const jobs = new Map<number, { ok: (m: any) => void; fail: (e: Error) => void }>();   // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -220,12 +222,12 @@ function build(): void {
   function drawKeys(): void {
     gk.setTransform(dpr, 0, 0, dpr, 0, 0); gk.clearRect(0, 0, 44, viewH);
     if (!S) return;
-    const off = scroll.scrollTop;
+    const off = scroll.scrollTop, hl = flatAt();   // hl: tuts tempat semua nada sedang diratakan (menyala)
     for (let m = S.lo; m <= S.hi; m++) {
-      const y = (S.hi - m) * rowH - off, pc = ((m % 12) + 12) % 12;
+      const y = (S.hi - m) * rowH - off, pc = ((m % 12) + 12) % 12, lit = m === hl;
       if (y > viewH || y + rowH < 0) continue;
-      gk.fillStyle = BLACK.has(pc) ? '#111118' : '#d9d9e4'; gk.fillRect(0, y, 44, rowH);
-      if (rowH >= 13 || pc === 0) { gk.fillStyle = BLACK.has(pc) ? '#8a8a9a' : '#33333f'; gk.font = '600 9px system-ui,sans-serif'; gk.textBaseline = 'middle'; gk.fillText(noteName(m), 6, y + rowH / 2); }
+      gk.fillStyle = lit ? '#ff5c9e' : BLACK.has(pc) ? '#111118' : '#d9d9e4'; gk.fillRect(0, y, 44, rowH);
+      if (rowH >= 13 || pc === 0 || lit) { gk.fillStyle = lit ? '#fff' : BLACK.has(pc) ? '#8a8a9a' : '#33333f'; gk.font = '600 9px system-ui,sans-serif'; gk.textBaseline = 'middle'; gk.fillText(noteName(m), 6, y + rowH / 2); }
     }
   }
 
@@ -290,7 +292,7 @@ function build(): void {
     // nada
     notes.forEach((nt, i) => {
       const x0 = xOf((nt.s - .5) * hopSec), x1 = xOf((nt.e - .5) * hopSec), yc = yOf(nt.target);
-      const on = i === sel;
+      const on = i === sel || all;
       if (on) {   // tanpa card pink: hanya garis putih tipis penanda nada terpilih
         g.strokeStyle = '#fff'; g.lineWidth = 1.5;
         g.beginPath(); g.roundRect(x0, yc - rowH * .5, Math.max(4, x1 - x0), rowH, Math.min(5, rowH / 2)); g.stroke();
@@ -330,13 +332,34 @@ function build(): void {
   }
 
   // ---------- status ----------
+  // Select all: semua nada terpilih; ketuk satu tuts piano di kiri = semua nada diratakan lurus ke tuts itu (diperlakukan seperti nada atur-tangan: koreksi penuh)
+  function flatAt(): number {
+    if (!all || !S || !S.notes.length) return NaN;
+    const t = S.notes[0].target; return S.notes.every(n => n.man && n.target === t) ? t : NaN;
+  }
+  function paintAll(): void { const b = btn('all'); b.classList.toggle('is-on', all); b.setAttribute('aria-pressed', String(all)); }
+  function setAll(on: boolean): void {
+    all = on && !!S && S.notes.length > 0; if (all) sel = -1;
+    paintAll(); draw(); info();
+  }
+  keys.addEventListener('pointerdown', e => {
+    if (!S || !all) return;
+    e.preventDefault();
+    const r = keys.getBoundingClientRect(), m = S.hi - Math.floor((e.clientY - r.top + scroll.scrollTop) / rowH), t = Math.max(S.lo, Math.min(S.hi, m));
+    let ch = false;
+    for (const n of S.notes) if (n.target !== t || !n.man) { n.target = t; n.man = true; ch = true; }
+    if (ch) edit(); else draw();
+    info();
+  });
+
   function info(): void {
     if (!S) { stat.textContent = ''; return; }
+    if (all) { const t = flatAt(); stat.textContent = t === t ? 'Semua nada rata di ' + noteName(t) : 'Semua nada terpilih: ketuk tuts piano'; return; }
     if (sel >= 0) { const n = S.notes[sel], eff = (n.man ? 1 : kv.center) * (n.target - n.midi); stat.textContent = noteName(n.midi) + (Math.round((n.midi - Math.round(n.midi)) * 100) ? ' ' + fmtShift(n.midi - Math.round(n.midi)) : '') + ' → ' + noteName(n.target) + '  (' + fmtShift(eff) + (n.man ? ', manual' : '') + ')'; }
     else stat.textContent = S.notes.length ? S.notes.length + ' nada terdeteksi' : 'Tidak ada nada terdeteksi';
   }
   function enable(on: boolean): void {
-    btn('play').disabled = !on; win.classList.toggle('is-off', !on);
+    btn('play').disabled = !on; btn('all').disabled = !on; win.classList.toggle('is-off', !on);
     KNOB_KEYS.forEach(k => { knobEl[k].closest('.mpcs__knob')!.classList.toggle('is-off', !on); });
   }
   function setBusy(on: boolean): void { busy.hidden = !on; }
@@ -361,7 +384,7 @@ function build(): void {
       }
       const sorted = Array.from(pt.rms).sort((a, b) => a - b);
       S = { name: f.name.replace(/\.[^.]+$/, ''), sr: buf.sampleRate, dur: buf.duration, pt, notes, orig: buf, out: null, lo, hi, ref: sorted[Math.floor(sorted.length * .95)] || 0.1, pk: buildPeaks(buf) };
-      sel = -1; dirty = true; playPos = 0; ph.style.transform = 'translateX(0)';
+      sel = -1; all = false; paintAll(); dirty = true; playPos = 0; ph.style.transform = 'translateX(0)';
       pps = Math.max(40, Math.min(400, scroll.clientWidth / Math.max(1, buf.duration)));
       scroll.scrollLeft = 0; layout(); info(); enable(true);
       if (notes.length) { const mt = notes.reduce((a, n) => a + n.target, 0) / notes.length; scroll.scrollTop = Math.max(0, yOf(mt) - viewH / 2); drawKeys(); drawOv(); } else scroll.scrollTop = 0;
@@ -433,6 +456,7 @@ function build(): void {
     if (!S) return;
     const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, i = hit(x, y);
     if (i < 0) { pan = { x0: e.clientX, y0: e.clientY, sl: scroll.scrollLeft, st: scroll.scrollTop, px: x, moved: false, id: e.pointerId, mouse: e.pointerType === 'mouse' }; cv.setPointerCapture(e.pointerId); return; }
+    if (all) { all = false; paintAll(); }   // ketuk satu nada = kembali ke pilihan tunggal
     sel = i; drag = { i, y0: e.clientY, base: Math.round(S.notes[i].target), moved: false, id: e.pointerId };
     cv.setPointerCapture(e.pointerId); draw(); info();
   });
@@ -454,7 +478,7 @@ function build(): void {
     if (drag && e.pointerId === drag.id) drag = null;
     if (pan && e.pointerId === pan.id) {
       const p = pan; pan = null;
-      if (!p.moved && e.type === 'pointerup' && S) { sel = -1; playPos = Math.max(0, Math.min(S.dur, p.px / pps)); moveHead(playPos); if (playing) restartPlay(); draw(); info(); }   // ketuk kosong = pindah playhead
+      if (!p.moved && e.type === 'pointerup' && S) { sel = -1; if (all) { all = false; paintAll(); } playPos = Math.max(0, Math.min(S.dur, p.px / pps)); moveHead(playPos); if (playing) restartPlay(); draw(); info(); }   // ketuk kosong = pindah playhead
     }
   };
   cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
@@ -462,7 +486,7 @@ function build(): void {
   // ---------- tombol ----------
   el.addEventListener('click', e => {
     const b = (e.target as Element).closest<HTMLButtonElement>('.mpcs__bar button'); if (!b || b.disabled) return;
-    if (b.dataset.a === 'up') file.click(); else if (b.dataset.a === 'play') { if (playing) stopPlay(); else void startPlay(); }
+    if (b.dataset.a === 'up') file.click(); else if (b.dataset.a === 'all') setAll(!all); else if (b.dataset.a === 'play') { if (playing) stopPlay(); else void startPlay(); }
   });
   empty.querySelector('button')!.addEventListener('click', () => file.click());
   file.addEventListener('change', () => { const f = file.files?.[0]; file.value = ''; if (f) void load(f); });
