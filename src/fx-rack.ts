@@ -6,14 +6,14 @@
 // Efek / plugin baru cukup ditambah ke EFFECTS (nama, parameter) dan ke applyAudio().
 // DERIZ: plugin sampler dengan canvas audio (spektrogram, zoom) + upload file; nada (tuts + Pitch) dan kecepatan (Speed) terpisah (deriz-synth.ts).
 
-import { setReverb, setEq, setFilter, reverbSeconds, eqDb, filterMode, filterHz, decodeStandalone, trackInput } from './audio-engine';
+import { setReverb, setEq, setFilter, setDeesser, reverbSeconds, eqDb, filterMode, filterHz, deesserHz, deesserThr, deesserMaxDb, decodeStandalone, trackInput } from './audio-engine';
 import { DerizSynth } from './deriz-synth';
 import { isAudio, ACCEPT as AUDIO_ACCEPT } from './audio-upload-card';
 import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } from './synth-engine';
 import { velGain } from './velocity';
 import { getMasterPitch, onMasterPitch } from './master-pitch';
 
-type FxType = 'reverb' | 'eq' | 'filter' | 'supersaw' | 'deriz';
+type FxType = 'reverb' | 'eq' | 'filter' | 'deesser' | 'supersaw' | 'deriz';
 // DERIZ: audio yang di-upload ke canvas plugin (buffer disimpan untuk tahap berikutnya; peaks + max khusus untuk menggambar waveform)
 interface DerizData { name: string; dur: number; buf: AudioBuffer; start: number; zoom: number; view: number; spec: Spec | null; busy?: number; }   // start: posisi garis start, 0..1 dari durasi; zoom >= 1: jendela terlihat = [view, view + 1/zoom] dari durasi; spec: spektrogram (null selagi dianalisis, busy = persen)
 // Spektrogram: frames x ROWS nilai dB (0..255 = -100..0 dBFS), baris 0 = frekuensi terendah (skala log); lut = palet warna yang disesuaikan dengan level puncak
@@ -62,6 +62,14 @@ const EFFECTS: EffectDef[] = [
       { key: 'reso', label: 'Reso', def: 0, fmt: pct }
     ]
   },
+  {
+    type: 'deesser', name: 'De-esser',
+    params: [
+      { key: 'freq', label: 'Freq', hint: 'Freq (batas bawah daerah desis)', def: 0.58, fmt: v => fmtHz(deesserHz(v)) },
+      { key: 'thresh', label: 'Thresh', hint: 'Thresh (desis di atas level ini diredam)', def: 0.56, fmt: v => Math.round(deesserThr(v)) + ' dB' },
+      { key: 'amount', label: 'Amount', hint: 'Amount (peredaman maksimum)', def: 0.5, fmt: v => v < 0.005 ? 'Off' : '\u2212' + Math.round(deesserMaxDb(v)) + ' dB' }
+    ]
+  },
   { type: 'deriz', name: 'DERIZ', params: [
     { key: 'speed', label: 'Speed', hint: 'Speed (kecepatan putar)', def: 0.5, bipolar: true, fmt: v => derizSpeed(v).toFixed(2) + '×' },
     { key: 'pitch', label: 'Pitch', hint: 'Pitch (nada, semitone)', def: 0.5, bipolar: true, fmt: v => { const n = derizPitch(v); return (n > 0 ? '+' : '') + n + ' st'; } },
@@ -91,10 +99,11 @@ let cur: string | null = null, seq = 0;
 
 function applyAudio(track: string): void {
   const rack = racks.get(track) ?? [];
-  const r = rack.find(f => f.type === 'reverb'), e = rack.find(f => f.type === 'eq'), fl = rack.find(f => f.type === 'filter'), s = rack.find(f => f.type === 'supersaw');
+  const r = rack.find(f => f.type === 'reverb'), e = rack.find(f => f.type === 'eq'), fl = rack.find(f => f.type === 'filter'), ds = rack.find(f => f.type === 'deesser'), s = rack.find(f => f.type === 'supersaw');
   setReverb(track, r ? { on: r.on, mix: r.v.mix, size: r.v.size } : null);
   setEq(track, e ? { on: e.on, low: e.v.low, mid: e.v.mid, high: e.v.high } : null);
   setFilter(track, fl ? { on: fl.on, cutoff: fl.v.cutoff, reso: fl.v.reso } : null);
+  setDeesser(track, ds ? { on: ds.on, freq: ds.v.freq, thresh: ds.v.thresh, amount: ds.v.amount } : null);
   setSupersaw(track, s ? { on: s.on, detune: s.v.detune, mix: s.v.mix, level: s.v.level, cutoff: s.v.cutoff, reso: s.v.reso, attack: s.v.attack, decay: s.v.decay, sustain: s.v.sustain, release: s.v.release } : null);
 }
 

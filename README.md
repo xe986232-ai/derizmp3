@@ -60,3 +60,16 @@ Tes: `node tools/mpcs-straight.ts` (sekarang termasuk skenario kata: lonjakan 2-
 Penyebab terukur: titik pitch (epoch) dipilih dari puncak gelombang + parabola, yang sering meleset ~0.5-1 sample. Meleset sekecil itu memutar fase harmonik atas antar grain TD-PSOLA, hasilnya noise antar-harmonik (serak). Perbaikan di `epochMarks()` (`src/mpcs-dsp.ts`): tiap titik diselaraskan lagi lewat korelasi bentuk gelombang satu periode dengan periode sebelumnya (geser pecahan 0.1 sample, dihaluskan parabola); kalau korelasinya lemah (< 0.5) dipakai posisi puncak seperti sebelumnya.
 Ukur: `node tools/mpcs-straight.ts` sekarang juga melaporkan HNR hasil vs referensi vokal yang pitch-nya lurus sempurna dan jarak spektrum log ke referensi. Selisih HNR turun dari 4.9 dB ke 0.9 dB, jarak spektrum dari 11.9 ke 9.0 dB. Tes regresi: HNR rata-rata `mpcs-eval-hard` 20.0 -> 22.6 dB, `mpcs-eval` 21.7 -> 24.7 dB; akurasi pitch tidak turun.
 Dicoba dan tidak membantu (tidak dipakai): normalisasi overlap-add dengan jumlah bobot jendela, dan grain lebih lebar.
+
+## De-esser (efek track)
+Pereda desis "S" untuk vokal (audio clip, DERIZ, dll.). Tambah lewat panel efek track: tombol + lalu **De-esser**. Selalu berada paling awal di jalur efek track (sebelum EQ / Filter / Reverb).
+
+| Knob | Bawaan | Fungsi |
+|---|---|---|
+| **Freq** | 6,7 kHz | Batas bawah daerah desis (3-12 kHz). Sinyal dibelah di sini (crossover LR4); hanya bagian di atasnya yang bisa diredam, bagian bawah tidak disentuh. Vokal cowok biasanya 5-7 kHz, cewek 6-9 kHz. |
+| **Thresh** | -32 dB | Desis di atas level ini mulai diredam (-60 sampai -10 dB). Makin kecil = makin sering bekerja. Kalau "S" tetap nusuk, turunkan; kalau huruf lain ikut redup, naikkan. |
+| **Amount** | -10 dB | Peredaman maksimum (0-20 dB). 0 = mati. |
+
+Cara kerja: level band di atas Freq dibaca detektor (attack 0,4 ms, release 30 ms), dikompres 10:1 dengan soft knee 6 dB, dibatasi Amount, lalu gain yang sama dipakai ke kiri dan kanan. Tanpa lookahead (tidak ada latensi tambahan). Saat tidak ada desis, suara sama persis dengan aslinya (magnitudo datar).
+
+Kode: `src/deesser.ts` (worklet), `src/audio-engine.ts` (`setDeesser`, jalur efek), `src/fx-rack.ts` (kartu + knob). Tes: `node tools/deesser-test.ts`.

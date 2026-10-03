@@ -1,6 +1,8 @@
 // Mesin audio clip: decode file, simpan buffer, gambar waveform sederhana, dan putar sesuai posisi playhead.
 // Satu clip di timeline = elemen .pattern dengan data-clip (id buffer) dan data-off (offset dalam detik).
 
+import { deesserLoaded, loadDeesser, createDeesser } from './deesser';
+
 interface Entry { buf: AudioBuffer; peaks?: Float32Array; chPeaks?: Float32Array[]; max: number; }
 const buffers = new Map<number, Entry>();
 let seq = 0;
@@ -227,8 +229,14 @@ export const filterHz = (cutoff: number): number => {
 export const filterQ = (reso: number): number => 0.707 + clamp01(reso) * 11.3;   // 0.707 (datar) .. 12 (resonansi tajam)
 export const EQ_RANGE_DB = 12;   // knob penuh = ±12 dB
 export const eqDb = (v: number): number => (Math.max(0, Math.min(1, v)) - 0.5) * 2 * EQ_RANGE_DB;
+// De-esser: pereda desis "S" (worklet, lihat deesser.ts). Selalu di awal jalur efek, sebelum EQ / Filter / Reverb, supaya desis tidak ikut diperkeras atau dipantulkan reverb.
+export interface DeesserParams { on: boolean; freq: number; thresh: number; amount: number }   // semua 0..1
+const deessers = new Map<string, DeesserParams>();
+export const deesserHz = (v: number): number => 3000 * Math.pow(4, clamp01(v));          // 3 kHz .. 12 kHz (log)
+export const deesserThr = (v: number): number => -60 + clamp01(v) * 50;                  // -60 .. -10 dB
+export const deesserMaxDb = (v: number): number => clamp01(v) * 20;                      // reduksi maksimum 0 .. 20 dB
 interface Chain {
-  ctx: BaseAudioContext; topo: string;
+  ctx: BaseAudioContext; topo: string; ds: AudioWorkletNode | null;
   low: BiquadFilterNode; mid: BiquadFilterNode; high: BiquadFilterNode;
   lp: BiquadFilterNode; hp: BiquadFilterNode;
   dry: GainNode; wet: GainNode; conv: ConvolverNode; decay: number;
@@ -258,13 +266,16 @@ function makeImpulse(ctx: BaseAudioContext, seconds: number): AudioBuffer {
 }
 
 function syncFx(track: string): void {
-  const g = gains.get(track), dest = dests.get(track), rv = reverbs.get(track), eq = eqs.get(track), fl = filters.get(track);
+  const g = gains.get(track), dest = dests.get(track), rv = reverbs.get(track), eq = eqs.get(track), fl = filters.get(track), ds = deessers.get(track);
   if (!g || !dest) return;                       // belum pernah diputar: dipasang saat gain track dibuat
   const ctx = g.context;
   let ch = chains.get(track);
-  if (!rv && !eq && !fl) {                       // semua card efek dihapus: kembali ke jalur langsung
+  if (ds && !deesserLoaded(ctx)) loadDeesser(ctx).then(() => syncFx(track), () => { /* worklet gagal dimuat: jalur jalan tanpa de-esser */ });
+  const dsOn = !!ds && deesserLoaded(ctx);      // node baru dipasang setelah modul worklet siap (beberapa ms)
+  if (!rv && !eq && !fl && !dsOn) {              // semua card efek dihapus: kembali ke jalur langsung
     if (ch) {
       g.disconnect(); [ch.low, ch.mid, ch.high, ch.lp, ch.hp, ch.dry, ch.wet, ch.conv].forEach(n => n.disconnect());
+      if (ch.ds) ch.ds.disconnect();
       g.connect(dest); chains.delete(track);
     }
     return;
@@ -279,13 +290,16 @@ function syncFx(track: string): void {
     hp.type = 'highpass'; hp.frequency.value = 20; hp.Q.value = 0.707;
     const conv = ctx.createConvolver();
     conv.normalize = false;   // normalisasi dilakukan sendiri di makeImpulse
-    ch = { ctx, topo: '', low, mid, high, lp, hp, dry: ctx.createGain(), wet: ctx.createGain(), conv, decay: 0 };
+    ch = { ctx, topo: '', ds: null, low, mid, high, lp, hp, dry: ctx.createGain(), wet: ctx.createGain(), conv, decay: 0 };
     chains.set(track, ch);
   }
-  const topo = (eq ? 'e' : '-') + (fl ? 'f' : '-') + (rv ? 'r' : '-');
+  if (dsOn && ds && !ch.ds) ch.ds = createDeesser(ctx, { fc: deesserHz(ds.freq), thr: deesserThr(ds.thresh), max: deesserMaxDb(ds.amount), on: ds.on });
+  const topo = (dsOn ? 'd' : '-') + (eq ? 'e' : '-') + (fl ? 'f' : '-') + (rv ? 'r' : '-');
   if (topo !== ch.topo) {                        // susun ulang jalur sesuai efek yang ada
     g.disconnect(); [ch.low, ch.mid, ch.high, ch.lp, ch.hp, ch.dry, ch.wet, ch.conv].forEach(n => n.disconnect());
+    if (ch.ds) { ch.ds.disconnect(); if (!dsOn) ch.ds = null; }
     let s: AudioNode = g;
+    if (dsOn && ch.ds) { s.connect(ch.ds); s = ch.ds; }
     if (eq) { s.connect(ch.low); ch.low.connect(ch.mid); ch.mid.connect(ch.high); s = ch.high; }
     if (fl) { s.connect(ch.lp); ch.lp.connect(ch.hp); s = ch.hp; }
     if (rv) { s.connect(ch.dry); ch.dry.connect(dest); s.connect(ch.conv); ch.conv.connect(ch.wet); ch.wet.connect(dest); }
@@ -293,6 +307,7 @@ function syncFx(track: string): void {
     ch.topo = topo;
   }
   const now = ctx.currentTime;
+  if (dsOn && ds && ch.ds) ch.ds.port.postMessage({ t: 'p', fc: deesserHz(ds.freq), thr: deesserThr(ds.thresh), max: deesserMaxDb(ds.amount), on: ds.on });
   if (eq) {
     ch.low.gain.setTargetAtTime(eq.on ? eqDb(eq.low) : 0, now, .02);
     ch.mid.gain.setTargetAtTime(eq.on ? eqDb(eq.mid) : 0, now, .02);
@@ -317,6 +332,12 @@ function syncFx(track: string): void {
 // null = track tidak punya reverb
 export function setReverb(track: string, p: ReverbParams | null): void {
   if (p) reverbs.set(track, { ...p }); else reverbs.delete(track);
+  syncFx(track);
+}
+
+// null = track tidak punya de-esser
+export function setDeesser(track: string, p: DeesserParams | null): void {
+  if (p) deessers.set(track, { ...p }); else deessers.delete(track);
   syncFx(track);
 }
 
