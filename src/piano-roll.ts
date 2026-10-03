@@ -53,7 +53,7 @@ let closeMenu: () => void = () => {};
 let menuOpen: () => boolean = () => false;
 
 // elemen
-let sc!: HTMLElement, space!: HTMLElement, gc!: HTMLCanvasElement, gclip!: HTMLElement, kc!: HTMLCanvasElement, rc!: HTMLCanvasElement;
+let sc!: HTMLElement, space!: HTMLElement, gc!: HTMLCanvasElement, bgc!: HTMLCanvasElement, gclip!: HTMLElement, kc!: HTMLCanvasElement, rc!: HTMLCanvasElement;
 let phDom!: HTMLElement, phBeat = -1;   // playhead: posisi dalam ketukan relatif ke awal pattern (<0 = tersembunyi)
 let btnUndo!: HTMLButtonElement, btnRedo!: HTMLButtonElement, selBar!: HTMLElement, btnPaste!: HTMLButtonElement, btnSlide!: HTMLButtonElement;
 
@@ -180,48 +180,74 @@ function drawHandle(c: CanvasRenderingContext2D, n: Note, sx: number, sy: number
 const OV_X = 0.4, OV_Y = 0.3;
 let drawn = {ppb: 0, rowH: 0, ox: 0, oy: 0, w: 0, h: 0, vw: 0, vh: 0};   // apa yang sedang ada di canvas: konten mulai di (ox,oy), ukuran w x h, untuk layar vw x vh
 let gridDirty = true;   // true = isi grid berubah (note, hover, animasi, ukuran); false = hanya posisi scroll
+const gridXf = (v: string) => { gc.style.transform = v; bgc.style.transform = v; };   // lapis latar & lapis nada selalu bergerak bersama
 function placeGrid(l: number, t: number) {
   const d = drawn; if (!d.ppb) return;
   const kx = ppb / d.ppb, ky = rowH / d.rowH;
-  gc.style.transform = 'translate(' + (d.ox * kx - l) + 'px,' + (d.oy * ky - t) + 'px) scale(' + kx + ',' + ky + ')';
+  gridXf('translate(' + (d.ox * kx - l) + 'px,' + (d.oy * ky - t) + 'px) scale(' + kx + ',' + ky + ')');
 }
 function gridCovers(l: number, t: number) {
   const d = drawn;
   return d.ppb === ppb && d.rowH === rowH && d.vw === sc.clientWidth && d.vh === sc.clientHeight && l >= d.ox && l + d.vw <= d.ox + d.w && t >= d.oy && t + d.vh <= d.oy + d.h;
 }
+let bgSig = '', prevSl = 0, prevSt = 0;   // bgSig: tanda isi lapis latar terakhir (sama = tidak digambar ulang); prevSl/prevSt: scroll saat gambar terakhir (untuk arah gerak)
 function drawGrid(zoomOnly = false) {
   const tg = performance.now();   // zoomOnly: frame ini hanya zoom, note tidak berubah -> lewati deteksi note baru / hilang
   const vw0 = sc.clientWidth, vh0 = sc.clientHeight, sl = sc.scrollLeft, stp = sc.scrollTop;
   const dense = (window.devicePixelRatio || 1) > 2;   // layar rapat (HP 3x): canvas digambar tajam di 3x, overscan dikecilkan supaya jumlah pixel tetap wajar
-  const mx = Math.round(vw0 * (dense ? 0.25 : OV_X)), my = Math.round(vh0 * (dense ? 0.2 : OV_Y));
-  const vw = vw0 + 2 * mx, vh = vh0 + 2 * my;           // ukuran canvas (vw/vh di bawah = ukuran canvas)
-  const sx = Math.max(0, sl - mx), sy = Math.max(0, stp - my);   // konten di pojok kiri-atas canvas
-  gclip.style.width = vw0 + 'px'; gclip.style.height = vh0 + 'px';
-  const c = fit(gc, vw, vh, 3);
-  c.fillStyle = PR.beyond; c.fillRect(0, 0, vw, vh);
-  const xr = Math.min(vw, total * ppb - sx);
-  const r0 = Math.max(0, Math.floor(sy / rowH)), r1 = Math.min(ROWS - 1, Math.floor((sy + vh) / rowH));
-  if (xr > 0) {
-    for (let r = r0; r <= r1; r++) {
-      const p = P_MAX - r, y = r * rowH - sy;
-      c.fillStyle = isBlack(p) ? PR.rowBlack : PR.rowWhite; c.fillRect(0, y, xr, rowH);
-      if (p === hoverP) { c.fillStyle = PR.hover; c.fillRect(0, y, xr, rowH); }
-      c.fillStyle = p % 12 === 0 ? PR.octLine : PR.rowLine;
-      c.fillRect(0, Math.round(y + rowH) - 1, xr, 1);
-    }
-    eachVLine(sx, vw, (x, _b, li) => { c.fillStyle = LEVEL_FILL[li]; c.fillRect(x - 0.5, 0, 1, vh); });
-    // garis akhir pattern
-    const ex = Math.round(total * ppb - sx);
-    if (ex >= 0 && ex <= vw) { c.fillStyle = soft(color, 0.55); c.fillRect(ex - 1, 0, 2, vh); }
+  let vw: number, vh: number, sx: number, sy: number;
+  if (gridCovers(sl, stp)) { sx = drawn.ox; sy = drawn.oy; vw = drawn.w; vh = drawn.h; }   // canvas yang ada masih menutupi layar: pakai lagi (lapis latar tidak perlu digambar ulang)
+  else {
+    // margin overscan: total tetap sama (ukuran canvas tidak bertambah), tapi 3/4-nya ditaruh di sisi arah geser, jadi geser panjang jarang memicu gambar ulang
+    const tx = Math.round(vw0 * 2 * (dense ? 0.25 : OV_X)), ty = Math.round(vh0 * 2 * (dense ? 0.2 : OV_Y));
+    const dx = sl - prevSl, dy = stp - prevSt, fx = dx > 0 ? 0.25 : dx < 0 ? 0.75 : 0.5, fy = dy > 0 ? 0.25 : dy < 0 ? 0.75 : 0.5;
+    const mxL = Math.round(tx * fx), myT = Math.round(ty * fy);
+    vw = vw0 + tx; vh = vh0 + ty;                         // ukuran canvas (vw/vh di bawah = ukuran canvas)
+    sx = Math.max(0, sl - mxL); sy = Math.max(0, stp - myT);   // konten di pojok kiri-atas canvas
   }
+  prevSl = sl; prevSt = stp;
+  gclip.style.width = vw0 + 'px'; gclip.style.height = vh0 + 'px';
+  const dprNow = window.devicePixelRatio || 1;
+  const bsig = ppb + '|' + rowH + '|' + sx + '|' + sy + '|' + vw + '|' + vh + '|' + hoverP + '|' + color + '|' + dprNow;
+  const xr = Math.min(vw, total * ppb - sx);
+  if (bsig !== bgSig) {   // LAPIS LATAR: baris, garis grid, garis akhir pattern. Hanya digambar kalau zoom / posisi canvas / hover / warna berubah (bukan tiap frame drag)
+    bgSig = bsig;
+    const b = fit(bgc, vw, vh, 3);
+    b.fillStyle = PR.beyond; b.fillRect(0, 0, vw, vh);
+    const r0 = Math.max(0, Math.floor(sy / rowH)), r1 = Math.min(ROWS - 1, Math.floor((sy + vh) / rowH));
+    if (xr > 0) {
+      for (let r = r0; r <= r1; r++) {
+        const p = P_MAX - r, y = r * rowH - sy;
+        b.fillStyle = isBlack(p) ? PR.rowBlack : PR.rowWhite; b.fillRect(0, y, xr, rowH);
+        if (p === hoverP) { b.fillStyle = PR.hover; b.fillRect(0, y, xr, rowH); }
+        b.fillStyle = p % 12 === 0 ? PR.octLine : PR.rowLine;
+        b.fillRect(0, Math.round(y + rowH) - 1, xr, 1);
+      }
+      eachVLine(sx, vw, (x, _b, li) => { b.fillStyle = LEVEL_FILL[li]; b.fillRect(x - 0.5, 0, 1, vh); });
+      // garis akhir pattern
+      const ex = Math.round(total * ppb - sx);
+      if (ex >= 0 && ex <= vw) { b.fillStyle = soft(color, 0.55); b.fillRect(ex - 1, 0, 2, vh); }
+    }
+  }
+  // LAPIS NADA: transparan, digambar ulang tiap perubahan (murah: hanya clear + nada)
+  const c = fit(gc, vw, vh, 3);
+  c.clearRect(0, 0, vw, vh);
   // nada
   const now = performance.now(); let animating = false;
   if (!REDUCE && !zoomOnly) {                   // deteksi note baru / hilang sejak gambar terakhir (mencakup undo, hapus, erase)
-    const cur = new Set(st.notes.map(n => n.id));
-    for (const n of st.notes) if (!lastDrawn.has(n.id) || (selected.has(n.id) && !lastSel.has(n.id))) born.set(n.id, now);   // baru dibuat / baru dipilih -> bulatan pop
-    for (const [id, n] of lastDrawn) if (!cur.has(id)) ghosts.push({n, t0: now, h: lastSel.has(id)});
+    let fresh = false;
+    for (const n of st.notes) if (!lastDrawn.has(n.id) || (selected.has(n.id) && !lastSel.has(n.id))) { born.set(n.id, now); if (!lastDrawn.has(n.id)) fresh = true; }   // baru dibuat / baru dipilih -> bulatan pop
+    if (fresh || lastDrawn.size !== st.notes.length) {   // jumlah sama dan tidak ada id baru = tidak ada yang hilang: Set id tidak perlu dibuat (kasus drag)
+      const cur = new Set(st.notes.map(n => n.id));
+      for (const [id, n] of lastDrawn) if (!cur.has(id)) ghosts.push({n, t0: now, h: lastSel.has(id)});
+    }
   }
-  if (!zoomOnly) { lastDrawn = new Map(st.notes.map(n => [n.id, {...n}])); lastSel = new Set(selected); }
+  if (!zoomOnly) {   // perbarui "gambar terakhir" di tempat (tanpa membuat Map / salinan baru tiap frame)
+    if (lastDrawn.size !== st.notes.length || st.notes.some(n => !lastDrawn.has(n.id))) lastDrawn = new Map(st.notes.map(n => [n.id, {...n}]));
+    else for (const n of st.notes) { const o = lastDrawn.get(n.id)!; o.p = n.p; o.s = n.s; o.l = n.l; o.sl = n.sl; o.v = n.v; }
+    let same = lastSel.size === selected.size; if (same) for (const id of selected) if (!lastSel.has(id)) { same = false; break; }
+    if (!same) lastSel = new Set(selected);
+  }
   const fs = Math.min(11, rowH - 4);
   c.font = '600 ' + fs + 'px system-ui,sans-serif'; c.textBaseline = 'middle';
   const visible = (n: Note) => {
@@ -281,11 +307,12 @@ function keyPath(c: CanvasRenderingContext2D, x: number, y: number, w: number, h
   c.beginPath(); c.moveTo(x, y); c.lineTo(x + w - rr, y); c.arcTo(x + w, y, x + w, y + rr, rr);
   c.lineTo(x + w, y + h - rr); c.arcTo(x + w, y + h, x + w - rr, y + h, rr); c.lineTo(x, y + h); c.closePath();
 }
-function drawKeys() {
-  const vh = sc.clientHeight, sy = curT();
-  const sig = sy + '|' + rowH + '|' + vh + '|' + hoverP + '|' + showNoteNames + '|' + color + '|' + (window.devicePixelRatio || 1);
-  if (sig === keysSig) return; keysSig = sig;
-  const c = fit(kc, KEY_W, vh), dpr = Math.min(window.devicePixelRatio || 1, 8);
+// Tuts: isi tuts hanya bergantung pada rowH / nama nada / warna / hover, bukan pada posisi geser. Jadi seluruh deret tuts (C1..C8)
+// digambar SATU KALI ke bitmap offscreen dengan kode gambar yang sama (gradient, bibir, bayangan tuts hitam), lalu tiap frame geser / zoom
+// cukup di-blit (drawImage). Tampilan akhir identik; bayangan (shadowBlur) per tuts tidak lagi dihitung ulang tiap frame.
+let keyStrip: HTMLCanvasElement | null = null, keyStripSig = '', keyStripRow = 0, keyStripDpr = 1;
+const KEY_MAX_PX = 16000;   // batas aman tinggi canvas di HP; kalau lewat, jatuh ke gambar langsung seperti semula
+function paintKeys(c: CanvasRenderingContext2D, dpr: number, sy: number, vh: number, hover: number) {
   c.fillStyle = KEYS_BG; c.fillRect(0, 0, KEY_W, vh);
   const r0 = Math.max(0, Math.floor(sy / rowH) - 1), r1 = Math.min(ROWS - 1, Math.floor((sy + vh) / rowH) + 1);
   const KW = KEY_W - 2, BL = KW * (showNoteNames ? 0.5 : 0.62);   // panjang tuts putih / hitam (nama nada tampil: tuts hitam dipendekkan supaya label tidak tertutup)
@@ -295,7 +322,7 @@ function drawKeys() {
   for (let r = r0; r <= r1; r++) {
     const p = P_MAX - r; if (isBlack(p)) continue;
     const y = r * rowH - sy, top = y + (isBlack(p + 1) ? -rowH / 2 : 0) + 0.5, bot = y + rowH + (isBlack(p - 1) ? rowH / 2 : 0) - 0.5;
-    const dn = p === hoverP, x = dn ? 1 : 0, h = bot - top, rr = Math.min(5, h / 2.5);
+    const dn = p === hover, x = dn ? 1 : 0, h = bot - top, rr = Math.min(5, h / 2.5);
     c.save(); keyPath(c, x, top, KW, h, rr); c.fillStyle = dn ? color : gw; c.fill(); c.clip();
     c.fillStyle = dn ? 'rgba(0,0,0,.2)' : 'rgba(0,0,0,.12)'; c.fillRect(x + KW - (dn ? 2 : 3), top, 3, h);   // bibir gelap di ujung depan tuts
     c.restore();
@@ -303,7 +330,7 @@ function drawKeys() {
   // 2) tuts hitam di atasnya, dengan bayangan jatuh ke arah ujung depan (kanan)
   for (let r = r0; r <= r1; r++) {
     const p = P_MAX - r; if (!isBlack(p)) continue;
-    const y = r * rowH - sy + 1, h = rowH - 2, dn = p === hoverP, x = dn ? 1 : 0, rr = Math.min(4, h / 2.5);
+    const y = r * rowH - sy + 1, h = rowH - 2, dn = p === hover, x = dn ? 1 : 0, rr = Math.min(4, h / 2.5);
     c.save(); c.shadowColor = 'rgba(0,0,0,.5)'; c.shadowBlur = 5 * dpr; c.shadowOffsetX = 3 * dpr; c.shadowOffsetY = 0;
     keyPath(c, x, y, BL, h, rr); c.fillStyle = dn ? color : gb; c.fill();
     c.restore();
@@ -315,10 +342,34 @@ function drawKeys() {
   c.font = '600 10px system-ui,sans-serif'; c.textBaseline = 'middle'; c.textAlign = 'right';
   for (let r = r0; r <= r1; r++) {
     const p = P_MAX - r, y = r * rowH - sy;
-    if (p % 12 === 0 || p === hoverP || (showNoteNames && rowH >= 11)) { c.fillStyle = p !== hoverP ? KEY_LABEL : isBlack(p) ? '#16161d' : '#fff'; c.fillText(pname(p), KW - 5, y + rowH / 2 + 0.5); }   // tuts hitam tertekan: label jatuh di bagian putih, jadi gelap
+    if (p % 12 === 0 || p === hover || (showNoteNames && rowH >= 11)) { c.fillStyle = p !== hoverP ? KEY_LABEL : isBlack(p) ? '#16161d' : '#fff'; c.fillText(pname(p), KW - 5, y + rowH / 2 + 0.5); }   // tuts hitam tertekan: label jatuh di bagian putih, jadi gelap
   }
   c.textAlign = 'start';
   c.fillStyle = PR.rulerLine; c.fillRect(KEY_W - 1, 0, 1, vh);
+}
+
+function drawKeys(preview = false) {
+  const vh = sc.clientHeight, sy = curT(), dprRaw = window.devicePixelRatio || 1, dpr = Math.min(dprRaw, 8);
+  const sig = sy + '|' + rowH + '|' + vh + '|' + hoverP + '|' + showNoteNames + '|' + color + '|' + dprRaw + '|' + (preview ? 'p' : '');
+  if (sig === keysSig) return; keysSig = sig;
+  const stripH = ROWS * rowH, cacheOk = hoverP === -1 && Math.round(stripH * dpr) <= KEY_MAX_PX;
+  const ssig = rowH + '|' + showNoteNames + '|' + color + '|' + dprRaw;
+  if (cacheOk && (!keyStrip || (keyStripSig !== ssig && !preview))) {   // bangun (ulang) bitmap deret tuts; saat preview zoom dipakai bitmap lama (diskalakan) dulu
+    if (!keyStrip) keyStrip = document.createElement('canvas');
+    const sc2 = fit(keyStrip, KEY_W, stripH, 8);
+    sc2.clearRect(0, 0, KEY_W, stripH);
+    paintKeys(sc2, dpr, 0, stripH, -1);
+    keyStripSig = ssig; keyStripRow = rowH; keyStripDpr = dpr;
+  }
+  const c = fit(kc, KEY_W, vh);
+  if (cacheOk && keyStrip) {
+    const k = rowH / keyStripRow;                    // preview zoom: bitmap lama diskalakan vertikal (seperti grid); setelah zoom selesai k = 1 dan tajam
+    const srcY = Math.round(sy / k * keyStripDpr), srcH = Math.min(Math.round(vh / k * keyStripDpr), keyStrip.height - srcY);
+    c.clearRect(0, 0, KEY_W, vh);
+    if (srcH > 0) c.drawImage(keyStrip, 0, srcY, keyStrip.width, srcH, 0, 0, KEY_W, srcH * k / keyStripDpr);
+    return;
+  }
+  paintKeys(c, dpr, sy, vh, hoverP);
 }
 
 function drawRuler() {
@@ -593,7 +644,10 @@ function commitZoom() {
   zoomEndT = 0;
   if (!zoomPend) return;
   if (pinch) { zoomEndT = window.setTimeout(commitZoom, ZOOM_IDLE); return; }   // jari masih menempel
-  flushZoom(); zoomFrame = true; schedule();
+  const z = zoomPend, panOnly = drawn.ppb === ppb && drawn.rowH === rowH && gridCovers(z.l, z.t);   // geser saja, zoom tidak berubah
+  flushZoom();
+  if (panOnly) { scheduleScroll(); return; }   // isi canvas masih benar: cukup tulis posisi scroll, grid tidak digambar ulang
+  zoomFrame = true; schedule();
 }
 function redraw() {
   const t0 = performance.now();
@@ -603,7 +657,7 @@ function redraw() {
       window.clearTimeout(zoomEndT); zoomEndT = 0; flushZoom(); zoomFrame = true; gridDirty = true;
     } else {
       hudMode = 'preview';
-      placeGrid(z.l, z.t); drawKeys(); drawRuler(); drawVel(); placePlayhead();
+      placeGrid(z.l, z.t); drawKeys(true); drawRuler(); drawVel(); placePlayhead();
       if (selBar && !selBar.hidden) { selBar.hidden = true; selBarOn = false; }
       window.clearTimeout(zoomEndT); zoomEndT = window.setTimeout(commitZoom, ZOOM_IDLE);
       hudTick(t0); return;
@@ -618,7 +672,7 @@ function redraw() {
   const zo = zoomFrame; zoomFrame = false;
   drawGrid(zo); drawKeys(); drawRuler(); drawVel(); placeSelBar(); placePlayhead();
   // notifyChange membuat JSON seluruh note: di frame zoom ditunda (note tidak berubah), supaya tidak ikut membebani gesture
-  if (zo) { window.clearTimeout(notifyT); notifyT = window.setTimeout(notifyChange, 250); } else notifyChange();
+  if (zo || g) { window.clearTimeout(notifyT); notifyT = window.setTimeout(notifyChange, 250); } else notifyChange();   // selama drag / zoom tidak ada JSON + render ulang pratinjau pattern tiap frame; jari lepas = langsung
   hudTick(t0);
 }
 
@@ -749,6 +803,7 @@ interface Gesture {
   t0: number;                 // waktu mulai (animasi bulatan)
   desel?: boolean;            // tap di area kosong saat ada seleksi: hanya lepas seleksi, jangan pasang nada
   touch?: boolean; moved?: boolean; timer?: number;   // tahan di area kosong (timer) lalu seret = blok / marquee
+  refs?: Array<Note | undefined>; bnd?: {minS: number; maxE: number; minP: number; maxP: number}; lastA?: number; lastB?: number;   // cache drag: nada hidup per orig, batas seleksi, dan nilai terakhir yang diterapkan (dilewati kalau sama)
   gh?: Ghost;                 // tap awal jatuh di nada VST lain: kalau ditahan sampai HOLD_MS, pindah ke VST itu
 }
 let g: Gesture | null = null;
@@ -926,29 +981,33 @@ function onMove(e: PointerEvent) {
       const n = g.anchor!;
       if (Math.abs(x - g.x0) > 3) {
         const end = clamp(snapRound(x / ppb), n.s + unit(), total);
-        n.l = Math.max(unit(), end - n.s);
+        const nl = Math.max(unit(), end - n.s);
+        if (nl !== n.l) { n.l = nl; schedule(); }   // snap: gambar ulang hanya saat melewati garis grid berikutnya
       }
-      schedule(); break;
+      break;
     }
     case 'move': {
       const a0 = g.orig!.find(o => o.id === g!.anchor!.id)!;
       let dB = snapRound(a0.s + (x - g.x0) / ppb) - a0.s;
       let dP = -Math.round((y - g.y0) / rowH);
-      const minS = Math.min(...g.orig!.map(o => o.s)), maxE = Math.max(...g.orig!.map(o => o.s + o.l));
-      const minP = Math.min(...g.orig!.map(o => o.p)), maxP = Math.max(...g.orig!.map(o => o.p));
-      dB = clamp(dB, -minS, total - maxE); dP = clamp(dP, P_MIN - minP, P_MAX - maxP);
+      if (!g.bnd) g.bnd = {minS: Math.min(...g.orig!.map(o => o.s)), maxE: Math.max(...g.orig!.map(o => o.s + o.l)), minP: Math.min(...g.orig!.map(o => o.p)), maxP: Math.max(...g.orig!.map(o => o.p))};
+      const b = g.bnd;
+      dB = clamp(dB, -b.minS, total - b.maxE); dP = clamp(dP, P_MIN - b.minP, P_MAX - b.maxP);
+      if (dB === g.lastA && dP === g.lastB) break;   // masih di kotak snap yang sama: tidak ada yang berubah, tidak perlu gambar ulang
+      g.lastA = dB; g.lastB = dP;
       if (!g.changed && (dB || dP)) { commit(); g.changed = true; }
-      for (const o of g.orig!) { const n = st.notes.find(q => q.id === o.id); if (n) { n.s = o.s + dB; n.p = o.p + dP; } }
+      if (!g.refs) g.refs = g.orig!.map(o => st.notes.find(q => q.id === o.id));   // sekali per gesture, bukan find() per nada per gerakan
+      g.orig!.forEach((o, i) => { const n = g!.refs![i]; if (n) { n.s = o.s + dB; n.p = o.p + dP; } });
       schedule(); break;
     }
     case 'resize': {
       const a0 = g.anchor!, end0 = a0.s + a0.l;
       const dL = snapRound(end0 + (x - g.x0) / ppb) - end0;
+      if (dL === g.lastA) break;                     // sama dengan frame sebelumnya: lewati
+      g.lastA = dL;
       if (!g.changed && dL) { commit(); g.changed = true; }
-      for (const o of g.orig!) {
-        const n = st.notes.find(q => q.id === o.id);
-        if (n) n.l = clamp(o.l + dL, unit(), total - o.s);
-      }
+      if (!g.refs) g.refs = g.orig!.map(o => st.notes.find(q => q.id === o.id));
+      g.orig!.forEach((o, i) => { const n = g!.refs![i]; if (n) n.l = clamp(o.l + dL, unit(), total - o.s); });
       schedule(); break;
     }
     case 'marquee': {
@@ -1147,7 +1206,7 @@ function build(): HTMLElement {
       '<div class="pr__corner"></div>' +
       '<canvas class="pr__ruler" aria-hidden="true"></canvas>' +
       '<canvas class="pr__keys" aria-hidden="true"></canvas>' +
-      '<div class="pr__scroll"><div class="pr__space"></div><div class="pr__clip"><canvas class="pr__grid" role="img" aria-label="Grid nada"></canvas></div></div>' +
+      '<div class="pr__scroll"><div class="pr__space"></div><div class="pr__clip"><canvas class="pr__gridbg" aria-hidden="true"></canvas><canvas class="pr__grid" role="img" aria-label="Grid nada"></canvas></div></div>' +
       '<div class="pr__phclip" aria-hidden="true"><div class="pr__ph"><svg width="9" height="20" viewBox="0 0 9 20"><path d="M5 0H4C1.79 0 0 1.79 0 4v8.6c0 .86.27 1.69.78 2.38L4.5 20l3.72-5.02A4 4 0 0 0 9 12.6V4c0-2.21-1.79-4-4-4Z" fill="currentColor"/></svg><i></i></div></div>' +
     '</div>' +
     '<div class="pr__vel">' +
@@ -1158,6 +1217,7 @@ function build(): HTMLElement {
   sc = el.querySelector<HTMLElement>('.pr__scroll')!;
   space = el.querySelector<HTMLElement>('.pr__space')!;
   gc = el.querySelector<HTMLCanvasElement>('.pr__grid')!;
+  bgc = el.querySelector<HTMLCanvasElement>('.pr__gridbg')!;
   gclip = el.querySelector<HTMLElement>('.pr__clip')!;
   kc = el.querySelector<HTMLCanvasElement>('.pr__keys')!;
   rc = el.querySelector<HTMLCanvasElement>('.pr__ruler')!;
@@ -1246,7 +1306,7 @@ export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.
     sc.scrollLeft = 0; sc.scrollTop = Math.max(0, (P_MAX - mid) * rowH - vh / 2);
   }
   resetAnim(); selBarOn = false; selBar.hidden = true; vg = null;
-  phSig = ''; keysSig = rulerSig = ''; zoomPend = null; zoomFrame = false; window.clearTimeout(zoomEndT); gc.style.transform = ''; drawn.ppb = 0; gridDirty = true;
+  phSig = ''; keysSig = rulerSig = ''; zoomPend = null; zoomFrame = false; window.clearTimeout(zoomEndT); gridXf(''); drawn.ppb = 0; bgSig = ''; gridDirty = true;
   if (!keep) setTool('draw');
   updateUI(); redraw();
 }
@@ -1254,7 +1314,8 @@ export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.
 export function closePianoRoll() {
   if (!root || root.hidden) return;
   closeMenu();
-  const r = root; r.classList.remove('is-open'); g = null; vg = null; ptrs.clear(); pinch = null; phStop(); phSig = ''; window.clearTimeout(zoomEndT); zoomPend = null; gc.style.transform = '';
+  window.clearTimeout(notifyT); notifyChange();   // kirim perubahan yang masih tertunda (debounce selama drag)
+  const r = root; r.classList.remove('is-open'); g = null; vg = null; ptrs.clear(); pinch = null; phStop(); phSig = ''; window.clearTimeout(zoomEndT); zoomPend = null; gridXf('');
   setTimeout(() => { if (!r.classList.contains('is-open')) r.hidden = true; }, 200);
   onClose && onClose();
 }

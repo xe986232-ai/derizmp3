@@ -875,6 +875,7 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .pr__space{grid-area:1/1;pointer-events:none}
 .pr__clip{grid-area:1/1;position:sticky;top:0;left:0;overflow:hidden;align-self:start;justify-self:start;touch-action:none}
 .pr__grid{position:absolute;top:0;left:0;display:block;touch-action:none;-webkit-user-select:none;user-select:none;transform-origin:0 0;will-change:transform}
+.pr__gridbg{position:absolute;top:0;left:0;display:block;pointer-events:none;transform-origin:0 0;will-change:transform}   /* lapis latar grid (baris + garis): di bawah lapis nada, tidak menerima sentuhan */
 .pr__hud{position:absolute;right:6px;bottom:6px;z-index:5;padding:3px 7px;border:1px solid #3a3a4a;border-radius:4px;background:#101016;color:#c9c9d6;font:600 10px/1.3 ui-monospace,monospace;pointer-events:none}
 
 /* panel Velocity: hanya batang velocity (tanpa strip judul, supaya grid tidak menyempit); tombol buka/tutup = panah kecil di kanan bawah */

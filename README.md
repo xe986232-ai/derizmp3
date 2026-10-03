@@ -73,3 +73,12 @@ Pereda desis "S" untuk vokal (audio clip, DERIZ, dll.). Tambah lewat panel efek 
 Cara kerja: level band di atas Freq dibaca detektor (attack 0,4 ms, release 30 ms), dikompres 10:1 dengan soft knee 6 dB, dibatasi Amount, lalu gain yang sama dipakai ke kiri dan kanan. Tanpa lookahead (tidak ada latensi tambahan). Saat tidak ada desis, suara sama persis dengan aslinya (magnitudo datar).
 
 Kode: `src/deesser.ts` (worklet), `src/audio-engine.ts` (`setDeesser`, jalur efek), `src/fx-rack.ts` (kartu + knob). Tes: `node tools/deesser-test.ts`.
+
+## Piano roll: optimasi gambar (tampilan tidak berubah)
+Drag nada, geser, dan zoom dibuat lebih ringan tanpa mengubah hasil gambar (grid, nada, tuts, penggaris tetap sama).
+- **Grid dua lapis** (`drawGrid`): lapis latar (baris + garis grid + garis akhir pattern) dipisah dari lapis nada yang transparan. Saat drag hanya lapis nada yang digambar ulang; lapis latar digambar ulang hanya kalau zoom / posisi canvas / hover / warna berubah (`bgSig`). Canvas yang masih menutupi layar dipakai lagi.
+- **Tuts di-cache** (`drawKeys` / `paintKeys`): seluruh deret tuts digambar sekali ke bitmap offscreen (gradient + bayangan tuts hitam tetap sama), lalu tiap frame geser / zoom hanya di-blit. Saat pinch, bitmap diskalakan dulu seperti grid, lalu digambar ulang tajam begitu zoom berhenti.
+- **Overscan searah gerak**: ukuran canvas tetap, tapi 3/4 margin ditaruh di sisi arah geser, jadi geser panjang lebih jarang memicu gambar ulang.
+- **Geser murni** tidak lagi memicu gambar ulang grid setelah jari berhenti (`commitZoom`).
+- **Drag / resize**: nada hidup di-cache per gesture (tanpa `find()` per nada per gerakan), frame dilewati kalau masih di kotak snap yang sama, deteksi nada baru / hilang tidak membuat Map / Set baru tiap frame.
+- **`notifyChange` ditunda** selama gesture (JSON + render ulang pratinjau pattern di timeline), dikirim langsung saat jari lepas atau piano roll ditutup.
