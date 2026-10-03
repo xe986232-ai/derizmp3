@@ -68,18 +68,20 @@ function build(): void {
   el.innerHTML =
     '<div class="mpcs__back"></div>' +
     '<div class="mpcs__win is-off" role="dialog" aria-modal="true" aria-label="MPCS" tabindex="-1">' +
-      `<header class="mpcs__head"><i class="mpcs__led" aria-hidden="true"></i><span class="mpcs__title">MPCS</span><span class="mpcs__stat" role="status" aria-live="polite"></span><button type="button" class="mpcs__close" aria-label="Tutup MPCS">${ICON.close}</button></header>` +
-      '<div class="mpcs__bar">' +
-        `<button type="button" class="mpcs__up" data-a="up">${ICON.up}<span>Upload audio</span></button>` +
-        `<div class="mpcs__knobs">${KNOB_KEYS.map(knobHtml).join('')}</div>` +
-        `<button type="button" class="mpcs__play" data-a="play" aria-label="Putar" disabled>${ICON.play}</button>` +
-      '</div>' +
+      `<header class="mpcs__head"><i class="mpcs__led" aria-hidden="true"></i><span class="mpcs__title">MPCS</span><div class="mpcs__lcd"><span class="mpcs__stat" role="status" aria-live="polite"></span></div><button type="button" class="mpcs__close" aria-label="Tutup MPCS">${ICON.close}</button></header>` +
+      '<div class="mpcs__mid">' +
       '<canvas class="mpcs__ov" aria-label="Peta posisi sample (ketuk / seret untuk pindah)" hidden></canvas>' +
       '<div class="mpcs__stage">' +
         '<canvas class="mpcs__keys" aria-hidden="true"></canvas>' +
         '<div class="mpcs__scroll"><canvas class="mpcs__cv" role="img" aria-label="Editor pitch"></canvas><i class="mpcs__ph" aria-hidden="true"></i></div>' +
         `<div class="mpcs__empty"><button type="button" class="mpcs__up" data-a="up">${ICON.up}<span>Upload audio</span></button><p>Pakai vokal atau instrumen satu nada (monofonik) yang bersih tanpa efek.</p></div>` +
         '<div class="mpcs__busy" hidden><i></i></div>' +
+      '</div>' +
+      '</div>' +
+      '<div class="mpcs__bar">' +
+        `<button type="button" class="mpcs__up" data-a="up">${ICON.up}<span>Upload audio</span></button>` +
+        `<div class="mpcs__knobs">${KNOB_KEYS.map(knobHtml).join('')}</div>` +
+        `<button type="button" class="mpcs__play" data-a="play" aria-label="Putar" disabled>${ICON.play}</button>` +
       '</div>' +
       '<div class="mpcs__glass" aria-hidden="true"></div>' +
       `<input type="file" class="mpcs__file" accept="${AUDIO_ACCEPT}" hidden>` +
@@ -207,10 +209,10 @@ function build(): void {
       const nF = S.pt.rms.length;
       for (let f = 0; f < nF; f++) { const px = Math.min(w - 1, Math.floor(f / nF * w)), v = Math.min(1, S.pt.rms[f] / S.ref); if (v > ovProf[px]) ovProf[px] = v; }
     }
-    go.fillStyle = 'rgba(38,176,160,.35)';
+    go.fillStyle = 'rgba(214,60,130,.35)';
     for (let px = 0; px < w; px++) { const a = ovProf[px] * h * .45; go.fillRect(px, h / 2 - a, 1, a * 2 + 1); }
     const rows = S.hi - S.lo + 1, hopSec = S.pt.hop / S.pt.sr;
-    go.fillStyle = '#ff8a3d';
+    go.fillStyle = '#ffc857';
     for (const n of S.notes) go.fillRect(n.s * hopSec / S.dur * w, (S.hi + .5 - n.target) / rows * h - 1.5, Math.max(2, (n.e - n.s) * hopSec / S.dur * w), 3);
     go.fillStyle = '#fff'; go.fillRect(Math.min(w - 1, playPos / S.dur * w), 0, 1.5, h);
     go.strokeStyle = 'rgba(255,255,255,.9)'; go.lineWidth = 1.2; go.fillStyle = 'rgba(255,255,255,.08)';
@@ -239,7 +241,7 @@ function build(): void {
     // baris semiton
     for (let m = lo; m <= hi; m++) {
       const y = (hi - m) * rowH, pc = ((m % 12) + 12) % 12;
-      g.fillStyle = BLACK.has(pc) ? '#0f1a1d' : '#16252a'; g.fillRect(0, y, W, rowH);
+      g.fillStyle = BLACK.has(pc) ? '#120f14' : '#1b161d'; g.fillRect(0, y, W, rowH);
       if (pc === 0) { g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(0, y + rowH - 1, W, 1); }
     }
     // garis detik
@@ -250,11 +252,11 @@ function build(): void {
     notes.forEach((nt, i) => {
       const x0 = xOf((nt.s - .5) * hopSec), x1 = xOf((nt.e - .5) * hopSec), yc = yOf(nt.target);
       const on = i === sel;
-      g.fillStyle = on ? 'rgba(45,212,191,.30)' : 'rgba(45,212,191,.16)';
-      g.strokeStyle = on ? '#fff' : 'rgba(45,212,191,.7)'; g.lineWidth = on ? 1.5 : 1;
+      g.fillStyle = on ? 'rgba(255,92,160,.30)' : 'rgba(255,92,160,.16)';
+      g.strokeStyle = on ? '#fff' : 'rgba(255,92,160,.7)'; g.lineWidth = on ? 1.5 : 1;
       g.beginPath(); g.roundRect(x0, yc - rowH * .5, Math.max(4, x1 - x0), rowH, Math.min(5, rowH / 2)); g.fill(); g.stroke();
       // amplitudo (ungu) mengikuti pitch hasil
-      g.fillStyle = 'rgba(38,176,160,.85)';
+      g.fillStyle = 'rgba(214,60,130,.85)';
       for (let f = nt.s; f < nt.e; f++) {
         if (!pt.f0[f]) continue;
         const m = 69 + 12 * Math.log2(pt.f0[f] / 440) + sc[f], h = Math.min(1, pt.rms[f] / S!.ref) * rowH * .42 + .5;
@@ -268,7 +270,7 @@ function build(): void {
       };
       let moved = false; for (let f = nt.s; f < nt.e; f++) if (pt.f0[f] && Math.abs(sc[f]) > .01) { moved = true; break; }
       if (moved) line(0, 'rgba(255,255,255,.28)', 1);   // pitch asli (redup) kalau hasilnya berbeda: digeser, drift, atau vibrato diubah
-      line(sc, '#ff8a3d', 1.4);
+      line(sc, '#ffc857', 1.4);
     });
   }
 
