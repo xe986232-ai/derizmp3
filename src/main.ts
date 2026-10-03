@@ -18,7 +18,7 @@ import { createClip, importClip, exportClip, cloneClip, splitClip, valueAt, getC
 import { decodeFile, addBuffer, getBuffer, encodeWav, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
 import { slideSource, glideBeats } from './note-slide';
 import { velAlpha } from './velocity';
-import { openPianoRoll, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getPianoRollNotes, setPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, clearPianoRollNotes, PR_BEATS } from './piano-roll';
+import { openPianoRoll, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getNoteColor, setNoteColor, getPianoRollNotes, setPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, clearPianoRollNotes, PR_BEATS } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 initLandscape();
 initMenuPanel();
@@ -1774,7 +1774,7 @@ function projectSnapshot() {
       ...(fxs.length ? {fx: fxs} : {}),
     });
   });
-  return {data: {v: 1, bpm: BPM, bars: BARS, ...(getMasterPitch() ? {mp: getMasterPitch()} : {}), tracks}, clips};
+  return {data: {v: 1, bpm: BPM, bars: BARS, ...(getMasterPitch() ? {mp: getMasterPitch()} : {}), ...(getNoteColor() ? {nc: getNoteColor()} : {}), tracks}, clips};
 }
 function clearProject() {
   if (playing) pausePlay();
@@ -1797,6 +1797,7 @@ async function projectRestore(rec) {
   clearProject();
   setBpm(d.bpm || 120);
   setMasterPitch(+d.mp || 0);   // Pitch Project ikut tersimpan di file project
+  setNoteColor(typeof d.nc === 'string' ? d.nc : null);   // warna nada piano roll (pilihan Color) ikut tersimpan di file project
   if (d.bars > BARS) growTimeline(Math.min(MAX_BARS, d.bars));
   const trMap = {}, pending = [], pendingAuto = [];
   for (const t of d.tracks) {

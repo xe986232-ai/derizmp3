@@ -64,7 +64,9 @@ const total = BARS * BEATS_PER_BAR;
 let ppb = 64, rowH = 18;
 let tool: Tool = 'draw';
 let snapOn = true;   // tombol Snap (lampu indikator): nyala = note menempel ke garis grid yang terlihat
-let color = '#3fbf5f';
+let color = '#3fbf5f';   // warna yang dipakai sekarang untuk semua nada = noteColor (pilihan di Color) kalau ada, kalau tidak warna track
+let noteColor: string | null = null;   // pilihan warna global dari menu Color: berlaku untuk SEMUA nada di piano roll (nada yang diedit, nada instrumen lain / ghost, dan pattern lain yang dibuka nanti). null = ikut warna track
+let trackColor = '';                   // warna track pattern yang sedang dibuka (dipakai kalau noteColor kosong)
 let ghostSrc: Ghost[] = [];
 let selected = new Set<number>();
 let undoStack: string[] = [];
@@ -256,7 +258,7 @@ function drawGrid(zoomOnly = false) {
   };
   for (const gs of ghostSrc) {   // nada instrumen lain: di belakang nada yang sedang diedit, warna meredup
     const gst = states.get(gs.key); if (!gst || !gst.notes.length) continue;
-    c.fillStyle = gs.color; c.globalAlpha = .3;
+    c.fillStyle = noteColor || gs.color; c.globalAlpha = .3;   // nada instrumen lain: ikut warna pilihan (tetap redup)
     for (const n of gst.notes) {
       if (!visible(n)) continue;
       const x = n.s * ppb - sx, w = Math.max(3, n.l * ppb), y = (P_MAX - n.p) * rowH - sy;
@@ -1127,7 +1129,7 @@ function buildSettingsMenu(el: HTMLElement) {
     c.addEventListener('click', e => {
       const sw = (e.target as HTMLElement).closest<HTMLElement>('.track-menu__swatch');
       if (!sw) return;
-      color = sw.dataset.c!;
+      noteColor = sw.dataset.c!; color = noteColor;   // berlaku global: nada aktif, nada instrumen lain, dan pattern lain
       root!.style.setProperty('--pr-color', color);
       schedule();
       closeAll();
@@ -1288,7 +1290,8 @@ export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.
   st = states.get(key) || {notes: [], nextId: 1};
   states.set(key, st);
 
-  color = opts.color || '#3fbf5f';
+  trackColor = opts.color || '';
+  color = noteColor || trackColor || '#3fbf5f';
   ghostSrc = opts.ghosts || [];
   root.style.setProperty('--pr-color', color);
   root.setAttribute('aria-label', opts.track + ' – ' + opts.pattern);
@@ -1318,6 +1321,14 @@ export function closePianoRoll() {
   const r = root; r.classList.remove('is-open'); g = null; vg = null; ptrs.clear(); pinch = null; phStop(); phSig = ''; window.clearTimeout(zoomEndT); zoomPend = null; gridXf('');
   setTimeout(() => { if (!r.classList.contains('is-open')) r.hidden = true; }, 200);
   onClose && onClose();
+}
+export const getNoteColor = (): string | null => noteColor;
+export function setNoteColor(c: string | null) {   // dipakai saat project dimuat; piano roll yang sedang terbuka langsung ikut
+  noteColor = c || null;
+  if (!isPianoRollOpen()) return;
+  color = noteColor || trackColor || '#3fbf5f';
+  root!.style.setProperty('--pr-color', color);
+  schedule();
 }
 export const isPianoRollOpen = () => !!root && !root.hidden && root.classList.contains('is-open');
 export const setPianoRollCloseHandler = (fn: () => void) => { onClose = fn; };
