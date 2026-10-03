@@ -13,11 +13,13 @@ export interface PianoRollOpts {
 }
 export interface Ghost { key: string; color: string; open?: () => void; }   // open: membuka piano roll untuk VST pemilik nada ini
 
-interface Note { id: number; p: number; s: number; l: number; sl?: boolean; }   // p: MIDI, s/l: dalam ketukan
+interface Note { id: number; p: number; s: number; l: number; sl?: boolean; v?: number; }   // p: MIDI, s/l: dalam ketukan, v: velocity 0..1 (kosong = 1)
 interface State { notes: Note[]; nextId: number; }
+export interface NoteData { p: number; s: number; l: number; sl?: boolean; v?: number; }   // bentuk nada yang disimpan / dimainkan
 type Tool = 'draw' | 'select' | 'erase' | 'pan';
 
 import { slideSource, glideBeats } from './note-slide';
+import { VEL_MIN, velOf, velAlpha } from './velocity';
 const P_MIN = 24, P_MAX = 108, ROWS = P_MAX - P_MIN + 1;   // C1..C8
 const KEY_W = 64, RULER_H = 32, BEATS_PER_BAR = 4, BARS = 15;   // grid selalu 15 bar (nomor 1..15)
 const PPB_MIN = 8, PPB_MAX = 480, ROW_MIN = 10, ROW_MAX = 40;
@@ -68,6 +70,9 @@ let selected = new Set<number>();
 let undoStack: string[] = [];
 let redoStack: string[] = [];
 let lastLen = 1;
+let lastVel = 1;     // velocity terakhir yang diatur di panel Velocity: dipakai nada yang dipasang berikutnya
+let velOpen = false; // panel Velocity (di bawah grid) terbuka / tertutup; tetap sama selama aplikasi hidup
+let velPanel!: HTMLElement, velBtn!: HTMLButtonElement, velVal!: HTMLElement, vc!: HTMLCanvasElement;
 let hoverP = -1;
 let raf = 0;
 
@@ -124,7 +129,10 @@ function eachVLine(sx: number, vw: number, fn: (x: number, beat: number, level: 
 
 function drawNoteBody(c: CanvasRenderingContext2D, n: Note, sx: number, sy: number, sel: boolean) {
   const x = n.s * ppb - sx, w = Math.max(3, n.l * ppb), y = (P_MAX - n.p) * rowH - sy;
+  const a0 = c.globalAlpha;   // a0 = transparansi dasar (mis. animasi hapus); velocity hanya menipiskan badan nada, tanda pilih / label tetap jelas
+  c.globalAlpha = a0 * velAlpha(n.v);
   c.fillStyle = color; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 3); c.fill();
+  c.globalAlpha = a0;
   if (sel) { c.fillStyle = 'rgba(255,255,255,.35)'; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 3); c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.stroke(); }
   if (n.sl) {   // slide: lebih terang + tanda panah miring di kiri
     c.fillStyle = 'rgba(255,255,255,.3)'; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 3); c.fill();
@@ -274,6 +282,116 @@ function drawRuler() {
   c.fillStyle = '#33333f'; c.fillRect(0, RULER_H - 1, vw, 1);
 }
 
+// ---------- panel Velocity: satu batang per nada, sejajar dengan awal nada di grid (ikut zoom & geser) ----------
+// Tinggi batang = velocity (0..1). Seret batang untuk mengubah; seret melintasi beberapa batang = melukis velocity.
+// Batang nada terpilih diseret bersama (selisihnya sama). Hasilnya: nada di grid makin transparan, suaranya makin pelan.
+const VEL_PAD_T = 10, VEL_PAD_B = 8, VEL_HIT = 11;
+interface VelGesture { id: number; mode: 'paint' | 'delta'; anchor: number; v0: number; orig: Map<number, number>; lastX: number; lastV: number; pushed: boolean; }
+let vg: VelGesture | null = null;
+const velUse = (h: number) => Math.max(1, h - VEL_PAD_T - VEL_PAD_B);
+const velY = (v: number, h: number) => VEL_PAD_T + (1 - velOf(v)) * velUse(h);
+const velFromY = (y: number, h: number) => clamp(1 - (y - VEL_PAD_T) / velUse(h), VEL_MIN, 1);
+const velX = (n: Note, sx: number) => KEY_W + n.s * ppb - sx;
+const pct = (v: number) => Math.round(velOf(v) * 100) + '%';
+function velShow() {   // angka di tombol panel: nilai yang sedang diseret, atau nilai bersama nada terpilih
+  if (!velVal) return;
+  let txt = '';
+  if (vg) txt = pct(st.notes.find(n => n.id === vg!.anchor)?.v ?? 1);
+  else if (selected.size) {
+    const vs = st.notes.filter(n => selected.has(n.id)).map(n => Math.round(velOf(n.v) * 100));
+    if (vs.length && vs.every(v => v === vs[0])) txt = vs[0] + '%';
+  }
+  if (velVal.textContent !== txt) velVal.textContent = txt;
+}
+function drawVel() {
+  if (!velOpen || !vc) return;
+  const body = vc.parentElement!, w = body.clientWidth, h = body.clientHeight;
+  if (w < 2 || h < 2) return;
+  const sx = curL(), c = fit(vc, w, h, 2);
+  c.fillStyle = '#101016'; c.fillRect(0, 0, w, h);
+  // kolom kiri (selebar tuts piano): skala 100 / 50 / 0
+  c.fillStyle = '#1e1e26'; c.fillRect(0, 0, KEY_W, h);
+  c.font = '600 10px system-ui,sans-serif'; c.textBaseline = 'middle'; c.textAlign = 'right'; c.fillStyle = '#8a8a9a';
+  for (const t of [1, 0.5, 0]) c.fillText(String(Math.round(t * 100)), KEY_W - 8, Math.min(h - 7, Math.max(7, velY(t, h))));
+  c.textAlign = 'start';
+  c.fillStyle = '#33333f'; c.fillRect(KEY_W - 1, 0, 1, h);
+  // area batang
+  c.save(); c.beginPath(); c.rect(KEY_W - 7, 0, w - KEY_W + 7, h); c.clip();   // sedikit melewati tepi kiri: kepala batang nada di awal pattern tidak terpotong
+  eachVLine(sx, w - KEY_W, (x, _b, li) => { c.fillStyle = LEVEL_FILL[li]; c.fillRect(KEY_W + x - 0.5, 0, 1, h); });
+  for (const t of [0, 0.25, 0.5, 0.75, 1]) { c.fillStyle = t === 0.5 || t === 0 || t === 1 ? 'rgba(255,255,255,.12)' : 'rgba(255,255,255,.05)'; c.fillRect(KEY_W, Math.round(velY(t, h)), w - KEY_W, 1); }
+  const ex = Math.round(KEY_W + total * ppb - sx);
+  if (ex >= KEY_W && ex <= w) { c.fillStyle = color; c.fillRect(ex - 1, 0, 2, h); }
+  const base = h - VEL_PAD_B;
+  for (const pass of [false, true]) {   // nada terpilih digambar terakhir (di atas)
+    for (const n of st.notes) {
+      if (selected.has(n.id) !== pass) continue;
+      const x = Math.round(velX(n, sx)); if (x < KEY_W - 8 || x > w + 8) continue;
+      const y = Math.round(velY(velOf(n.v), h));
+      c.fillStyle = color; c.fillRect(x - 1, y, 3, Math.max(1, base - y));   // batang
+      c.beginPath(); c.arc(x + 0.5, y, pass ? 5.5 : 4.5, 0, Math.PI * 2); c.fill();   // kepala batang
+      if (pass) { c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke(); }
+    }
+  }
+  c.restore();
+  velShow();
+}
+// batang yang dipegang di titik (px, py): dalam jarak VEL_HIT horizontal; kalau bertumpuk (akor) pilih yang kepalanya paling dekat dengan jari
+function velHit(px: number, py: number, h: number): Note | null {
+  const sx = curL(); let best: Note | null = null, bd = 1e9;
+  for (const n of st.notes) {
+    const dx = Math.abs(velX(n, sx) - px); if (dx > VEL_HIT) continue;
+    const d = dx * 0.25 + Math.abs(velY(velOf(n.v), h) - py);
+    if (d <= bd) { bd = d; best = n; }
+  }
+  return best;
+}
+function velXY(e: PointerEvent) { const r = vc.getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top, h: r.height}; }
+function velSet(n: Note, v: number) { if (v >= 1) delete n.v; else n.v = Math.round(v * 1000) / 1000; }
+function onVelDown(e: PointerEvent) {
+  if ((e.pointerType === 'mouse' && e.button !== 0) || vg) return;
+  const {x, y, h} = velXY(e), hit = velHit(x, y, h); if (!hit) return;
+  e.preventDefault(); vc.setPointerCapture(e.pointerId);
+  const multi = selected.has(hit.id) && selected.size > 1;
+  vg = {id: e.pointerId, mode: multi ? 'delta' : 'paint', anchor: hit.id, v0: velOf(hit.v),
+    orig: new Map(st.notes.filter(n => multi ? selected.has(n.id) : n.id === hit.id).map(n => [n.id, velOf(n.v)])), lastX: x, lastV: velFromY(y, h), pushed: false};
+  velApply(x, y, h);
+}
+function velApply(x: number, y: number, h: number) {
+  const gs = vg; if (!gs) return;
+  const v = velFromY(y, h);
+  if (!gs.pushed) { pushUndo(); gs.pushed = true; }
+  if (gs.mode === 'delta') {
+    const d = v - gs.v0;
+    for (const n of st.notes) { const o = gs.orig.get(n.id); if (o !== undefined) velSet(n, clamp(o + d, VEL_MIN, 1)); }
+  } else {   // melukis: batang yang dipegang + semua batang yang dilewati sejak titik terakhir (nilainya diinterpolasi, gerakan cepat tidak melewatkan batang)
+    const sx = curL(), a = Math.min(gs.lastX, x), b = Math.max(gs.lastX, x), span = x - gs.lastX;
+    const an = st.notes.find(n => n.id === gs.anchor), ax = an ? velX(an, sx) : -1e9;
+    for (const n of st.notes) {
+      const nx = velX(n, sx);
+      const holding = n === an && Math.abs(x - nx) <= VEL_HIT;   // batang yang dipegang mengikuti jari selama jari masih di dekatnya
+      const swept = nx >= a && nx <= b && (n === an || Math.abs(nx - ax) >= 1);   // batang lain di tumpukan yang sama dengan batang yang dipegang tidak ikut berubah
+      if (!holding && !swept) continue;
+      const t = swept && Math.abs(span) >= 1 ? clamp((nx - gs.lastX) / span, 0, 1) : 1;
+      velSet(n, clamp(gs.lastV + (v - gs.lastV) * t, VEL_MIN, 1));
+    }
+    gs.lastX = x; gs.lastV = v;
+  }
+  lastVel = velOf(st.notes.find(n => n.id === gs.anchor)?.v);
+  schedule();
+}
+function onVelMove(e: PointerEvent) { if (!vg || e.pointerId !== vg.id) return; const {x, y, h} = velXY(e); velApply(x, y, h); }
+function onVelUp(e: PointerEvent) {
+  if (!vg || e.pointerId !== vg.id) return;
+  vg = null; schedule();   // schedule: menggambar ulang + memberi tahu perubahan (mini-notes di pattern ikut berubah)
+}
+function setVelOpen(open: boolean) {
+  velOpen = open;
+  velPanel.classList.toggle('is-open', open);
+  velBtn.setAttribute('aria-expanded', String(open));
+  velBtn.title = open ? 'Tutup panel Velocity' : 'Buka panel Velocity';
+  if (open) requestAnimationFrame(() => { drawVel(); schedule(); });   // tinggi grid berubah (ResizeObserver menggambar ulang grid)
+}
+
 // ---------- menu bulat di atas / bawah note terpilih (gaya sama dengan menu pattern di timeline) ----------
 let selBarOn = false;
 let barOff = false;   // true setelah note selesai di-DRAG (pindah / ubah panjang): menu tidak muncul; baru muncul lagi kalau note di-KLIK
@@ -370,14 +488,16 @@ function notifyChange() {
   if (sn !== notified) { notified = sn; onChange(curKey); }
 }
 export const PR_BEATS = total;   // lebar grid piano roll (ketukan)
-export function getPianoRollNotes(id: string): Array<{p: number; s: number; l: number; sl?: boolean}> {
+// sl / v hanya ikut kalau bukan nilai awal (velocity 1 = tidak disimpan), jadi data project lama tetap sama
+const extras = (n: {sl?: boolean; v?: number}) => ({...(n.sl ? {sl: true} : {}), ...(n.v !== undefined && n.v < 1 ? {v: Math.round(velOf(n.v) * 1000) / 1000} : {})});
+export function getPianoRollNotes(id: string): NoteData[] {
   const x = states.get(id);
-  return x ? x.notes.map(n => (n.sl ? {p: n.p, s: n.s, l: n.l, sl: true} : {p: n.p, s: n.s, l: n.l})) : [];
+  return x ? x.notes.map(n => ({p: n.p, s: n.s, l: n.l, ...extras(n)})) : [];
 }
 // isi nada satu kunci dari data yang disimpan (memuat project)
-export function setPianoRollNotes(id: string, notes: Array<{p: number; s: number; l: number; sl?: boolean}>) {
+export function setPianoRollNotes(id: string, notes: NoteData[]) {
   const st: State = {notes: [], nextId: 1};
-  for (const n of notes) st.notes.push({id: st.nextId++, p: n.p, s: n.s, l: n.l, ...(n.sl ? {sl: true} : {})});
+  for (const n of notes) st.notes.push({id: st.nextId++, p: n.p, s: n.s, l: n.l, ...extras(n)});
   states.set(id, st);
   onChange && onChange(id);
 }
@@ -387,7 +507,7 @@ export function copyPianoRollNotes(from: string, to: string, fromBeat = 0, toBea
   const dst: State = {notes: [], nextId: 1};
   for (const n of src.notes) {
     const a = Math.max(n.s, fromBeat), b = Math.min(n.s + n.l, toBeat);
-    if (b > a + 1e-9) dst.notes.push({id: dst.nextId++, p: n.p, s: a - fromBeat, l: b - a, ...(n.sl ? {sl: true} : {})});
+    if (b > a + 1e-9) dst.notes.push({id: dst.nextId++, p: n.p, s: a - fromBeat, l: b - a, ...extras(n)});
   }
   states.set(to, dst);
 }
@@ -429,7 +549,7 @@ function redraw() {
       window.clearTimeout(zoomEndT); zoomEndT = 0; flushZoom(); zoomFrame = true; gridDirty = true;
     } else {
       hudMode = 'preview';
-      placeGrid(z.l, z.t); drawKeys(); drawRuler(); placePlayhead();
+      placeGrid(z.l, z.t); drawKeys(); drawRuler(); drawVel(); placePlayhead();
       if (selBar && !selBar.hidden) { selBar.hidden = true; selBarOn = false; }
       window.clearTimeout(zoomEndT); zoomEndT = window.setTimeout(commitZoom, ZOOM_IDLE);
       hudTick(t0); return;
@@ -437,12 +557,12 @@ function redraw() {
   }
   if (!gridDirty && gridCovers(sc.scrollLeft, sc.scrollTop)) {   // hanya scroll biasa & masih di dalam canvas: geser saja
     hudMode = 'scroll';
-    placeGrid(sc.scrollLeft, sc.scrollTop); drawKeys(); drawRuler(); placeSelBar(); placePlayhead();
+    placeGrid(sc.scrollLeft, sc.scrollTop); drawKeys(); drawRuler(); drawVel(); placeSelBar(); placePlayhead();
     hudTick(t0); return;
   }
   hudMode = 'full'; gridDirty = false;
   const zo = zoomFrame; zoomFrame = false;
-  drawGrid(zo); drawKeys(); drawRuler(); placeSelBar(); placePlayhead();
+  drawGrid(zo); drawKeys(); drawRuler(); drawVel(); placeSelBar(); placePlayhead();
   // notifyChange membuat JSON seluruh note: di frame zoom ditunda (note tidak berubah), supaya tidak ikut membebani gesture
   if (zo) { window.clearTimeout(notifyT); notifyT = window.setTimeout(notifyChange, 250); } else notifyChange();
   hudTick(t0);
@@ -512,11 +632,11 @@ function deleteSelected() {
   selected.clear(); updateUI(); schedule();
 }
 // salin / tempel nada (clipboard dibagi antar pattern; posisi disimpan relatif ke nada paling kiri)
-let clip: Array<{p: number; s: number; l: number; sl?: boolean}> = [];
+let clip: NoteData[] = [];
 function copySelected() {
   if (!selected.size) return;
   const sel = st.notes.filter(n => selected.has(n.id)), s0 = Math.min(...sel.map(n => n.s));
-  clip = sel.map(n => ({p: n.p, s: n.s - s0, l: n.l, ...(n.sl ? {sl: true} : {})}));
+  clip = sel.map(n => ({p: n.p, s: n.s - s0, l: n.l, ...extras(n)}));
   updateUI(); flashBtn('copy');
 }
 function pasteNotes() {
@@ -528,7 +648,7 @@ function pasteNotes() {
   let at = sel.length ? snapRound(Math.max(...sel.map(n => n.s + n.l))) : snapFloor(sc.scrollLeft / ppb);
   if (at + span > total + 1e-9) { if (sel.length) return shakeSelBar(); at = total - span; }
   pushUndo();
-  const made = clip.map(c => ({id: st.nextId++, p: c.p, s: at + c.s, l: c.l, ...(c.sl ? {sl: true} : {})}));
+  const made = clip.map(c => ({id: st.nextId++, p: c.p, s: at + c.s, l: c.l, ...extras(c)}));
   st.notes.push(...made);
   selected = new Set(made.map(n => n.id));
   updateUI(); schedule();
@@ -701,7 +821,7 @@ function addNoteAt(x: number, y: number): Note | null {
   const l = Math.min(lastLen, total - s);
   if (l <= 0) return null;
   pushUndo();
-  const n: Note = {id: st.nextId++, p, s, l};
+  const n: Note = {id: st.nextId++, p, s, l, ...(lastVel < 1 ? {v: lastVel} : {})};   // nada baru memakai velocity terakhir yang diatur di panel
   st.notes.push(n);   // note baru tidak langsung terpilih; baru terpilih kalau diklik lagi
   return n;
 }
@@ -968,6 +1088,10 @@ function build(): HTMLElement {
       '<canvas class="pr__keys" aria-hidden="true"></canvas>' +
       '<div class="pr__scroll"><div class="pr__space"></div><div class="pr__clip"><canvas class="pr__grid" role="img" aria-label="Grid nada"></canvas></div></div>' +
       '<div class="pr__phclip" aria-hidden="true"><div class="pr__ph"><svg width="9" height="20" viewBox="0 0 9 20"><path d="M5 0H4C1.79 0 0 1.79 0 4v8.6c0 .86.27 1.69.78 2.38L4.5 20l3.72-5.02A4 4 0 0 0 9 12.6V4c0-2.21-1.79-4-4-4Z" fill="currentColor"/></svg><i></i></div></div>' +
+    '</div>' +
+    '<div class="pr__vel">' +
+      '<button type="button" class="pr__velbtn" aria-expanded="false" aria-controls="prVelBody" title="Buka panel Velocity">' + ICON.chev + '<span>Velocity</span><b class="pr__velval" aria-live="off"></b></button>' +
+      '<div class="pr__velbody" id="prVelBody"><canvas class="pr__velc" role="img" aria-label="Velocity tiap nada: seret batang untuk mengubah"></canvas></div>' +
     '</div>';
 
   sc = el.querySelector<HTMLElement>('.pr__scroll')!;
@@ -979,6 +1103,20 @@ function build(): HTMLElement {
   hudEl = document.createElement('div'); hudEl.className = 'pr__hud'; hudEl.setAttribute('aria-hidden', 'true'); el.querySelector('.pr__main')!.appendChild(hudEl);
   btnUndo = el.querySelector<HTMLButtonElement>('[data-act="undo"]')!;
   btnRedo = el.querySelector<HTMLButtonElement>('[data-act="redo"]')!;
+
+  // panel Velocity (buka / tutup di bawah grid)
+  velPanel = el.querySelector<HTMLElement>('.pr__vel')!;
+  velBtn = el.querySelector<HTMLButtonElement>('.pr__velbtn')!;
+  velVal = el.querySelector<HTMLElement>('.pr__velval')!;
+  vc = el.querySelector<HTMLCanvasElement>('.pr__velc')!;
+  velBtn.addEventListener('click', () => setVelOpen(!velOpen));
+  vc.addEventListener('pointerdown', onVelDown);
+  vc.addEventListener('pointermove', onVelMove);
+  vc.addEventListener('pointerup', onVelUp);
+  vc.addEventListener('pointercancel', onVelUp);
+  vc.addEventListener('contextmenu', e => e.preventDefault());
+  new ResizeObserver(() => { if (velOpen && root && !root.hidden) drawVel(); }).observe(velPanel);
+  setVelOpen(velOpen);
 
   // menu bulat Copy / Delete / Paste yang muncul di dekat note terpilih
   phDom = el.querySelector<HTMLElement>('.pr__ph')!;
@@ -1047,7 +1185,7 @@ export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.
     const mid = seen.length ? seen.reduce((a, n) => a + n.p, 0) / seen.length : 62;   // mulai di sekitar C4
     sc.scrollLeft = 0; sc.scrollTop = Math.max(0, (P_MAX - mid) * rowH - vh / 2);
   }
-  resetAnim(); selBarOn = false; selBar.hidden = true;
+  resetAnim(); selBarOn = false; selBar.hidden = true; vg = null;
   phSig = ''; keysSig = rulerSig = ''; zoomPend = null; zoomFrame = false; window.clearTimeout(zoomEndT); gc.style.transform = ''; drawn.ppb = 0; gridDirty = true;
   if (!keep) setTool('draw');
   updateUI(); redraw();
@@ -1056,7 +1194,7 @@ export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.
 export function closePianoRoll() {
   if (!root || root.hidden) return;
   closeMenu();
-  const r = root; r.classList.remove('is-open'); g = null; ptrs.clear(); pinch = null; phStop(); phSig = ''; window.clearTimeout(zoomEndT); zoomPend = null; gc.style.transform = '';
+  const r = root; r.classList.remove('is-open'); g = null; vg = null; ptrs.clear(); pinch = null; phStop(); phSig = ''; window.clearTimeout(zoomEndT); zoomPend = null; gc.style.transform = '';
   setTimeout(() => { if (!r.classList.contains('is-open')) r.hidden = true; }, 200);
   onClose && onClose();
 }

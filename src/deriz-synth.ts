@@ -105,7 +105,8 @@ class DerizSampler extends AudioWorkletProcessor {
       id: m.id, semis: m.semis, N: N, nom: start, prev: 0, first: true, last: false, oi: oi,
       w: 0, cEnd: 0, vEnd: 0, rd: 0, rho: P0 * rate / sampleRate, size: size,
       T: [new Float32Array(size), new Float32Array(size)],
-      env: 0, rel: false, atk: 1 / (0.002 * sampleRate), relK: Math.exp(-1 / (0.04 * sampleRate))
+      env: 0, rel: false, atk: 1 / (0.002 * sampleRate), relK: Math.exp(-1 / (0.04 * sampleRate)),
+      vel: m.vel === undefined ? 1 : m.vel   // velocity per nada (penguatan 0..1), terpisah dari knob Volume yang berlaku untuk semua nada
     });
   }
   // interpolasi kubik (Catmull-Rom) pada array x di posisi pecahan pos (batas dijaga)
@@ -269,7 +270,7 @@ class DerizSampler extends AudioWorkletProcessor {
           sr = ((((x2 - xm) * 0.5 + (x0 - x1) * 1.5) * f + (xm - 2.5 * x0 + 2 * x1 - 0.5 * x2)) * f + (x1 - xm) * 0.5) * f + x0;
         }
         if (!v.rel) { if (v.env < 1) v.env = Math.min(1, v.env + v.atk); } else v.env *= v.relK;
-        const g = v.env * (g0 + (g1 - g0) * i / n);
+        const g = v.env * v.vel * (g0 + (g1 - g0) * i / n);
         oL[i] += sl * g; oR[i] += sr * g;
         v.rd += v.rho;
       }
@@ -317,8 +318,9 @@ export class DerizSynth {
   }
 
   // at (opsional) = waktu AudioContext tempat nada mulai / dilepas; kosong = sekarang
-  noteOn(id: number, semis: number, start: number, speed: number, pitch: number, vol: number, at = 0): void {
-    this.node.port.postMessage({ t: 'on', id, semis, start, speed, pitch, vol, at });
+  // vel (opsional) = penguatan nada ini 0..1 (1 = tidak berubah)
+  noteOn(id: number, semis: number, start: number, speed: number, pitch: number, vol: number, at = 0, vel = 1): void {
+    this.node.port.postMessage({ t: 'on', id, semis, start, speed, pitch, vol, at, vel });
   }
   noteOff(id: number, at = 0): void { this.node.port.postMessage({ t: 'off', id, at }); }
   glide(id: number, semis: number, at: number, dur: number): void { this.node.port.postMessage({ t: 'glide', id, semis, at, dur }); }   // slide: meluncur ke `semis` mulai `at` selama `dur` detik

@@ -14,6 +14,7 @@ import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
 import { decodeFile, addBuffer, getBuffer, encodeWav, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
 import { slideSource, glideBeats } from './note-slide';
+import { velAlpha } from './velocity';
 import { openPianoRoll, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getPianoRollNotes, setPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, clearPianoRollNotes, PR_BEATS } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 initLandscape();
@@ -336,7 +337,7 @@ function renderPatNotes(el) {
   let lo = 127, hi = 0; notes.forEach(n => { lo = Math.min(lo, n.p); hi = Math.max(hi, n.p); });
   const rows = Math.max(hi - lo + 1, 8), top = (rows - (hi - lo + 1)) / 2;   // minimal 8 baris supaya 1-2 nada tidak jadi balok raksasa
   box.innerHTML = '<svg viewBox="0 0 ' + PR_BEATS + ' ' + rows + '" preserveAspectRatio="none" aria-hidden="true" style="width:calc(var(--bar) * ' + PR_BEATS / 4 + ')">' +
-    notes.map(n => '<rect x="' + n.s + '" y="' + (top + hi - n.p + 0.1) + '" width="' + Math.max(n.l, 0.12) + '" height="0.8"/>').join('') + '</svg>';
+    notes.map(n => '<rect x="' + n.s + '" y="' + (top + hi - n.p + 0.1) + '" width="' + Math.max(n.l, 0.12) + '" height="0.8"' + (n.v !== undefined ? ' fill-opacity="' + velAlpha(n.v).toFixed(2) + '"' : '') + '/>').join('') + '</svg>';
 }
 // Banyak DERIZ bisa mengisi satu pattern: nada instrumen bawaan track pemilik pattern disimpan di kunci id pattern, nada DERIZ lain di "<id>@<id DERIZ>"
 const patKey = (prId, fxId, laneTrack) => !hasSynth(laneTrack) && fxRack.derizOwnsPlain(laneTrack, fxId) ? prId : prId + '@' + fxId;   // DERIZ pertama yang dibuat di track pemilik pattern pakai kunci polos (data lama tetap terbaca)
@@ -1070,7 +1071,7 @@ function synthPump(ctx, ahead) {
   while (synthI < synthQ.length && synthQ[synthI].when <= ahead) {
     if (synthQ[synthI].when > ctx.currentTime + .1 && performance.now() - t0 > 3) break;
     const n = synthQ[synthI++];
-    if (n.deriz) fxRack.derizPlay(n.track, n.p, n.when, n.dur, n.glides, n.fxId); else playNote(ctx, master, n.track, n.p, n.when, n.dur, n.glides);
+    if (n.deriz) fxRack.derizPlay(n.track, n.p, n.when, n.dur, n.glides, n.fxId, n.vel); else playNote(ctx, master, n.track, n.p, n.when, n.dur, n.glides, n.vel);
   }
 }
 // Nada satu pattern (kunci nada = key) dijadwalkan ke instrumen track "track"; deriz = lewat sampler DERIZ track itu
@@ -1090,10 +1091,10 @@ function queueNotes(el, key, track, deriz, bs, fxId) {
       else { en.glides.push({b: s, from: en.cur, to: n.p, d: Math.min(glideBeats(n), e - s)}); en.cur = n.p; }
       return;
     }
-    const e1 = {p: n.p, cur: n.p, sb: Math.max(s, from), eb: e, glides: []};
+    const e1 = {p: n.p, cur: n.p, sb: Math.max(s, from), eb: e, glides: [], vel: n.v};   // velocity nada sumber berlaku untuk seluruh luncuran
     ent.set(n, e1); list.push(e1);
   });
-  list.forEach(en => synthQ.push({track, deriz, fxId, p: en.p, when: startCtx + (en.sb - from) * bs, dur: (en.eb - en.sb) * bs,
+  list.forEach(en => synthQ.push({track, deriz, fxId, p: en.p, vel: en.vel, when: startCtx + (en.sb - from) * bs, dur: (en.eb - en.sb) * bs,
     glides: en.glides.length ? en.glides.map(g => ({when: startCtx + (g.b - from) * bs, from: g.from, to: g.to, dur: g.d * bs})) : undefined}));
 }
 function buildSynthQueue() {

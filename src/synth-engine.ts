@@ -3,6 +3,7 @@
 // Semua parameter 0..1 (sama seperti knob & slider di panel efek); konversi ke satuan nyata lewat fungsi di bawah.
 
 import { trackInput } from './audio-engine';
+import { velGain } from './velocity';
 
 export interface SupersawParams {
   on: boolean;
@@ -40,7 +41,7 @@ export interface Voice {
 const live = new Set<Voice>();
 const MAX_VOICES = 28;
 
-export function startVoice(ctx: AudioContext, dest: AudioNode, track: string, midi: number, when: number): Voice | null {
+export function startVoice(ctx: AudioContext, dest: AudioNode, track: string, midi: number, when: number, vel?: number): Voice | null {
   const p = params.get(track);
   if (!p || !p.on) return null;
   while (live.size >= MAX_VOICES) {   // terlalu banyak voice sekaligus membebani thread audio (7 saw per voice): curi voice yang sudah dilepas / paling lama
@@ -54,7 +55,7 @@ export function startVoice(ctx: AudioContext, dest: AudioNode, track: string, mi
   filter.type = 'lowpass'; filter.frequency.value = cutoffHz(p.cutoff); filter.Q.value = resoQ(p.reso);
   const a = attackSec(p.attack), d = decaySec(p.decay), s = clamp01(p.sustain), r = releaseSec(p.release);
   env.gain.setValueAtTime(0, t0);
-  const peak = VOICE_GAIN * levelMul(p.level);
+  const peak = VOICE_GAIN * levelMul(p.level) * velGain(vel);   // vel kosong = 1: volume tidak berubah
   env.gain.linearRampToValueAtTime(peak, t0 + a);
   env.gain.setTargetAtTime(peak * s, t0 + a, d / 3);
   filter.connect(env); env.connect(trackInput(ctx, dest, track));
@@ -93,8 +94,8 @@ export function releaseVoice(v: Voice | null, at: number): void {
 // Nada terjadwal (dari piano roll): mulai di `when`, lepas setelah `dur` detik.
 export interface Glide { when: number; from: number; to: number; dur: number }   // meluncur dari MIDI `from` ke `to` mulai `when` (waktu AudioContext) selama `dur` detik
 const midiHz = (m: number): number => 440 * Math.pow(2, (m - 69) / 12);
-export function playNote(ctx: AudioContext, dest: AudioNode, track: string, midi: number, when: number, dur: number, glides?: Glide[]): void {
-  const v = startVoice(ctx, dest, track, midi, when);
+export function playNote(ctx: AudioContext, dest: AudioNode, track: string, midi: number, when: number, dur: number, glides?: Glide[], vel?: number): void {
+  const v = startVoice(ctx, dest, track, midi, when, vel);
   if (!v) return;
   if (glides) for (const g of glides) {
     const t = Math.max(g.when, v.t0), d = Math.max(0.01, g.dur);

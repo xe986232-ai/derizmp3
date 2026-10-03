@@ -10,6 +10,7 @@ import { setReverb, setEq, reverbSeconds, eqDb, decodeStandalone, trackInput } f
 import { DerizSynth } from './deriz-synth';
 import { isAudio, ACCEPT as AUDIO_ACCEPT } from './audio-upload-card';
 import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } from './synth-engine';
+import { velGain } from './velocity';
 
 type FxType = 'reverb' | 'eq' | 'supersaw' | 'deriz';
 // DERIZ: audio yang di-upload ke canvas plugin (buffer disimpan untuk tahap berikutnya; peaks + max khusus untuk menggambar waveform)
@@ -332,7 +333,7 @@ export interface FxRack {
   addInstrument(track: string, type: 'supersaw' | 'deriz'): void;   // track synth baru: pasang plugin instrumennya (kartu di paling atas)
   closePicker(instant?: boolean): void;
   hasDeriz(track: string): boolean;   // track punya plugin DERIZ yang menyala dan sudah berisi audio
-  derizPlay(track: string, midi: number, when: number, dur: number, glides?: Array<{ when: number; to: number; dur: number }>, fxId?: number): void;   // nada terjadwal dari piano roll (when = waktu AudioContext); fxId kosong = DERIZ pertama yang menyala
+  derizPlay(track: string, midi: number, when: number, dur: number, glides?: Array<{ when: number; to: number; dur: number }>, fxId?: number, vel?: number): void;   // nada terjadwal dari piano roll (when = waktu AudioContext); fxId kosong = DERIZ pertama yang menyala
   derizOn(track: string, midi: number, fxId?: number): number;   // nada langsung (keyboard di bawah piano roll); mengembalikan id untuk derizOff
   derizOwnsPlain(track: string, fxId: number): boolean;   // DERIZ ini pemilik nada kunci polos di pattern track tsb
   derizIds(track: string): number[];          // semua DERIZ di track ini, urut kartu (yang pertama = bawaan track)
@@ -544,14 +545,14 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     }
     if (heads.size) headRaf = requestAnimationFrame(headTick);
   }
-  function derizPlay(track: string, midi: number, when: number, dur: number, glides?: Array<{ when: number; to: number; dur: number }>, fxId?: number): void {
+  function derizPlay(track: string, midi: number, when: number, dur: number, glides?: Array<{ when: number; to: number; dur: number }>, fxId?: number, vel?: number): void {
     const fx = derizOf(track, fxId); if (!fx) return;
     const { ctx, dest } = host(), id = ++kbSeq;
     derizSynth(fx, ctx).then(s => {
       const z = fx.deriz; if (!z) return;
       s.routeTo(trackInput(ctx, dest, track)); s.setBuffer(z.buf);
       const [sp, pi, vo] = derizArgs(fx), at = Math.max(when, ctx.currentTime);
-      s.noteOn(id, midi - KROOT, derizStart(z), sp, pi, vo, at);
+      s.noteOn(id, midi - KROOT, derizStart(z), sp, pi, vo, at, velGain(vel));
       if (glides) for (const g of glides) s.glide(id, g.to - KROOT, Math.max(g.when, at), g.dur);
       s.noteOff(id, at + Math.max(0.01, dur));
       headBegin(id, fx, ctx, at, at + Math.max(0.01, dur));
