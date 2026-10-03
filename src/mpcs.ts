@@ -71,7 +71,7 @@ function build(): void {
       `<header class="mpcs__head"><i class="mpcs__led" aria-hidden="true"></i><span class="mpcs__title">MPCS</span><span class="mpcs__stat" role="status" aria-live="polite"></span><button type="button" class="mpcs__close" aria-label="Tutup MPCS">${ICON.close}</button></header>` +
       '<div class="mpcs__bar">' +
         `<button type="button" class="mpcs__up" data-a="up">${ICON.up}<span>Upload audio</span></button>` +
-        KNOB_KEYS.map(knobHtml).join('') +
+        `<div class="mpcs__knobs">${KNOB_KEYS.map(knobHtml).join('')}</div>` +
         `<button type="button" class="mpcs__play" data-a="play" aria-label="Putar" disabled>${ICON.play}</button>` +
       '</div>' +
       '<canvas class="mpcs__ov" aria-label="Peta posisi sample (ketuk / seret untuk pindah)" hidden></canvas>' +
@@ -207,7 +207,7 @@ function build(): void {
       const nF = S.pt.rms.length;
       for (let f = 0; f < nF; f++) { const px = Math.min(w - 1, Math.floor(f / nF * w)), v = Math.min(1, S.pt.rms[f] / S.ref); if (v > ovProf[px]) ovProf[px] = v; }
     }
-    go.fillStyle = 'rgba(150,104,214,.35)';
+    go.fillStyle = 'rgba(38,176,160,.35)';
     for (let px = 0; px < w; px++) { const a = ovProf[px] * h * .45; go.fillRect(px, h / 2 - a, 1, a * 2 + 1); }
     const rows = S.hi - S.lo + 1, hopSec = S.pt.hop / S.pt.sr;
     go.fillStyle = '#ff8a3d';
@@ -239,7 +239,7 @@ function build(): void {
     // baris semiton
     for (let m = lo; m <= hi; m++) {
       const y = (hi - m) * rowH, pc = ((m % 12) + 12) % 12;
-      g.fillStyle = BLACK.has(pc) ? '#17171e' : '#1f1f28'; g.fillRect(0, y, W, rowH);
+      g.fillStyle = BLACK.has(pc) ? '#0f1a1d' : '#16252a'; g.fillRect(0, y, W, rowH);
       if (pc === 0) { g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(0, y + rowH - 1, W, 1); }
     }
     // garis detik
@@ -250,11 +250,11 @@ function build(): void {
     notes.forEach((nt, i) => {
       const x0 = xOf((nt.s - .5) * hopSec), x1 = xOf((nt.e - .5) * hopSec), yc = yOf(nt.target);
       const on = i === sel;
-      g.fillStyle = on ? 'rgba(166,108,255,.30)' : 'rgba(166,108,255,.16)';
-      g.strokeStyle = on ? '#fff' : 'rgba(166,108,255,.7)'; g.lineWidth = on ? 1.5 : 1;
+      g.fillStyle = on ? 'rgba(45,212,191,.30)' : 'rgba(45,212,191,.16)';
+      g.strokeStyle = on ? '#fff' : 'rgba(45,212,191,.7)'; g.lineWidth = on ? 1.5 : 1;
       g.beginPath(); g.roundRect(x0, yc - rowH * .5, Math.max(4, x1 - x0), rowH, Math.min(5, rowH / 2)); g.fill(); g.stroke();
       // amplitudo (ungu) mengikuti pitch hasil
-      g.fillStyle = 'rgba(150,104,214,.85)';
+      g.fillStyle = 'rgba(38,176,160,.85)';
       for (let f = nt.s; f < nt.e; f++) {
         if (!pt.f0[f]) continue;
         const m = 69 + 12 * Math.log2(pt.f0[f] / 440) + sc[f], h = Math.min(1, pt.rms[f] / S!.ref) * rowH * .42 + .5;

@@ -1310,18 +1310,21 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs[hidden]{display:none}
 .mpcs__back{position:absolute;inset:0;background:rgba(8,8,12,.5)}
 /* faceplate: logam gelap bersekrup, miring 3D tipis mengikuti kursor, kilau mengikuti arah cahaya (sama dengan card DERIZ) */
-.mpcs__win{--rx:0deg;--ry:0deg;--mx:50%;--my:0%;position:relative;display:flex;flex-direction:column;gap:10px;width:min(860px,100%);height:min(560px,100%);padding:14px 20px 20px 24px;border-radius:16px;overflow:hidden;outline:none;color:var(--text);
+.mpcs__win{--accent:#22d3c5;--accent-soft:rgba(34,211,197,.26);--rx:0deg;--ry:0deg;--mx:50%;--my:0%;position:relative;display:flex;flex-direction:column;gap:8px;width:min(520px,100%);height:min(400px,100%);padding:10px 14px 14px 18px;border-radius:16px;overflow:hidden;outline:none;color:var(--text);
   transform:perspective(1100px) rotateX(var(--rx)) rotateY(var(--ry));transition:transform .45s var(--ease-out),box-shadow .3s ease;
-  background-color:#17171e;
+  background-color:#0b1417;
   background-image:
-    radial-gradient(circle,#9a9ab0 0 1px,#2c2c38 1.8px,#07070b 3.2px,transparent 3.6px),radial-gradient(circle,#9a9ab0 0 1px,#2c2c38 1.8px,#07070b 3.2px,transparent 3.6px),
-    radial-gradient(circle,#9a9ab0 0 1px,#2c2c38 1.8px,#07070b 3.2px,transparent 3.6px),radial-gradient(circle,#9a9ab0 0 1px,#2c2c38 1.8px,#07070b 3.2px,transparent 3.6px),
-    radial-gradient(260px 170px at var(--mx) var(--my),rgba(255,255,255,.11),transparent 70%),
-    repeating-linear-gradient(90deg,rgba(255,255,255,.014) 0 1px,transparent 1px 3px),
-    linear-gradient(165deg,#2e2e3b 0%,#1c1c25 46%,#13131a 100%);
-  background-repeat:no-repeat,no-repeat,no-repeat,no-repeat,no-repeat,repeat,no-repeat;
-  background-position:left 7px top 7px,right 7px top 7px,left 7px bottom 7px,right 7px bottom 7px,0 0,0 0,0 0;
-  background-size:8px 8px,8px 8px,8px 8px,8px 8px,100% 100%,auto,100% 100%;
+    radial-gradient(circle,#9ab8b8 0 1px,#26383b 1.8px,#050a0c 3.2px,transparent 3.6px),radial-gradient(circle,#9ab8b8 0 1px,#26383b 1.8px,#050a0c 3.2px,transparent 3.6px),
+    radial-gradient(circle,#9ab8b8 0 1px,#26383b 1.8px,#050a0c 3.2px,transparent 3.6px),radial-gradient(circle,#9ab8b8 0 1px,#26383b 1.8px,#050a0c 3.2px,transparent 3.6px),
+    radial-gradient(220px 150px at var(--mx) var(--my),rgba(120,255,240,.13),transparent 70%),
+    linear-gradient(165deg,rgba(16,96,104,.30) 0%,rgba(8,48,56,.38) 46%,rgba(3,20,26,.52) 100%),
+    linear-gradient(27deg,#0b0b0b 5px,transparent 5px),linear-gradient(207deg,#0b0b0b 5px,transparent 5px),
+    linear-gradient(27deg,#2f2f2f 5px,transparent 5px),linear-gradient(207deg,#2f2f2f 5px,transparent 5px),
+    linear-gradient(90deg,#101010 10px,transparent 10px),
+    linear-gradient(#121212 25%,#0d0d0d 25%,#0d0d0d 50%,transparent 50%,transparent 75%,#323232 75%,#323232);
+  background-repeat:no-repeat,no-repeat,no-repeat,no-repeat,no-repeat,no-repeat,repeat,repeat,repeat,repeat,repeat,repeat;
+  background-position:left 7px top 7px,right 7px top 7px,left 7px bottom 7px,right 7px bottom 7px,0 0,0 0,0 5px,10px 0,0 10px,10px 5px,0 0,0 0;
+  background-size:8px 8px,8px 8px,8px 8px,8px 8px,100% 100%,100% 100%,20px 20px,20px 20px,20px 20px,20px 20px,20px 20px,20px 20px;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 0 0 1px rgba(255,255,255,.05),inset 0 -2px 0 rgba(0,0,0,.5),0 40px 80px -20px rgba(0,0,0,.85),0 2px 0 #0a0a0f}
 .mpcs__win.is-tilting{transition:transform .1s linear,box-shadow .3s ease}
 .mpcs__glass{position:absolute;inset:0;z-index:4;pointer-events:none;border-radius:inherit;background:linear-gradient(158deg,rgba(255,255,255,.07) 0,rgba(255,255,255,.015) 30%,transparent 31%)}   /* kilau kaca tipis di atas pelat */
@@ -1336,34 +1339,35 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
   background-image:linear-gradient(180deg,#03030600 0%,#040407 24%,#0d0d14 52%,#2a2a37 84%);-webkit-background-clip:text;background-clip:text;
   filter:drop-shadow(0 1px 0 rgba(255,255,255,.18)) drop-shadow(0 -1px 0 rgba(0,0,0,.55))}
 .mpcs__win.is-off .mpcs__title{background-image:linear-gradient(180deg,#0a0a0f 0%,#1a1a22 100%);filter:drop-shadow(0 1px 0 rgba(255,255,255,.12))}
-.mpcs__stat{margin-left:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#9a9ab0;font-size:12px;font-variant-numeric:tabular-nums}
+.mpcs__stat{margin-left:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#9ab8b8;font-size:12px;font-variant-numeric:tabular-nums}
 .mpcs__close{display:grid;place-items:center;flex:none;width:24px;height:24px;padding:0;border:0;border-radius:50%;color:#a8a8bd;cursor:pointer;
-  background:radial-gradient(circle at 36% 28%,#2f2f3c 0%,#1a1a22 60%,#101016 100%);
+  background:radial-gradient(circle at 36% 28%,#2f2f3c 0%,#1a1a22 60%,#0b1316 100%);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.12),inset 0 -1px 2px rgba(0,0,0,.6),0 0 0 2px #0a0a0f,0 0 0 3px rgba(255,255,255,.08);
   transition:color .2s ease,box-shadow .2s ease,transform .15s ease}
 .mpcs__close:hover{color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 -1px 2px rgba(0,0,0,.6),0 0 0 2px #0a0a0f,0 0 0 3px var(--accent),0 0 12px var(--accent-soft)}
 .mpcs__close:active{transform:scale(.9)}
 .mpcs__close:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 /* bar menu: hanya upload, tiga knob, play / pause */
-.mpcs__bar{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:12px 26px;flex:none;padding:2px 0 10px}
+.mpcs__knobs{display:contents}
+.mpcs__bar{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px 16px;flex:none;padding:0 0 9px}
 /* tombol upload: kunci logam timbul, turun saat ditekan */
-.mpcs__up{display:flex;align-items:center;justify-content:center;gap:8px;flex:none;min-width:150px;height:40px;padding:0 18px;border:1px solid rgba(255,255,255,.08);border-radius:11px;color:#ececf4;font:inherit;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer;
-  background:linear-gradient(180deg,#44445a,#25252f 55%,#1c1c25);
+.mpcs__up{display:flex;align-items:center;justify-content:center;gap:8px;flex:none;min-width:112px;height:34px;padding:0 14px;border:1px solid rgba(255,255,255,.08);border-radius:11px;color:#ececf4;font:inherit;font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer;
+  background:linear-gradient(180deg,#3f5559,#1f2f33 55%,#162226);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.2),inset 0 -2px 0 rgba(0,0,0,.45),0 4px 0 #0a0a0f,0 9px 14px -4px rgba(0,0,0,.65);
   transition:transform .12s ease,box-shadow .12s ease,background .2s ease}
-.mpcs__up:hover:not(:disabled){background:linear-gradient(180deg,#505068,#2c2c38 55%,#20202a)}
+.mpcs__up:hover:not(:disabled){background:linear-gradient(180deg,#4b6468,#243639 55%,#1a282b)}
 .mpcs__up:active:not(:disabled){transform:translateY(3px);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),inset 0 -1px 0 rgba(0,0,0,.45),0 1px 0 #0a0a0f,0 3px 6px -2px rgba(0,0,0,.65)}
 .mpcs__up:disabled{cursor:default;opacity:.75}
 .mpcs__up:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .mpcs__up span{overflow:hidden;text-overflow:ellipsis}
 /* tiga knob: kenop logam cembung dengan cincin lengkung yang menyala */
-.mpcs__knob{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:60px;transition:opacity .25s ease}
+.mpcs__knob{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:50px;transition:opacity .25s ease}
 .mpcs__knob.is-off{opacity:.45;pointer-events:none}
-.mpcs__knob .fxk{width:52px;height:52px;border-radius:50%;border:1px solid rgba(255,255,255,.12);
+.mpcs__knob .fxk{width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,.12);
   background:radial-gradient(circle at 50% 50%,#0a0a0f 0 62%,#1a1a22 100%);
   box-shadow:inset 0 2px 5px rgba(0,0,0,.85),0 1px 0 rgba(255,255,255,.1),0 7px 10px -4px rgba(0,0,0,.7)}   /* dudukan cekung + bayangan jatuh di bawah kenop */
 .mpcs__knob .knob-inner{display:block;width:100%;height:100%;border-radius:50%;
-  background:radial-gradient(circle at 36% 28%,#4a4a5c 0%,#24242f 52%,#101016 100%);
+  background:radial-gradient(circle at 36% 28%,#3f5558 0%,#1c2b2f 52%,#0b1316 100%);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -3px 5px rgba(0,0,0,.55),0 3px 6px rgba(0,0,0,.6)}
 .mpcs__knob .circle-bg{stroke:#0a0a0f;stroke-width:3.4}
 .mpcs__knob .circle{stroke:var(--accent);stroke-width:3.4;filter:drop-shadow(0 0 3px var(--accent))}
@@ -1371,23 +1375,23 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs__knob .circle-inner-stroke{stroke:rgba(255,255,255,.08)}
 .mpcs__knob .knob-pos{stroke:#fff;stroke-width:2.6;filter:drop-shadow(0 1px 1px rgba(0,0,0,.7))}
 .mpcs__knob .knob-input:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:50%}
-.mpcs__lbl{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#8a8aa0}
-.mpcs__knob output{margin-top:-2px;font-size:11px;font-weight:600;color:#c4c4d6;font-variant-numeric:tabular-nums}
+.mpcs__lbl{font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#7fa3a3}
+.mpcs__knob output{margin-top:-2px;font-size:10px;font-weight:600;color:#c2dada;font-variant-numeric:tabular-nums}
 /* play / pause: tombol bulat timbul, menyala saat memutar */
-.mpcs__play{display:grid;place-items:center;flex:none;width:48px;height:48px;padding:0;border:1px solid rgba(255,255,255,.1);border-radius:50%;color:#ececf4;cursor:pointer;
-  background:radial-gradient(circle at 36% 26%,#4a4a5c 0%,#262631 55%,#121218 100%);
+.mpcs__play{display:grid;place-items:center;flex:none;width:40px;height:40px;padding:0;border:1px solid rgba(255,255,255,.1);border-radius:50%;color:#ececf4;cursor:pointer;
+  background:radial-gradient(circle at 36% 26%,#3f5558 0%,#1d2c30 55%,#121218 100%);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -3px 5px rgba(0,0,0,.5),0 0 0 3px #0a0a0f,0 0 0 4px rgba(255,255,255,.08),0 6px 0 #0a0a0f,0 12px 14px -4px rgba(0,0,0,.7);
   transition:transform .12s ease,box-shadow .2s ease,color .2s ease}
-.mpcs__play svg{display:block;filter:drop-shadow(0 1px 0 rgba(0,0,0,.6))}
+.mpcs__play svg{display:block;width:18px;height:18px;filter:drop-shadow(0 1px 0 rgba(0,0,0,.6))}
 .mpcs__play:hover:not(:disabled){color:#fff}
 .mpcs__play:active:not(:disabled){transform:translateY(4px);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.5),0 0 0 3px #0a0a0f,0 0 0 4px rgba(255,255,255,.08),0 2px 0 #0a0a0f,0 5px 8px -3px rgba(0,0,0,.7)}
 .mpcs__play.is-on{color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -3px 5px rgba(0,0,0,.5),0 0 0 3px #0a0a0f,0 0 0 4px var(--accent),0 0 18px var(--accent-soft),0 6px 0 #0a0a0f,0 12px 14px -4px rgba(0,0,0,.7)}
 .mpcs__play:disabled{opacity:.45;cursor:default}
 .mpcs__play:focus-visible{outline:2px solid var(--accent);outline-offset:6px}
 /* peta sample + editor piano roll: layar kaca cekung di dalam faceplate */
-.mpcs__ov{display:block;flex:none;width:100%;height:38px;border:0;border-radius:8px;background:radial-gradient(120% 100% at 50% 50%,#1e1c2e 0%,#0b0b12 100%);box-shadow:inset 0 3px 8px rgba(0,0,0,.85),inset 0 0 0 1px rgba(255,255,255,.07),0 1px 0 rgba(255,255,255,.08);touch-action:none;cursor:pointer}
+.mpcs__ov{display:block;flex:none;width:100%;height:30px;border:0;border-radius:8px;background:radial-gradient(120% 100% at 50% 50%,#0f2b30 0%,#050d10 100%);box-shadow:inset 0 3px 8px rgba(0,0,0,.85),inset 0 0 0 1px rgba(255,255,255,.07),0 1px 0 rgba(255,255,255,.08);touch-action:none;cursor:pointer}
 .mpcs__ov[hidden]{display:none}
-.mpcs__stage{position:relative;flex:1;display:flex;min-height:140px;border-radius:10px;overflow:hidden;background:radial-gradient(120% 100% at 50% 50%,#1e1c2e 0%,#0b0b12 100%);box-shadow:0 1px 0 rgba(255,255,255,.08)}
+.mpcs__stage{position:relative;flex:1;display:flex;min-height:96px;border-radius:10px;overflow:hidden;background:radial-gradient(120% 100% at 50% 50%,#0f2b30 0%,#050d10 100%);box-shadow:0 1px 0 rgba(255,255,255,.08)}
 .mpcs__stage::after{content:"";position:absolute;inset:0;z-index:3;border-radius:inherit;pointer-events:none;box-shadow:inset 0 3px 10px rgba(0,0,0,.85),inset 0 0 0 1px rgba(255,255,255,.07)}
 .mpcs__keys{flex:none;display:block;width:44px}
 .mpcs__scroll{position:relative;flex:1;min-width:0;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.28) transparent;touch-action:pan-x}
@@ -1396,12 +1400,13 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs__scroll::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.42)}
 .mpcs__cv{display:block;touch-action:pan-x;cursor:default}
 .mpcs__ph{position:absolute;top:0;height:100%;left:0;width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 8px rgba(255,255,255,.55);pointer-events:none;will-change:transform}
-.mpcs__empty{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;background:radial-gradient(120% 100% at 50% 50%,#1e1c2e 0%,#0b0b12 100%);text-align:center}
+.mpcs__empty{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;background:radial-gradient(120% 100% at 50% 50%,#0f2b30 0%,#050d10 100%);text-align:center}
 .mpcs__empty[hidden]{display:none}
-.mpcs__empty p{margin:0;max-width:320px;color:#9a9ab0;font-size:12px;line-height:1.5}
+.mpcs__empty p{margin:0;max-width:320px;color:#9ab8b8;font-size:12px;line-height:1.5}
 .mpcs__busy{position:absolute;left:0;right:0;top:0;z-index:2;height:2px;overflow:hidden}
 .mpcs__busy[hidden]{display:none}
 .mpcs__busy i{display:block;width:35%;height:100%;background:var(--accent);animation:mpcsbusy 1s var(--ease-inout) infinite}
 @keyframes mpcsbusy{from{transform:translateX(-100%)}to{transform:translateX(300%)}}
-@media (max-width:560px){.mpcs__win{padding:12px 14px 16px 16px}.mpcs__bar{gap:10px 14px}.mpcs__knob{min-width:52px}.mpcs__knob .fxk{width:44px;height:44px}.mpcs__up{min-width:0;padding:0 12px}}
+@media (max-height:520px){.mpcs__win{width:min(560px,100%);height:min(310px,100%);gap:6px}.mpcs__ov{height:24px}.mpcs__bar{padding-bottom:7px}.mpcs__stage{min-height:70px}}
+@media (max-width:420px){.mpcs__win{padding:9px 12px 12px 14px}.mpcs__bar{gap:10px 12px}.mpcs__up{order:1;flex:1 1 auto;min-width:0}.mpcs__play{order:2}.mpcs__knobs{display:flex;order:3;flex:1 0 100%;justify-content:center;gap:18px}.mpcs__knob{min-width:52px}}   /* HP portrait: upload + play satu baris, tiga knob di baris bawahnya */
 @media (prefers-reduced-motion:reduce){.mpcs__win{transform:none!important;transition:none!important}.mpcs__busy i{animation:none;width:100%}.mpcs__up,.mpcs__play,.mpcs__close,.mpcs__knob{transition:none}}
