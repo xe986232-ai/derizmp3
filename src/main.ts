@@ -12,6 +12,7 @@ import { initMenuPanel, setProjectIO } from './menu-panel';
 import { hasSynth, startVoice, releaseVoice, playNote, stopAllSynth } from './synth-engine';
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
+import { initTransportMore } from './transport-more';
 import { decodeFile, addBuffer, getBuffer, encodeWav, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
 import { slideSource, glideBeats } from './note-slide';
 import { velAlpha } from './velocity';
@@ -1242,6 +1243,7 @@ function setBpm(v) {
   undoStack = []; redoStack = []; histCur = histCapture(); histSync();   // lebar clip berubah: riwayat undo dimulai ulang
 }
 btnPlay.addEventListener('click', togglePlay);
+initTransportMore(document.getElementById('btnMore') as HTMLButtonElement);   // titik tiga di kiri tombol M (isi menu menyusul)
 const metroUI = initMetronomePanel(btnMetro, {
   getBpm: () => BPM, setBpm,
   isOn: () => metro.on,

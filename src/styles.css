@@ -481,6 +481,9 @@ html[data-theme="jembut"] .lane{background-image:
 @keyframes metroBeat{0%{box-shadow:0 0 0 0 rgba(166,108,255,.7)}100%{box-shadow:0 0 0 9px rgba(166,108,255,0)}}
 @keyframes metroIn{0%{opacity:0;transform:scale(.6)}60%{opacity:1}100%{opacity:1;transform:none}}
 .metro-btn{font-size:15px;font-weight:700;letter-spacing:0}
+/* titik tiga di kiri tombol M: ikon mengikuti warna teks tombol, ukuran ikon sebanding dengan tombol */
+.more-btn svg{display:block;width:20px;height:20px;fill:currentColor;stroke:none}
+.more-btn[aria-expanded="true"]{border-color:#fff}
 .metro-btn.is-on{background:var(--accent);border-color:var(--accent);color:#fff}
 .metro-btn.is-on:hover:not(:disabled){background:#b685ff;border-color:#b685ff}
 .metro-btn[aria-expanded="true"]{border-color:#fff}
@@ -985,6 +988,7 @@ body:has(.pr.is-open) .landscape-btn svg{width:14px;height:14px}
 .transport-controls .play .soundtrap-icon{width:18px;height:18px}
 .hist-btn{width:28px;height:28px;font-size:9px}
 .metro-btn{font-size:12px}
+.more-btn svg{width:16px;height:16px}
 .kbd-toggle svg{width:16px;height:16px}
 
 /* DERIZ: tombol titik tiga (masuk ke pattern) di kiri indikator nyala/mati + menu daftar pattern */
