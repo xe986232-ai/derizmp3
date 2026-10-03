@@ -111,15 +111,14 @@ function fit(c: HTMLCanvasElement, w: number, h: number, cap = 8) {
 }
 
 // garis vertikal bertingkat: bar > ketukan > 1/2 > 1/4 > 1/8
-// Tema ala FL Studio: latar abu kehijauan, baris tuts putih lebih terang dari tuts hitam, garis grid GELAP (bar paling tegas)
+// Latar & grid: warna semula (gelap keunguan). Garis grid terang tipis bertingkat: bar > ketukan > 1/2 > 1/4 > 1/8
 const PR = {
-  bg: '#222c32', rowWhite: '#3a4952', rowBlack: '#2e3b42', beyond: '#222c32', hover: 'rgba(255,255,255,.06)',
-  rowLine: 'rgba(10,18,22,.16)', octLine: 'rgba(10,18,22,.55)',
-  ruler: '#2b373e', rulerLine: '#1b252a', rulerText: '#dde7eb', rulerTick1: '#8fa0a8', rulerTick2: '#61727a', rulerTick3: '#4a5a62', dim: '#8fa0a8',
-  corner: '#2b373e'
+  bg: '#101016', rowWhite: '#1f1f29', rowBlack: '#17171e', beyond: '#101016', hover: 'rgba(255,255,255,.05)',
+  rowLine: 'rgba(255,255,255,.05)', octLine: 'rgba(255,255,255,.22)',
+  ruler: '#1e1e26', rulerLine: '#33333f', rulerText: '#e8e8f0', rulerTick1: '#8a8a9a', rulerTick2: '#55556a', rulerTick3: '#3c3c4c', dim: '#8a8a9a'
 };
-const LEVELS: Array<[number, number]> = [[4, 0.58], [1, 0.36], [0.5, 0.24], [0.25, 0.16], [0.125, 0.1]];
-const LEVEL_FILL = LEVELS.map(l => 'rgba(10,18,22,' + l[1] + ')');
+const LEVELS: Array<[number, number]> = [[4, 0.42], [1, 0.2], [0.5, 0.11], [0.25, 0.08], [0.125, 0.06]];
+const LEVEL_FILL = LEVELS.map(l => 'rgba(255,255,255,' + l[1] + ')');
 
 // Warna nada: pastel (campuran warna track + putih) dengan garis tepi gelap & teks gelap, seperti nada hijau muda di FL Studio
 const hexRgb = (h: string): number[] => { const m = h.replace('#', ''), f = m.length === 3 ? m.split('').map(x => x + x).join('') : m, n = parseInt(f, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
@@ -269,7 +268,7 @@ function drawGrid(zoomOnly = false) {
 let keysSig = '', rulerSig = '';   // tanda masukan gambar terakhir: kalau sama, tidak digambar ulang (mis. pinch horizontal tidak menyentuh keys)
 // Keyboard di kiri grid: gaya sama dengan keyboard DERIZ (tuts putih gradasi + bibir gelap di ujung depan, tuts hitam gradasi
 // gelap bersudut membulat dengan bayangan, tuts tertekan berwarna track), hanya diputar 90 derajat: pangkal tuts di kiri, ujung depan di kanan (sisi grid).
-const KEYS_BG = PR.bg, KEY_WHITE_A = '#fbfbfd', KEY_WHITE_B = '#e4e4ec', KEY_BLACK_A = '#2c2c38', KEY_BLACK_B = '#0e0e13', KEY_LABEL = PR.dim;
+const KEYS_BG = '#17171e', KEY_WHITE_A = '#fbfbfd', KEY_WHITE_B = '#e4e4ec', KEY_BLACK_A = '#2c2c38', KEY_BLACK_B = '#0e0e13', KEY_LABEL = PR.dim;
 function keyPath(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, rr: number) {   // sudut kiri lurus (terpotong tepi canvas), sudut kanan membulat
   c.beginPath(); c.moveTo(x, y); c.lineTo(x + w - rr, y); c.arcTo(x + w, y, x + w, y + rr, rr);
   c.lineTo(x + w, y + h - rr); c.arcTo(x + w, y + h, x + w - rr, y + h, rr); c.lineTo(x, y + h); c.closePath();
@@ -357,7 +356,7 @@ function drawVel() {
   // area batang
   c.save(); c.beginPath(); c.rect(KEY_W - 7, 0, w - KEY_W + 7, h); c.clip();   // sedikit melewati tepi kiri: kepala batang nada di awal pattern tidak terpotong
   eachVLine(sx, w - KEY_W, (x, _b, li) => { c.fillStyle = LEVEL_FILL[li]; c.fillRect(KEY_W + x - 0.5, 0, 1, h); });
-  for (const t of [0, 0.25, 0.5, 0.75, 1]) { c.fillStyle = t === 0.5 || t === 0 || t === 1 ? 'rgba(10,18,22,.45)' : 'rgba(10,18,22,.2)'; c.fillRect(KEY_W, Math.round(velY(t, h)), w - KEY_W, 1); }
+  for (const t of [0, 0.25, 0.5, 0.75, 1]) { c.fillStyle = t === 0.5 || t === 0 || t === 1 ? 'rgba(255,255,255,.12)' : 'rgba(255,255,255,.05)'; c.fillRect(KEY_W, Math.round(velY(t, h)), w - KEY_W, 1); }
   const ex = Math.round(KEY_W + total * ppb - sx);
   if (ex >= KEY_W && ex <= w) { c.fillStyle = color; c.fillRect(ex - 1, 0, 2, h); }
   const base = h - VEL_PAD_B;
