@@ -111,8 +111,27 @@ function fit(c: HTMLCanvasElement, w: number, h: number, cap = 8) {
 }
 
 // garis vertikal bertingkat: bar > ketukan > 1/2 > 1/4 > 1/8
-const LEVELS: Array<[number, number]> = [[4, 0.42], [1, 0.2], [0.5, 0.11], [0.25, 0.08], [0.125, 0.06]];
-const LEVEL_FILL = LEVELS.map(l => 'rgba(255,255,255,' + l[1] + ')');
+// Tema ala FL Studio: latar abu kehijauan, baris tuts putih lebih terang dari tuts hitam, garis grid GELAP (bar paling tegas)
+const PR = {
+  bg: '#222c32', rowWhite: '#3a4952', rowBlack: '#2e3b42', beyond: '#222c32', hover: 'rgba(255,255,255,.06)',
+  rowLine: 'rgba(10,18,22,.16)', octLine: 'rgba(10,18,22,.55)',
+  ruler: '#2b373e', rulerLine: '#1b252a', rulerText: '#dde7eb', rulerTick1: '#8fa0a8', rulerTick2: '#61727a', rulerTick3: '#4a5a62', dim: '#8fa0a8',
+  corner: '#2b373e'
+};
+const LEVELS: Array<[number, number]> = [[4, 0.58], [1, 0.36], [0.5, 0.24], [0.25, 0.16], [0.125, 0.1]];
+const LEVEL_FILL = LEVELS.map(l => 'rgba(10,18,22,' + l[1] + ')');
+
+// Warna nada: pastel (campuran warna track + putih) dengan garis tepi gelap & teks gelap, seperti nada hijau muda di FL Studio
+const hexRgb = (h: string): number[] => { const m = h.replace('#', ''), f = m.length === 3 ? m.split('').map(x => x + x).join('') : m, n = parseInt(f, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+const mixRgb = (a: number[], b: number[], t: number): string => 'rgb(' + a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(',') + ')';
+let noteTh = { c: '', fill: '', sel: '', edge: '', text: '' };
+function noteTheme() {
+  if (noteTh.c !== color) {
+    const k = hexRgb(color), W = [255, 255, 255], B = [0, 0, 0];
+    noteTh = { c: color, fill: mixRgb(k, W, 0.42), sel: mixRgb(k, W, 0.8), edge: mixRgb(k, B, 0.55), text: mixRgb(k, B, 0.72) };
+  }
+  return noteTh;
+}
 function eachVLine(sx: number, vw: number, fn: (x: number, beat: number, level: number) => void) {
   for (let li = 0; li < LEVELS.length; li++) {
     const step = LEVELS[li][0];
@@ -129,16 +148,18 @@ function eachVLine(sx: number, vw: number, fn: (x: number, beat: number, level: 
 
 function drawNoteBody(c: CanvasRenderingContext2D, n: Note, sx: number, sy: number, sel: boolean) {
   const x = n.s * ppb - sx, w = Math.max(3, n.l * ppb), y = (P_MAX - n.p) * rowH - sy;
+  const th = noteTheme();
   const a0 = c.globalAlpha;   // a0 = transparansi dasar (mis. animasi hapus); velocity hanya menipiskan badan nada, tanda pilih / label tetap jelas
   c.globalAlpha = a0 * velAlpha(n.v);
-  c.fillStyle = color; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 3); c.fill();
+  c.fillStyle = sel ? th.sel : th.fill; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 2); c.fill();
+  c.strokeStyle = sel ? '#fff' : th.edge; c.lineWidth = sel ? 1.5 : 1; c.stroke();
+  if (w > 5 && rowH >= 9) { c.fillStyle = 'rgba(255,255,255,.3)'; c.fillRect(x + 1.5, y + 2, w - 3, 1); }   // kilau tipis di tepi atas
   c.globalAlpha = a0;
-  if (sel) { c.fillStyle = 'rgba(255,255,255,.35)'; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 3); c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.stroke(); }
   if (n.sl) {   // slide: lebih terang + tanda panah miring di kiri
-    c.fillStyle = 'rgba(255,255,255,.3)'; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 3); c.fill();
-    if (w > 18 && rowH >= 12) { c.strokeStyle = 'rgba(0,0,0,.7)'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(x + 5, y + rowH - 5); c.lineTo(x + 12, y + 5); c.stroke(); }
+    c.fillStyle = 'rgba(255,255,255,.3)'; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 2); c.fill();
+    if (w > 18 && rowH >= 12) { c.strokeStyle = th.text; c.lineWidth = 1.5; c.beginPath(); c.moveTo(x + 5, y + rowH - 5); c.lineTo(x + 12, y + 5); c.stroke(); }
   }
-  if (w > (n.sl ? 44 : 30) && rowH >= 14) { c.fillStyle = 'rgba(0,0,0,.65)'; c.fillText(pname(n.p), x + (n.sl ? 17 : 5), y + rowH / 2 + 0.5); }
+  if (w > (n.sl ? 44 : 30) && rowH >= 14) { c.fillStyle = th.text; c.fillText(pname(n.p), x + (n.sl ? 17 : 5), y + rowH / 2 + 0.5); }
 }
 // bulatan putih di LUAR ujung kanan note (tidak menyentuh badan note); k = skala animasi
 function drawHandle(c: CanvasRenderingContext2D, n: Note, sx: number, sy: number, k: number) {
@@ -169,15 +190,15 @@ function drawGrid(zoomOnly = false) {
   const sx = Math.max(0, sl - mx), sy = Math.max(0, stp - my);   // konten di pojok kiri-atas canvas
   gclip.style.width = vw0 + 'px'; gclip.style.height = vh0 + 'px';
   const c = fit(gc, vw, vh, 2);
-  c.fillStyle = '#101016'; c.fillRect(0, 0, vw, vh);
+  c.fillStyle = PR.beyond; c.fillRect(0, 0, vw, vh);
   const xr = Math.min(vw, total * ppb - sx);
   const r0 = Math.max(0, Math.floor(sy / rowH)), r1 = Math.min(ROWS - 1, Math.floor((sy + vh) / rowH));
   if (xr > 0) {
     for (let r = r0; r <= r1; r++) {
       const p = P_MAX - r, y = r * rowH - sy;
-      c.fillStyle = isBlack(p) ? '#17171e' : '#1f1f29'; c.fillRect(0, y, xr, rowH);
-      if (p === hoverP) { c.fillStyle = 'rgba(255,255,255,.05)'; c.fillRect(0, y, xr, rowH); }
-      c.fillStyle = p % 12 === 0 ? 'rgba(255,255,255,.22)' : 'rgba(255,255,255,.05)';
+      c.fillStyle = isBlack(p) ? PR.rowBlack : PR.rowWhite; c.fillRect(0, y, xr, rowH);
+      if (p === hoverP) { c.fillStyle = PR.hover; c.fillRect(0, y, xr, rowH); }
+      c.fillStyle = p % 12 === 0 ? PR.octLine : PR.rowLine;
       c.fillRect(0, Math.round(y + rowH) - 1, xr, 1);
     }
     eachVLine(sx, vw, (x, _b, li) => { c.fillStyle = LEVEL_FILL[li]; c.fillRect(x - 0.5, 0, 1, vh); });
@@ -240,15 +261,15 @@ function drawGrid(zoomOnly = false) {
   // marquee
   if (g && g.kind === 'marquee') {
     const a = g.x0 - sx, b = g.y0 - sy, w = g.x - g.x0, h = g.y - g.y0;
-    c.fillStyle = 'rgba(255,255,255,.12)'; c.strokeStyle = '#fff'; c.lineWidth = 1;
-    c.fillRect(a, b, w, h); c.strokeRect(a + 0.5, b + 0.5, w, h);
+    c.fillStyle = 'rgba(120,190,255,.16)'; c.strokeStyle = '#8ecbff'; c.lineWidth = 1.5;   // kotak seleksi biru muda ala FL Studio
+    c.beginPath(); c.roundRect(a + 0.5, b + 0.5, w, h, 4); c.fill(); c.stroke();
   }
 }
 
 let keysSig = '', rulerSig = '';   // tanda masukan gambar terakhir: kalau sama, tidak digambar ulang (mis. pinch horizontal tidak menyentuh keys)
 // Keyboard di kiri grid: gaya sama dengan keyboard DERIZ (tuts putih gradasi + bibir gelap di ujung depan, tuts hitam gradasi
 // gelap bersudut membulat dengan bayangan, tuts tertekan berwarna track), hanya diputar 90 derajat: pangkal tuts di kiri, ujung depan di kanan (sisi grid).
-const KEYS_BG = '#17171e', KEY_WHITE_A = '#fbfbfd', KEY_WHITE_B = '#e4e4ec', KEY_BLACK_A = '#2c2c38', KEY_BLACK_B = '#0e0e13', KEY_LABEL = '#8a8a9a';
+const KEYS_BG = PR.bg, KEY_WHITE_A = '#fbfbfd', KEY_WHITE_B = '#e4e4ec', KEY_BLACK_A = '#2c2c38', KEY_BLACK_B = '#0e0e13', KEY_LABEL = PR.dim;
 function keyPath(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, rr: number) {   // sudut kiri lurus (terpotong tepi canvas), sudut kanan membulat
   c.beginPath(); c.moveTo(x, y); c.lineTo(x + w - rr, y); c.arcTo(x + w, y, x + w, y + rr, rr);
   c.lineTo(x + w, y + h - rr); c.arcTo(x + w, y + h, x + w - rr, y + h, rr); c.lineTo(x, y + h); c.closePath();
@@ -290,7 +311,7 @@ function drawKeys() {
     if (p % 12 === 0 || p === hoverP || (showNoteNames && rowH >= 11)) { c.fillStyle = p !== hoverP ? KEY_LABEL : isBlack(p) ? '#16161d' : '#fff'; c.fillText(pname(p), KW - 5, y + rowH / 2 + 0.5); }   // tuts hitam tertekan: label jatuh di bagian putih, jadi gelap
   }
   c.textAlign = 'start';
-  c.fillStyle = '#33333f'; c.fillRect(KEY_W - 1, 0, 1, vh);
+  c.fillStyle = PR.rulerLine; c.fillRect(KEY_W - 1, 0, 1, vh);
 }
 
 function drawRuler() {
@@ -298,16 +319,16 @@ function drawRuler() {
   const sig = sx + '|' + ppb + '|' + vw + '|' + color + '|' + (window.devicePixelRatio || 1);
   if (sig === rulerSig) return; rulerSig = sig;
   const c = fit(rc, vw, RULER_H);
-  c.fillStyle = '#1e1e26'; c.fillRect(0, 0, vw, RULER_H);
+  c.fillStyle = PR.ruler; c.fillRect(0, 0, vw, RULER_H);
   c.font = '11px system-ui,sans-serif'; c.textBaseline = 'top';
   eachVLine(sx, vw, (x, beat, li) => {
-    if (li === 0) { c.fillStyle = '#8a8a9a'; c.fillRect(x - 0.5, 4, 1, RULER_H - 4); if (beat < total) { c.fillStyle = '#e8e8f0'; c.fillText(String(1 + beat / BEATS_PER_BAR), x + 5, 5); } }
-    else if (li === 1) { c.fillStyle = '#55556a'; c.fillRect(x - 0.5, RULER_H - 12, 1, 12); if (ppb >= 64) { c.fillStyle = '#8a8a9a'; c.fillText(String(Math.round(beat % BEATS_PER_BAR) + 1), x + 4, 14); } }
-    else { c.fillStyle = '#3c3c4c'; c.fillRect(x - 0.5, RULER_H - 6, 1, 6); }
+    if (li === 0) { c.fillStyle = PR.rulerTick1; c.fillRect(x - 0.5, 4, 1, RULER_H - 4); if (beat < total) { c.fillStyle = PR.rulerText; c.fillText(String(1 + beat / BEATS_PER_BAR), x + 5, 5); } }
+    else if (li === 1) { c.fillStyle = PR.rulerTick2; c.fillRect(x - 0.5, RULER_H - 12, 1, 12); if (ppb >= 64) { c.fillStyle = PR.dim; c.fillText(String(Math.round(beat % BEATS_PER_BAR) + 1), x + 4, 14); } }
+    else { c.fillStyle = PR.rulerTick3; c.fillRect(x - 0.5, RULER_H - 6, 1, 6); }
   });
   const ex = Math.round(total * ppb - sx);
   if (ex >= 0 && ex <= vw) { c.fillStyle = color; c.fillRect(ex - 1, 0, 2, RULER_H); }
-  c.fillStyle = '#33333f'; c.fillRect(0, RULER_H - 1, vw, 1);
+  c.fillStyle = PR.rulerLine; c.fillRect(0, RULER_H - 1, vw, 1);
 }
 
 // ---------- panel Velocity: satu batang per nada, sejajar dengan awal nada di grid (ikut zoom & geser) ----------
@@ -326,17 +347,17 @@ function drawVel() {
   const body = vc.parentElement!, w = body.clientWidth, h = body.clientHeight;
   if (w < 2 || h < 2) return;
   const sx = curL(), c = fit(vc, w, h, 2);
-  c.fillStyle = '#101016'; c.fillRect(0, 0, w, h);
+  c.fillStyle = PR.bg; c.fillRect(0, 0, w, h);
   // kolom kiri (selebar tuts piano): skala 100 / 50 / 0
-  c.fillStyle = '#1e1e26'; c.fillRect(0, 0, KEY_W, h);
-  c.font = '600 10px system-ui,sans-serif'; c.textBaseline = 'middle'; c.textAlign = 'right'; c.fillStyle = '#8a8a9a';
+  c.fillStyle = PR.ruler; c.fillRect(0, 0, KEY_W, h);
+  c.font = '600 10px system-ui,sans-serif'; c.textBaseline = 'middle'; c.textAlign = 'right'; c.fillStyle = PR.dim;
   for (const t of [1, 0.5, 0]) c.fillText(String(Math.round(t * 100)), KEY_W - 8, Math.min(h - 7, Math.max(7, velY(t, h))));
   c.textAlign = 'start';
-  c.fillStyle = '#33333f'; c.fillRect(KEY_W - 1, 0, 1, h);
+  c.fillStyle = PR.rulerLine; c.fillRect(KEY_W - 1, 0, 1, h);
   // area batang
   c.save(); c.beginPath(); c.rect(KEY_W - 7, 0, w - KEY_W + 7, h); c.clip();   // sedikit melewati tepi kiri: kepala batang nada di awal pattern tidak terpotong
   eachVLine(sx, w - KEY_W, (x, _b, li) => { c.fillStyle = LEVEL_FILL[li]; c.fillRect(KEY_W + x - 0.5, 0, 1, h); });
-  for (const t of [0, 0.25, 0.5, 0.75, 1]) { c.fillStyle = t === 0.5 || t === 0 || t === 1 ? 'rgba(255,255,255,.12)' : 'rgba(255,255,255,.05)'; c.fillRect(KEY_W, Math.round(velY(t, h)), w - KEY_W, 1); }
+  for (const t of [0, 0.25, 0.5, 0.75, 1]) { c.fillStyle = t === 0.5 || t === 0 || t === 1 ? 'rgba(10,18,22,.45)' : 'rgba(10,18,22,.2)'; c.fillRect(KEY_W, Math.round(velY(t, h)), w - KEY_W, 1); }
   const ex = Math.round(KEY_W + total * ppb - sx);
   if (ex >= KEY_W && ex <= w) { c.fillStyle = color; c.fillRect(ex - 1, 0, 2, h); }
   const base = h - VEL_PAD_B;
