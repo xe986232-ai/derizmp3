@@ -15,6 +15,10 @@ const ICON = {
   pause: svg('<rect x="6" y="5" width="4.5" height="14" rx="1.2" fill="currentColor" stroke="none"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2" fill="currentColor" stroke="none"/>', 22),
   close: svg('<path d="M6 6l12 12M18 6L6 18"/>', 12),
   drag: svg('<circle cx="9" cy="6" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.7" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.7" fill="currentColor" stroke="none"/>', 14),
+  zin: svg('<path d="M5 12h14M12 5v14"/>', 14),
+  zout: svg('<path d="M5 12h14"/>', 14),
+  zh: svg('<path d="M4 12h16M8 8l-4 4 4 4M16 8l4 4-4 4"/>', 12),
+  zv: svg('<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/>', 12),
   cut: svg('<circle cx="6" cy="6.5" r="2.6"/><circle cx="6" cy="17.5" r="2.6"/><path d="M8.2 8l11 8.5M8.2 16l11-8.5"/>', 16),
   all: svg('<rect x="4" y="4" width="16" height="16" rx="2.5" stroke-dasharray="3.2 3"/><path d="M8.5 12.2l2.4 2.4 4.6-5"/>', 16)
 };
@@ -115,6 +119,13 @@ function build(): void {
         '<div class="mpcs__scroll"><canvas class="mpcs__cv" role="img" aria-label="Editor pitch"></canvas><i class="mpcs__ph" aria-hidden="true"></i></div>' +
         `<div class="mpcs__empty"><button type="button" class="mpcs__up" data-a="up">${ICON.up}<span>Upload audio</span></button><p>Pakai vokal atau instrumen satu nada (monofonik) yang bersih tanpa efek.</p></div>` +
         '<div class="mpcs__busy" hidden><i></i></div>' +
+        `<div class="mpcs__zoom" role="group" aria-label="Zoom" hidden><span class="mpcs__zg" aria-hidden="true" title="Zoom waktu">${ICON.zh}</span>` +
+          `<button type="button" class="mpcs__zb" data-z="hout" aria-label="Zoom out waktu" title="Zoom out waktu (-)">${ICON.zout}</button>` +
+          `<button type="button" class="mpcs__zb" data-z="hin" aria-label="Zoom in waktu" title="Zoom in waktu (+)">${ICON.zin}</button>` +
+          '<i class="mpcs__zsep" aria-hidden="true"></i>' +
+          `<span class="mpcs__zg" aria-hidden="true" title="Zoom tinggi nada">${ICON.zv}</span>` +
+          `<button type="button" class="mpcs__zb" data-z="vout" aria-label="Zoom out tinggi nada" title="Zoom out tinggi nada">${ICON.zout}</button>` +
+          `<button type="button" class="mpcs__zb" data-z="vin" aria-label="Zoom in tinggi nada" title="Zoom in tinggi nada">${ICON.zin}</button></div>` +
       '</div>' +
       '</div>' +
       '<div class="mpcs__bar">' +
@@ -141,6 +152,7 @@ function build(): void {
   const ph = el.querySelector<HTMLElement>('.mpcs__ph')!;
   const empty = el.querySelector<HTMLElement>('.mpcs__empty')!;
   const busy = el.querySelector<HTMLElement>('.mpcs__busy')!;
+  const zoomEl = el.querySelector<HTMLElement>('.mpcs__zoom')!;
   const file = el.querySelector<HTMLInputElement>('.mpcs__file')!;
   const btn = (a: string): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`.mpcs__bar [data-a="${a}"]`)!;
   const ov = el.querySelector<HTMLCanvasElement>('.mpcs__ov')!;
@@ -183,7 +195,7 @@ function build(): void {
     });
   });
 
-  let S: Session | null = null, sel = -1, all = false, pps = 100, W = 0, H = 0, viewH = 0, rowH = 12, dpr = 1;
+  let S: Session | null = null, sel = -1, all = false, zy = 1, basePps = 100, pps = 100, W = 0, H = 0, viewH = 0, rowH = 12, dpr = 1;
   let ac: AudioContext | null = null, src: AudioBufferSourceNode | null = null, playing = false, playPos = 0, t0 = 0, raf = 0, mode: 'out' | 'orig' = 'out';
   let dirty = false, rendering = false, ver = 0, worker: Worker | null = null, jobId = 0;
   const jobs = new Map<number, { ok: (m: any) => void; fail: (e: Error) => void }>();   // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -212,7 +224,7 @@ function build(): void {
     dpr = Math.min(2, devicePixelRatio || 1);
     viewH = stage.clientHeight;
     const rows = S ? S.hi - S.lo + 1 : 1;
-    rowH = S ? Math.max(24, viewH / rows) : 12;   // baris tidak dipepatkan lagi: kalau rentang nada lebar, kanvas jadi lebih tinggi dan di-scroll
+    rowH = S ? Math.max(10, Math.max(24, viewH / rows) * zy) : 12;   // baris tidak dipepatkan lagi: kalau rentang nada lebar, kanvas jadi lebih tinggi dan di-scroll
     H = S ? Math.round(rowH * rows) : viewH;
     const viewW = scroll.clientWidth;
     W = S ? Math.max(viewW, Math.ceil(S.dur * pps)) : viewW;
@@ -220,7 +232,7 @@ function build(): void {
     dpr = Math.max(1, Math.min(dpr, Math.sqrt(14e6 / (W * H))));   // batas luas kanvas supaya aman di HP
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = H + 'px';
     keys.width = Math.round(44 * dpr); keys.height = Math.round(viewH * dpr); keys.style.width = '44px'; keys.style.height = viewH + 'px';
-    ph.style.height = H + 'px';
+    ph.style.height = H + 'px'; ph.style.transform = `translateX(${xOf(playPos)}px)`;   // playhead ikut posisi baru setelah zoom
     draw();
   }
   const ro = new ResizeObserver(() => { if (!el.hidden) layout(); });
@@ -386,7 +398,7 @@ function build(): void {
     else stat.textContent = S.notes.length ? S.notes.length + ' nada terdeteksi' : 'Tidak ada nada terdeteksi';
   }
   function enable(on: boolean): void {
-    btn('play').disabled = !on; btn('all').disabled = !on; btn('cut').disabled = !on; dragBtn.disabled = !on; win.classList.toggle('is-off', !on);
+    btn('play').disabled = !on; btn('all').disabled = !on; btn('cut').disabled = !on; zoomEl.hidden = !on; dragBtn.disabled = !on; win.classList.toggle('is-off', !on);
     KNOB_KEYS.forEach(k => { knobEl[k].closest('.mpcs__knob')!.classList.toggle('is-off', !on); });
   }
   function setBusy(on: boolean): void { busy.hidden = !on; }
@@ -413,7 +425,7 @@ function build(): void {
       S = { name: f.name.replace(/\.[^.]+$/, ''), sr: buf.sampleRate, dur: buf.duration, pt, notes, orig: buf, out: null, lo, hi, ref: sorted[Math.floor(sorted.length * .95)] || 0.1, pk: buildPeaks(buf) };
       sel = -1; all = false; paintAll(); dirty = true; playPos = 0; ph.style.transform = 'translateX(0)';
       pps = Math.max(40, Math.min(400, scroll.clientWidth / Math.max(1, buf.duration)));
-      scroll.scrollLeft = 0; layout(); info(); enable(true);
+      scroll.scrollLeft = 0; zy = 1; layout(); basePps = pps; info(); enable(true);
       if (notes.length) { const mt = notes.reduce((a, n) => a + n.target, 0) / notes.length; scroll.scrollTop = Math.max(0, yOf(mt) - viewH / 2); drawKeys(); drawOv(); } else scroll.scrollTop = 0;
     } catch (err) {
       S = null; empty.hidden = false; draw(); stat.textContent = 'Gagal memuat audio';
@@ -466,9 +478,77 @@ function build(): void {
     if (follow) { const v = scroll.clientWidth; if (x < scroll.scrollLeft || x > scroll.scrollLeft + v * .9) scroll.scrollLeft = Math.max(0, x - v * .1); }
   }
 
+  // ---------- zoom piano roll ----------
+  // Dua sumbu: waktu (pps = piksel per detik) dan tinggi nada (zy = pengali tinggi baris). Titik di bawah jari / kursor / playhead tetap diam saat zoom (jangkar).
+  // Cara: tombol di pojok kanan atas, tombol + / - / 0 di keyboard, Ctrl + roda (Ctrl+Shift = tinggi nada, pinch trackpad ikut), cubit dua jari (cubit mendatar = waktu, menegak = tinggi nada).
+  const ZSTEP = 1.4;
+  function ppsLimits(): [number, number] {
+    const fit = Math.max(2, scroll.clientWidth / S!.dur), cap = 16000 / Math.min(2, devicePixelRatio || 1) / S!.dur;   // cap: batas lebar kanvas supaya aman di HP
+    const lo = Math.min(fit, cap);
+    return [lo, Math.max(lo, Math.min(cap, Math.max(1200, basePps * 4)))];   // terkecil = seluruh sample pas satu layar
+  }
+  const clampZy = (v: number): number => Math.max(.5, Math.min(3, v));
+  const clampPps = (v: number): number => { const [lo, hi] = ppsLimits(); return Math.max(lo, Math.min(hi, v)); };
+  function zoomTo(np: number, nz: number, sec: number, row: number, ax: number, ay: number): void {
+    pps = clampPps(np); zy = clampZy(nz);
+    layout();
+    scroll.scrollLeft = sec * pps - ax; scroll.scrollTop = row * rowH - ay;
+  }
+  let zRaf = 0, zT = 0;
+  function zoomNote(): void {
+    const h = Math.round(pps / basePps * 100), v = Math.round(zy * 100);
+    stat.textContent = 'Zoom ' + h + '%' + (v !== 100 ? ' · Nada ' + v + '%' : '');
+    clearTimeout(zT); zT = window.setTimeout(info, 1400);
+  }
+  const anchorAt = (ax: number, ay: number): { sec: number; row: number } => ({ sec: (scroll.scrollLeft + ax) / pps, row: (scroll.scrollTop + ay) / rowH });
+  function zoomBy(fx: number, fy: number): void {   // tombol / keyboard: beranimasi; jangkar = playhead kalau sedang terlihat, kalau tidak tengah layar
+    if (!S) return;
+    const vw = scroll.clientWidth, phx = xOf(playPos) - scroll.scrollLeft, ax = phx >= 0 && phx <= vw ? phx : vw / 2, ay = viewH / 2, { sec, row } = anchorAt(ax, ay);
+    const p0 = pps, z0 = zy, p1 = clampPps(p0 * fx), z1 = clampZy(z0 * fy);
+    cancelAnimationFrame(zRaf);
+    if (p1 === p0 && z1 === z0) { zoomNote(); return; }
+    if (reduce) { zoomTo(p1, z1, sec, row, ax, ay); zoomNote(); return; }
+    const t0 = performance.now(), D = 170;
+    const step = (now: number): void => {
+      const u = Math.min(1, (now - t0) / D), e = 1 - (1 - u) ** 3;
+      zoomTo(p0 * (p1 / p0) ** e, z0 * (z1 / z0) ** e, sec, row, ax, ay);
+      if (u < 1) zRaf = requestAnimationFrame(step); else zoomNote();
+    };
+    zRaf = requestAnimationFrame(step);
+  }
+  const zoomReset = (): void => { if (S) zoomBy(basePps / pps, 1 / zy); };
+  zoomEl.addEventListener('click', e => {
+    const z = (e.target as Element).closest<HTMLButtonElement>('button[data-z]')?.dataset.z; if (!z) return;
+    zoomBy(z === 'hin' ? ZSTEP : z === 'hout' ? 1 / ZSTEP : 1, z === 'vin' ? ZSTEP : z === 'vout' ? 1 / ZSTEP : 1);
+  });
+  scroll.addEventListener('wheel', e => {   // Ctrl + roda (juga pinch trackpad): langsung, tanpa animasi, jangkar di kursor
+    if (!S || !(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault(); cancelAnimationFrame(zRaf);
+    const d = Math.exp(-(e.deltaY || e.deltaX) * (e.deltaMode === 1 ? .05 : .0025)), r = scroll.getBoundingClientRect(), ax = e.clientX - r.left, ay = e.clientY - r.top, { sec, row } = anchorAt(ax, ay);
+    zoomTo(pps * (e.shiftKey ? 1 : d), zy * (e.shiftKey ? d : 1), sec, row, ax, ay); zoomNote();
+  }, { passive: false });
+
+  // cubit dua jari di kanvas: jarak mendatar antar jari = waktu, jarak menegak = tinggi nada; titik tengah jari = jangkar (geser dua jari ikut menggeser tampilan)
+  const ptrs = new Map<number, { x: number; y: number }>();
+  let pinch: { dx: number; dy: number; pps: number; zy: number; sec: number; row: number } | null = null, pRaf = 0;
+  const twoPtrs = (): { dx: number; dy: number; mx: number; my: number } => {
+    const [a, b] = Array.from(ptrs.values()), r = scroll.getBoundingClientRect();
+    return { dx: Math.abs(a.x - b.x), dy: Math.abs(a.y - b.y), mx: (a.x + b.x) / 2 - r.left, my: (a.y + b.y) / 2 - r.top };
+  };
+  function startPinch(): void {
+    cancelAnimationFrame(zRaf); drag = null; pan = null;
+    const t = twoPtrs(), { sec, row } = anchorAt(t.mx, t.my);
+    pinch = { dx: Math.max(28, t.dx), dy: Math.max(28, t.dy), pps, zy, sec, row };
+  }
+  function pinchApply(): void {
+    pRaf = 0; if (!pinch || ptrs.size < 2) return;
+    const t = twoPtrs();
+    zoomTo(pinch.pps * Math.max(28, t.dx) / pinch.dx, pinch.zy * Math.max(28, t.dy) / pinch.dy, pinch.sec, pinch.row, t.mx, t.my); zoomNote();
+  }
+
   // ---------- seret blok ----------
   let drag: { i: number; y0: number; base: number; moved: boolean; id: number } | null = null;
-  let pan: { x0: number; y0: number; sl: number; st: number; px: number; moved: boolean; id: number; mouse: boolean } | null = null;
+  let pan: { x0: number; y0: number; sl: number; st: number; px: number; moved: boolean; id: number } | null = null;
   const hit = (x: number, y: number): number => {
     if (!S) return -1;
     const hopSec = S.pt.hop / S.pt.sr; let best = -1, bd = 1e9;
@@ -481,17 +561,21 @@ function build(): void {
   };
   cv.addEventListener('pointerdown', e => {
     if (!S) return;
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptrs.size >= 2) { cv.setPointerCapture(e.pointerId); if (ptrs.size === 2) startPinch(); return; }   // jari kedua = cubit zoom, bukan seret nada
     const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, i = hit(x, y);
-    if (i < 0) { pan = { x0: e.clientX, y0: e.clientY, sl: scroll.scrollLeft, st: scroll.scrollTop, px: x, moved: false, id: e.pointerId, mouse: e.pointerType === 'mouse' }; cv.setPointerCapture(e.pointerId); return; }
+    if (i < 0) { pan = { x0: e.clientX, y0: e.clientY, sl: scroll.scrollLeft, st: scroll.scrollTop, px: x, moved: false, id: e.pointerId }; cv.setPointerCapture(e.pointerId); return; }
     if (all) { all = false; paintAll(); }   // ketuk satu nada = kembali ke pilihan tunggal
     sel = i; drag = { i, y0: e.clientY, base: Math.round(S.notes[i].target), moved: false, id: e.pointerId };
     cv.setPointerCapture(e.pointerId); draw(); info();
   });
   cv.addEventListener('pointermove', e => {
+    const pp = ptrs.get(e.pointerId); if (pp) { pp.x = e.clientX; pp.y = e.clientY; }
+    if (pinch) { if (!pRaf) pRaf = requestAnimationFrame(pinchApply); return; }
     if (pan && e.pointerId === pan.id) {
       const dx = e.clientX - pan.x0, dy = e.clientY - pan.y0;
       if (!pan.moved && Math.hypot(dx, dy) < 6) return;
-      pan.moved = true; scroll.scrollTop = pan.st - dy; if (pan.mouse) scroll.scrollLeft = pan.sl - dx;
+      pan.moved = true; scroll.scrollTop = pan.st - dy; scroll.scrollLeft = pan.sl - dx;   // geser dua sumbu lewat JS (kanvas touch-action: none supaya cubit zoom tidak direbut browser)
       return;
     }
     if (!drag || !S || e.pointerId !== drag.id) return;
@@ -502,6 +586,7 @@ function build(): void {
     if (t !== S.notes[drag.i].target || !S.notes[drag.i].man) { S.notes[drag.i].target = t; S.notes[drag.i].man = true; edit(); }   // diseret tangan: dikoreksi penuh, di luar knob Center
   });
   const endDrag = (e: PointerEvent): void => {
+    ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
     if (drag && e.pointerId === drag.id) drag = null;
     if (pan && e.pointerId === pan.id) {
       const p = pan; pan = null;
@@ -586,6 +671,9 @@ function build(): void {
     if (e.key === 'Escape') { e.preventDefault(); close(); return; }
     const onBtn = (e.target as Element).closest?.('button');
     if (e.key === ' ' && !onBtn && S) { e.preventDefault(); playing ? stopPlay() : void startPlay(); }
+    else if (S && !e.ctrlKey && !e.metaKey && (e.key === '+' || e.key === '=')) { e.preventDefault(); zoomBy(ZSTEP, 1); }
+    else if (S && !e.ctrlKey && !e.metaKey && (e.key === '-' || e.key === '_')) { e.preventDefault(); zoomBy(1 / ZSTEP, 1); }
+    else if (S && !e.ctrlKey && !e.metaKey && e.key === '0') { e.preventDefault(); zoomReset(); }
     else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && sel >= 0 && S && !(e.target as Element).closest?.('.knob-input')) {
       e.preventDefault(); const n = S.notes[sel], t = Math.max(S.lo + 1, Math.min(S.hi - 1, Math.round(n.target) + (e.key === 'ArrowUp' ? 1 : -1)));
       if (t !== n.target) { n.target = t; n.man = true; edit(); }

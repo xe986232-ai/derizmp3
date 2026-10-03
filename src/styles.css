@@ -1363,11 +1363,21 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs__stage{position:relative;flex:1;display:flex;min-height:70px;border-radius:8px;overflow:hidden;background:linear-gradient(180deg,#07070a,#15151b);box-shadow:0 0 0 1px #2a2a30,0 1px 0 1px rgba(255,255,255,.55)}
 .mpcs__stage::after{content:"";position:absolute;inset:0;z-index:3;border-radius:inherit;pointer-events:none;box-shadow:inset 0 3px 10px rgba(0,0,0,.9),inset 0 0 0 1px rgba(255,255,255,.06)}
 .mpcs__keys{flex:none;display:block;width:44px}
-.mpcs__scroll{position:relative;flex:1;min-width:0;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.28) transparent;touch-action:pan-x}
+.mpcs__scroll{position:relative;flex:1;min-width:0;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.28) transparent;touch-action:none}
 .mpcs__scroll::-webkit-scrollbar{width:8px;height:8px}
 .mpcs__scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.26);border-radius:4px}
 .mpcs__scroll::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.42)}
-.mpcs__cv{display:block;touch-action:pan-x;cursor:default}
+.mpcs__cv{display:block;touch-action:none;cursor:default}
+/* kontrol zoom: pil kecil transparan di pojok kanan atas editor (waktu | tinggi nada) */
+.mpcs__zoom{position:absolute;top:6px;right:14px;z-index:4;display:flex;align-items:center;gap:2px;padding:2px 4px;border-radius:999px;background:rgba(10,10,14,.62);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);box-shadow:0 0 0 1px rgba(255,255,255,.14);opacity:.8;transition:opacity .2s ease}
+.mpcs__zoom:hover,.mpcs__zoom:focus-within{opacity:1}
+.mpcs__zoom[hidden]{display:none}
+.mpcs__zg{display:grid;place-items:center;width:16px;height:22px;color:#8a8a9a}
+.mpcs__zsep{flex:none;width:1px;height:12px;margin:0 4px;background:rgba(255,255,255,.2)}
+.mpcs__zb{display:grid;place-items:center;flex:none;width:22px;height:22px;padding:0;border:0;border-radius:50%;background:transparent;color:#e8e8ee;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .15s ease,transform .15s ease}
+.mpcs__zb:hover{background:rgba(255,255,255,.16)}
+.mpcs__zb:active{transform:scale(.88)}
+.mpcs__zb:focus-visible{outline:2px solid #fff;outline-offset:1px}
 .mpcs__ph{position:absolute;top:0;height:100%;left:0;width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 8px rgba(255,255,255,.55);pointer-events:none;will-change:transform}
 .mpcs__empty{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px;background:linear-gradient(180deg,#07070a,#15151b);text-align:center}
 .mpcs__empty[hidden]{display:none}
@@ -1420,4 +1430,4 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs__play:focus-visible{outline:2px solid #fff;outline-offset:6px}
 @media (max-height:520px){.mpcs__win{width:min(580px,100%);height:min(300px,100%)}.mpcs__head{min-height:34px;padding-top:4px;padding-bottom:4px}.mpcs__mid{padding:8px 10px;gap:5px}.mpcs__ov{height:22px}.mpcs__bar{padding:6px 12px 9px}}
 @media (max-width:420px){.mpcs__win{height:min(520px,100%)}.mpcs__bar{gap:10px 12px}.mpcs__ups{order:1;flex:1 1 auto;width:auto}.mpcs__play{order:2}.mpcs__knobs{display:flex;order:3;flex:1 0 100%;justify-content:center;gap:20px}.mpcs__lcd{max-width:none}.mpcs__title{letter-spacing:.2em}}   /* HP portrait: upload + play satu baris, tiga knob di baris bawahnya */
-@media (prefers-reduced-motion:reduce){.mpcs__win{transform:none!important;transition:none!important}.mpcs__busy i{animation:none;width:100%}.mpcs__up,.mpcs__play,.mpcs__close,.mpcs__drag,.mpcs__knob{transition:none}}
+@media (prefers-reduced-motion:reduce){.mpcs__win{transform:none!important;transition:none!important}.mpcs__busy i{animation:none;width:100%}.mpcs__up,.mpcs__play,.mpcs__close,.mpcs__drag,.mpcs__knob,.mpcs__zb,.mpcs__zoom{transition:none}}
