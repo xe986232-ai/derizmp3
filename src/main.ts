@@ -813,7 +813,9 @@ const baseMidi = () => 12 + 12 * kbdOct;   // C3 = 48 (C4 = 60 = middle C)
 let actx = null, master = null; const voices = new Map();
 function audio() {
   if (!actx) {
-    actx = new (window.AudioContext || window.webkitAudioContext)();
+    // latencyHint 'playback': buffer keluaran lebih besar, jadi lonjakan beban sesaat (banyak VST / reverb) tidak langsung jadi gresek.
+    // Kualitas suara tidak berubah; harganya jeda (latency) sedikit lebih besar. Browser yang tidak mendukung mengabaikan opsi ini.
+    actx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'playback' });
     master = actx.createGain(); master.gain.value = 1;   // unity gain: suara asli, tanpa kompresor/limiter
     master.connect(actx.destination);
   }
