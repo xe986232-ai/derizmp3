@@ -1,18 +1,18 @@
 // Isi panel efek: tombol "+" bulat putih (di atas saat kosong, pindah ke bawah setelah ada efek), card gelap (gaya card track)
 // untuk memilih efek, dan satu card per efek. Parameter diatur dengan knob seperti knob pan di channel mixer.
 // Efek disimpan per track (kunci = id track); panel selalu menampilkan efek milik track yang sedang dipilih.
-// Selain efek (Reverb, Equalizer) ada plugin instrumen (Supersaw): kartunya otomatis muncul di paling atas saat track synth dibuat,
+// Selain efek (Reverb, Equalizer, Filter) ada plugin instrumen (Supersaw): kartunya otomatis muncul di paling atas saat track synth dibuat,
 // memakai knob + slider vertikal, dan tidak bisa dihapus / tidak muncul di daftar pilihan efek.
 // Efek / plugin baru cukup ditambah ke EFFECTS (nama, parameter) dan ke applyAudio().
 // DERIZ: plugin sampler dengan canvas audio (spektrogram, zoom) + upload file; nada (tuts + Pitch) dan kecepatan (Speed) terpisah (deriz-synth.ts).
 
-import { setReverb, setEq, reverbSeconds, eqDb, decodeStandalone, trackInput } from './audio-engine';
+import { setReverb, setEq, setFilter, reverbSeconds, eqDb, filterMode, filterHz, decodeStandalone, trackInput } from './audio-engine';
 import { DerizSynth } from './deriz-synth';
 import { isAudio, ACCEPT as AUDIO_ACCEPT } from './audio-upload-card';
 import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } from './synth-engine';
 import { velGain } from './velocity';
 
-type FxType = 'reverb' | 'eq' | 'supersaw' | 'deriz';
+type FxType = 'reverb' | 'eq' | 'filter' | 'supersaw' | 'deriz';
 // DERIZ: audio yang di-upload ke canvas plugin (buffer disimpan untuk tahap berikutnya; peaks + max khusus untuk menggambar waveform)
 interface DerizData { name: string; dur: number; buf: AudioBuffer; start: number; zoom: number; view: number; spec: Spec | null; busy?: number; }   // start: posisi garis start, 0..1 dari durasi; zoom >= 1: jendela terlihat = [view, view + 1/zoom] dari durasi; spec: spektrogram (null selagi dianalisis, busy = persen)
 // Spektrogram: frames x ROWS nilai dB (0..255 = -100..0 dBFS), baris 0 = frekuensi terendah (skala log); lut = palet warna yang disesuaikan dengan level puncak
@@ -32,6 +32,7 @@ const fmtDb = (v: number): string => { const d = Math.round(eqDb(v) * 10) / 10; 
 const pct = (v: number): string => Math.round(v * 100) + '%';
 const fmtSec = (s: number): string => (s < 1 ? Math.round(s * 1000) + ' ms' : s.toFixed(2) + ' s');
 const fmtHz = (hz: number): string => (hz >= 1000 ? (hz / 1000).toFixed(1) + ' kHz' : Math.round(hz) + ' Hz');
+const fmtCut = (v: number): string => { const m = filterMode(v); return m === 'off' ? 'Off' : (m === 'lp' ? 'LP ' : 'HP ') + fmtHz(filterHz(v)); };   // knob Cutoff: kiri low-pass, kanan high-pass, tengah mati
 
 const derizVol = (v: number | undefined): number => (v ?? 0.8) * 1.125;   // knob Volume: default 80% = penguatan 0.9 (sama seperti sebelumnya), 100% = 1.125
 const derizPitch = (v: number | undefined): number => Math.round(((v ?? 0.5) - 0.5) * 24);   // knob Pitch: tengah = 0, kiri -12, kanan +12 semitone (bulat)
@@ -51,6 +52,13 @@ const EFFECTS: EffectDef[] = [
       { key: 'low', label: 'Low', def: 0.5, bipolar: true, fmt: fmtDb },
       { key: 'mid', label: 'Mid', def: 0.5, bipolar: true, fmt: fmtDb },
       { key: 'high', label: 'High', def: 0.5, bipolar: true, fmt: fmtDb }
+    ]
+  },
+  {
+    type: 'filter', name: 'Filter',
+    params: [
+      { key: 'cutoff', label: 'Cutoff', hint: 'Cutoff (kiri low-pass, kanan high-pass)', def: 0.5, bipolar: true, fmt: fmtCut },
+      { key: 'reso', label: 'Reso', def: 0, fmt: pct }
     ]
   },
   { type: 'deriz', name: 'DERIZ', params: [
@@ -82,9 +90,10 @@ let cur: string | null = null, seq = 0;
 
 function applyAudio(track: string): void {
   const rack = racks.get(track) ?? [];
-  const r = rack.find(f => f.type === 'reverb'), e = rack.find(f => f.type === 'eq'), s = rack.find(f => f.type === 'supersaw');
+  const r = rack.find(f => f.type === 'reverb'), e = rack.find(f => f.type === 'eq'), fl = rack.find(f => f.type === 'filter'), s = rack.find(f => f.type === 'supersaw');
   setReverb(track, r ? { on: r.on, mix: r.v.mix, size: r.v.size } : null);
   setEq(track, e ? { on: e.on, low: e.v.low, mid: e.v.mid, high: e.v.high } : null);
+  setFilter(track, fl ? { on: fl.on, cutoff: fl.v.cutoff, reso: fl.v.reso } : null);
   setSupersaw(track, s ? { on: s.on, detune: s.v.detune, mix: s.v.mix, level: s.v.level, cutoff: s.v.cutoff, reso: s.v.reso, attack: s.v.attack, decay: s.v.decay, sustain: s.v.sustain, release: s.v.release } : null);
 }
 
@@ -1243,7 +1252,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
       for (const f of racks.get(track) ?? []) if (f.type === 'deriz') patterns?.removed(f.id, track, false);
       racks.delete(track); plainOwner.delete(track);
       if (autoOpen?.track === track) autoOpen = null;
-      setReverb(track, null); setEq(track, null); setSupersaw(track, null);
+      setReverb(track, null); setEq(track, null); setFilter(track, null); setSupersaw(track, null);
       if (cur === track) { closePicker(true); closeMenu(true); hideTip(); closeOverlay(true, true); ro.disconnect(); cur = null; addBtn.disabled = true; list.replaceChildren(); layout(false); }
     },
     addInstrument,

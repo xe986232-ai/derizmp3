@@ -205,19 +205,32 @@ export function trackLevels(track: string): [number, number] {
   return m ? [peakOf(m.l, m.bufL), peakOf(m.r, m.bufR)] : [0, 0];
 }
 
-// ---------- effect per track: equalizer -> reverb ----------
-// Jalur: gain track -> [EQ: low shelf -> mid peaking -> high shelf] -> dry -> output, dan -> convolver -> wet -> output (reverb).
-// Mix reverb memakai crossfade equal-power. Urutan di jalur audio selalu EQ dulu, baru reverb (tidak tergantung urutan card).
+// ---------- effect per track: equalizer -> filter -> reverb ----------
+// Jalur: gain track -> [EQ: low shelf -> mid peaking -> high shelf] -> [Filter: low-pass -> high-pass] -> dry -> output, dan -> convolver -> wet -> output (reverb).
+// Mix reverb memakai crossfade equal-power. Urutan di jalur audio selalu EQ, Filter, lalu reverb (tidak tergantung urutan card).
 export interface ReverbParams { on: boolean; mix: number; size: number }   // mix 0..1, size 0..1 (-> gema 0,4 s .. 5 s)
 const reverbs = new Map<string, ReverbParams>();
 const dests = new Map<string, AudioNode>();
 export interface EqParams { on: boolean; low: number; mid: number; high: number }   // tiap band 0..1, 0,5 = 0 dB
 const eqs = new Map<string, EqParams>();
+// Filter ala DJ: satu knob Cutoff. Tengah = bypass, ke kiri = low-pass (makin kiri makin gelap), ke kanan = high-pass (makin kanan makin tipis).
+export interface FilterParams { on: boolean; cutoff: number; reso: number }   // cutoff 0..1 (0,5 = bypass), reso 0..1
+const filters = new Map<string, FilterParams>();
+const FILTER_DEAD = 0.03;   // zona mati di sekitar tengah knob: benar-benar bypass
+const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
+export const filterMode = (cutoff: number): 'off' | 'lp' | 'hp' => { const d = clamp01(cutoff) - 0.5; return Math.abs(d) * 2 < FILTER_DEAD ? 'off' : d < 0 ? 'lp' : 'hp'; };
+// frekuensi potong (Hz): low-pass 20 kHz -> 80 Hz ke arah kiri, high-pass 20 Hz -> 8 kHz ke arah kanan (skala log)
+export const filterHz = (cutoff: number): number => {
+  const x = Math.abs(clamp01(cutoff) - 0.5) * 2, m = filterMode(cutoff);
+  return m === 'lp' ? 20000 * Math.pow(80 / 20000, x) : m === 'hp' ? 20 * Math.pow(8000 / 20, x) : 0;
+};
+export const filterQ = (reso: number): number => 0.707 + clamp01(reso) * 11.3;   // 0.707 (datar) .. 12 (resonansi tajam)
 export const EQ_RANGE_DB = 12;   // knob penuh = ±12 dB
 export const eqDb = (v: number): number => (Math.max(0, Math.min(1, v)) - 0.5) * 2 * EQ_RANGE_DB;
 interface Chain {
   ctx: BaseAudioContext; topo: string;
   low: BiquadFilterNode; mid: BiquadFilterNode; high: BiquadFilterNode;
+  lp: BiquadFilterNode; hp: BiquadFilterNode;
   dry: GainNode; wet: GainNode; conv: ConvolverNode; decay: number;
 }
 const chains = new Map<string, Chain>();
@@ -245,13 +258,13 @@ function makeImpulse(ctx: BaseAudioContext, seconds: number): AudioBuffer {
 }
 
 function syncFx(track: string): void {
-  const g = gains.get(track), dest = dests.get(track), rv = reverbs.get(track), eq = eqs.get(track);
+  const g = gains.get(track), dest = dests.get(track), rv = reverbs.get(track), eq = eqs.get(track), fl = filters.get(track);
   if (!g || !dest) return;                       // belum pernah diputar: dipasang saat gain track dibuat
   const ctx = g.context;
   let ch = chains.get(track);
-  if (!rv && !eq) {                              // semua card efek dihapus: kembali ke jalur langsung
+  if (!rv && !eq && !fl) {                       // semua card efek dihapus: kembali ke jalur langsung
     if (ch) {
-      g.disconnect(); [ch.low, ch.mid, ch.high, ch.dry, ch.wet, ch.conv].forEach(n => n.disconnect());
+      g.disconnect(); [ch.low, ch.mid, ch.high, ch.lp, ch.hp, ch.dry, ch.wet, ch.conv].forEach(n => n.disconnect());
       g.connect(dest); chains.delete(track);
     }
     return;
@@ -261,16 +274,20 @@ function syncFx(track: string): void {
     low.type = 'lowshelf'; low.frequency.value = 150;
     mid.type = 'peaking'; mid.frequency.value = 1000; mid.Q.value = 0.8;
     high.type = 'highshelf'; high.frequency.value = 6000;
+    const lp = ctx.createBiquadFilter(), hp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 20000; lp.Q.value = 0.707;
+    hp.type = 'highpass'; hp.frequency.value = 20; hp.Q.value = 0.707;
     const conv = ctx.createConvolver();
     conv.normalize = false;   // normalisasi dilakukan sendiri di makeImpulse
-    ch = { ctx, topo: '', low, mid, high, dry: ctx.createGain(), wet: ctx.createGain(), conv, decay: 0 };
+    ch = { ctx, topo: '', low, mid, high, lp, hp, dry: ctx.createGain(), wet: ctx.createGain(), conv, decay: 0 };
     chains.set(track, ch);
   }
-  const topo = (eq ? 'e' : '-') + (rv ? 'r' : '-');
+  const topo = (eq ? 'e' : '-') + (fl ? 'f' : '-') + (rv ? 'r' : '-');
   if (topo !== ch.topo) {                        // susun ulang jalur sesuai efek yang ada
-    g.disconnect(); [ch.low, ch.mid, ch.high, ch.dry, ch.wet, ch.conv].forEach(n => n.disconnect());
+    g.disconnect(); [ch.low, ch.mid, ch.high, ch.lp, ch.hp, ch.dry, ch.wet, ch.conv].forEach(n => n.disconnect());
     let s: AudioNode = g;
-    if (eq) { g.connect(ch.low); ch.low.connect(ch.mid); ch.mid.connect(ch.high); s = ch.high; }
+    if (eq) { s.connect(ch.low); ch.low.connect(ch.mid); ch.mid.connect(ch.high); s = ch.high; }
+    if (fl) { s.connect(ch.lp); ch.lp.connect(ch.hp); s = ch.hp; }
     if (rv) { s.connect(ch.dry); ch.dry.connect(dest); s.connect(ch.conv); ch.conv.connect(ch.wet); ch.wet.connect(dest); }
     else s.connect(dest);
     ch.topo = topo;
@@ -280,6 +297,13 @@ function syncFx(track: string): void {
     ch.low.gain.setTargetAtTime(eq.on ? eqDb(eq.low) : 0, now, .02);
     ch.mid.gain.setTargetAtTime(eq.on ? eqDb(eq.mid) : 0, now, .02);
     ch.high.gain.setTargetAtTime(eq.on ? eqDb(eq.high) : 0, now, .02);
+  }
+  if (fl) {   // dua biquad seri: yang tidak aktif dibiarkan di luar jangkauan dengar (20 kHz / 20 Hz), Q datar
+    const m = fl.on ? filterMode(fl.cutoff) : 'off', hz = filterHz(fl.cutoff), q = filterQ(fl.reso);
+    ch.lp.frequency.setTargetAtTime(m === 'lp' ? hz : 20000, now, .02);
+    ch.hp.frequency.setTargetAtTime(m === 'hp' ? hz : 20, now, .02);
+    ch.lp.Q.setTargetAtTime(m === 'lp' ? q : 0.707, now, .02);
+    ch.hp.Q.setTargetAtTime(m === 'hp' ? q : 0.707, now, .02);
   }
   if (rv) {
     const decay = reverbSeconds(rv.size);
@@ -299,6 +323,12 @@ export function setReverb(track: string, p: ReverbParams | null): void {
 // null = track tidak punya equalizer
 export function setEq(track: string, p: EqParams | null): void {
   if (p) eqs.set(track, { ...p }); else eqs.delete(track);
+  syncFx(track);
+}
+
+// null = track tidak punya filter
+export function setFilter(track: string, p: FilterParams | null): void {
+  if (p) filters.set(track, { ...p }); else filters.delete(track);
   syncFx(track);
 }
 
