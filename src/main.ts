@@ -1137,10 +1137,10 @@ function openAddMenu(btn) {
     }
   });
 }
-// Icon track "Audio clip": gelombang suara (7 batang, ujung bulat), digambar sendiri dengan SVG supaya tajam di ukuran berapa pun
+// Icon track "Audio clip": gelombang suara (5 batang tebal, ujung bulat, tinggi tidak simetris), digambar sendiri dengan SVG supaya tajam di ukuran berapa pun
 const ICON_AUDIO_CLIP =
-  '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">' +
-  '<path d="M3.45 11.5v1M6.3 10.6v2.8M9.15 7.25v9.5M12 10.1v3.8M14.85 8.7v6.65M17.7 10.6v2.8M20.55 11.5v1"/></svg>';
+  '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">' +
+  '<path d="M3 10v4M7.5 7v10M12 3.5v17M16.5 6v12M21 9.5v5"/></svg>';
 const ICON_AUTO =   // Icon track "Automation": kurva dengan titik kontrol
   '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' +
   '<path d="M3 17c3 0 3-10 6-10s3 10 6 10 3-6 6-6"/><circle cx="9" cy="7" r="1.6" fill="currentColor" stroke="none"/><circle cx="15" cy="17" r="1.6" fill="currentColor" stroke="none"/></svg>';
