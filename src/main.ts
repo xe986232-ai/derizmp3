@@ -13,6 +13,7 @@ import { hasSynth, startVoice, releaseVoice, playNote, stopAllSynth } from './sy
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
 import { initTransportMore } from './transport-more';
+import { createClip, importClip, exportClip, cloneClip, splitClip, valueAt, getClip, renderMini, openAutoEditor } from './automation';
 import { decodeFile, addBuffer, getBuffer, encodeWav, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
 import { slideSource, glideBeats } from './note-slide';
 import { velAlpha } from './velocity';
@@ -547,6 +548,7 @@ function copyPattern() {
   const n = createPattern(lane, {start, width: w}, clipOf(el, 0));
   n.querySelector('.pattern__title').textContent = el.querySelector('.pattern__title').textContent;
   if (el.dataset.prId) { n.dataset.prId = 'pat' + (++prSeq); copyPatNotes(el.dataset.prId, n.dataset.prId); renderPatNotes(n); }   // salinan ikut membawa nada
+  if (el.dataset.auId) setupAutoEl(n, cloneClip(el.dataset.auId));   // salinan Automation Clip: kurva sama, diedit terpisah
   patAnchor = null; selectPattern(n);
   n.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'smooth'});
 }
@@ -560,6 +562,7 @@ function deletePattern() {
 let prSeq = 0, prStartBar = 0;   // prStartBar: posisi awal pattern yang sedang dibuka di piano roll (dalam bar), supaya playhead-nya relatif
 function editPattern() {
   const el = selPat; if (!el) return;
+  if (el.dataset.auId) return openAutoEdit(el);   // Automation Clip: buka editor kurva
   if (el.dataset.clip) return renamePattern();
   openEdit(el);
 }
@@ -616,7 +619,7 @@ function enterPatternAs(el, fxId, keepView = false) {
 }
 const patternBridge = {
   list(fxId) {
-    const rows = [...lanesEl.querySelectorAll('.pattern:not([data-clip])')].map(el => {
+    const rows = [...lanesEl.querySelectorAll('.pattern:not([data-clip]):not([data-au-id])')].map(el => {
       const lane = el.parentElement, lt = lane.dataset.track, id = el.dataset.prId;
       const nm = document.getElementById('track-name-' + lt), cont = document.querySelector('.trackheader-container[data-track="' + lt + '"]');
       return {
@@ -674,6 +677,7 @@ function splitPattern() {
     n.dataset.prId = 'pat' + (++prSeq); copyPatNotes(el.dataset.prId, n.dataset.prId, cb); trimPatNotes(el.dataset.prId, cb);
     renderPatNotes(el); renderPatNotes(n);
   }
+  if (el.dataset.auId) setupAutoEl(n, splitClip(el.dataset.auId, (cut - s0) / BAR_W * 4));   // kurva ikut terbagi di titik potong
   el.style.width = (cut - s0) + 'px'; handleSide(el);
 }
 function doubleLength() {
@@ -719,6 +723,75 @@ patBar.addEventListener('click', e => {
   }
 });
 
+
+// ===== Automation Clip =====
+// Putar knob efek (mis. Cutoff) -> titik tiga di transport -> "Create Automation Clip": clip baru di track Automation (satu lane per knob)
+// dan editornya langsung terbuka. Saat Play, kurvanya menggerakkan knob itu (autoPump, ikut jadwal 25 ms milik metroPump).
+const AUTO_COLOR = '#f97316';
+const autoKey = t => t.track + ':' + t.fxId + ':' + t.key;
+const autoLen = el => pw(el) / BAR_W * 4;   // panjang clip dalam ketukan
+const autoRO = new ResizeObserver(es => es.forEach(en => { const el = en.target; if (el.isConnected && el.dataset.auId) renderMini(el, el.dataset.auId, autoLen(el)); }));
+function setupAutoEl(el, id) {   // pattern biasa -> Automation Clip
+  el.dataset.auId = id; el.classList.add('pattern--auto');
+  const c = getClip(id); if (c && c.target) el.parentElement.dataset.auTarget = autoKey(c.target);   // lane ini milik knob tsb: clip berikutnya untuk knob yang sama masuk ke sini
+  autoRO.observe(el);
+  renderMini(el, id, autoLen(el));
+}
+function openAutoEdit(el) {
+  const id = el.dataset.auId, c = getClip(id); if (!c || !el.isConnected) return;
+  const t = c.target, info = t ? fxRack.paramInfo(t.track, t.fxId, t.key) : null;
+  openAutoEditor({
+    id, len: autoLen(el), title: el.querySelector('.pattern__title').textContent, color: AUTO_COLOR, info,
+    onChange: () => { if (el.isConnected) renderMini(el, id, autoLen(el)); }
+  });
+}
+function createAutomationClip() {
+  const t = fxRack.lastTouched(); if (!t) return;
+  const info = fxRack.paramInfo(t.track, t.fxId, t.key); if (!info) return;
+  const value = fxRack.getParam(t.track, t.fxId, t.key) ?? info.def, tag = autoKey(t), title = info.fxName + ' · ' + info.label;
+  const x = Math.max(0, Math.min(posBars * BAR_W, W - BAR_W / 2));   // mulai dari playhead
+  let lane = [...lanesEl.querySelectorAll('.lane')].find(l => l.dataset.auTarget === tag && slot(l, x)), sl = lane && slot(lane, x);
+  if (!lane) {   // belum ada lane untuk knob ini (atau penuh di posisi itu): track Automation baru
+    const src = document.querySelector('.trackheader-container[data-track="' + t.track + '"]');
+    addTrack({n: 'Automation', c: AUTO_COLOR});
+    const id = trackSeq;
+    lane = lanesEl.querySelector('.lane[data-track="' + id + '"]');
+    const cont = document.querySelector('.trackheader-container[data-track="' + id + '"]');
+    document.getElementById('track-name-' + id).textContent = title;
+    cont.querySelector('.trackheader__track-name-button').title = title;
+    cont.querySelector('input[type=range]').setAttribute('aria-label', 'Volume, ' + title);
+    lane.dataset.auTarget = tag;
+    sl = slot(lane, x) || slot(lane, 0);
+    if (src) selectTrack(src);   // panel efek tetap di track asal: knob yang diotomasi tetap kelihatan
+  }
+  if (!sl) { toast('Tidak ada ruang kosong untuk Automation Clip'); return; }
+  const el = createPattern(lane, sl);
+  el.querySelector('.pattern__title').textContent = title;
+  setupAutoEl(el, createClip({track: t.track, fxId: t.fxId, key: t.key}, value, sl.width / BAR_W * 4));
+  selectPattern(null);
+  el.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'smooth'});
+  setTimeout(() => openAutoEdit(el), REDUCE ? 0 : 280);   // langsung bisa diatur (menunggu animasi track baru)
+}
+// Saat main: tiap knob yang punya Automation Clip mengikuti kurva clip terakhir yang sudah dimulai (sesudah clip berakhir, nilai terakhirnya ditahan)
+function autoPump(ctx) {
+  if (ctx.currentTime < startCtx) return;   // masih count-in
+  const pos = startPos + (ctx.currentTime - startCtx) / SEC_PER_BAR, best = new Map();
+  lanesEl.querySelectorAll('.pattern[data-au-id]').forEach(el => {
+    if (el.parentElement.classList.contains('is-off')) return;   // track Automation dimatikan
+    const c = getClip(el.dataset.auId); if (!c || !c.target) return;
+    const start = pl(el) / BAR_W; if (start > pos) return;
+    const k = autoKey(c.target), b = best.get(k);
+    if (!b || start > b.start) best.set(k, {el, t: c.target, start});
+  });
+  best.forEach(({el, t, start}) => {
+    const v = valueAt(el.dataset.auId, Math.min((pos - start) * 4, autoLen(el)));
+    if (v !== undefined) fxRack.setParam(t.track, t.fxId, t.key, v);
+  });
+}
+lanesEl.addEventListener('dblclick', e => {   // klik dua kali badan Automation Clip: buka editor (judul tetap ganti nama)
+  const el = e.target.closest && e.target.closest('.pattern--auto');
+  if (el && !e.target.closest('.pattern__title, .pattern__handle')) { selectPattern(el); openAutoEdit(el); }
+});
 
 // ===== Keyboard virtual =====
 const kbdEl = document.getElementById('kbd'), kbdKeys = document.getElementById('kbdKeys'), kbdTitle = document.getElementById('kbdTitle');
@@ -980,6 +1053,9 @@ function openAddMenu(btn) {
 const ICON_AUDIO_CLIP =
   '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">' +
   '<path d="M3.45 11.5v1M6.3 10.6v2.8M9.15 7.25v9.5M12 10.1v3.8M14.85 8.7v6.65M17.7 10.6v2.8M20.55 11.5v1"/></svg>';
+const ICON_AUTO =   // Icon track "Automation": kurva dengan titik kontrol
+  '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M3 17c3 0 3-10 6-10s3 10 6 10 3-6 6-6"/><circle cx="9" cy="7" r="1.6" fill="currentColor" stroke="none"/><circle cx="15" cy="17" r="1.6" fill="currentColor" stroke="none"/></svg>';
 function addTrack(t) {
   const id = ++trackSeq, cont = TRACK_TPL.cloneNode(true);
   cont.dataset.track = id; cont.dataset.ins = t.n; cont.classList.add('is-new');
@@ -991,6 +1067,7 @@ function addTrack(t) {
   nm.id = 'track-name-' + id; nm.textContent = name;
   cont.querySelector('.trackheader__track-name-button').title = name;
   if (t.n === 'Audio clip') cont.querySelector('.trackheader__instrument-button .soundtrap-icon').innerHTML = ICON_AUDIO_CLIP;
+  if (t.n === 'Automation') cont.querySelector('.trackheader__instrument-button .soundtrap-icon').innerHTML = ICON_AUTO;   // track khusus Automation Clip (dibuat dari titik tiga di transport)
   cont.querySelector('input[type=range]').setAttribute('aria-label', 'Volume, ' + name);
   const lane = document.createElement('div');
   lane.className = 'lane'; lane.dataset.track = id; lane.style.setProperty('--track-color', t.c);
@@ -1113,6 +1190,7 @@ function metroPump() {
   if (!playing) return;
   const ctx = actx, ahead = ctx.currentTime + .12;
   synthPump(ctx, ctx.currentTime + SYNTH_AHEAD);
+  autoPump(ctx);
   for (;;) {
     const t = startCtx + (nextBeat / 4 - startPos) * SEC_PER_BAR;
     if (t > ahead) break;
@@ -1243,7 +1321,10 @@ function setBpm(v) {
   undoStack = []; redoStack = []; histCur = histCapture(); histSync();   // lebar clip berubah: riwayat undo dimulai ulang
 }
 btnPlay.addEventListener('click', togglePlay);
-initTransportMore(document.getElementById('btnMore') as HTMLButtonElement);   // titik tiga di kiri tombol M (isi menu menyusul)
+initTransportMore(document.getElementById('btnMore') as HTMLButtonElement, () => {   // titik tiga di kiri tombol M
+  const t = fxRack.lastTouched(), info = t && fxRack.paramInfo(t.track, t.fxId, t.key);   // ada knob yang baru diputar = muncul opsi Automation Clip
+  return t && info ? [{label: 'Create Automation Clip', sub: info.fxName + ' · ' + info.label, run: createAutomationClip}] : [];
+});
 const metroUI = initMetronomePanel(btnMetro, {
   getBpm: () => BPM, setBpm,
   isOn: () => metro.on,
@@ -1426,7 +1507,7 @@ function histCapture() {
   const ids = [], pats = {};
   lanesEl.querySelectorAll('.lane').forEach(l => {
     ids.push(l.dataset.track);
-    pats[l.dataset.track] = [...l.querySelectorAll('.pattern')].map(p => ({s: r4(pl(p) / BAR_W), w: r4(pw(p) / BAR_W), t: p.querySelector('.pattern__title').textContent, c: p.dataset.clip || '', o: r4(+p.dataset.off || 0)}))
+    pats[l.dataset.track] = [...l.querySelectorAll('.pattern')].map(p => ({s: r4(pl(p) / BAR_W), w: r4(pw(p) / BAR_W), t: p.querySelector('.pattern__title').textContent, c: p.dataset.clip || '', o: r4(+p.dataset.off || 0), a: p.dataset.auId || ''}))
       .sort((a, b) => a.s - b.s || a.w - b.w || (a.t < b.t ? -1 : a.t > b.t ? 1 : 0));
   });
   return {ids: ids.join(','), pats};
@@ -1455,12 +1536,13 @@ function histApply(st) {
     const want = (st.pats[l.dataset.track] || []).map(x => ({...x, used: false}));
     [...l.querySelectorAll('.pattern')].forEach(p => {   // pattern yang sudah cocok dibiarkan, hanya yang berbeda diganti
       const s = r4(pl(p) / BAR_W), w = r4(pw(p) / BAR_W), t = p.querySelector('.pattern__title').textContent;
-      const m = want.find(x => !x.used && x.s === s && x.w === w && x.t === t && x.c === (p.dataset.clip || '') && x.o === r4(+p.dataset.off || 0));
+      const m = want.find(x => !x.used && x.s === s && x.w === w && x.t === t && x.c === (p.dataset.clip || '') && x.o === r4(+p.dataset.off || 0) && x.a === (p.dataset.auId || ''));
       if (m) m.used = true; else p.remove();
     });
     want.filter(x => !x.used).forEach(x => {
       const n = createPattern(l, {start: x.s * BAR_W, width: x.w * BAR_W}, x.c ? {clip: +x.c, off: x.o} : null);
       n.querySelector('.pattern__title').textContent = x.t;
+      if (x.a) setupAutoEl(n, x.a);   // Automation Clip yang dihapus lalu di-undo: kurvanya masih tersimpan
     });
   });
   histCur = st;   // sudah sama dengan keadaan sekarang, jadi tidak dicatat ulang
@@ -1493,7 +1575,7 @@ initTrackMeters();   // meter level stereo di card track
 // ===== Simpan / buka file project (menu kanan atas) =====
 // Disimpan: BPM, panjang timeline, track (jenis, nama, warna, volume, on/off), pattern (posisi, lebar, judul), nada piano roll
 // (termasuk nada tiap DERIZ), audio clip di timeline, dan isi tiap plugin DERIZ (audio sample, garis start, zoom, knob, nyala/mati).
-// Belum disimpan: setelan efek lain (reverb, EQ, dst).
+// Juga disimpan: setelan efek tiap track (Reverb, EQ, Filter, Supersaw) dan Automation Clip (kurva + knob yang diotomasi).
 const r3p = v => Math.round(v * 1e3) / 1e3;
 function projectSnapshot() {
   const clips = {}, tracks = [], seenClips = new Set(), dKeys = new Map();   // dKeys: audio DERIZ -> kunci 'd1', 'd2', ... (audio yang sama dipakai bersama disimpan sekali)
@@ -1515,6 +1597,11 @@ function projectSnapshot() {
         }).filter(Boolean);
         if (extra.length) o.x = extra;
       }
+      if (p.dataset.auId) {   // Automation Clip: titik kurva + knob target (id efek tidak tetap antar sesi, jadi disimpan sebagai jenis + urutan)
+        const c = getClip(p.dataset.auId), ref = c && c.target ? fxRack.fxRef(c.target.track, c.target.fxId) : null;
+        o.a = exportClip(p.dataset.auId);
+        if (ref) o.a.t = {tr: c.target.track, ft: ref.type, fi: ref.i, k: c.target.key};
+      }
       return o;
     });
     const dz = fxRack.derizExport(id).map(st => {
@@ -1526,11 +1613,13 @@ function projectSnapshot() {
       }
       return o;
     });
+    const fxs = fxRack.fxExport(id);
     tracks.push({
       id, ins: c.dataset.ins || 'Drums', name: document.getElementById('track-name-' + id).textContent,
       color: c.style.getPropertyValue('--track-color'), vol: sl ? +sl.value : 100,
       off: !!pwr && pwr.getAttribute('aria-checked') === 'false', deriz: fxRack.derizIds(id).length, pats,
       ...(dz.some(x => x.z) ? {dz} : {}),
+      ...(fxs.length ? {fx: fxs} : {}),
     });
   });
   return {data: {v: 1, bpm: BPM, bars: BARS, tracks}, clips};
@@ -1556,7 +1645,7 @@ async function projectRestore(rec) {
   clearProject();
   setBpm(d.bpm || 120);
   if (d.bars > BARS) growTimeline(Math.min(MAX_BARS, d.bars));
-  const trMap = {}, pending = [];
+  const trMap = {}, pending = [], pendingAuto = [];
   for (const t of d.tracks) {
     addTrack({n: t.ins, c: t.color || COLORS[0]});
     const id = String(trackSeq); trMap[t.id] = id;
@@ -1571,10 +1660,12 @@ async function projectRestore(rec) {
       const z = st.z && dBufs[st.z.k];
       fxRack.derizImport(id, i, {on: st.on !== false, v: st.v || {}, ...(z ? {z: {name: st.z.name, start: st.z.start || 0, zoom: st.z.zoom || 1, view: st.z.view || 0, buf: z}} : {})});
     });
+    if (t.fx && t.fx.length) fxRack.fxImport(id, t.fx);   // Reverb / EQ / Filter / Supersaw: jenis, nyala, nilai knob
     if (t.off) cont.querySelector('.trackheader__pwr').click();
     for (const p of t.pats) {
       const el = createPattern(lane, {start: p.s * BAR_W, width: p.w * BAR_W}, p.c && clipMap[p.c] ? {clip: clipMap[p.c], off: p.o || 0} : null);
       el.querySelector('.pattern__title').textContent = p.t;
+      if (p.a) pendingAuto.push({el, a: p.a});
       if (p.n || p.x) { el.dataset.prId = 'pat' + (++prSeq); pending.push({el, p}); }
     }
   }
@@ -1586,6 +1677,10 @@ async function projectRestore(rec) {
       if (fx !== undefined) setPianoRollNotes(pid + '@' + fx, x.n);
     }
     renderPatNotes(el);
+  }
+  for (const {el, a} of pendingAuto) {   // Automation Clip: knob target dicari lagi lewat track + jenis efek + urutannya
+    const tr = a.t && trMap[a.t.tr], fx = tr !== undefined ? fxRack.fxFind(tr, a.t.ft, a.t.fi) : undefined;
+    setupAutoEl(el, importClip(fx !== undefined ? {track: tr, fxId: fx, key: a.t.k} : null, a));
   }
   const first = document.querySelector('.trackheader-container');
   if (first) selectTrack(first);

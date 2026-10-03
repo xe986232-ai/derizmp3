@@ -1230,3 +1230,39 @@ html.is-reorder,html.is-reorder *{cursor:grabbing !important;user-select:none;-w
 .pattern.is-jelly-src{opacity:0;transition:none}   /* pattern asli disembunyikan selama salinannya dibawa; muncul lagi saat salinan mendarat */
 .pattern__ph{position:absolute;left:0;top:0;bottom:0;width:1px;z-index:3;background:currentColor;pointer-events:none;display:none;will-change:transform}   /* sama seperti .playhead-body: 1px, tanpa shadow */
 html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas, playhead utama hilang (ada di salinan pattern) */
+
+/* ===== Automation Clip ===== */
+.pattern__auto{position:absolute;left:0;right:0;top:18px;bottom:0;overflow:hidden;border-radius:0 0 8px 8px;pointer-events:none}   /* kurva mini di dalam clip (renderMini) */
+.pattern__auto svg{display:block;width:100%;height:100%}
+.pattern__auto-fill{fill:rgba(255,255,255,.2)}
+.pattern__auto-line{fill:none;stroke:rgba(255,255,255,.95);stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}
+.trackheader-container[data-ins="Automation"] .trackheader__bottom-row{visibility:hidden}   /* track Automation tidak punya volume / pan / solo */
+.tmore__col{display:flex;flex-direction:column;gap:1px;min-width:0;padding:6px 0}   /* item menu titik tiga dengan keterangan */
+.tmore__sub{font-size:11px;font-weight:600;letter-spacing:.03em;color:#8a8a9a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.autoov{position:fixed;inset:0;z-index:215;display:grid;place-items:center;padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom))}
+.autoov__back{position:absolute;inset:0;background:rgba(8,8,12,.45)}
+.autoov__win{position:relative;width:min(720px,100%);max-height:100%;outline:none;display:flex;flex-direction:column;gap:10px;padding:14px 14px 12px;border-radius:16px;
+  background:var(--card,#25252f);color:var(--text);box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 0 0 1px rgba(255,255,255,.05),0 40px 80px -20px rgba(0,0,0,.85)}
+.autoov__head{display:flex;align-items:center;gap:8px}
+.autoov__ttl{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.autoov__ttl b{font-size:15px;letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.autoov__ttl span{font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--muted)}
+.autoov__btn{flex:none;min-height:34px;padding:0 14px;border-radius:9px;font-size:12.5px;font-weight:700;letter-spacing:.04em;color:#ececf4;
+  background:linear-gradient(180deg,#3a3a4a 0%,#2a2a36 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 0 0 1px rgba(255,255,255,.05),0 2px 0 #0a0a0f;transition:transform .12s ease,filter .15s ease}
+.autoov__btn:hover{filter:brightness(1.12)}
+.autoov__btn:active{transform:translateY(1px) scale(.97)}
+.autoov__btn--pri{color:#1b1204;background:linear-gradient(180deg,color-mix(in srgb,var(--auto-color,#f97316) 82%,#fff) 0%,var(--auto-color,#f97316) 100%)}
+.autoov__plot{position:relative;height:min(300px,46vh);min-height:180px;border-radius:12px;overflow:hidden;background:#13131a;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06),inset 0 2px 8px rgba(0,0,0,.5)}
+.autoov__svg{display:block;position:absolute;inset:0;touch-action:none;cursor:crosshair;user-select:none;-webkit-user-select:none}
+.autoov__bar{stroke:rgba(255,255,255,.16);stroke-width:1}
+.autoov__beat{stroke:rgba(255,255,255,.06);stroke-width:1}
+.autoov__hline{stroke:rgba(255,255,255,.06);stroke-width:1}
+.autoov__mid{stroke:rgba(255,255,255,.2);stroke-width:1;stroke-dasharray:4 4}
+.autoov__lbl{fill:rgba(255,255,255,.4);font-size:10.5px;font-weight:700;letter-spacing:.04em;pointer-events:none}
+.autoov__area{fill:color-mix(in srgb,var(--auto-color,#f97316) 24%,transparent);pointer-events:none}
+.autoov__line{fill:none;stroke:var(--auto-color,#f97316);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round;pointer-events:none}
+.autoov__pt{fill:#13131a;stroke:var(--auto-color,#f97316);stroke-width:2.5;pointer-events:none;transition:r .12s ease}
+.autoov__pt.is-sel{fill:#fff;stroke:var(--auto-color,#f97316)}
+.autoov__read{margin:0;min-height:16px;font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--auto-color,#f97316);font-variant-numeric:tabular-nums}
+.autoov__hint{margin:0;font-size:11px;font-weight:600;letter-spacing:.03em;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){.autoov__btn,.autoov__pt{transition:none!important}}

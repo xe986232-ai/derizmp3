@@ -2,7 +2,7 @@
 // Menu memakai gaya yang sama dengan menu pattern DERIZ (.fx-pats). Isi menu diberikan lewat `items` (dibaca tiap menu dibuka);
 // selama belum ada isi, menu menampilkan teks kosong. Tutup: klik tombol lagi, klik di luar, atau Esc.
 
-export interface MoreItem { label: string; run(): void }
+export interface MoreItem { label: string; sub?: string; run(): void }   // sub: keterangan kecil di bawah label (mis. knob yang akan diotomasi)
 
 export function initTransportMore(btn: HTMLButtonElement, items: () => MoreItem[] = () => []): { close(instant?: boolean): void } {
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -45,7 +45,11 @@ export function initTransportMore(btn: HTMLButtonElement, items: () => MoreItem[
       const b = document.createElement('button');
       b.type = 'button'; b.setAttribute('role', 'menuitem'); b.className = 'fx-pats__item';
       const t = document.createElement('span'); t.className = 'fx-pats__name'; t.textContent = it.label;
-      b.appendChild(t);
+      if (it.sub) {
+        const col = document.createElement('span'); col.className = 'tmore__col';
+        const sub = document.createElement('span'); sub.className = 'tmore__sub'; sub.textContent = it.sub;
+        col.append(t, sub); b.appendChild(col);
+      } else b.appendChild(t);
       b.addEventListener('click', () => { close(true); it.run(); });
       el.appendChild(b);
     }

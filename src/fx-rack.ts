@@ -336,7 +336,22 @@ function cardHtml(fx: Fx, i: number): string {
 // Keadaan satu DERIZ untuk disimpan / dibuka di file project (audio ikut: buf)
 export interface DerizSaved { on: boolean; v: Record<string, number>; z?: { name: string; start: number; zoom: number; view: number; buf: AudioBuffer } }
 
+// Parameter efek yang bisa diotomasi (knob / slider): dipakai Automation Clip
+export interface AutoTarget { track: string; fxId: number; key: string; fxName: string; label: string }
+export interface AutoParamInfo { fxName: string; label: string; def: number; bipolar: boolean; fmt(v: number): string }
+// Keadaan satu efek non-DERIZ (Reverb, EQ, Filter, Supersaw) untuk file project
+export interface FxSaved { type: string; on: boolean; v: Record<string, number> }
+
 export interface FxRack {
+  onTouch(cb: (t: AutoTarget) => void): void;   // dipanggil tiap pengguna memutar knob / slider (bukan saat automation berjalan)
+  lastTouched(): AutoTarget | null;             // knob terakhir yang diputar pengguna, null kalau efeknya sudah dihapus
+  paramInfo(track: string, fxId: number, key: string): AutoParamInfo | null;   // null = efek / parameter tidak ada
+  getParam(track: string, fxId: number, key: string): number | undefined;
+  setParam(track: string, fxId: number, key: string, v: number): void;   // nilai dari automation: suara + knob ikut bergerak (diabaikan selagi knob itu sedang dipegang)
+  fxRef(track: string, fxId: number): { type: string; i: number } | null;   // identitas efek yang stabil antar sesi: jenis + urutan di antara efek sejenis
+  fxFind(track: string, type: string, i: number): number | undefined;
+  fxExport(track: string): FxSaved[];
+  fxImport(track: string, list: FxSaved[]): void;
   show(track: string | null): void;   // tampilkan efek milik track ini (null = tidak ada track terpilih)
   drop(track: string): void;          // track dihapus: buang efeknya
   addInstrument(track: string, type: 'supersaw' | 'deriz'): void;   // track synth baru: pasang plugin instrumennya (kartu di paling atas)
@@ -929,9 +944,12 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     const p = defOf(fx.type).params.find(x => x.key === el.dataset.k)!;
     return { fx, p };
   };
+  let touched: AutoTarget | null = null, touchCb: ((t: AutoTarget) => void) | null = null;
+  const nameOf = (fx: Fx): string => { const n = defOf(fx.type).name; if (fx.type !== 'deriz') return n; const no = derizNo(fx.id); return no > 1 ? n + ' ' + no : n; };
   const setVal = (el: HTMLElement, fx: Fx, p: Param, n: number) => {
     const v = Math.max(0, Math.min(1, n));
     fx.v[p.key] = v;
+    if (cur) { touched = { track: cur, fxId: fx.id, key: p.key, fxName: nameOf(fx), label: p.label }; touchCb?.(touched); }   // knob ini jadi calon Automation Clip
     paintCtl(el, v, p, defOf(fx.type).name);
     if (cur) applyAudio(cur);
     if (fx.type === 'deriz') kbParams(fx);
@@ -1235,7 +1253,52 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     if (cur === track) api.show(track);   // kartu track ini sedang tampil: gambar ulang dengan keadaan baru
   }
 
+  // ---------- Automation Clip: baca / tulis parameter dari luar panel ----------
+  const fxOf = (track: string, fxId: number): Fx | undefined => (racks.get(track) ?? []).find(f => f.id === fxId);
+  const paramOf = (fx: Fx, key: string): Param | undefined => defOf(fx.type).params.find(x => x.key === key);
+  function paramInfo(track: string, fxId: number, key: string): AutoParamInfo | null {
+    const fx = fxOf(track, fxId), p = fx && paramOf(fx, key); if (!fx || !p) return null;
+    return { fxName: nameOf(fx), label: p.label, def: p.def, bipolar: !!p.bipolar, fmt: p.fmt };
+  }
+  function setParam(track: string, fxId: number, key: string, n: number): void {
+    const fx = fxOf(track, fxId), p = fx && paramOf(fx, key); if (!fx || !p) return;
+    if (drag && drag.fx === fx && drag.p === p) return;   // pengguna sedang memegang knob ini: jangan direbut
+    const v = Math.max(0, Math.min(1, n));
+    if (Math.abs((fx.v[key] ?? 0) - v) < 1e-4) return;
+    fx.v[key] = v;
+    const el = cardById(fx.id)?.querySelector<HTMLElement>(`[data-k="${key}"]`);
+    if (el) paintCtl(el, v, p, defOf(fx.type).name);
+    applyAudio(track);
+    if (fx.type === 'deriz') kbParams(fx);
+  }
+  const fxRef = (track: string, fxId: number): { type: string; i: number } | null => {
+    const rack = racks.get(track) ?? [], fx = rack.find(f => f.id === fxId); if (!fx) return null;
+    return { type: fx.type, i: rack.filter(f => f.type === fx.type).findIndex(f => f.id === fxId) };
+  };
+  const fxFind = (track: string, type: string, i: number): number | undefined => (racks.get(track) ?? []).filter(f => f.type === type)[i]?.id;
+  const fxExport = (track: string): FxSaved[] => (racks.get(track) ?? []).filter(f => f.type !== 'deriz').map(f => ({ type: f.type, on: f.on, v: { ...f.v } }));
+  function fxImport(track: string, list: FxSaved[]): void {   // dipanggil saat membuka project (track-nya sudah dibuat; Supersaw bawaan track sudah ada)
+    const cnt = new Map<string, number>();
+    for (const st of list) {
+      const type = st.type as FxType, d = EFFECTS.find(e => e.type === type); if (!d || type === 'deriz') continue;
+      const k = cnt.get(type) ?? 0; cnt.set(type, k + 1);
+      let fx = (racks.get(track) ?? []).filter(f => f.type === type)[k];
+      if (!fx) {
+        if (d.synth) continue;   // plugin instrumen hanya ada kalau track-nya memang jenis itu
+        const v: Record<string, number> = {}; d.params.forEach(q => { v[q.key] = q.def; });
+        fx = { id: ++seq, type, on: true, min: false, v };
+        racks.set(track, [...(racks.get(track) ?? []), fx]);
+      }
+      fx.on = st.on !== false; fx.v = { ...fx.v, ...st.v };
+    }
+    applyAudio(track);
+    if (cur === track) api.show(track);
+  }
+
   const api: FxRack = {
+    onTouch: cb => { touchCb = cb; },
+    lastTouched: () => (touched && fxOf(touched.track, touched.fxId) ? touched : null),
+    paramInfo, getParam: (track, fxId, key) => fxOf(track, fxId)?.v[key], setParam, fxRef, fxFind, fxExport, fxImport,
     show(track) {
       closePicker(true); closeMenu(true); hideTip(); drag = null; closeOverlay(true, true); ro.disconnect();
       cur = track;
