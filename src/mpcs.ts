@@ -4,7 +4,7 @@
 // Inti DSP ada di mpcs-dsp.ts (murni), jalan di mpcs-worker.ts.
 
 import { ACCEPT as AUDIO_ACCEPT, isAudio } from './audio-upload-card';
-import { encodeWav, shiftCurve, snapTargets, toMono, type Note, type PitchTrack } from './mpcs-dsp';
+import { DEFAULT_CONTROLS, encodeWav, shiftCurve, snapTargets, toMono, type Controls, type Note, type PitchTrack } from './mpcs-dsp';
 
 const svg = (inner: string, size = 18): string =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
@@ -22,6 +22,24 @@ const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const BLACK = new Set([1, 3, 6, 8, 10]);
 const noteName = (m: number): string => { const r = Math.round(m); return NAMES[((r % 12) + 12) % 12] + (Math.floor(r / 12) - 1); };
 const fmtShift = (s: number): string => { const c = Math.round(s * 100); return (c > 0 ? '+' : '') + (Math.abs(c) % 100 === 0 ? c / 100 + ' st' : c + ' ct'); };
+
+// Tiga knob global ala NewTone. Markup & kelas sama dengan knob efek (fx-rack.ts) supaya gayanya menyatu dengan DAW.
+const knobSvg = '<svg viewBox="0 0 36 36" aria-hidden="true" class="circular-chart">' +
+  '<path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" stroke-dasharray="75, 100" class="circle-bg" style="transform-origin:18px 18px;transform:rotate(225deg)"></path>' +
+  '<path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" stroke-dashoffset="0" stroke-dasharray="0 100" class="circle primary-theme" style="transform:rotate(225deg)"></path>' +
+  '<path d="M18 5.142857142857142 a 12.857142857142858 12.857142857142858 0 0 1 0 25.714285714285715 a 12.857142857142858 12.857142857142858 0 0 1 0 -25.714285714285715" fill="var(--background-tinted-press)" stroke="none" class="circle-inner"></path>' +
+  '<path d="M18 5.7857142857142865 a 12.214285714285714 12.214285714285714 0 0 1 0 24.428571428571427 a 12.214285714285714 12.214285714285714 0 0 1 0 -24.428571428571427" stroke="var(--background-tinted-base)" fill="none" class="circle-inner-stroke"></path>' +
+  '<path d="M 18 7.5 L 18 12" class="knob-pos" style="transform:rotate(-135deg)"></path></svg>';
+type KnobKey = keyof Controls;
+const KNOBS: Record<KnobKey, { label: string; tip: string; bipolar?: boolean }> = {
+  center: { label: 'Center', tip: 'Center: tarik pitch pusat tiap nada ke semiton terdekat. 0% = pitch asli, 100% = tepat di nada. Nada yang diseret tangan selalu dikoreksi penuh. Klik dua kali = reset' },
+  variation: { label: 'Variation', tip: 'Variation: variasi alami di dalam nada (vibrato dan pitch yang goyang). 100% = asli, 0% = datar di pusat nada. Klik dua kali = reset' },
+  transition: { label: 'Transition', bipolar: true, tip: 'Transition: cara pindah antar nada. 50% = luncuran asli dipertahankan. Ke kiri: makin tajam sampai lompat robotik. Ke kanan: makin legato (luncuran lebar). Klik dua kali = reset' }
+};
+const KNOB_KEYS = Object.keys(KNOBS) as KnobKey[];
+const knobHtml = (k: KnobKey): string =>
+  `<div class="mpcs__knob is-off" title="${KNOBS[k].tip}"><div class="knob"><div role="slider" tabindex="0" class="knob-input" data-kn="${k}" aria-label="${KNOBS[k].label}" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${DEFAULT_CONTROLS[k]}"><div class="knobwheel">${knobSvg}</div></div></div>` +
+  `<span>${KNOBS[k].label}</span><output>${Math.round(DEFAULT_CONTROLS[k] * 100)}%</output></div>`;
 
 interface Session {
   name: string; sr: number; dur: number; pt: PitchTrack; notes: Note[];
@@ -62,8 +80,9 @@ function build(): void {
         '<div class="mpcs__seg" role="group" aria-label="Sumber putar"><button type="button" data-m="out" class="is-on">Hasil</button><button type="button" data-m="orig">Asli</button></div>' +
         '<button type="button" class="mpcs__btn" data-a="snap" disabled>Snap semua</button>' +
         '<button type="button" class="mpcs__btn" data-a="reset" disabled>Reset</button>' +
-        '<label class="mpcs__ctl" title="Variasi lambat pitch asli yang dipertahankan (0 = diratakan ke target). Berlaku untuk nada terpilih, atau semua nada kalau belum ada yang dipilih"><span>Drift</span><input type="range" min="0" max="100" value="100" data-k="drift" disabled></label>' +
-        '<label class="mpcs__ctl" title="Vibrato yang dipertahankan (0 = vibrato dibuang). Berlaku untuk nada terpilih, atau semua nada kalau belum ada yang dipilih"><span>Vibrato</span><input type="range" min="0" max="100" value="100" data-k="vib" disabled></label>' +
+        KNOB_KEYS.map(knobHtml).join('') +
+        '<label class="mpcs__ctl" hidden title="Drift nada terpilih: variasi lambat pitch asli yang dipertahankan (0 = diratakan ke target). Dikalikan dengan knob Variation"><span>Drift</span><input type="range" min="0" max="100" value="100" data-k="drift" disabled></label>' +
+        '<label class="mpcs__ctl" hidden title="Vibrato nada terpilih: vibrato yang dipertahankan (0 = vibrato dibuang). Dikalikan dengan knob Variation"><span>Vibrato</span><input type="range" min="0" max="100" value="100" data-k="vib" disabled></label>' +
         `<button type="button" class="mpcs__btn" data-a="wav" disabled>${ICON.dl}<span>WAV</span></button>` +
         `<span class="mpcs__zoom"><button type="button" class="mpcs__btn mpcs__ico" data-a="zout" aria-label="Perkecil" disabled>${ICON.minus}</button><button type="button" class="mpcs__btn mpcs__ico" data-a="zin" aria-label="Perbesar" disabled>${ICON.plus}</button></span>` +
       '</div>' +
@@ -93,6 +112,42 @@ function build(): void {
   const ov = el.querySelector<HTMLCanvasElement>('.mpcs__ov')!;
   const g = cv.getContext('2d')!, gk = keys.getContext('2d')!, go = ov.getContext('2d')!;
   const ctl = (k: 'drift' | 'vib'): HTMLInputElement => el.querySelector<HTMLInputElement>(`.mpcs__bar [data-k="${k}"]`)!;
+
+  // ---------- knob Center / Variation / Transition ----------
+  let kv: Controls = { ...DEFAULT_CONTROLS };
+  const knobEl = {} as Record<KnobKey, HTMLElement>;
+  KNOB_KEYS.forEach(k => { knobEl[k] = el.querySelector<HTMLElement>(`.mpcs__bar [data-kn="${k}"]`)!; });
+  function paintKnob(k: KnobKey): void {
+    const e = knobEl[k], v = kv[k], arc = e.querySelector('.circle')!;
+    e.querySelector<SVGElement>('.knob-pos')!.style.transform = `rotate(${-135 + v * 270}deg)`;
+    if (KNOBS[k].bipolar) { const a = Math.min(v, 0.5) * 75, b = Math.max(v, 0.5) * 75; arc.setAttribute('stroke-dasharray', `0 ${a.toFixed(2)} ${(b - a).toFixed(2)} 100`); }   // arc dari tengah (50% = bawaan), seperti knob pan
+    else arc.setAttribute('stroke-dasharray', `${(v * 75).toFixed(2)} 100`);
+    const t = Math.round(v * 100) + '%';
+    e.setAttribute('aria-valuenow', v.toFixed(3)); e.setAttribute('aria-valuetext', KNOBS[k].label + ' ' + t);
+    e.closest('.mpcs__knob')!.querySelector('output')!.textContent = t;
+  }
+  const paintKnobs = (): void => KNOB_KEYS.forEach(paintKnob);
+  const resetKnobs = (): void => { kv = { ...DEFAULT_CONTROLS }; paintKnobs(); };
+  let restartT = 0;
+  const lazyRestart = (): void => { if (!playing) return; clearTimeout(restartT); restartT = window.setTimeout(() => { if (playing) restartPlay(); }, 140); };   // memutar knob tidak memicu render tiap piksel
+  function setKnob(k: KnobKey, v: number): void {
+    const nv = Math.max(0, Math.min(1, v)); if (!S || nv === kv[k]) return;
+    kv[k] = nv; paintKnob(k); dirty = true; ver++; draw(); info(); lazyRestart();   // draw(): garis oranye ikut berubah persis seperti yang akan terdengar
+  }
+  KNOB_KEYS.forEach(k => {
+    const e = knobEl[k]; let sx = 0, sy = 0, sv = 0, dr = false;
+    e.style.touchAction = 'none';
+    e.addEventListener('pointerdown', ev => { if (!S) return; dr = true; e.classList.add('is-dragging'); sx = ev.clientX; sy = ev.clientY; sv = kv[k]; e.setPointerCapture(ev.pointerId); ev.preventDefault(); });
+    e.addEventListener('pointermove', ev => { if (dr) setKnob(k, sv + ((sy - ev.clientY) + (ev.clientX - sx)) / 150); });   // atas / kanan = naik, sama seperti knob lain
+    const end = (): void => { dr = false; e.classList.remove('is-dragging'); };
+    e.addEventListener('pointerup', end); e.addEventListener('pointercancel', end);
+    e.addEventListener('dblclick', () => setKnob(k, DEFAULT_CONTROLS[k]));
+    e.addEventListener('keydown', ev => {
+      const st = ev.shiftKey ? 0.1 : 0.02;
+      if (ev.key === 'ArrowUp' || ev.key === 'ArrowRight') { setKnob(k, kv[k] + st); ev.preventDefault(); ev.stopPropagation(); }
+      else if (ev.key === 'ArrowDown' || ev.key === 'ArrowLeft') { setKnob(k, kv[k] - st); ev.preventDefault(); ev.stopPropagation(); }
+    });
+  });
 
   let S: Session | null = null, sel = -1, pps = 100, W = 0, H = 0, viewH = 0, rowH = 12, dpr = 1;
   let ac: AudioContext | null = null, src: AudioBufferSourceNode | null = null, playing = false, playPos = 0, t0 = 0, raf = 0, mode: 'out' | 'orig' = 'out';
@@ -192,7 +247,7 @@ function build(): void {
     drawKeys(); drawOv();
     if (!S) return;
     const { lo, hi, pt, notes } = S, hopSec = pt.hop / pt.sr;
-    const sc = shiftCurve(pt, notes);   // geseran per frame persis seperti yang dirender (target + drift + vibrato), jadi garis = yang terdengar
+    const sc = shiftCurve(pt, notes, undefined, kv);   // geseran per frame persis seperti yang dirender (target, knob, drift, vibrato), jadi garis = yang terdengar
     // baris semiton
     for (let m = lo; m <= hi; m++) {
       const y = (hi - m) * rowH, pc = ((m % 12) + 12) % 12;
@@ -232,10 +287,11 @@ function build(): void {
   // ---------- status ----------
   function info(): void {
     if (!S) { stat.textContent = ''; return; }
-    if (sel >= 0) { const n = S.notes[sel]; ctl('drift').value = String(Math.round((n.drift ?? 1) * 100)); ctl('vib').value = String(Math.round((n.vib ?? 1) * 100)); stat.textContent = noteName(n.midi) + (Math.round((n.midi - Math.round(n.midi)) * 100) ? ' ' + fmtShift(n.midi - Math.round(n.midi)) : '') + ' → ' + noteName(n.target) + '  (' + fmtShift(n.target - n.midi) + ')'; }
+    ctl('drift').parentElement!.hidden = sel < 0; ctl('vib').parentElement!.hidden = sel < 0;   // Drift / Vibrato = pengaturan per nada, hanya muncul kalau ada nada terpilih (yang global: knob Variation)
+    if (sel >= 0) { const n = S.notes[sel], eff = (n.man ? 1 : kv.center) * (n.target - n.midi); ctl('drift').value = String(Math.round((n.drift ?? 1) * 100)); ctl('vib').value = String(Math.round((n.vib ?? 1) * 100)); stat.textContent = noteName(n.midi) + (Math.round((n.midi - Math.round(n.midi)) * 100) ? ' ' + fmtShift(n.midi - Math.round(n.midi)) : '') + ' → ' + noteName(n.target) + '  (' + fmtShift(eff) + (n.man ? ', manual' : '') + ')'; }
     else stat.textContent = S.notes.length ? S.notes.length + ' nada terdeteksi' : 'Tidak ada nada terdeteksi';
   }
-  function enable(on: boolean): void { ['play', 'snap', 'reset', 'wav', 'zin', 'zout'].forEach(a => { btn(a).disabled = !on; }); ctl('drift').disabled = !on; ctl('vib').disabled = !on; }
+  function enable(on: boolean): void { ['play', 'snap', 'reset', 'wav', 'zin', 'zout'].forEach(a => { btn(a).disabled = !on; }); ctl('drift').disabled = !on; ctl('vib').disabled = !on; KNOB_KEYS.forEach(k => { knobEl[k].closest('.mpcs__knob')!.classList.toggle('is-off', !on); }); }
   function setBusy(on: boolean): void { busy.hidden = !on; }
 
   // ---------- muat & analisis ----------
@@ -249,6 +305,7 @@ function build(): void {
       stat.textContent = 'Menganalisis 0%';
       const r = await job({ type: 'analyze', x: mono, sr: buf.sampleRate }, [mono.buffer]);
       const notes: Note[] = r.notes, pt: PitchTrack = r.pt;
+      snapTargets(notes); resetKnobs();   // target = semiton terdekat (hysteresis); Center 0% jadi audio belum berubah sampai knob diputar
       let lo = 48, hi = 72;
       if (notes.length) {
         lo = Math.floor(Math.min(...notes.map(n => Math.min(n.midi, n.target)))) - 3; hi = Math.ceil(Math.max(...notes.map(n => Math.max(n.midi, n.target)))) + 3;
@@ -275,7 +332,7 @@ function build(): void {
     if (rendering) { await new Promise<void>(r => { const t = setInterval(() => { if (!rendering) { clearInterval(t); r(); } }, 40); }); return ensureRendered(); }
     rendering = true; const my = ver;
     try {
-      const r = await job({ type: 'render', notes: S.notes });
+      const r = await job({ type: 'render', notes: S.notes, ctl: { ...kv } });
       const out = ac!.createBuffer(1, r.y.length, S.sr); out.copyToChannel(r.y, 0);
       S.out = out; if (my === ver) dirty = false;
     } finally { rendering = false; }
@@ -345,7 +402,7 @@ function build(): void {
     if (!drag.moved && Math.abs(dy) < 4) return;
     drag.moved = true;
     const t = Math.max(S.lo + 1, Math.min(S.hi - 1, drag.base + Math.round(dy / rowH)));
-    if (t !== S.notes[drag.i].target) { S.notes[drag.i].target = t; edit(); }
+    if (t !== S.notes[drag.i].target || !S.notes[drag.i].man) { S.notes[drag.i].target = t; S.notes[drag.i].man = true; edit(); }   // diseret tangan: dikoreksi penuh, di luar knob Center
   });
   const endDrag = (e: PointerEvent): void => {
     if (drag && e.pointerId === drag.id) drag = null;
@@ -357,8 +414,8 @@ function build(): void {
   cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
 
   // ---------- tombol ----------
-  const snapAll = (): void => { if (!S) return; snapTargets(S.notes); edit(); };   // snap ke semiton dengan hysteresis: pitch di perbatasan dua nada tidak bikin target loncat-loncat
-  const resetAll = (): void => { if (!S) return; S.notes.forEach(n => { n.target = n.midi; delete n.drift; delete n.vib; }); ctl('drift').value = '100'; ctl('vib').value = '100'; edit(); };
+  const snapAll = (): void => { if (!S) return; S.notes.forEach(n => { delete n.man; }); snapTargets(S.notes); kv.center = 1; paintKnob('center'); edit(); };   // auto-tune penuh: snap semua nada (hysteresis: pitch di perbatasan tidak bikin target loncat) dan Center 100%
+  const resetAll = (): void => { if (!S) return; S.notes.forEach(n => { delete n.drift; delete n.vib; delete n.man; }); snapTargets(S.notes); resetKnobs(); ctl('drift').value = '100'; ctl('vib').value = '100'; edit(); };
   el.querySelector('.mpcs__bar')!.addEventListener('input', e => {   // kontrol ekspresi: drift / vibrato
     const t = e.target as HTMLInputElement, k = t.dataset.k as 'drift' | 'vib' | undefined;
     if (!k || !S) return;
@@ -404,9 +461,9 @@ function build(): void {
     if (e.key === 'Escape') { e.preventDefault(); close(); return; }
     const onBtn = (e.target as Element).closest?.('button');
     if (e.key === ' ' && !onBtn && S) { e.preventDefault(); playing ? stopPlay() : void startPlay(); }
-    else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && sel >= 0 && S) {
+    else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && sel >= 0 && S && !(e.target as Element).closest?.('.knob-input')) {
       e.preventDefault(); const n = S.notes[sel], t = Math.max(S.lo + 1, Math.min(S.hi - 1, Math.round(n.target) + (e.key === 'ArrowUp' ? 1 : -1)));
-      if (t !== n.target) { n.target = t; edit(); }
+      if (t !== n.target) { n.target = t; n.man = true; edit(); }
     }
   };
   el.addEventListener('keydown', onKey); el.addEventListener('keyup', e => e.stopPropagation());

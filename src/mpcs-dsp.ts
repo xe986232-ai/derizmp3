@@ -20,6 +20,24 @@ export interface Note {
   target: number;       // pitch tujuan; selisih dari midi = geseran
   drift?: number;       // 0..1: seberapa banyak variasi lambat (drift) pitch asli dipertahankan; 1 = asli (default), 0 = diratakan ke target
   vib?: number;         // 0..1: seberapa banyak vibrato / variasi cepat dipertahankan; 1 = asli (default), 0 = vibrato dibuang
+  man?: boolean;        // target diatur tangan (seret / panah): selalu dikoreksi penuh, tidak ikut knob Center, tidak disentuh snapTargets
+}
+
+// Tiga knob global ala NewTone (semua 0..1):
+//   center     : seberapa jauh pitch pusat tiap nada ditarik ke targetnya (semiton terdekat). 0 = pitch asli, 1 = tepat di target
+//   variation  : sisa variasi alami di dalam nada (drift lambat + vibrato). 1 = asli, 0 = datar (pitch tetap di pusat nada)
+//   transition : cara pindah antar nada bersambung. 0.5 = bawaan: luncuran alami penyanyi dipertahankan.
+//                ke 0 : luncuran asli dibuang, pindah nada makin tajam (2 ms = lompat robotik ala hard-tune)
+//                ke 1 : luncuran asli diganti luncuran sintetis yang makin lebar (300 ms = legato panjang)
+export interface Controls { center: number; variation: number; transition: number }
+export const DEFAULT_CONTROLS: Controls = { center: 0, variation: 1, transition: 0.5 };
+const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
+// lebar zona halus pergantian target (ms): 2 ms (0) -> 45 ms (0.5, nilai lama) -> 300 ms (1), eksponensial supaya terasa rata di seluruh putaran knob
+export function transitionMs(t: number): number { t = clamp01(t); return t <= 0.5 ? 2 * 22.5 ** (2 * t) : 45 * (300 / 45) ** (2 * t - 1); }
+interface Ctl { center: number; variation: number; glide: number; transMs: number }   // glide: bagian luncuran asli di sambungan yang dipertahankan (1 di Transition 0.5, 0 di kedua ujung knob; kiri linear, kanan kuadratik supaya legato terasa sejak 60-70%)
+function resolveCtl(c: Partial<Controls> | undefined, transMs: number): Ctl {
+  const t = c?.transition;   // tanpa kontrol = perilaku lama: semua nada dikoreksi penuh, variasi dan luncuran asli utuh
+  return { center: clamp01(c?.center ?? 1), variation: clamp01(c?.variation ?? 1), glide: t === undefined ? 1 : clamp01(t) <= 0.5 ? 2 * clamp01(t) : (2 - 2 * clamp01(t)) ** 2, transMs: t === undefined ? transMs : transitionMs(t) };
 }
 
 const FMIN = 28, FMAX = 2200;   // 808 / bass sampai synth tinggi (dulu 70-1000 Hz: nada di luar rentang itu tidak pernah terdeteksi)
@@ -376,6 +394,7 @@ export function snapTargets(notes: Note[], hyst = 0.15, gapFrames = 12): void {
   let prev: Note | null = null;
   for (const idx of order) {
     const nt = notes[idx];
+    if (nt.man) { prev = nt; continue; }   // target atur-tangan tidak ditimpa
     let t = Math.round(nt.midi);
     if (prev && nt.s - prev.e <= gapFrames && Math.abs(nt.midi - prev.target) < 0.5 + hyst) t = prev.target;
     nt.target = t; prev = nt;
@@ -470,27 +489,50 @@ function slowPart(dev: Float64Array, fps: number): Float64Array {
 
 // kurva geseran (semiton) satu kelompok nada bersambung: bagian tetap per nada (dihaluskan di zona transisi) + koreksi drift / vibrato per nada.
 // Dipakai BERSAMA oleh render() dan tampilan (shiftCurve) supaya garis yang digambar = yang terdengar.
-function groupShift(g: Note[], f0: Float32Array, hop: number, sr: number, transMs: number): { gs: number; sh: Float64Array } | null {
+function groupShift(g: Note[], f0: Float32Array, hop: number, sr: number, R: Ctl): { gs: number; sh: Float64Array } | null {
   const gs = g[0].s, ge = g[g.length - 1].e, L = ge - gs, fps = sr / hop;
   if (L < 2) return null;
-  const Z = Math.max(1, Math.round(transMs / 1000 * sr / hop)) | 1, zh = (Z - 1) / 2;   // lebar zona transisi (frame, ganjil)
+  const Z = Math.max(1, Math.round(R.transMs / 1000 * sr / hop)) | 1, zh = (Z - 1) / 2;   // lebar zona transisi (frame, ganjil)
   const kern = new Float64Array(Z); { let ks = 0; for (let q = -zh; q <= zh; q++) { kern[q + zh] = 0.5 + 0.5 * Math.cos(Math.PI * q / (zh + 1)); ks += kern[q + zh]; } for (let q = 0; q < Z; q++) kern[q] /= ks; }
-  const step = new Float64Array(L), has = new Uint8Array(L), extra = new Float64Array(L);
+  const step = new Float64Array(L), has = new Uint8Array(L), extra = new Float64Array(L), mstep = new Float64Array(L), rhoF = new Float64Array(L).fill(1);
+
+  // zona sambungan di sekitar tiap perbatasan nada bersambung: di sini deviasi pitch asli adalah LUNCURAN antar nada, dan knob Transition
+  // menentukan seberapa banyak yang dipertahankan (glide = 1 asli; menuju 0 dibuang sehingga pindah nada ditentukan kernel transisi).
+  // Bobot penuh (1) sejauh +-45 ms supaya seluruh luncuran (umumnya 30-100 ms) terhapus, lalu turun cosine sampai +-90 ms
+  const Wz = Math.max(Math.round(0.09 * fps), zh + 1), Wp = Math.round(Wz / 2);   // Wz minimal selebar kernel transisi, supaya koreksi di bawah tidak terpotong
+  let jw: Float64Array | null = null;
+  if (R.glide < 1) {
+    jw = new Float64Array(L);
+    for (let i = 1; i < g.length; i++) {
+      const jc = Math.round((g[i - 1].e + g[i].s) / 2) - gs;
+      for (let q = -Wz; q <= Wz; q++) { const f = jc + q, d = Math.abs(q); if (f < 0 || f >= L) continue; const w = d <= Wp ? 1 : 0.5 + 0.5 * Math.cos(Math.PI * (d - Wp) / (Wz - Wp)); if (w > jw[f]) jw[f] = w; }
+    }
+  }
+
   for (const nt of g) {
-    for (let f = nt.s; f < nt.e; f++) { step[f - gs] = nt.target - nt.midi; has[f - gs] = 1; }
-    const dk = nt.drift ?? 1, vk = nt.vib ?? 1;
-    if (dk !== 1 || vk !== 1) {
+    const k = nt.man ? 1 : R.center;   // Center: skala koreksi ke target; nada atur-tangan selalu penuh
+    for (let f = nt.s; f < nt.e; f++) { step[f - gs] = k * (nt.target - nt.midi); mstep[f - gs] = nt.midi; has[f - gs] = 1; }
+    const dk = (nt.drift ?? 1) * R.variation, vk = (nt.vib ?? 1) * R.variation;   // Variation global dikalikan pengaturan per nada
+    for (let f = nt.s; f < nt.e; f++) rhoF[f - gs] = R.glide * dk;
+    if (dk !== 1 || vk !== 1 || jw) {
       const len = nt.e - nt.s, dev = new Float64Array(len);
       for (let q = 0; q < len; q++) { const hz = f0[nt.s + q]; dev[q] = hz ? Math.max(-3, Math.min(3, midiOf(hz) - nt.midi)) : (q ? dev[q - 1] : 0); }
       const slow = slowPart(dev, fps);
-      for (let q = 0; q < len; q++) extra[nt.s + q - gs] = (dk - 1) * slow[q] + (vk - 1) * (dev[q] - slow[q]);
+      for (let q = 0; q < len; q++) {
+        const gf = nt.s + q - gs, nrm = (dk - 1) * slow[q] + (vk - 1) * (dev[q] - slow[q]);
+        const w = jw ? jw[gf] : 0;
+        extra[gf] = w > 0 ? (1 - w) * nrm + w * (R.glide * dk - 1) * dev[q] : nrm;   // di sambungan: seluruh deviasi (luncuran) dikali glide * drift
+      }
     }
   }
-  for (let f = 1; f < L; f++) if (!has[f]) step[f] = step[f - 1];
+  for (let f = 1; f < L; f++) if (!has[f]) { step[f] = step[f - 1]; mstep[f] = mstep[f - 1]; }
+  const smooth = (a: Float64Array, f: number): number => { let v = 0; for (let q = -zh; q <= zh; q++) v += kern[q + zh] * a[Math.min(L - 1, Math.max(0, f + q))]; return v; };
   const sh = new Float64Array(L);
   for (let f = 0; f < L; f++) {
-    let v = 0; for (let q = -zh; q <= zh; q++) v += kern[q + zh] * step[Math.min(L - 1, Math.max(0, f + q))];
-    sh[f] = v + extra[f];
+    sh[f] = smooth(step, f) + extra[f];
+    // suku legato / tajam: luncuran asli hanya dipertahankan sebesar rho; sisanya diganti pindah-nada sintetis yang dibentuk kernel transisi,
+    // yaitu selisih antara pusat nada yang dihaluskan dan yang tajam (rho = 1 -> suku ini nol, hasil sama seperti sebelumnya)
+    if (jw && jw[f] > 0 && has[f]) sh[f] += jw[f] * (1 - rhoF[f]) * (smooth(mstep, f) - mstep[f]);
   }
   return { gs, sh };
 }
@@ -503,14 +545,14 @@ function groupNotes(notes: Note[]): Note[][] {
 }
 
 // geseran (semiton) per frame pitch-track, persis seperti yang dipakai render(): pitch hasil di frame f = midi(f0[f]) + hasil[f]. Untuk menggambar garis hasil.
-export function shiftCurve(pt: PitchTrack, notes: Note[], transMs = 45): Float32Array {
-  const out = new Float32Array(pt.f0.length);
-  for (const g of groupNotes(notes)) { const r = groupShift(g, pt.f0, pt.hop, pt.sr, transMs); if (r) for (let f = 0; f < r.sh.length; f++) out[r.gs + f] = r.sh[f]; }
+export function shiftCurve(pt: PitchTrack, notes: Note[], transMs = 45, ctl?: Partial<Controls>): Float32Array {
+  const out = new Float32Array(pt.f0.length), R = resolveCtl(ctl, transMs);
+  for (const g of groupNotes(notes)) { const r = groupShift(g, pt.f0, pt.hop, pt.sr, R); if (r) for (let f = 0; f < r.sh.length; f++) out[r.gs + f] = r.sh[f]; }
   return out;
 }
 
-export function render(x: Float32Array, pt: PitchTrack, notes: Note[], fadeMs = 12, transMs = 45): Float32Array {
-  const { sr, hop, f0 } = pt, n = x.length;
+export function render(x: Float32Array, pt: PitchTrack, notes: Note[], fadeMs = 12, transMs = 45, ctl?: Partial<Controls>): Float32Array {
+  const { sr, hop, f0 } = pt, n = x.length, R = resolveCtl(ctl, transMs);
   const fade = Math.max(2, Math.round(sr * fadeMs / 1000)) & ~1, hf = fade / 2;
   const acc = new Float32Array(n), W = new Float32Array(n);
   const ramp = (u: number): number => (u <= 0 ? 0 : u >= 1 ? 1 : 0.5 - 0.5 * Math.cos(Math.PI * u));   // naik halus 0 -> 1
@@ -518,7 +560,7 @@ export function render(x: Float32Array, pt: PitchTrack, notes: Note[], fadeMs = 
   for (const g of groupNotes(notes)) {
     const gs = g[0].s, ge = g[g.length - 1].e, L = ge - gs;
     // 1) kurva geseran (dibagi dengan tampilan lewat groupShift)
-    const gsh = groupShift(g, f0, hop, sr, transMs);
+    const gsh = groupShift(g, f0, hop, sr, R);
     if (!gsh) continue;
     const sh = gsh.sh;
     let peak = 0; for (let f = 0; f < L; f++) peak = Math.max(peak, Math.abs(sh[f]));
