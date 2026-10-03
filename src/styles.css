@@ -490,6 +490,38 @@ html.is-dock-dragging,html.is-dock-dragging *{cursor:ns-resize !important;user-s
 .daw-toast{position:fixed;left:50%;bottom:24px;translate:-50% 0;z-index:200;padding:10px 16px;border-radius:10px;background:#1d1f27;color:#fff;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.1);pointer-events:none;animation:fadeIn .2s ease}
 .daw-toast[hidden]{display:none}
 
+/* ===== PITCH PROJECT (tombol paling kiri di card transport + panel knob) ===== */
+@keyframes pitchIn{0%{opacity:0;transform:scale(.6)}60%{opacity:1}100%{opacity:1;transform:none}}
+.pitch-btn svg{display:block;width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.pitch-btn.is-on{background:var(--accent);border-color:var(--accent);color:#fff}
+.pitch-btn.is-on:hover:not(:disabled){background:#b685ff;border-color:#b685ff}
+.pitch-btn[aria-expanded="true"]{border-color:#fff}
+.pitch-panel{position:fixed;z-index:56;width:min(212px,calc(100vw - 16px));padding:14px 14px 12px;border-radius:22px;display:flex;flex-direction:column;align-items:center;
+  background:#22222c;border:1px solid rgba(255,255,255,.1);box-shadow:0 18px 50px rgba(0,0,0,.55);animation:pitchIn .38s var(--ease-spring) backwards;user-select:none;-webkit-user-select:none}
+.pitch-title{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.pitch-ring{width:140px;height:140px;margin-top:4px;touch-action:none;cursor:ns-resize;outline:none;overflow:visible}
+.pitch-track,.pitch-fill{fill:none;stroke-width:9;stroke-linecap:round}
+.pitch-track{stroke:#33333f}
+.pitch-fill{stroke:var(--accent)}
+.pitch-body{fill:#2d2d38;stroke:rgba(255,255,255,.14);stroke-width:1}
+.pitch-ptr{stroke:#fff;stroke-width:3;stroke-linecap:round}
+.pitch-dot{fill:#fff;filter:drop-shadow(0 2px 4px rgba(0,0,0,.5));transition:r .15s ease}
+.pitch-ring:hover .pitch-dot{r:7.5}
+.pitch-ring:focus-visible .pitch-dot{stroke:var(--accent);stroke-width:3}
+.pitch-val{margin-top:-2px;font:700 30px/1 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff;font-variant-numeric:tabular-nums}
+.pitch-unit{margin-top:3px;font-size:10px;font-weight:600;letter-spacing:.14em;color:var(--muted)}
+.pitch-row{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:10px}
+.pitch-step,.pitch-reset{border:1px solid rgba(255,255,255,.2);background:#2d2d38;color:#e3e3ec;display:grid;place-items:center;padding:0;touch-action:manipulation;
+  transition:transform .25s var(--ease-spring),background-color .2s ease,border-color .2s ease,opacity .2s ease}
+.pitch-step{width:34px;height:34px;border-radius:50%;font-size:20px;font-weight:500;line-height:1}
+.pitch-reset{height:28px;min-width:60px;padding:0 12px;border-radius:99px;font-size:12px;font-weight:600}
+.pitch-step:hover,.pitch-reset:hover:not(:disabled){background:#383846;border-color:rgba(255,255,255,.34)}
+.pitch-step:active,.pitch-reset:active:not(:disabled){transform:scale(.9);transition-duration:.08s}
+.pitch-reset:disabled{opacity:.4}
+.pitch-step:focus-visible,.pitch-reset:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pitch-note{margin-top:10px;font-size:10.5px;line-height:1.35;text-align:center;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){.pitch-panel{animation:none}.pitch-dot{transition:none}}
+
 /* ===== METRONOME & BPM ===== */
 @keyframes tbBeat{0%{border-color:#d6b6ff;transform:scale(1.16)}100%{border-color:var(--accent);transform:none}}
 @keyframes metroBeat{0%{box-shadow:0 0 0 0 rgba(166,108,255,.7)}100%{box-shadow:0 0 0 9px rgba(166,108,255,0)}}
@@ -1288,10 +1320,13 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .transportbar .more-btn svg{display:block;width:16px;height:16px;fill:currentColor;stroke:none}
 .transportbar .hist-ico svg{display:block;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 .transportbar .metro-btn{font-size:13px}
+.transportbar .pitch-btn svg{display:block;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.transportbar .pitch-btn.is-on{border-color:var(--accent);color:var(--accent);background:transparent}
+.transportbar .pitch-btn.is-on:hover:not(:disabled){border-color:#c9a2ff;color:#c9a2ff;background:transparent}
 .transportbar .play{width:var(--tb-play);height:var(--tb-play);margin:0;border-color:rgba(255,255,255,.9);color:#fff}
 .transportbar .play:hover:not(:disabled){border-color:#fff}
 .transportbar .play .soundtrap-icon{width:18px;height:18px}
-.transportbar :is(.more-btn,.metro-btn)[aria-expanded="true"]{border-color:#fff}
+.transportbar :is(.more-btn,.metro-btn,.pitch-btn)[aria-expanded="true"]{border-color:#fff}
 .transportbar .metro-btn.is-on{border-color:var(--accent);color:var(--accent);background:transparent}
 .transportbar .metro-btn.is-on:hover:not(:disabled){border-color:#c9a2ff;color:#c9a2ff;background:transparent}
 .transportbar .metro-btn.is-beat{animation:tbBeat .35s ease-out}

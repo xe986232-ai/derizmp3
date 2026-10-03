@@ -14,6 +14,7 @@ import { hasSynth, startVoice, releaseVoice, playNote, stopAllSynth } from './sy
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
 import { initTransportMore } from './transport-more';
+import { initPitchPanel, getMasterPitch, setMasterPitch } from './master-pitch';
 import { createClip, importClip, exportClip, cloneClip, splitClip, valueAt, getClip, renderMini, openAutoEditor } from './automation';
 import { decodeFile, addBuffer, getBuffer, encodeWav, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
 import { slideSource, glideBeats } from './note-slide';
@@ -1470,6 +1471,7 @@ function setBpm(v) {
   undoStack = []; redoStack = []; histCur = histCapture(); histSync();   // lebar clip berubah: riwayat undo dimulai ulang
 }
 btnPlay.addEventListener('click', togglePlay);
+initPitchPanel(document.getElementById('btnPitch') as HTMLButtonElement);   // paling kiri: knob Pitch Project (DERIZ + Supersaw, audio clip tidak ikut)
 initTransportMore(document.getElementById('btnMore') as HTMLButtonElement, () => {   // titik tiga di kiri tombol M
   const t = fxRack.lastTouched(), info = t && fxRack.paramInfo(t.track, t.fxId, t.key);   // ada knob yang baru diputar = muncul opsi Automation Clip
   return t && info ? [{label: 'Create Automation Clip', sub: info.fxName + ' · ' + info.label, run: createAutomationClip}] : [];
@@ -1774,7 +1776,7 @@ function projectSnapshot() {
       ...(fxs.length ? {fx: fxs} : {}),
     });
   });
-  return {data: {v: 1, bpm: BPM, bars: BARS, tracks}, clips};
+  return {data: {v: 1, bpm: BPM, bars: BARS, ...(getMasterPitch() ? {mp: getMasterPitch()} : {}), tracks}, clips};
 }
 function clearProject() {
   if (playing) pausePlay();
@@ -1796,6 +1798,7 @@ async function projectRestore(rec) {
   }
   clearProject();
   setBpm(d.bpm || 120);
+  setMasterPitch(+d.mp || 0);   // Pitch Project ikut tersimpan di file project
   if (d.bars > BARS) growTimeline(Math.min(MAX_BARS, d.bars));
   const trMap = {}, pending = [], pendingAuto = [];
   for (const t of d.tracks) {

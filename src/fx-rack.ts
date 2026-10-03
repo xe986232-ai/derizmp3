@@ -11,6 +11,7 @@ import { DerizSynth } from './deriz-synth';
 import { isAudio, ACCEPT as AUDIO_ACCEPT } from './audio-upload-card';
 import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } from './synth-engine';
 import { velGain } from './velocity';
+import { getMasterPitch, onMasterPitch } from './master-pitch';
 
 type FxType = 'reverb' | 'eq' | 'filter' | 'supersaw' | 'deriz';
 // DERIZ: audio yang di-upload ke canvas plugin (buffer disimpan untuk tahap berikutnya; peaks + max khusus untuk menggambar waveform)
@@ -511,7 +512,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     }
     return e.p;
   }
-  const derizArgs = (fx: Fx): [number, number, number] => [derizSpeed(fx.v.speed), derizPitch(fx.v.pitch), derizVol(fx.v.volume)];
+  const derizArgs = (fx: Fx): [number, number, number] => [derizSpeed(fx.v.speed), derizPitch(fx.v.pitch) + getMasterPitch(), derizVol(fx.v.volume)];   // + Pitch Project (card transport)
   function kbOn(m: number): void {
     const fx = ovOpen ? find(ovOpen.card) : undefined, z = fx?.deriz;
     if (!fx || !z || !fx.on || !cur || kbVoices.has(m)) return;
@@ -630,6 +631,12 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   function kbParams(fx: Fx): void {   // knob Speed / Pitch / Volume diputar saat nada ditahan: ikut berubah mulus
     const s = synths.get(fx.id)?.s; if (s) s.params(...derizArgs(fx));
   }
+  onMasterPitch(() => {   // Pitch Project diputar: semua sampler DERIZ yang sudah siap menerima nilai baru (nada yang sedang bunyi ikut bergeser)
+    for (const [id, e] of synths) {
+      if (!e.s) continue;
+      for (const r of racks.values()) { const fx = r.find(f => f.id === id); if (fx) { e.s.params(...derizArgs(fx)); break; } }
+    }
+  });
   function kbOff(m: number): void {
     const v = kbVoices.get(m); if (!v) return;
     kbVoices.delete(m);

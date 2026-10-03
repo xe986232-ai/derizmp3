@@ -4,6 +4,7 @@
 
 import { trackInput } from './audio-engine';
 import { velGain } from './velocity';
+import { getMasterPitch, onMasterPitch } from './master-pitch';
 
 export interface SupersawParams {
   on: boolean;
@@ -25,6 +26,7 @@ export const attackSec = (v: number): number => expMap(v, 0.002, 2);
 export const decaySec = (v: number): number => expMap(v, 0.01, 2.5);
 export const releaseSec = (v: number): number => expMap(v, 0.02, 3);
 
+const pitchCents = (): number => getMasterPitch() * 100;   // Pitch Project (card transport): geser semua voice Supersaw lewat detune
 const OFFSETS = [-1, -0.62, -0.28, 0, 0.28, 0.62, 1];       // posisi tiap saw terhadap sebaran detune
 const PANS = [-0.9, -0.55, -0.2, 0, 0.2, 0.55, 0.9];
 const CENTER = 3;
@@ -62,7 +64,7 @@ export function startVoice(ctx: AudioContext, dest: AudioNode, track: string, mi
   const oscs: OscillatorNode[] = [], gains: GainNode[] = [];
   for (let i = 0; i < OFFSETS.length; i++) {
     const o = ctx.createOscillator(), g = ctx.createGain(), pan = ctx.createStereoPanner();
-    o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = OFFSETS[i] * detuneCents(p.detune);
+    o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = OFFSETS[i] * detuneCents(p.detune) + pitchCents();
     g.gain.value = i === CENTER ? centerGain(p.mix) : sideGain(p.mix);
     pan.pan.value = PANS[i];
     o.connect(g); g.connect(pan); pan.connect(filter);
@@ -129,9 +131,16 @@ export function setSupersaw(track: string, p: SupersawParams | null): void {
     if (v.track !== track) return;
     const now = v.ctx.currentTime;
     if (!p.on && wasOn) { kill(v, now); return; }
-    v.oscs.forEach((o, i) => o.detune.setTargetAtTime(OFFSETS[i] * detuneCents(p.detune), now, 0.02));
+    v.oscs.forEach((o, i) => o.detune.setTargetAtTime(OFFSETS[i] * detuneCents(p.detune) + pitchCents(), now, 0.02));
     v.gains.forEach((g, i) => g.gain.setTargetAtTime(i === CENTER ? centerGain(p.mix) : sideGain(p.mix), now, 0.02));
     v.filter.frequency.setTargetAtTime(cutoffHz(p.cutoff), now, 0.02);
     v.filter.Q.setTargetAtTime(resoQ(p.reso), now, 0.02);
   });
 }
+
+onMasterPitch(() => {   // Pitch Project diputar: voice yang sedang bunyi ikut bergeser mulus
+  live.forEach(v => {
+    const dc = detuneCents(params.get(v.track)?.detune ?? 0), now = v.ctx.currentTime;
+    v.oscs.forEach((o, i) => o.detune.setTargetAtTime(OFFSETS[i] * dc + pitchCents(), now, 0.02));
+  });
+});
