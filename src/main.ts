@@ -1536,6 +1536,7 @@ const ZSTEP = 1.2;
 // Ctrl + scroll / pinch trackpad
 wsEl.addEventListener('wheel', e => {
   if (!(e.ctrlKey || e.metaKey)) return;
+  if (document.documentElement.classList.contains('is-pat-jelly')) return;   // pattern terangkat (Record Mode): zoom-nya milik pattern, bukan timeline
   e.preventDefault();
   // deltaY mouse wheel bisa ±100 per klik (terlalu besar) -> dibatasi; trackpad pinch nilainya kecil jadi tetap halus
   let dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
@@ -1546,10 +1547,12 @@ wsEl.addEventListener('wheel', e => {
 let pinch = null;
 const tdist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
 wsEl.addEventListener('touchstart', e => {
+  if (document.documentElement.classList.contains('is-pat-jelly')) return;   // pattern terangkat (Record Mode): cubit dua jari = zoom pattern, bukan timeline
   if (e.touches.length === 2) { pinch = {d: tdist(e.touches), bar: BAR_W}; wsEl.style.overflow = 'hidden'; dismissAdd(true); }
 }, {passive: true});
 wsEl.addEventListener('touchmove', e => {
   if (!pinch || e.touches.length !== 2) return;
+  if (document.documentElement.classList.contains('is-pat-jelly')) return;
   if (e.cancelable) e.preventDefault();
   zoomNow(pinch.bar * tdist(e.touches) / pinch.d, (e.touches[0].clientX + e.touches[1].clientX) / 2);
 }, {passive: false});

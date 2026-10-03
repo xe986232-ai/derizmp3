@@ -4,7 +4,12 @@
 // Playhead utama disembunyikan selama itu dan dipindah jadi garis mini di dalam salinan (tinggi = pattern), jalan sesuai alur.
 // Yang digoyang adalah SALINAN visual (clone) di <body>; pattern aslinya tetap di lane tapi disembunyikan (muncul lagi saat salinan mendarat),
 // sehingga data, jadwal audio, dan riwayat undo tidak tersentuh.
+// Zoom pattern: selagi pattern terangkat, jari kedua (cubit dua jari, atau Ctrl+scroll / pinch trackpad) memperbesar / memperkecil SALINAN itu saja;
+// zoom timeline dimatikan selama itu (main.ts melewati logika zoomnya saat html.is-pat-jelly). Dilepas -> ukuran memantul balik ke 1 bersama posisinya.
 import { POS_DRAG, POS_FREE, ROT, HOLD_MS, HOLD_SLOP, MAX_TILT, LIFT, REDUCE } from './record-jelly';
+
+const SC_MIN = 0.4, SC_MAX = 3;   // batas ukuran salinan pattern saat di-zoom (1 = ukuran asli)
+const clampSc = (v: number): number => Math.max(SC_MIN, Math.min(SC_MAX, v));
 
 export function initPatternJelly(lanesEl: HTMLElement): void {
   const root = document.documentElement;
@@ -16,6 +21,11 @@ export function initPatternJelly(lanesEl: HTMLElement): void {
   let raf = 0, last = 0, holdTimer = 0;
   let pointerId = -1, held = false, pending = false, suppressClick = false;
   let x = 0, y = 0, vx = 0, vy = 0, rot = 0, rv = 0, lift = 1;
+  let sc = 1, scT = 1;                                  // ukuran salinan (zoom pattern): sc = yang tampil, scT = target
+  let pinch: { d: number; s: number } | null = null;    // cubitan dua jari yang sedang berjalan: jarak awal + ukuran awal
+  let pinchUsed = false;                                // ada zoom selama pattern terangkat -> klik sisa jari kedua diabaikan
+  let suppressUntil = 0;
+  const pts = new Map<number, { x: number; y: number }>();   // semua jari / pointer yang sedang menyentuh layar
   let tx = 0, ty = 0, p0x = 0, p0y = 0, lx = 0, ly = 0;
   let gx = 0, gy = 0;
   let nat = { l: 0, t: 0, r: 0, b: 0 };
@@ -26,7 +36,7 @@ export function initPatternJelly(lanesEl: HTMLElement): void {
     if (!card) return;
     const r = card.getBoundingClientRect();
     const cx = r.left + r.width / 2 - x, cy = r.top + r.height / 2 - y;
-    const w = card.offsetWidth, h = card.offsetHeight;
+    const w = card.offsetWidth * sc, h = card.offsetHeight * sc;   // ukuran tampil (sudah terskala), supaya card besar tidak keluar layar
     nat = { l: cx - w / 2, t: cy - h / 2, r: cx + w / 2, b: cy + h / 2 };
   }
   function clampTarget(): void {
@@ -90,7 +100,7 @@ export function initPatternJelly(lanesEl: HTMLElement): void {
     if (src) src.classList.remove('is-jelly-src');
     root.classList.remove('is-pat-jelly');
     src = card = phLine = null;
-    x = y = vx = vy = rot = rv = 0; lift = 1;
+    x = y = vx = vy = rot = rv = 0; lift = 1; sc = scT = 1; pinch = null; pinchUsed = false;
     held = pending = false; pointerId = -1;
   }
 
@@ -105,13 +115,14 @@ export function initPatternJelly(lanesEl: HTMLElement): void {
     rv += (ROT.k * (tilt - rot) - ROT.c * rv) * dt;
     rot += rv * dt;
     lift += ((held ? LIFT : 1) - lift) * Math.min(1, dt * 14);
+    sc += (scT - sc) * Math.min(1, dt * 16);
   }
 
   function paint(): void {
     if (!card) return;
     // hanya posisi + rotasi (goyang miring), tanpa melar/memipih; scale hanya efek "terangkat"
     card.style.transform =
-      'translate3d(' + x.toFixed(2) + 'px,' + y.toFixed(2) + 'px,0) rotate(' + rot.toFixed(2) + 'deg) scale(' + lift.toFixed(4) + ')';
+      'translate3d(' + x.toFixed(2) + 'px,' + y.toFixed(2) + 'px,0) rotate(' + rot.toFixed(2) + 'deg) scale(' + (lift * sc).toFixed(4) + ')';
   }
 
   function tick(now: number): void {
@@ -121,7 +132,7 @@ export function initPatternJelly(lanesEl: HTMLElement): void {
     for (let i = 0; i < 2; i++) step(dt / 2);
     if (held) { measureNatural(); clampTarget(); }
     paint(); updatePlayheadLine();
-    if (!held && Math.abs(x) < 0.15 && Math.abs(y) < 0.15 && Math.abs(vx) < 1 && Math.abs(vy) < 1 && Math.abs(rot) < 0.1 && Math.abs(rv) < 1) { finish(); return; }
+    if (!held && Math.abs(x) < 0.15 && Math.abs(y) < 0.15 && Math.abs(vx) < 1 && Math.abs(vy) < 1 && Math.abs(rot) < 0.1 && Math.abs(rv) < 1 && Math.abs(sc - 1) < 0.004) { finish(); return; }
     raf = requestAnimationFrame(tick);
   }
 
@@ -135,7 +146,7 @@ export function initPatternJelly(lanesEl: HTMLElement): void {
   }
 
   lanesEl.addEventListener('pointerdown', e => {
-    if (!recOn() || e.button > 0 || pointerId !== -1) return;
+    if (!recOn() || e.button > 0 || pointerId !== -1 || pts.size > 1) return;   // jari kedua = zoom (timeline / pattern), bukan tahan baru
     const t = e.target as HTMLElement;
     const el = t.closest('.pattern') as HTMLElement | null;
     if (!el || t.closest('.pattern__handle') || t.isContentEditable) return;
@@ -149,7 +160,44 @@ export function initPatternJelly(lanesEl: HTMLElement): void {
     holdTimer = window.setTimeout(pickUp, HOLD_MS);
   });
 
+  // ---- jari kedua: sebelum pattern terangkat = zoom timeline biasa (batalkan tahan); sesudah terangkat = zoom pattern ----
+  const otherPt = (): { x: number; y: number } | undefined => { for (const [id, q] of pts) if (id !== pointerId) return q; };
+  const pinchDist = (): number => {
+    const a = pts.get(pointerId), b = otherPt();
+    return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+  };
+  document.addEventListener('pointerdown', e => {
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (e.pointerId === pointerId || pts.size < 2) return;
+    if (pending) { clearTimeout(holdTimer); holdTimer = 0; pending = false; pointerId = -1; src = null; return; }   // dua jari sebelum terangkat: biarkan zoom timeline
+    if (held && !pinch) { const d = pinchDist(); if (d > 12) { pinch = { d, s: scT }; pinchUsed = true; } }
+  }, true);
+  const dropPt = (e: PointerEvent): void => {
+    pts.delete(e.pointerId);
+    if (held && e.pointerId !== pointerId) suppressUntil = performance.now() + 500;   // jari kedua diangkat: klik yang menyusul jangan memilih pattern / membuka kartu Add
+    if (pts.size < 2) pinch = null;
+  };
+  document.addEventListener('pointerup', dropPt, true);
+  document.addEventListener('pointercancel', dropPt, true);
+  window.addEventListener('blur', () => { pts.clear(); pinch = null; });
+  document.addEventListener('click', e => {
+    if (performance.now() < suppressUntil) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+  // Ctrl+scroll / pinch trackpad (desktop) selagi pattern terangkat: zoom pattern, bukan timeline
+  document.addEventListener('wheel', e => {
+    if (!held || !(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault(); e.stopPropagation();
+    const dy = Math.max(-24, Math.min(24, e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY));
+    scT = clampSc(scT * Math.exp(-dy * 0.008)); pinchUsed = true;
+    if (REDUCE) { sc = scT; paint(); }
+  }, { capture: true, passive: false });
+
   document.addEventListener('pointermove', e => {
+    const q = pts.get(e.pointerId); if (q) { q.x = e.clientX; q.y = e.clientY; }
+    if (pinch && held) {   // cubit: jarak dua jari / jarak awal = ukuran pattern
+      const d = pinchDist();
+      if (d > 0) { scT = clampSc(pinch.s * d / pinch.d); if (REDUCE) { sc = scT; paint(); } }
+    }
     if (e.pointerId !== pointerId || !src) return;
     lx = e.clientX; ly = e.clientY;
     if (pending) {
@@ -170,7 +218,8 @@ export function initPatternJelly(lanesEl: HTMLElement): void {
     clearTimeout(holdTimer); holdTimer = 0;
     pointerId = -1;
     if (pending) { pending = false; src = null; return; }
-    held = false;
+    held = false; pinch = null; scT = 1;   // dilepas: ukuran ikut memantul balik ke 1
+    if (pinchUsed) suppressUntil = performance.now() + 500;
     if (REDUCE) { finish(); return; }
     if (!raf) { last = performance.now(); raf = requestAnimationFrame(tick); }
     setTimeout(() => { suppressClick = false; }, 0);
