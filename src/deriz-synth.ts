@@ -35,6 +35,7 @@ class DerizSampler extends AudioWorkletProcessor {
     this.speed = 1; this.pitch = 0; this.vol = 0.9; this.volS = 0.9;
     this.PF = 2;   // jatah frame prefetch per blok audio (di luar frame yang wajib)
     this.clean = []; this.dirty = []; this.POOL = 16;   // kolam ring buffer voice: disiapkan di blok senggang, bukan saat nada ditekan
+    this.st = new Float64Array(65536 * 5);   // cache hasil search()
     this.port.onmessage = e => this.msg(e.data);
   }
   msg(m) {
@@ -57,7 +58,7 @@ class DerizSampler extends AudioWorkletProcessor {
     if (due.length) { this.pend = rest; for (const m of due) this.apply(m); }
   }
   setBuf(m) {
-    this.bufRate = m.rate; this.wins.clear(); this.recycleAll();
+    this.bufRate = m.rate; this.wins.clear(); this.st.fill(0); this.recycleAll();
     const minLen = Math.ceil(0.09 * m.rate) + 8;   // sample lebih pendek dari satu frame: tambah nol supaya aman dibaca
     this.ch = m.ch.map(a => { if (a.length >= minLen) return a; const p = new Float32Array(minLen); p.set(a); return p; });
     this.len = this.ch[0].length;
@@ -121,7 +122,17 @@ class DerizSampler extends AudioWorkletProcessor {
   // lalu SUB-SAMPEL (parabola di puncak korelasi). Hasil: this.fr = bagian pecahan (-0.5..0.5), return = bagian bulat.
   // Templat = lanjutan alami frame sebelumnya (posisi pecahan tp) sepanjang 3 hop; ada sedikit bias ke posisi nominal
   // supaya posisi tidak melompat antar periode yang sama bagusnya (mengurangi flutter).
+  // Cache hasil pencarian: search0 adalah fungsi MURNI dari (c0, tp, N) dan sample, jadi nada yang sama diputar ulang
+  // (pola berulang / loop) menghasilkan urutan frame yang persis sama dan tidak perlu mencari lagi. Hasil identik bit-per-bit.
+  // Tabel hash langsung (direct-mapped) di typed array: tanpa alokasi di thread audio. Per slot: [tp, c0, c, fr, N].
   search(c0, tp, N, Hs) {
+    const t = this.st, h = (((Math.imul(c0, 73856093) ^ Math.imul((tp * 64) | 0, 19349663) ^ Math.imul(N, 83492791)) >>> 0) & 65535) * 5;
+    if (t[h + 4] === N && t[h] === tp && t[h + 1] === c0) { this.fr = t[h + 3]; return t[h + 2]; }
+    const c = this.search0(c0, tp, N, Hs);
+    t[h] = tp; t[h + 1] = c0; t[h + 2] = c; t[h + 3] = this.fr; t[h + 4] = N;
+    return c;
+  }
+  search0(c0, tp, N, Hs) {
     const x = this.mono, L = this.len, maxC = L - N, W = Hs;
     this.fr = 0;
     const tI = Math.floor(tp), tf = tp - tI;
