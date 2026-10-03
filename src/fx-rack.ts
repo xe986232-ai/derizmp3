@@ -1071,6 +1071,13 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     if (card && f) void loadDeriz(card, f);
   });
 
+  // sample dari MPCS: ikon grip di MPCS dilepas di atas kanvas DERIZ ini (event dari mpcs.ts), masuk lewat jalur yang sama dengan upload file
+  const onMpcsSample = ((e: CustomEvent<{ file: File }>) => {
+    const card = (e.target as Element).closest<HTMLElement>('.fxc'), f = e.detail?.file;
+    if (card && f) void loadDeriz(card, f);
+  }) as EventListener;
+  list.addEventListener('mpcs-sample', onMpcsSample); ov.addEventListener('mpcs-sample', onMpcsSample);
+
   // ---------- DERIZ: garis start. Drag garisnya (atau tap / klik di mana saja pada canvas untuk memindahkan), panah keyboard menggeser, dobel klik = kembali ke 0 ----------
   const winAt = (stage: HTMLElement, x: number): number => {   // posisi x dalam jendela yang terlihat, 0..1
     const r = stage.getBoundingClientRect();

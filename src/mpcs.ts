@@ -5,6 +5,7 @@
 
 import { ACCEPT as AUDIO_ACCEPT, isAudio } from './audio-upload-card';
 import { DEFAULT_CONTROLS, shiftCurve, snapTargets, toMono, type Controls, type Note, type PitchTrack } from './mpcs-dsp';
+import { encodeWavFloat } from './wav';
 
 const svg = (inner: string, size = 18): string =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
@@ -13,6 +14,7 @@ const ICON = {
   play: svg('<path d="M8 5l12 7-12 7z" fill="currentColor" stroke="none"/>', 22),
   pause: svg('<rect x="6" y="5" width="4.5" height="14" rx="1.2" fill="currentColor" stroke="none"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2" fill="currentColor" stroke="none"/>', 22),
   close: svg('<path d="M6 6l12 12M18 6L6 18"/>', 12),
+  drag: svg('<circle cx="9" cy="6" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.7" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.7" fill="currentColor" stroke="none"/>', 14),
   all: svg('<rect x="4" y="4" width="16" height="16" rx="2.5" stroke-dasharray="3.2 3"/><path d="M8.5 12.2l2.4 2.4 4.6-5"/>', 16)
 };
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -104,7 +106,7 @@ function build(): void {
   el.innerHTML =
     '<div class="mpcs__back"></div>' +
     '<div class="mpcs__win is-off" role="dialog" aria-modal="true" aria-label="MPCS" tabindex="-1">' +
-      `<header class="mpcs__head"><i class="mpcs__led" aria-hidden="true"></i><span class="mpcs__title">MPCS</span><div class="mpcs__lcd"><span class="mpcs__stat" role="status" aria-live="polite"></span></div><button type="button" class="mpcs__close" aria-label="Tutup MPCS">${ICON.close}</button></header>` +
+      `<header class="mpcs__head"><i class="mpcs__led" aria-hidden="true"></i><span class="mpcs__title">MPCS</span><div class="mpcs__lcd"><span class="mpcs__stat" role="status" aria-live="polite"></span></div><button type="button" class="mpcs__drag" aria-label="Seret hasil olahan ke plugin DERIZ" title="Tahan lalu seret ke plugin DERIZ: hasil olahan masuk jadi sample DERIZ" disabled>${ICON.drag}</button><button type="button" class="mpcs__close" aria-label="Tutup MPCS">${ICON.close}</button></header>` +
       '<div class="mpcs__mid">' +
       '<canvas class="mpcs__ov" aria-label="Peta posisi sample (ketuk / seret untuk pindah)" hidden></canvas>' +
       '<div class="mpcs__stage">' +
@@ -140,6 +142,7 @@ function build(): void {
   const file = el.querySelector<HTMLInputElement>('.mpcs__file')!;
   const btn = (a: string): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`.mpcs__bar [data-a="${a}"]`)!;
   const ov = el.querySelector<HTMLCanvasElement>('.mpcs__ov')!;
+  const dragBtn = el.querySelector<HTMLButtonElement>('.mpcs__drag')!;
   const g = cv.getContext('2d')!, gk = keys.getContext('2d')!, go = ov.getContext('2d')!;
 
   // ---------- knob Center / Variation / Transition ----------
@@ -361,7 +364,7 @@ function build(): void {
     else stat.textContent = S.notes.length ? S.notes.length + ' nada terdeteksi' : 'Tidak ada nada terdeteksi';
   }
   function enable(on: boolean): void {
-    btn('play').disabled = !on; btn('all').disabled = !on; win.classList.toggle('is-off', !on);
+    btn('play').disabled = !on; btn('all').disabled = !on; dragBtn.disabled = !on; win.classList.toggle('is-off', !on);
     KNOB_KEYS.forEach(k => { knobEl[k].closest('.mpcs__knob')!.classList.toggle('is-off', !on); });
   }
   function setBusy(on: boolean): void { busy.hidden = !on; }
@@ -484,6 +487,54 @@ function build(): void {
     }
   };
   cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
+
+  // ---------- seret hasil olahan ke plugin DERIZ ----------
+  // Tahan ikon grip: kartu MPCS disembunyikan, hanya ikon yang melayang mengikuti jari / kursor. Lepas di atas kanvas DERIZ = hasil render masuk jadi sample DERIZ
+  // (lewat event 'mpcs-sample' yang ditangkap fx-rack, jalur yang sama dengan upload file). Pakai pointer events buatan sendiri karena drag & drop HTML tidak jalan dengan sentuhan.
+  const LIFT = 38;   // di layar sentuh ikon melayang di atas jari supaya tidak tertutup; titik jatuhnya = posisi ikon
+  let dg: { id: number; x0: number; y0: number; touch: boolean; ghost: HTMLElement | null; over: HTMLElement | null; res: Promise<AudioBuffer | null> | null; name: string } | null = null;
+  const stageAt = (x: number, y: number): HTMLElement | null => {
+    for (const n of document.elementsFromPoint(x, y)) { if (n.closest('.mpcs')) continue; return n.closest<HTMLElement>('.deriz__stage'); }   // elemen pertama di bawah MPCS (kartu yang disembunyikan tetap ikut hit-test)
+    return null;
+  };
+  const dgPoint = (e: PointerEvent): { x: number; y: number } => ({ x: e.clientX, y: e.clientY - (dg?.touch ? LIFT : 0) });
+  function dgMove(e: PointerEvent): void {
+    if (!dg || e.pointerId !== dg.id) return;
+    if (!dg.ghost) {
+      if (Math.hypot(e.clientX - dg.x0, e.clientY - dg.y0) < 8) return;   // di bawah 8 px = ketukan biasa, kartu belum disembunyikan
+      stopPlay();
+      const gh = document.createElement('div'); gh.className = 'mpcs__ghost'; gh.innerHTML = ICON.drag; document.body.appendChild(gh);
+      dg.ghost = gh; el.classList.add('is-dragout');
+      dg.res = ensureRendered().catch(() => null);   // render hasil dimulai sekarang, selesai sebelum dilepas
+    }
+    e.preventDefault();
+    const p = dgPoint(e);
+    dg.ghost.style.transform = `translate(${p.x - 20}px,${p.y - 20}px)`;
+    const s = stageAt(p.x, p.y);
+    if (s !== dg.over) { dg.over?.classList.remove('is-over'); s?.classList.add('is-over'); dg.over = s; dg.ghost.classList.toggle('is-hot', !!s); }
+  }
+  async function dgEnd(e: PointerEvent): Promise<void> {
+    if (!dg || e.pointerId !== dg.id) return;
+    const d = dg; dg = null;
+    window.removeEventListener('pointermove', dgMove); window.removeEventListener('pointerup', dgEnd); window.removeEventListener('pointercancel', dgEnd);
+    if (!d.ghost) { stat.textContent = 'Tahan lalu seret ke plugin DERIZ'; window.setTimeout(info, 1800); return; }   // ketukan tanpa geser
+    d.over?.classList.remove('is-over');
+    const p = { x: e.clientX, y: e.clientY - (d.touch ? LIFT : 0) }, target = e.type === 'pointerup' ? stageAt(p.x, p.y) : null;
+    if (!target) { d.ghost.remove(); el.classList.remove('is-dragout'); stat.textContent = 'Lepas di atas plugin DERIZ'; window.setTimeout(info, 1800); return; }   // jatuh di tempat lain: kartu kembali
+    d.ghost.classList.add('is-busy');
+    const out = await d.res;
+    d.ghost.remove(); el.classList.remove('is-dragout');
+    if (!out || !target.isConnected) { stat.textContent = out ? 'Plugin DERIZ sudah tidak ada' : 'Gagal merender'; window.setTimeout(info, 1800); return; }
+    const f = new File([encodeWavFloat(out.getChannelData(0), out.sampleRate)], d.name + '-MPCS.wav', { type: 'audio/wav' });
+    target.dispatchEvent(new CustomEvent('mpcs-sample', { bubbles: true, detail: { file: f } }));
+    stopPlay(); untilt(); el.hidden = true;   // sample sudah di DERIZ: MPCS ditutup supaya DERIZ kelihatan
+  }
+  dragBtn.addEventListener('pointerdown', e => {
+    if (!S || dragBtn.disabled || dg) return;
+    e.preventDefault();
+    dg = { id: e.pointerId, x0: e.clientX, y0: e.clientY, touch: e.pointerType !== 'mouse', ghost: null, over: null, res: null, name: S.name };
+    window.addEventListener('pointermove', dgMove, { passive: false }); window.addEventListener('pointerup', dgEnd); window.addEventListener('pointercancel', dgEnd);
+  });
 
   // ---------- tombol ----------
   el.addEventListener('click', e => {

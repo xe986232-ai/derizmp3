@@ -1330,14 +1330,24 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs__lcd{flex:1;min-width:0;max-width:280px;margin:0 auto;display:flex;align-items:center;justify-content:center;height:26px;padding:0 12px;border-radius:4px;background:linear-gradient(180deg,#050507,#14141a);
   box-shadow:inset 0 2px 5px rgba(0,0,0,.95),inset 0 0 0 1px rgba(255,255,255,.07),0 1px 0 rgba(255,255,255,.35)}
 .mpcs__stat{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f4f4f6;font-size:12px;font-weight:500;font-variant-numeric:tabular-nums;text-shadow:0 0 6px rgba(255,255,255,.25)}
-.mpcs__close{display:grid;place-items:center;flex:none;width:24px;height:24px;margin-left:auto;padding:0;border:0;border-radius:50%;color:#f2d6e2;cursor:pointer;
+.mpcs__close,.mpcs__drag{display:grid;place-items:center;flex:none;width:24px;height:24px;margin-left:auto;padding:0;border:0;border-radius:50%;color:#f2d6e2;cursor:pointer;
   background:radial-gradient(circle at 36% 28%,#4a4a52 0%,#26262c 60%,#131317 100%);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 2px rgba(0,0,0,.6),0 0 0 2px #4a0a25,0 0 0 3px rgba(255,255,255,.22);
   transition:color .2s ease,box-shadow .2s ease,transform .15s ease}
-.mpcs__lcd+.mpcs__close{margin-left:0}
-.mpcs__close:hover{color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.28),inset 0 -1px 2px rgba(0,0,0,.6),0 0 0 2px #4a0a25,0 0 0 3px #fff,0 0 12px rgba(255,255,255,.4)}
-.mpcs__close:active{transform:scale(.9)}
-.mpcs__close:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.mpcs__lcd+.mpcs__close,.mpcs__lcd+.mpcs__drag,.mpcs__drag+.mpcs__close{margin-left:0}
+.mpcs__close:hover,.mpcs__drag:hover:not(:disabled){color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.28),inset 0 -1px 2px rgba(0,0,0,.6),0 0 0 2px #4a0a25,0 0 0 3px #fff,0 0 12px rgba(255,255,255,.4)}
+.mpcs__close:active,.mpcs__drag:active:not(:disabled){transform:scale(.9)}
+.mpcs__close:focus-visible,.mpcs__drag:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.mpcs__drag{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+.mpcs__drag:disabled{cursor:default;opacity:.45}
+/* seret hasil ke DERIZ: kartu MPCS disembunyikan, hanya ikon (gaya tombol X) yang melayang mengikuti jari */
+.mpcs.is-dragout .mpcs__win,.mpcs.is-dragout .mpcs__back{opacity:0;transition:opacity .12s ease}
+.mpcs__ghost{position:fixed;left:0;top:0;z-index:240;width:40px;height:40px;display:grid;place-items:center;border-radius:50%;color:#fff;pointer-events:none;will-change:transform;
+  background:radial-gradient(circle at 36% 28%,#4a4a52 0%,#26262c 60%,#131317 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 2px rgba(0,0,0,.6),0 0 0 2px #4a0a25,0 0 0 3px rgba(255,255,255,.22)}
+.mpcs__ghost svg{width:18px;height:18px}
+.mpcs__ghost.is-hot{box-shadow:inset 0 1px 0 rgba(255,255,255,.28),inset 0 -1px 2px rgba(0,0,0,.6),0 0 0 2px #4a0a25,0 0 0 3px #ff5c9e}
+.mpcs__ghost.is-busy{opacity:.6}
 /* panel tengah perak (aluminium sikat) berisi layar editor hitam berbingkai */
 .mpcs__mid{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;gap:6px;padding:10px 12px;
   background:
@@ -1410,4 +1420,4 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs__play:focus-visible{outline:2px solid #fff;outline-offset:6px}
 @media (max-height:520px){.mpcs__win{width:min(480px,100%);height:min(300px,100%)}.mpcs__head{min-height:34px;padding-top:4px;padding-bottom:4px}.mpcs__mid{padding:8px 10px;gap:5px}.mpcs__ov{height:22px}.mpcs__bar{padding:6px 12px 9px}}
 @media (max-width:420px){.mpcs__win{height:min(520px,100%)}.mpcs__bar{gap:10px 12px}.mpcs__ups{order:1;flex:1 1 auto;width:auto}.mpcs__play{order:2}.mpcs__knobs{display:flex;order:3;flex:1 0 100%;justify-content:center;gap:20px}.mpcs__lcd{max-width:none}.mpcs__title{letter-spacing:.2em}}   /* HP portrait: upload + play satu baris, tiga knob di baris bawahnya */
-@media (prefers-reduced-motion:reduce){.mpcs__win{transform:none!important;transition:none!important}.mpcs__busy i{animation:none;width:100%}.mpcs__up,.mpcs__play,.mpcs__close,.mpcs__knob{transition:none}}
+@media (prefers-reduced-motion:reduce){.mpcs__win{transform:none!important;transition:none!important}.mpcs__busy i{animation:none;width:100%}.mpcs__up,.mpcs__play,.mpcs__close,.mpcs__drag,.mpcs__knob{transition:none}}
