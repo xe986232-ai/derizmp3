@@ -67,6 +67,7 @@ function build(): void {
         `<button type="button" class="mpcs__btn" data-a="wav" disabled>${ICON.dl}<span>WAV</span></button>` +
         `<span class="mpcs__zoom"><button type="button" class="mpcs__btn mpcs__ico" data-a="zout" aria-label="Perkecil" disabled>${ICON.minus}</button><button type="button" class="mpcs__btn mpcs__ico" data-a="zin" aria-label="Perbesar" disabled>${ICON.plus}</button></span>` +
       '</div>' +
+      '<canvas class="mpcs__ov" aria-label="Peta posisi sample (ketuk / seret untuk pindah)" hidden></canvas>' +
       '<div class="mpcs__stage">' +
         '<canvas class="mpcs__keys" aria-hidden="true"></canvas>' +
         '<div class="mpcs__scroll"><canvas class="mpcs__cv" role="img" aria-label="Editor pitch"></canvas><i class="mpcs__ph" aria-hidden="true"></i></div>' +
@@ -89,10 +90,11 @@ function build(): void {
   const busy = el.querySelector<HTMLElement>('.mpcs__busy')!;
   const file = el.querySelector<HTMLInputElement>('.mpcs__file')!;
   const btn = (a: string): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`.mpcs__bar [data-a="${a}"]`)!;
-  const g = cv.getContext('2d')!, gk = keys.getContext('2d')!;
+  const ov = el.querySelector<HTMLCanvasElement>('.mpcs__ov')!;
+  const g = cv.getContext('2d')!, gk = keys.getContext('2d')!, go = ov.getContext('2d')!;
   const ctl = (k: 'drift' | 'vib'): HTMLInputElement => el.querySelector<HTMLInputElement>(`.mpcs__bar [data-k="${k}"]`)!;
 
-  let S: Session | null = null, sel = -1, pps = 100, W = 0, H = 0, rowH = 12, dpr = 1;
+  let S: Session | null = null, sel = -1, pps = 100, W = 0, H = 0, viewH = 0, rowH = 12, dpr = 1;
   let ac: AudioContext | null = null, src: AudioBufferSourceNode | null = null, playing = false, playPos = 0, t0 = 0, raf = 0, mode: 'out' | 'orig' = 'out';
   let dirty = false, rendering = false, ver = 0, worker: Worker | null = null, jobId = 0;
   const jobs = new Map<number, { ok: (m: any) => void; fail: (e: Error) => void }>();   // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -119,21 +121,75 @@ function build(): void {
   const yOf = (midi: number): number => (S!.hi + 0.5 - midi) * rowH;
   function layout(): void {
     dpr = Math.min(2, devicePixelRatio || 1);
-    H = stage.clientHeight;
+    viewH = stage.clientHeight;
+    const rows = S ? S.hi - S.lo + 1 : 1;
+    rowH = S ? Math.max(16, viewH / rows) : 12;   // baris tidak dipepatkan lagi: kalau rentang nada lebar, kanvas jadi lebih tinggi dan di-scroll
+    H = S ? Math.round(rowH * rows) : viewH;
     const viewW = scroll.clientWidth;
     W = S ? Math.max(viewW, Math.ceil(S.dur * pps)) : viewW;
     while (W * dpr > 16000 && pps > 10) { pps /= 1.25; W = Math.max(viewW, Math.ceil(S!.dur * pps)); }
+    dpr = Math.max(1, Math.min(dpr, Math.sqrt(14e6 / (W * H))));   // batas luas kanvas supaya aman di HP
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = H + 'px';
-    keys.width = Math.round(44 * dpr); keys.height = Math.round(H * dpr); keys.style.width = '44px'; keys.style.height = H + 'px';
-    rowH = S ? H / (S.hi - S.lo + 1) : 12;
+    keys.width = Math.round(44 * dpr); keys.height = Math.round(viewH * dpr); keys.style.width = '44px'; keys.style.height = viewH + 'px';
+    ph.style.height = H + 'px';
     draw();
   }
   const ro = new ResizeObserver(() => { if (!el.hidden) layout(); });
   ro.observe(stage);
 
+  function drawKeys(): void {
+    gk.setTransform(dpr, 0, 0, dpr, 0, 0); gk.clearRect(0, 0, 44, viewH);
+    if (!S) return;
+    const off = scroll.scrollTop;
+    for (let m = S.lo; m <= S.hi; m++) {
+      const y = (S.hi - m) * rowH - off, pc = ((m % 12) + 12) % 12;
+      if (y > viewH || y + rowH < 0) continue;
+      gk.fillStyle = BLACK.has(pc) ? '#111118' : '#d9d9e4'; gk.fillRect(0, y, 44, rowH);
+      if (rowH >= 13 || pc === 0) { gk.fillStyle = BLACK.has(pc) ? '#8a8a9a' : '#33333f'; gk.font = '600 9px system-ui,sans-serif'; gk.textBaseline = 'middle'; gk.fillText(noteName(m), 6, y + rowH / 2); }
+    }
+  }
+
+  // peta seluruh sample: bentuk amplitudo + posisi nada + kotak jendela yang sedang terlihat. Ketuk / seret buat pindah.
+  let ovProf: Float32Array | null = null, ovKey = '';
+  function drawOv(): void {
+    if (!S) { ov.hidden = true; return; }
+    ov.hidden = false;
+    const w = ov.clientWidth, h = ov.clientHeight; if (!w || !h) return;
+    const d = Math.min(2, devicePixelRatio || 1);
+    if (ov.width !== Math.round(w * d) || ov.height !== Math.round(h * d)) { ov.width = Math.round(w * d); ov.height = Math.round(h * d); }
+    go.setTransform(d, 0, 0, d, 0, 0); go.clearRect(0, 0, w, h);
+    const key = S.name + '|' + S.pt.rms.length + '|' + w;
+    if (key !== ovKey || !ovProf) {
+      ovKey = key; ovProf = new Float32Array(w);
+      const nF = S.pt.rms.length;
+      for (let f = 0; f < nF; f++) { const px = Math.min(w - 1, Math.floor(f / nF * w)), v = Math.min(1, S.pt.rms[f] / S.ref); if (v > ovProf[px]) ovProf[px] = v; }
+    }
+    go.fillStyle = 'rgba(150,104,214,.35)';
+    for (let px = 0; px < w; px++) { const a = ovProf[px] * h * .45; go.fillRect(px, h / 2 - a, 1, a * 2 + 1); }
+    const rows = S.hi - S.lo + 1, hopSec = S.pt.hop / S.pt.sr;
+    go.fillStyle = '#ff8a3d';
+    for (const n of S.notes) go.fillRect(n.s * hopSec / S.dur * w, (S.hi + .5 - n.target) / rows * h - 1.5, Math.max(2, (n.e - n.s) * hopSec / S.dur * w), 3);
+    go.fillStyle = '#fff'; go.fillRect(Math.min(w - 1, playPos / S.dur * w), 0, 1.5, h);
+    go.strokeStyle = 'rgba(255,255,255,.9)'; go.lineWidth = 1.2; go.fillStyle = 'rgba(255,255,255,.08)';
+    const vx = scroll.scrollLeft / W * w, vw = Math.min(w, scroll.clientWidth / W * w), vy = scroll.scrollTop / H * h, vh = Math.min(h, viewH / H * h);
+    go.beginPath(); go.roundRect(vx + .5, vy + .5, Math.max(4, vw - 1), Math.max(4, vh - 1), 3); go.fill(); go.stroke();
+  }
+  const ovGo = (e: PointerEvent): void => {
+    if (!S) return;
+    const r = ov.getBoundingClientRect(), fx = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), fy = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
+    scroll.scrollLeft = fx * W - scroll.clientWidth / 2; scroll.scrollTop = fy * H - viewH / 2;
+  };
+  let ovDrag = false;
+  ov.addEventListener('pointerdown', e => { ovDrag = true; ov.setPointerCapture(e.pointerId); ovGo(e); });
+  ov.addEventListener('pointermove', e => { if (ovDrag) ovGo(e); });
+  const ovEnd = (): void => { ovDrag = false; };
+  ov.addEventListener('pointerup', ovEnd); ov.addEventListener('pointercancel', ovEnd);
+  scroll.addEventListener('scroll', () => { drawKeys(); drawOv(); }, { passive: true });
+
   function draw(): void {
-    g.setTransform(dpr, 0, 0, dpr, 0, 0); gk.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.clearRect(0, 0, W, H); gk.clearRect(0, 0, 44, H);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, W, H);
+    drawKeys(); drawOv();
     if (!S) return;
     const { lo, hi, pt, notes } = S, hopSec = pt.hop / pt.sr;
     // baris semiton
@@ -141,8 +197,6 @@ function build(): void {
       const y = (hi - m) * rowH, pc = ((m % 12) + 12) % 12;
       g.fillStyle = BLACK.has(pc) ? '#17171e' : '#1f1f28'; g.fillRect(0, y, W, rowH);
       if (pc === 0) { g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(0, y + rowH - 1, W, 1); }
-      gk.fillStyle = BLACK.has(pc) ? '#111118' : '#d9d9e4'; gk.fillRect(0, y, 44, rowH);
-      if (rowH >= 13 || pc === 0) { gk.fillStyle = BLACK.has(pc) ? '#8a8a9a' : '#33333f'; gk.font = '600 9px system-ui,sans-serif'; gk.textBaseline = 'middle'; gk.fillText(noteName(m), 6, y + rowH / 2); }
     }
     // garis detik
     g.font = '9px system-ui,sans-serif'; g.textBaseline = 'top';
@@ -197,13 +251,14 @@ function build(): void {
       if (notes.length) {
         lo = Math.floor(Math.min(...notes.map(n => Math.min(n.midi, n.target)))) - 3; hi = Math.ceil(Math.max(...notes.map(n => Math.max(n.midi, n.target)))) + 3;
         while (hi - lo < 23) { lo--; hi++; }
-        if (hi - lo > 59) { const c = (hi + lo) >> 1; lo = c - 29; hi = c + 30; }
+        if (hi - lo > 84) { const c = (hi + lo) >> 1; lo = c - 42; hi = c + 42; }
       }
       const sorted = Array.from(pt.rms).sort((a, b) => a - b);
       S = { name: f.name.replace(/\.[^.]+$/, ''), sr: buf.sampleRate, dur: buf.duration, pt, notes, orig: buf, out: null, lo, hi, ref: sorted[Math.floor(sorted.length * .95)] || 0.1 };
       sel = -1; dirty = true; playPos = 0; ph.style.transform = 'translateX(0)';
       pps = Math.max(40, Math.min(220, scroll.clientWidth / Math.max(1, buf.duration)));
       scroll.scrollLeft = 0; layout(); info(); enable(true);
+      if (notes.length) { const mt = notes.reduce((a, n) => a + n.target, 0) / notes.length; scroll.scrollTop = Math.max(0, yOf(mt) - viewH / 2); drawKeys(); drawOv(); } else scroll.scrollTop = 0;
       if (!notes.length) { btn('snap').disabled = true; btn('reset').disabled = true; }
     } catch (err) {
       S = null; empty.hidden = false; draw(); stat.textContent = 'Gagal memuat audio';
@@ -252,12 +307,13 @@ function build(): void {
   }
   function restartPlay(): void { if (playing) { playPos = Math.max(0, (ac?.currentTime ?? 0) - t0); void startPlay(); } }
   function moveHead(sec: number, follow = false): void {
-    const x = xOf(sec); ph.style.transform = `translateX(${x}px)`;
+    const x = xOf(sec); ph.style.transform = `translateX(${x}px)`; drawOv();
     if (follow) { const v = scroll.clientWidth; if (x < scroll.scrollLeft || x > scroll.scrollLeft + v * .9) scroll.scrollLeft = Math.max(0, x - v * .1); }
   }
 
   // ---------- seret blok ----------
   let drag: { i: number; y0: number; base: number; moved: boolean; id: number } | null = null;
+  let pan: { x0: number; y0: number; sl: number; st: number; px: number; moved: boolean; id: number; mouse: boolean } | null = null;
   const hit = (x: number, y: number): number => {
     if (!S) return -1;
     const hopSec = S.pt.hop / S.pt.sr; let best = -1, bd = 1e9;
@@ -271,11 +327,17 @@ function build(): void {
   cv.addEventListener('pointerdown', e => {
     if (!S) return;
     const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, i = hit(x, y);
-    if (i < 0) { sel = -1; playPos = Math.max(0, Math.min(S.dur, x / pps)); moveHead(playPos); if (playing) restartPlay(); draw(); info(); return; }
+    if (i < 0) { pan = { x0: e.clientX, y0: e.clientY, sl: scroll.scrollLeft, st: scroll.scrollTop, px: x, moved: false, id: e.pointerId, mouse: e.pointerType === 'mouse' }; cv.setPointerCapture(e.pointerId); return; }
     sel = i; drag = { i, y0: e.clientY, base: Math.round(S.notes[i].target), moved: false, id: e.pointerId };
     cv.setPointerCapture(e.pointerId); draw(); info();
   });
   cv.addEventListener('pointermove', e => {
+    if (pan && e.pointerId === pan.id) {
+      const dx = e.clientX - pan.x0, dy = e.clientY - pan.y0;
+      if (!pan.moved && Math.hypot(dx, dy) < 6) return;
+      pan.moved = true; scroll.scrollTop = pan.st - dy; if (pan.mouse) scroll.scrollLeft = pan.sl - dx;
+      return;
+    }
     if (!drag || !S || e.pointerId !== drag.id) return;
     const dy = drag.y0 - e.clientY;
     if (!drag.moved && Math.abs(dy) < 4) return;
@@ -283,7 +345,13 @@ function build(): void {
     const t = Math.max(S.lo + 1, Math.min(S.hi - 1, drag.base + Math.round(dy / rowH)));
     if (t !== S.notes[drag.i].target) { S.notes[drag.i].target = t; edit(); }
   });
-  const endDrag = (e: PointerEvent): void => { if (drag && e.pointerId === drag.id) drag = null; };
+  const endDrag = (e: PointerEvent): void => {
+    if (drag && e.pointerId === drag.id) drag = null;
+    if (pan && e.pointerId === pan.id) {
+      const p = pan; pan = null;
+      if (!p.moved && e.type === 'pointerup' && S) { sel = -1; playPos = Math.max(0, Math.min(S.dur, p.px / pps)); moveHead(playPos); if (playing) restartPlay(); draw(); info(); }   // ketuk kosong = pindah playhead
+    }
+  };
   cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
 
   // ---------- tombol ----------

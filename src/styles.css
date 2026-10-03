@@ -1335,10 +1335,14 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs__seg button.is-on{background:var(--accent);color:#fff}
 .mpcs__stage{position:relative;flex:1;display:flex;min-height:140px;border-top:1px solid var(--line);background:#14141a}
 .mpcs__keys{flex:none;display:block;width:44px}
-.mpcs__scroll{position:relative;flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;touch-action:pan-x}
-.mpcs__scroll::-webkit-scrollbar{display:none}
+.mpcs__scroll{position:relative;flex:1;min-width:0;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.28) transparent;touch-action:pan-x}
+.mpcs__scroll::-webkit-scrollbar{width:8px;height:8px}
+.mpcs__scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.26);border-radius:4px}
+.mpcs__scroll::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.42)}
+.mpcs__ov{display:block;flex:none;width:calc(100% - 32px);height:38px;margin:0 16px 10px;border:1px solid var(--line);border-radius:8px;background:#14141a;touch-action:none;cursor:pointer}
+.mpcs__ov[hidden]{display:none}
 .mpcs__cv{display:block;touch-action:pan-x;cursor:default}
-.mpcs__ph{position:absolute;top:0;bottom:0;left:0;width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 8px rgba(255,255,255,.55);pointer-events:none;will-change:transform}
+.mpcs__ph{position:absolute;top:0;height:100%;left:0;width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 8px rgba(255,255,255,.55);pointer-events:none;will-change:transform}
 .mpcs__empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;background:#14141a;text-align:center}
 .mpcs__empty[hidden]{display:none}
 .mpcs__empty p{margin:0;max-width:320px;color:var(--muted);font-size:12px;line-height:1.5}
