@@ -33,6 +33,8 @@ class DerizSampler extends AudioWorkletProcessor {
     this.voices = [];
     this.pend = [];   // perintah on / off yang dijadwalkan di waktu AudioContext tertentu (piano roll)
     this.speed = 1; this.pitch = 0; this.vol = 0.9; this.volS = 0.9;
+    this.PF = 2;   // jatah frame prefetch per blok audio (di luar frame yang wajib)
+    this.clean = []; this.dirty = []; this.POOL = 16;   // kolam ring buffer voice: disiapkan di blok senggang, bukan saat nada ditekan
     this.port.onmessage = e => this.msg(e.data);
   }
   msg(m) {
@@ -40,7 +42,7 @@ class DerizSampler extends AudioWorkletProcessor {
     else if (m.t === 'on' || m.t === 'off' || m.t === 'glide') { if (m.at && m.at > currentTime) this.pend.push(m); else this.apply(m); }
     else if (m.t === 'p') { this.speed = m.speed; this.pitch = m.pitch; this.vol = m.vol; }
     else if (m.t === 'relall') { this.pend = []; for (const v of this.voices) v.rel = true; }
-    else if (m.t === 'kill') { this.voices = []; this.pend = []; }
+    else if (m.t === 'kill') { this.recycleAll(); this.pend = []; }
   }
   apply(m) {
     if (m.t === 'on') { this.speed = m.speed; this.pitch = m.pitch; this.vol = m.vol; this.start(m); }
@@ -55,7 +57,7 @@ class DerizSampler extends AudioWorkletProcessor {
     if (due.length) { this.pend = rest; for (const m of due) this.apply(m); }
   }
   setBuf(m) {
-    this.bufRate = m.rate; this.wins.clear(); this.voices = [];
+    this.bufRate = m.rate; this.wins.clear(); this.recycleAll();
     const minLen = Math.ceil(0.09 * m.rate) + 8;   // sample lebih pendek dari satu frame: tambah nol supaya aman dibaca
     this.ch = m.ch.map(a => { if (a.length >= minLen) return a; const p = new Float32Array(minLen); p.set(a); return p; });
     this.len = this.ch[0].length;
@@ -104,7 +106,7 @@ class DerizSampler extends AudioWorkletProcessor {
     this.voices.push({
       id: m.id, semis: m.semis, N: N, nom: start, prev: 0, first: true, last: false, oi: oi,
       w: 0, cEnd: 0, vEnd: 0, rd: 0, rho: P0 * rate / sampleRate, size: size,
-      T: [new Float32Array(size), new Float32Array(size)],
+      T: this.takeRing(size),
       env: 0, rel: false, atk: 1 / (0.002 * sampleRate), relK: Math.exp(-1 / (0.04 * sampleRate)),
       vel: m.vel === undefined ? 1 : m.vel   // velocity per nada (penguatan 0..1), terpisah dari knob Volume yang berlaku untuk semua nada
     });
@@ -161,6 +163,28 @@ class DerizSampler extends AudioWorkletProcessor {
       const fr = pc - fc; if (fr > -0.75 && fr < 0.75) this.fr = fr;
     }
     return fc;
+  }
+  // ---- kolam ring buffer voice: tanpa alokasi 256 KB per nada di tengah audio ----
+  takeRing(size) {
+    const r = this.clean.length ? this.clean.pop() : null;
+    return r && r[0].length === size ? r : [new Float32Array(size), new Float32Array(size)];   // kolam kosong: alokasi seperti dulu
+  }
+  recycle(v) { if (this.clean.length + this.dirty.length < 2 * this.POOL) this.dirty.push(v.T); }
+  recycleAll() { for (const v of this.voices) this.recycle(v); this.voices = []; }
+  // satu langkah perawatan per blok senggang: bersihkan satu buffer bekas (harus nol lagi: ujung kiri sinc dibaca sebagai nol), atau isi kolam sampai POOL
+  idle() {
+    if (this.dirty.length) { const r = this.dirty.pop(); r[0].fill(0); r[1].fill(0); this.clean.push(r); }
+    else if (this.clean.length < this.POOL) this.clean.push([new Float32Array(1 << 15), new Float32Array(1 << 15)]);
+  }
+  // apakah frame berikutnya voice ini adalah "mulai ulang di onset"? Frame itu bergantung pada posisi pembaca (v.rd),
+  // jadi tidak boleh disiapkan lebih awal supaya hasilnya sama persis dengan penghitungan tepat waktu.
+  restartNext(v) {
+    if (v.first) return false;
+    const ons = this.ons, pre = Math.round(0.0015 * this.bufRate);
+    const nom = v.nom + (v.N >> 2) * (this.speed / Math.pow(2, (v.semis + this.pitch) / 12));
+    let oi = v.oi;
+    while (oi + 1 < ons.length && ons[oi + 1] - pre <= nom) oi++;
+    return oi < ons.length && ons[oi] - pre <= nom;
   }
   frameBuf(N) {
     if (!this.fbs || this.fbs[0].length < N) this.fbs = [new Float32Array(N), new Float32Array(N)];
@@ -236,18 +260,43 @@ class DerizSampler extends AudioWorkletProcessor {
   process(inputs, outputs) {
     const out = outputs[0], oL = out[0], oR = out[1] || out[0], n = oL.length;
     this.flush();
-    if (!this.voices.length) return true;
+    if (!this.voices.length) { this.idle(); return true; }
     const g0 = this.volS; this.volS += (this.vol - this.volS) * 0.25; const g1 = this.volS;
-    for (let vi = this.voices.length - 1; vi >= 0; vi--) {
-      const v = this.voices[vi], mask = v.size - 1, TL = v.T[0], TR = v.T[1];
+    // Tahap A: perbarui laju baca tiap voice, lalu pastikan frame yang DIPERLUKAN blok ini sudah ada (wajib).
+    // Satu frame WSOLA mahal (search korelasi silang). Kalau dihitung hanya saat dibutuhkan, banyak voice yang butuh
+    // frame baru di blok yang sama menumpuk jadi satu lonjakan > 2,7 ms -> gresek. Jadi setelah yang wajib, frame
+    // berikutnya disiapkan LEBIH AWAL (maks PF per blok, voice dengan sisa terpendek duluan). Hasil per voice tetap sama:
+    // urutan dan isi frame tidak berubah, hanya waktu penghitungannya yang disebar.
+    const vs = this.voices, nv = vs.length, HWf = this.HW;
+    let made = 0;
+    for (let vi = 0; vi < nv; vi++) {
+      const v = vs[vi];
       if (v.gd) { const f = Math.min(1, Math.max(0, (currentTime - v.g0) / v.gd)); v.semis = v.gf + (v.gt - v.gf) * f; if (f >= 1) v.gd = 0; }   // slide: tinggi nada meluncur linear (dalam semiton)
       const rhoT = Math.pow(2, (v.semis + this.pitch) / 12) * this.bufRate / sampleRate;
       v.rho += (rhoT - v.rho) * 0.3;
+      const hhA = v.rho > 1 ? Math.ceil(HWf / (0.85 / Math.min(v.rho, 8))) : 2;
+      v.need = v.rd + v.rho * n + hhA + 4;
+      while (!v.last && v.cEnd < v.need) { this.gen(v); made++; }
+    }
+    // prefetch: sisa jatah dipakai voice yang cadangan frame-nya kurang dari 2 hop (ring buffer 32768 jauh lebih besar dari itu)
+    while (made < this.PF) {
+      let bv = null, bm = 0;
+      for (let vi = 0; vi < nv; vi++) {
+        const v = vs[vi];
+        if (v.last || this.restartNext(v)) continue;
+        const m = v.cEnd - v.need - 2 * (v.N >> 2);
+        if (m < bm) { bm = m; bv = v; }
+      }
+      if (!bv) break;
+      this.gen(bv); made++;
+    }
+    for (let vi = this.voices.length - 1; vi >= 0; vi--) {
+      const v = this.voices[vi], mask = v.size - 1, TL = v.T[0], TR = v.T[1];
+      // (glide dan laju baca rho sudah diperbarui di tahap A, di atas)
       // rho > 1 (nada naik): baca dengan kernel sinc yang frekuensi potongnya 0.85/rho (pita transisi filter muat di bawah Nyquist keluaran) (low-pass sebelum decimate) -> tidak ada aliasing
       // rho <= 1: Hermite 4 titik (tidak perlu filter)
       const rr = v.rho, aa = rr > 1, fc = aa ? 0.85 / Math.min(rr, 8) : 1, hh = aa ? Math.ceil(this.HW / fc) : 2, sk = this.sinc, TRf = this.TR * fc, lim = this.HW * this.TR;
-      const need = v.rd + v.rho * n + hh + 4;
-      while (!v.last && v.cEnd < need) this.gen(v);
+      // (frame yang diperlukan sudah disiapkan di tahap A)
       let dead = false;
       for (let i = 0; i < n; i++) {
         const pos = v.rd, i0 = Math.floor(pos);
@@ -274,7 +323,7 @@ class DerizSampler extends AudioWorkletProcessor {
         oL[i] += sl * g; oR[i] += sr * g;
         v.rd += v.rho;
       }
-      if (dead || (v.rel && v.env < 1e-4)) this.voices.splice(vi, 1);
+      if (dead || (v.rel && v.env < 1e-4)) { this.voices.splice(vi, 1); this.recycle(v); }
     }
     // limiter lembut: sampai 0.9 lurus (satu nada di volume normal tidak tersentuh), di atasnya melengkung halus menuju 1.0 (hanya akor yang keras)
     for (let i = 0; i < n; i++) {
@@ -282,6 +331,7 @@ class DerizSampler extends AudioWorkletProcessor {
       if (l > 0.9 || l < -0.9) oL[i] = Math.sign(l) * (0.9 + 0.1 * Math.tanh((Math.abs(l) - 0.9) / 0.1));
       if (oR !== oL) { const r = oR[i]; if (r > 0.9 || r < -0.9) oR[i] = Math.sign(r) * (0.9 + 0.1 * Math.tanh((Math.abs(r) - 0.9) / 0.1)); }
     }
+    if (made < this.PF) this.idle();   // blok ini ringan: sempatkan merawat kolam buffer
     return true;
   }
 }
