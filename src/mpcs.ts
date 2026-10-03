@@ -203,7 +203,7 @@ function build(): void {
     dpr = Math.min(2, devicePixelRatio || 1);
     viewH = stage.clientHeight;
     const rows = S ? S.hi - S.lo + 1 : 1;
-    rowH = S ? Math.max(16, viewH / rows) : 12;   // baris tidak dipepatkan lagi: kalau rentang nada lebar, kanvas jadi lebih tinggi dan di-scroll
+    rowH = S ? Math.max(30, viewH / rows) : 12;   // baris tidak dipepatkan lagi: kalau rentang nada lebar, kanvas jadi lebih tinggi dan di-scroll
     H = S ? Math.round(rowH * rows) : viewH;
     const viewW = scroll.clientWidth;
     W = S ? Math.max(viewW, Math.ceil(S.dur * pps)) : viewW;
@@ -301,7 +301,7 @@ function build(): void {
       for (let i = nF - 1, nx = NaN; i >= 0; i--) { if (cy[i] === cy[i]) nx = cy[i]; else cy[i] = nx; }
       if (nF > 0 && cy[0] === cy[0]) {
         const px = 1 / dpr, xa = Math.max(0, Math.floor(x0 * dpr) / dpr), xb = Math.min(W, x1), n = Math.ceil((xb - xa) / px);
-        const tops = new Float32Array(Math.max(0, n)), bots = new Float32Array(Math.max(0, n)), r = [0, 0], half = rowH * .46 * .92;
+        const tops = new Float32Array(Math.max(0, n)), bots = new Float32Array(Math.max(0, n)), r = [0, 0], half = rowH * .48 * .92;
         for (let i = 0; i < n; i++) {
           const x = xa + i * px;
           peakRange(pk, sr, x / pps, (x + px) / pps, r);
@@ -359,7 +359,7 @@ function build(): void {
       const sorted = Array.from(pt.rms).sort((a, b) => a - b);
       S = { name: f.name.replace(/\.[^.]+$/, ''), sr: buf.sampleRate, dur: buf.duration, pt, notes, orig: buf, out: null, lo, hi, ref: sorted[Math.floor(sorted.length * .95)] || 0.1, pk: buildPeaks(buf) };
       sel = -1; dirty = true; playPos = 0; ph.style.transform = 'translateX(0)';
-      pps = Math.max(40, Math.min(220, scroll.clientWidth / Math.max(1, buf.duration)));
+      pps = Math.max(40, Math.min(400, scroll.clientWidth / Math.max(1, buf.duration)));
       scroll.scrollLeft = 0; layout(); info(); enable(true);
       if (notes.length) { const mt = notes.reduce((a, n) => a + n.target, 0) / notes.length; scroll.scrollTop = Math.max(0, yOf(mt) - viewH / 2); drawKeys(); drawOv(); } else scroll.scrollTop = 0;
     } catch (err) {
