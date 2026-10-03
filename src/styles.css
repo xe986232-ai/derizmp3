@@ -982,6 +982,13 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .fxc__pop{width:26px;height:26px;flex:none;padding:0;border:0;border-radius:50%;background:transparent;color:#9a9ab0;display:grid;place-items:center;cursor:pointer;transition:background .2s ease,color .2s ease,transform .15s ease}
 .fxc__pop:hover{background:rgba(255,255,255,.1);color:#fff}
 .fxc__pop:active{transform:scale(.9)}
+.fxc--mpcs{padding:12px 14px 12px 16px;background-image:linear-gradient(90deg,rgba(255,92,158,.16),transparent 60%)}
+.fxc--mpcs .fxc__title{font-family:'Syncopate',system-ui,sans-serif;font-size:14px;font-weight:700;letter-spacing:.3em}
+.fxc__led{flex:none;width:12px;height:12px;border-radius:50%;background:radial-gradient(circle at 36% 30%,#fff 0 8%,#ffd2e4 30%,#ff5c9e 70%,#8a1245 100%);box-shadow:0 0 8px rgba(255,92,158,.55)}
+.fxc__open{width:28px;height:28px;flex:none;padding:0;border:0;border-radius:50%;background:transparent;color:var(--muted);display:grid;place-items:center;cursor:pointer;transition:background .2s ease,color .2s ease,transform .2s var(--ease-spring)}
+.fxc__open:hover{background:rgba(255,255,255,.1);color:var(--text)}
+.fxc__open:active{transform:scale(.9);transition-duration:.08s}
+.fxc__open:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .fxc-ph{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;padding:12px 14px;border-radius:14px;border:1px dashed rgba(255,255,255,.18);color:var(--muted);font-size:12px}
 .fxc-ph__btn{border:0;border-radius:999px;padding:6px 12px;background:rgba(255,255,255,.1);color:var(--text);font:inherit;font-weight:600;cursor:pointer}
 .fxc-ph__btn:hover{background:rgba(255,255,255,.18)}

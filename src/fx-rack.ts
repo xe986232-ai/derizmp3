@@ -14,7 +14,7 @@ import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } f
 import { velGain } from './velocity';
 import { getMasterPitch, onMasterPitch } from './master-pitch';
 
-type FxType = 'reverb' | 'eq' | 'filter' | 'deesser' | 'supersaw' | 'deriz';
+type FxType = 'reverb' | 'eq' | 'filter' | 'deesser' | 'supersaw' | 'deriz' | 'mpcs';
 // DERIZ: audio yang di-upload ke canvas plugin (buffer disimpan untuk tahap berikutnya; peaks + max khusus untuk menggambar waveform)
 interface DerizData { name: string; dur: number; buf: AudioBuffer; start: number; zoom: number; view: number; spec: Spec | null; busy?: number; }   // start: posisi garis start, 0..1 dari durasi; zoom >= 1: jendela terlihat = [view, view + 1/zoom] dari durasi; spec: spektrogram (null selagi dianalisis, busy = persen)
 // Spektrogram: frames x ROWS nilai dB (0..255 = -100..0 dBFS), baris 0 = frekuensi terendah (skala log); lut = palet warna yang disesuaikan dengan level puncak
@@ -27,6 +27,7 @@ const svg = (inner: string, size = 20) =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
 
 const ICON_PAT = svg('<rect x="3" y="4.5" width="10" height="3.6" rx="1.3" fill="currentColor" stroke="none"/><rect x="8" y="10.2" width="13" height="3.6" rx="1.3" fill="currentColor" stroke="none"/><rect x="4.5" y="15.9" width="8.5" height="3.6" rx="1.3" fill="currentColor" stroke="none"/>', 18);   // blok nada ala piano roll: tombol masuk ke pattern
+const ICON_OPEN = svg('<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/>', 16);   // buka MPCS
 const ICON_MORE = svg('<circle cx="5" cy="12" r="1.9" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.9" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.9" fill="currentColor" stroke="none"/>', 18);
 
 const fmtDb = (v: number): string => { const d = Math.round(eqDb(v) * 10) / 10; return (d > 0 ? '+' : '') + d.toFixed(1) + ' dB'; };
@@ -76,6 +77,7 @@ const EFFECTS: EffectDef[] = [
     { key: 'pitch', label: 'Pitch', hint: 'Pitch (nada, semitone)', def: 0.5, bipolar: true, fmt: v => { const n = derizPitch(v); return (n > 0 ? '+' : '') + n + ' st'; } },
     { key: 'volume', label: 'Volume', hint: 'Volume (level suara)', def: 0.8, fmt: pct }
   ], synth: true },   // plugin DERIZ: spektrogram + upload + knob; satu bawaan track DERIZ (dari "+ Tambahkan track"), sisanya bisa ditambah dari daftar efek (banyak DERIZ per track)
+  { type: 'mpcs', name: 'MPCS', params: [], synth: true },   // plugin MPCS: kartu ringkas di panel; editornya jendela terpisah (mpcs.ts), dibuka lewat kartu ini
   {
     type: 'supersaw', name: 'Supersaw', synth: true,
     params: [
@@ -328,6 +330,12 @@ type FxPage = 'plugin' | 'effect';   // halaman panel: Plugin (VST / instrumen: 
 const pageOf = (type: FxType): FxPage => (defOf(type).synth ? 'plugin' : 'effect');
 
 function cardHtml(fx: Fx, i: number): string {
+  if (fx.type === 'mpcs') {   // MPCS: kartu ringkas (judul + buka + titik tiga); isinya ada di jendela MPCS
+    return `<section class="fxc fxc--mpcs" data-fx="${fx.id}" data-kind="plugin" style="--i:${i}" aria-label="MPCS">` +
+      `<header class="fxc__head"><i class="fxc__led" aria-hidden="true"></i><h3 class="fxc__name"><button type="button" class="fxc__title fxc__mp" title="Buka MPCS">MPCS</button></h3>` +
+      `<button type="button" class="fxc__open fxc__mp" aria-label="Buka MPCS" title="Buka MPCS">${ICON_OPEN}</button>` +
+      `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi MPCS" title="Opsi">${ICON_MORE}</button></header></section>`;
+  }
   const d = { ...defOf(fx.type) }; if (fx.type === 'deriz') { const no = derizNo(fx.id); if (no > 1) d.name += ' ' + no; }
   const tabs = tabNames(d), cur = Math.min(fx.tab ?? 0, Math.max(0, tabs.length - 1));
   // plugin dengan kategori: tab di baris judul (tinggi card tetap sama dengan Reverb / EQ), tiap tab punya panel kontrolnya sendiri
@@ -768,15 +776,14 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     closeMenu(true);
     const have = new Set(fxs().map(f => f.type));
     // halaman Plugin: hanya DERIZ (boleh banyak; Supersaw otomatis ada di track synth). Halaman Effect: Reverb, EQ, Filter, dll.
-    // MPCS = jendela editor pitch (bukan kartu di rack): langsung dibuka dari sini
-    const choices: Array<{ type: FxType | 'mpcs'; name: string }> = EFFECTS.filter(d => page === 'plugin' ? d.type === 'deriz' : !d.synth);
-    if (page === 'plugin') choices.push({ type: 'mpcs', name: 'MPCS' });
+    // halaman Plugin: DERIZ (boleh banyak) dan MPCS (satu per track; Supersaw otomatis ada di track synth). Halaman Effect: Reverb, EQ, Filter, dll.
+    const choices = EFFECTS.filter(d => page === 'plugin' ? d.type === 'deriz' || d.type === 'mpcs' : !d.synth);
     const el = document.createElement('div');
     el.className = 'fx-pick';
     el.setAttribute('role', 'menu');
     el.setAttribute('aria-label', page === 'plugin' ? 'Pilih plugin' : 'Pilih efek');
     el.innerHTML = choices.map((d, k) => {
-      const used = d.type !== 'deriz' && d.type !== 'mpcs' && have.has(d.type);
+      const used = d.type !== 'deriz' && have.has(d.type);
       return `<button type="button" role="menuitem" class="fx-pick__item" data-type="${d.type}" style="--i:${k}"${used ? ' disabled title="Sudah ditambahkan"' : ''}>` +
         `<span>${d.name}</span></button>`;
     }).join('');
@@ -793,10 +800,10 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     el.addEventListener('click', e => {
       const b = (e.target as Element).closest<HTMLButtonElement>('.fx-pick__item');
       if (!b || b.disabled) return;
-      if (b.dataset.type === 'mpcs') { closePicker(true); openMpcs(); return; }   // fokus pindah ke jendela MPCS
-      addEffect(b.dataset.type as FxType);
-      closePicker();
-      addBtn.focus({ preventScroll: true });
+      const t = b.dataset.type as FxType;
+      addEffect(t);
+      closePicker(t === 'mpcs');
+      if (t !== 'mpcs') addBtn.focus({ preventScroll: true });   // MPCS: fokus pindah ke jendelanya
     });
     el.addEventListener('keydown', e => e.stopPropagation());   // pintasan DAW (Space, panah) tidak ikut jalan
     el.addEventListener('keyup', e => e.stopPropagation());
@@ -926,6 +933,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     layout(true);
     card.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
     openAuto();
+    if (type === 'mpcs') openMpcs();   // langsung terbuka, seperti DERIZ
   }
 
   function openAuto(): void {
@@ -983,7 +991,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   }
 
   function removeEffect(card: HTMLElement): void {
-    const fx = find(card); if (!fx || !cur || (defOf(fx.type).synth && fx.type !== 'deriz')) return;
+    const fx = find(card); if (!fx || !cur || (defOf(fx.type).synth && fx.type !== 'deriz' && fx.type !== 'mpcs')) return;
     hideTip();
     if (fx.type === 'deriz') {   // lepas sampler-nya dan buang nadanya di semua pattern
       const e = synths.get(fx.id); if (e) { synths.delete(fx.id); void e.p.then(x => x.dispose(), () => { /* gagal dibuat */ }); }
@@ -1257,6 +1265,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   onRoots('click', e => {
     const t = e.target as Element, card = t.closest<HTMLElement>('.fxc');
     if (!card || t.matches('.deriz__file')) return;
+    if (t.closest('.fxc__mp')) { openMpcs(); return; }
     if (t.closest('.fxc__pop')) { if (ovOpen?.card === card) closeOverlay(); else openOverlay(card); return; }
     if (t.closest('.deriz__up, .deriz__swap')) { card.querySelector<HTMLInputElement>('.deriz__file')!.click(); return; }
     const pat = t.closest<HTMLButtonElement>('.fxc__pat');
@@ -1361,7 +1370,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
       const k = cnt.get(type) ?? 0; cnt.set(type, k + 1);
       let fx = (racks.get(track) ?? []).filter(f => f.type === type)[k];
       if (!fx) {
-        if (d.synth) continue;   // plugin instrumen hanya ada kalau track-nya memang jenis itu
+        if (d.synth && type !== 'mpcs') continue;   // plugin instrumen hanya ada kalau track-nya memang jenis itu (MPCS boleh dipasang di track mana pun)
         const v: Record<string, number> = {}; d.params.forEach(q => { v[q.key] = q.def; });
         fx = { id: ++seq, type, on: true, min: false, v };
         racks.set(track, [...(racks.get(track) ?? []), fx]);
