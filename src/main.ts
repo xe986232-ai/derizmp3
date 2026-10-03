@@ -5,6 +5,7 @@ import { initEffectsPanel } from './effects-panel';
 import { initTrackMeters } from './track-meters';
 import { initTrackReorder } from './track-reorder';
 import { initFxRack } from './fx-rack';
+import { initMpcs } from './mpcs';
 import { initRecordJelly } from './record-jelly';
 import { initPatternJelly } from './pattern-jelly';
 import { initLandscape } from './landscape';
@@ -1102,6 +1103,7 @@ document.querySelector('.headers-list').addEventListener('click', e => {
 document.querySelectorAll('.trackheader__left-content').forEach(b => b.title = 'Tutup panel track');
 // Panel efek (kanan): lebar timeline berubah selama animasi, jadi ruler & toolbar pattern digambar ulang tiap frame
 const fxRack = initFxRack(() => ({ ctx: audio(), dest: master }), patternBridge);   // isi panel efek: tombol +, card pilihan efek, dan card tiap efek (per track)
+initMpcs();   // MPCS: jendela tersembunyi, dibuka lewat ketukan beruntun pada judul panel efek (tidak ada di daftar efek)
 initEffectsPanel(settled => { paintRuler(settled); patBarPlace(); }, () => { closeMenu(true); closeAddMenu(true); dismissAdd(true); fxRack.closePicker(true); });
 fxRack.show(selTrack ? selTrack.closest('.trackheader-container').dataset.track : null);
 // ===== Menu "Tambahkan track" =====

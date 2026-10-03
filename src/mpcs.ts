@@ -1,0 +1,351 @@
+// MPCS (Manual Pitch Correct Sample): jendela editor pitch ala Melodyne. Tahap 1 (starter):
+//   upload audio -> analisis di Worker -> blok nada di piano roll -> seret blok ke atas / bawah (snap semiton) -> putar hasil / asli -> ekspor WAV.
+// Tombol buka sengaja tidak ada di daftar efek: jendela hanya terbuka lewat ketukan beruntun pada judul panel "Effects".
+// Inti DSP ada di mpcs-dsp.ts (murni), jalan di mpcs-worker.ts.
+
+import { ACCEPT as AUDIO_ACCEPT, isAudio } from './audio-upload-card';
+import { encodeWav, toMono, type Note, type PitchTrack } from './mpcs-dsp';
+
+const svg = (inner: string, size = 18): string =>
+  `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+const ICON = {
+  up: svg('<path d="M12 16V5M7 10l5-5 5 5M5 19h14"/>'),
+  play: svg('<path d="M7 5l12 7-12 7z" fill="currentColor" stroke="none"/>'),
+  stop: svg('<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>'),
+  close: svg('<path d="M6 6l12 12M18 6L6 18"/>', 12),
+  minus: svg('<path d="M6 12h12"/>', 16),
+  plus: svg('<path d="M12 6v12M6 12h12"/>', 16),
+  dl: svg('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>')
+};
+
+const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const BLACK = new Set([1, 3, 6, 8, 10]);
+const noteName = (m: number): string => { const r = Math.round(m); return NAMES[((r % 12) + 12) % 12] + (Math.floor(r / 12) - 1); };
+const fmtShift = (s: number): string => { const c = Math.round(s * 100); return (c > 0 ? '+' : '') + (Math.abs(c) % 100 === 0 ? c / 100 + ' st' : c + ' ct'); };
+
+interface Session {
+  name: string; sr: number; dur: number; pt: PitchTrack; notes: Note[];
+  orig: AudioBuffer; out: AudioBuffer | null; lo: number; hi: number; ref: number;
+}
+
+let root: HTMLElement | null = null, openFn: (() => void) | null = null;
+
+export function initMpcs(): void {
+  const title = document.querySelector<HTMLElement>('.fx__title');
+  if (!title) return;
+  title.style.userSelect = 'none'; title.style.touchAction = 'manipulation'; title.style.setProperty('-webkit-tap-highlight-color', 'transparent');
+  let taps = 0, last = 0;
+  title.addEventListener('click', () => {
+    const t = performance.now();
+    taps = t - last > 900 ? 1 : taps + 1; last = t;
+    if (taps >= 7) { taps = 0; navigator.vibrate?.(18); open(); }
+  });
+}
+
+function open(): void {
+  if (!root) build();
+  openFn?.();
+}
+
+function build(): void {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const el = document.createElement('div');
+  el.className = 'mpcs'; el.hidden = true;
+  el.innerHTML =
+    '<div class="mpcs__back"></div>' +
+    '<div class="mpcs__win" role="dialog" aria-modal="true" aria-label="MPCS" tabindex="-1">' +
+      '<header class="mpcs__head"><span class="mpcs__title">MPCS</span><span class="mpcs__sub">Manual Pitch Correct Sample</span>' +
+        `<span class="mpcs__stat" role="status" aria-live="polite"></span><button type="button" class="mpcs__close" aria-label="Tutup MPCS">${ICON.close}</button></header>` +
+      '<div class="mpcs__bar">' +
+        `<button type="button" class="mpcs__btn mpcs__btn--pri" data-a="up">${ICON.up}<span>Upload audio</span></button>` +
+        `<button type="button" class="mpcs__btn mpcs__ico" data-a="play" aria-label="Putar" disabled>${ICON.play}</button>` +
+        '<div class="mpcs__seg" role="group" aria-label="Sumber putar"><button type="button" data-m="out" class="is-on">Hasil</button><button type="button" data-m="orig">Asli</button></div>' +
+        '<button type="button" class="mpcs__btn" data-a="snap" disabled>Snap semua</button>' +
+        '<button type="button" class="mpcs__btn" data-a="reset" disabled>Reset</button>' +
+        `<button type="button" class="mpcs__btn" data-a="wav" disabled>${ICON.dl}<span>WAV</span></button>` +
+        `<span class="mpcs__zoom"><button type="button" class="mpcs__btn mpcs__ico" data-a="zout" aria-label="Perkecil" disabled>${ICON.minus}</button><button type="button" class="mpcs__btn mpcs__ico" data-a="zin" aria-label="Perbesar" disabled>${ICON.plus}</button></span>` +
+      '</div>' +
+      '<div class="mpcs__stage">' +
+        '<canvas class="mpcs__keys" aria-hidden="true"></canvas>' +
+        '<div class="mpcs__scroll"><canvas class="mpcs__cv" role="img" aria-label="Editor pitch"></canvas><i class="mpcs__ph" aria-hidden="true"></i></div>' +
+        `<div class="mpcs__empty"><button type="button" class="mpcs__btn mpcs__btn--pri" data-a="up">${ICON.up}<span>Upload audio</span></button><p>Pakai vokal atau instrumen satu nada (monofonik) yang bersih tanpa efek.</p></div>` +
+        '<div class="mpcs__busy" hidden><i></i></div>' +
+      '</div>' +
+      `<input type="file" class="mpcs__file" accept="${AUDIO_ACCEPT}" hidden>` +
+    '</div>';
+  document.body.appendChild(el);
+  root = el;
+
+  const win = el.querySelector<HTMLElement>('.mpcs__win')!;
+  const stat = el.querySelector<HTMLElement>('.mpcs__stat')!;
+  const stage = el.querySelector<HTMLElement>('.mpcs__stage')!;
+  const scroll = el.querySelector<HTMLElement>('.mpcs__scroll')!;
+  const cv = el.querySelector<HTMLCanvasElement>('.mpcs__cv')!;
+  const keys = el.querySelector<HTMLCanvasElement>('.mpcs__keys')!;
+  const ph = el.querySelector<HTMLElement>('.mpcs__ph')!;
+  const empty = el.querySelector<HTMLElement>('.mpcs__empty')!;
+  const busy = el.querySelector<HTMLElement>('.mpcs__busy')!;
+  const file = el.querySelector<HTMLInputElement>('.mpcs__file')!;
+  const btn = (a: string): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`.mpcs__bar [data-a="${a}"]`)!;
+  const g = cv.getContext('2d')!, gk = keys.getContext('2d')!;
+
+  let S: Session | null = null, sel = -1, pps = 100, W = 0, H = 0, rowH = 12, dpr = 1;
+  let ac: AudioContext | null = null, src: AudioBufferSourceNode | null = null, playing = false, playPos = 0, t0 = 0, raf = 0, mode: 'out' | 'orig' = 'out';
+  let dirty = false, rendering = false, ver = 0, worker: Worker | null = null, jobId = 0;
+  const jobs = new Map<number, { ok: (m: any) => void; fail: (e: Error) => void }>();   // eslint-disable-line @typescript-eslint/no-explicit-any
+
+  // ---------- worker ----------
+  function getWorker(): Worker {
+    if (worker) return worker;
+    worker = new Worker(new URL('./mpcs-worker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (e: MessageEvent) => {
+      const m = e.data;
+      if (m.type === 'progress') { stat.textContent = 'Menganalisis ' + Math.round(m.p * 100) + '%'; return; }
+      const j = jobs.get(m.id); if (!j) return;
+      jobs.delete(m.id);
+      if (m.type === 'error') j.fail(new Error(m.msg)); else j.ok(m);
+    };
+    worker.onerror = () => { jobs.forEach(j => j.fail(new Error('Worker gagal'))); jobs.clear(); };
+    return worker;
+  }
+  const job = (msg: Record<string, unknown>, transfer: Transferable[] = []): Promise<any> =>   // eslint-disable-line @typescript-eslint/no-explicit-any
+    new Promise((ok, fail) => { const id = ++jobId; jobs.set(id, { ok, fail }); getWorker().postMessage({ ...msg, id }, transfer); });
+
+  // ---------- tata letak & gambar ----------
+  const xOf = (sec: number): number => sec * pps;
+  const yOf = (midi: number): number => (S!.hi + 0.5 - midi) * rowH;
+  function layout(): void {
+    dpr = Math.min(2, devicePixelRatio || 1);
+    H = stage.clientHeight;
+    const viewW = scroll.clientWidth;
+    W = S ? Math.max(viewW, Math.ceil(S.dur * pps)) : viewW;
+    while (W * dpr > 16000 && pps > 10) { pps /= 1.25; W = Math.max(viewW, Math.ceil(S!.dur * pps)); }
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    keys.width = Math.round(44 * dpr); keys.height = Math.round(H * dpr); keys.style.width = '44px'; keys.style.height = H + 'px';
+    rowH = S ? H / (S.hi - S.lo + 1) : 12;
+    draw();
+  }
+  const ro = new ResizeObserver(() => { if (!el.hidden) layout(); });
+  ro.observe(stage);
+
+  function draw(): void {
+    g.setTransform(dpr, 0, 0, dpr, 0, 0); gk.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, W, H); gk.clearRect(0, 0, 44, H);
+    if (!S) return;
+    const { lo, hi, pt, notes } = S, hopSec = pt.hop / pt.sr;
+    // baris semiton
+    for (let m = lo; m <= hi; m++) {
+      const y = (hi - m) * rowH, pc = ((m % 12) + 12) % 12;
+      g.fillStyle = BLACK.has(pc) ? '#17171e' : '#1f1f28'; g.fillRect(0, y, W, rowH);
+      if (pc === 0) { g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(0, y + rowH - 1, W, 1); }
+      gk.fillStyle = BLACK.has(pc) ? '#111118' : '#d9d9e4'; gk.fillRect(0, y, 44, rowH);
+      if (rowH >= 13 || pc === 0) { gk.fillStyle = BLACK.has(pc) ? '#8a8a9a' : '#33333f'; gk.font = '600 9px system-ui,sans-serif'; gk.textBaseline = 'middle'; gk.fillText(noteName(m), 6, y + rowH / 2); }
+    }
+    // garis detik
+    g.font = '9px system-ui,sans-serif'; g.textBaseline = 'top';
+    for (let s = 0; s <= S.dur; s++) { const x = Math.round(xOf(s)) + .5; g.fillStyle = 'rgba(255,255,255,.06)'; g.fillRect(x, 0, 1, H); g.fillStyle = '#6c6c7c'; g.fillText(s + 's', x + 3, 2); }
+    // nada
+    const bw = Math.max(1.2, hopSec * pps + .6);
+    notes.forEach((nt, i) => {
+      const shift = nt.target - nt.midi, x0 = xOf((nt.s - .5) * hopSec), x1 = xOf((nt.e - .5) * hopSec), yc = yOf(nt.target);
+      const on = i === sel;
+      g.fillStyle = on ? 'rgba(166,108,255,.30)' : 'rgba(166,108,255,.16)';
+      g.strokeStyle = on ? '#fff' : 'rgba(166,108,255,.7)'; g.lineWidth = on ? 1.5 : 1;
+      g.beginPath(); g.roundRect(x0, yc - rowH * .5, Math.max(4, x1 - x0), rowH, Math.min(5, rowH / 2)); g.fill(); g.stroke();
+      // amplitudo (ungu) mengikuti pitch hasil
+      g.fillStyle = 'rgba(150,104,214,.85)';
+      for (let f = nt.s; f < nt.e; f++) {
+        if (!pt.f0[f]) continue;
+        const m = 69 + 12 * Math.log2(pt.f0[f] / 440) + shift, h = Math.min(1, pt.rms[f] / S!.ref) * rowH * .42 + .5;
+        g.fillRect(xOf(f * hopSec - hopSec / 2), yOf(m) - h, bw, h * 2);
+      }
+      // pitch asli (redup, hanya kalau digeser) dan pitch hasil (oranye)
+      const line = (add: number, style: string, w: number): void => {
+        g.strokeStyle = style; g.lineWidth = w; g.beginPath();
+        for (let f = nt.s; f < nt.e; f++) { if (!pt.f0[f]) continue; const x = xOf(f * hopSec), y = yOf(69 + 12 * Math.log2(pt.f0[f] / 440) + add); f === nt.s ? g.moveTo(x, y) : g.lineTo(x, y); }
+        g.stroke();
+      };
+      if (Math.abs(shift) > .01) line(0, 'rgba(255,255,255,.28)', 1);
+      line(shift, '#ff8a3d', 1.4);
+    });
+  }
+
+  // ---------- status ----------
+  function info(): void {
+    if (!S) { stat.textContent = ''; return; }
+    if (sel >= 0) { const n = S.notes[sel]; stat.textContent = noteName(n.midi) + (Math.round((n.midi - Math.round(n.midi)) * 100) ? ' ' + fmtShift(n.midi - Math.round(n.midi)) : '') + ' → ' + noteName(n.target) + '  (' + fmtShift(n.target - n.midi) + ')'; }
+    else stat.textContent = S.notes.length ? S.notes.length + ' nada terdeteksi' : 'Tidak ada nada terdeteksi';
+  }
+  function enable(on: boolean): void { ['play', 'snap', 'reset', 'wav', 'zin', 'zout'].forEach(a => { btn(a).disabled = !on; }); }
+  function setBusy(on: boolean): void { busy.hidden = !on; }
+
+  // ---------- muat & analisis ----------
+  async function load(f: File): Promise<void> {
+    if (!isAudio(f)) { stat.textContent = 'File bukan audio'; return; }
+    stopPlay(); enable(false); setBusy(true); empty.hidden = true; stat.textContent = 'Membaca audio';
+    try {
+      ac ??= new AudioContext();
+      const buf = await ac.decodeAudioData(await f.arrayBuffer());
+      const mono = toMono(Array.from({ length: buf.numberOfChannels }, (_, c) => buf.getChannelData(c).slice()));
+      stat.textContent = 'Menganalisis 0%';
+      const r = await job({ type: 'analyze', x: mono, sr: buf.sampleRate }, [mono.buffer]);
+      const notes: Note[] = r.notes, pt: PitchTrack = r.pt;
+      let lo = 48, hi = 72;
+      if (notes.length) {
+        lo = Math.floor(Math.min(...notes.map(n => Math.min(n.midi, n.target)))) - 3; hi = Math.ceil(Math.max(...notes.map(n => Math.max(n.midi, n.target)))) + 3;
+        while (hi - lo < 23) { lo--; hi++; }
+        if (hi - lo > 59) { const c = (hi + lo) >> 1; lo = c - 29; hi = c + 30; }
+      }
+      const sorted = Array.from(pt.rms).sort((a, b) => a - b);
+      S = { name: f.name.replace(/\.[^.]+$/, ''), sr: buf.sampleRate, dur: buf.duration, pt, notes, orig: buf, out: null, lo, hi, ref: sorted[Math.floor(sorted.length * .95)] || 0.1 };
+      sel = -1; dirty = true; playPos = 0; ph.style.transform = 'translateX(0)';
+      pps = Math.max(40, Math.min(220, scroll.clientWidth / Math.max(1, buf.duration)));
+      scroll.scrollLeft = 0; layout(); info(); enable(true);
+      if (!notes.length) { btn('snap').disabled = true; btn('reset').disabled = true; }
+    } catch (err) {
+      S = null; empty.hidden = false; draw(); stat.textContent = 'Gagal memuat audio';
+      console.error(err);
+    } finally { setBusy(false); }
+  }
+
+  // ---------- render hasil (di Worker), lalu putar ----------
+  async function ensureRendered(): Promise<AudioBuffer | null> {
+    if (!S) return null;
+    if (!dirty && S.out) return S.out;
+    if (rendering) { await new Promise<void>(r => { const t = setInterval(() => { if (!rendering) { clearInterval(t); r(); } }, 40); }); return ensureRendered(); }
+    rendering = true; const my = ver;
+    try {
+      const r = await job({ type: 'render', notes: S.notes });
+      const out = ac!.createBuffer(1, r.y.length, S.sr); out.copyToChannel(r.y, 0);
+      S.out = out; if (my === ver) dirty = false;
+    } finally { rendering = false; }
+    return dirty ? ensureRendered() : S.out;
+  }
+  const edit = (): void => { dirty = true; ver++; draw(); info(); if (playing) restartPlay(); };
+
+  function stopPlay(): void {
+    if (src) { src.onended = null; try { src.stop(); } catch { /* sudah berhenti */ } src.disconnect(); src = null; }
+    if (playing) { playing = false; btn('play').innerHTML = ICON.play; btn('play').setAttribute('aria-label', 'Putar'); }
+    cancelAnimationFrame(raf); raf = 0;
+  }
+  async function startPlay(): Promise<void> {
+    if (!S || !ac) return;
+    await ac.resume();
+    let b: AudioBuffer | null = S.orig;
+    if (mode === 'out') { btn('play').disabled = true; stat.textContent = 'Merender'; try { b = await ensureRendered(); } finally { btn('play').disabled = false; } info(); }
+    if (!b || !S) return;
+    stopPlay();
+    if (playPos >= S.dur - .02) playPos = 0;
+    src = ac.createBufferSource(); src.buffer = b; src.connect(ac.destination);
+    src.onended = () => { if (playing) { playPos = 0; stopPlay(); moveHead(0); } };
+    src.start(0, playPos); t0 = ac.currentTime - playPos; playing = true;
+    btn('play').innerHTML = ICON.stop; btn('play').setAttribute('aria-label', 'Berhenti');
+    const tick = (): void => {
+      if (!playing || !ac) return;
+      playPos = Math.min(S!.dur, ac.currentTime - t0); moveHead(playPos, true);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+  }
+  function restartPlay(): void { if (playing) { playPos = Math.max(0, (ac?.currentTime ?? 0) - t0); void startPlay(); } }
+  function moveHead(sec: number, follow = false): void {
+    const x = xOf(sec); ph.style.transform = `translateX(${x}px)`;
+    if (follow) { const v = scroll.clientWidth; if (x < scroll.scrollLeft || x > scroll.scrollLeft + v * .9) scroll.scrollLeft = Math.max(0, x - v * .1); }
+  }
+
+  // ---------- seret blok ----------
+  let drag: { i: number; y0: number; base: number; moved: boolean; id: number } | null = null;
+  const hit = (x: number, y: number): number => {
+    if (!S) return -1;
+    const hopSec = S.pt.hop / S.pt.sr; let best = -1, bd = 1e9;
+    S.notes.forEach((n, i) => {
+      const x0 = xOf((n.s - .5) * hopSec) - 4, x1 = xOf((n.e - .5) * hopSec) + 4, yc = yOf(n.target), pad = Math.max(rowH * .7, 16);
+      if (x < x0 || x > x1 || Math.abs(y - yc) > pad) return;
+      const d = Math.abs(y - yc); if (d < bd) { bd = d; best = i; }
+    });
+    return best;
+  };
+  cv.addEventListener('pointerdown', e => {
+    if (!S) return;
+    const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, i = hit(x, y);
+    if (i < 0) { sel = -1; playPos = Math.max(0, Math.min(S.dur, x / pps)); moveHead(playPos); if (playing) restartPlay(); draw(); info(); return; }
+    sel = i; drag = { i, y0: e.clientY, base: Math.round(S.notes[i].target), moved: false, id: e.pointerId };
+    cv.setPointerCapture(e.pointerId); draw(); info();
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!drag || !S || e.pointerId !== drag.id) return;
+    const dy = drag.y0 - e.clientY;
+    if (!drag.moved && Math.abs(dy) < 4) return;
+    drag.moved = true;
+    const t = Math.max(S.lo + 1, Math.min(S.hi - 1, drag.base + Math.round(dy / rowH)));
+    if (t !== S.notes[drag.i].target) { S.notes[drag.i].target = t; edit(); }
+  });
+  const endDrag = (e: PointerEvent): void => { if (drag && e.pointerId === drag.id) drag = null; };
+  cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
+
+  // ---------- tombol ----------
+  const snapAll = (): void => { if (!S) return; S.notes.forEach(n => { n.target = Math.round(n.midi); }); edit(); };
+  const resetAll = (): void => { if (!S) return; S.notes.forEach(n => { n.target = n.midi; }); edit(); };
+  const zoom = (k: number): void => {
+    if (!S) return;
+    const c = (scroll.scrollLeft + scroll.clientWidth / 2) / pps; pps = Math.max(20, Math.min(600, pps * k));
+    layout(); scroll.scrollLeft = Math.max(0, c * pps - scroll.clientWidth / 2); moveHead(playPos);
+  };
+  async function exportWav(): Promise<void> {
+    if (!S) return;
+    btn('wav').disabled = true; stat.textContent = 'Merender';
+    try {
+      const b = await ensureRendered(); if (!b) return;
+      const url = URL.createObjectURL(new Blob([encodeWav(b.getChannelData(0), S.sr)], { type: 'audio/wav' }));
+      const a = document.createElement('a'); a.href = url; a.download = 'mpcs-' + S.name + '.wav'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+    } finally { btn('wav').disabled = false; info(); }
+  }
+  el.querySelector('.mpcs__bar')!.addEventListener('click', e => {
+    const b = (e.target as Element).closest<HTMLElement>('button'); if (!b || (b as HTMLButtonElement).disabled) return;
+    if (b.dataset.m) { mode = b.dataset.m as 'out' | 'orig'; el.querySelectorAll('.mpcs__seg button').forEach(x => x.classList.toggle('is-on', x === b)); if (playing) restartPlay(); return; }
+    switch (b.dataset.a) {
+      case 'up': file.click(); break;
+      case 'play': playing ? stopPlay() : void startPlay(); break;
+      case 'snap': snapAll(); break;
+      case 'reset': resetAll(); break;
+      case 'wav': void exportWav(); break;
+      case 'zin': zoom(1.4); break;
+      case 'zout': zoom(1 / 1.4); break;
+    }
+  });
+  empty.querySelector('button')!.addEventListener('click', () => file.click());
+  file.addEventListener('change', () => { const f = file.files?.[0]; file.value = ''; if (f) void load(f); });
+  el.addEventListener('dragover', e => e.preventDefault());
+  el.addEventListener('drop', e => { e.preventDefault(); const f = e.dataTransfer?.files[0]; if (f) void load(f); });
+
+  // ---------- buka / tutup ----------
+  const onKey = (e: KeyboardEvent): void => {
+    e.stopPropagation();   // pintasan DAW (Space, tuts keyboard) tidak ikut jalan selagi MPCS terbuka
+    if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+    const onBtn = (e.target as Element).closest?.('button');
+    if (e.key === ' ' && !onBtn && S) { e.preventDefault(); playing ? stopPlay() : void startPlay(); }
+    else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && sel >= 0 && S) {
+      e.preventDefault(); const n = S.notes[sel], t = Math.max(S.lo + 1, Math.min(S.hi - 1, Math.round(n.target) + (e.key === 'ArrowUp' ? 1 : -1)));
+      if (t !== n.target) { n.target = t; edit(); }
+    }
+  };
+  el.addEventListener('keydown', onKey); el.addEventListener('keyup', e => e.stopPropagation());
+  el.querySelector('.mpcs__close')!.addEventListener('click', () => close());
+  el.querySelector('.mpcs__back')!.addEventListener('pointerdown', () => close());
+
+  function close(): void {
+    stopPlay();
+    const done = (): void => { el.hidden = true; };
+    if (reduce) { done(); return; }
+    el.querySelector('.mpcs__back')!.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, fill: 'forwards' });
+    win.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(10px) scale(.96)' }], { duration: 170, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }).onfinish = () => { done(); el.getAnimations({ subtree: true }).forEach(a => a.cancel()); };
+  }
+  openFn = () => {
+    if (!el.hidden) return;
+    el.getAnimations({ subtree: true }).forEach(a => a.cancel());
+    el.hidden = false; empty.hidden = !!S;
+    layout(); info();
+    if (!reduce) win.animate([{ opacity: 0, transform: 'translateY(14px) scale(.94)' }, { opacity: 1, transform: 'none' }], { duration: 380, easing: 'cubic-bezier(.34,1.3,.64,1)' });
+    win.focus({ preventScroll: true });
+  };
+}
