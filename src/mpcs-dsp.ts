@@ -22,7 +22,7 @@ export interface Note {
   vib?: number;         // 0..1: seberapa banyak vibrato / variasi cepat dipertahankan; 1 = asli (default), 0 = vibrato dibuang
 }
 
-const FMIN = 70, FMAX = 1000;
+const FMIN = 28, FMAX = 2200;   // 808 / bass sampai synth tinggi (dulu 70-1000 Hz: nada di luar rentang itu tidak pernah terdeteksi)
 const midiOf = (hz: number): number => 69 + 12 * Math.log2(hz / 440);
 export const hzOf = (midi: number): number => 440 * 2 ** ((midi - 69) / 12);
 
@@ -38,36 +38,52 @@ function median(a: number[]): number {
   return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2;
 }
 
-// ---------- analisis pitch: pYIN (kandidat banyak + HMM Viterbi), dikerjakan pada sample rate rendah supaya cepat ----------
+// ---------- analisis pitch: pYIN (kandidat banyak + HMM Viterbi), tiga band supaya rentang lebar (28 Hz - 2.2 kHz) tetap akurat ----------
+//   band A: sample rate ~22 kHz  -> 110 Hz - 2.2 kHz  (resolusi pitch halus di nada tinggi)
+//   band B: sample rate ~5.5 kHz -> 58 - 280 Hz       (jendela ~37 ms: vibrato suara rendah tidak ter-blur)
+//   band C: sample rate ~2.8 kHz -> 28 - 75 Hz        (jendela ~80 ms, untuk 808 / bass sub; jarang butuh respons cepat)
 const BIN_CENTS = 25;                                                       // resolusi state pitch HMM
 const NBIN = Math.ceil(1200 * Math.log2(FMAX / FMIN) / BIN_CENTS) + 1;
 const binHz = (b: number): number => FMIN * 2 ** (b * BIN_CENTS / 1200);
 const binOf = (hz: number): number => 1200 * Math.log2(hz / FMIN) / BIN_CENTS;
-const MAXC = 6;                                                             // kandidat F0 per frame
-const JUMP = 6;                                                             // lompatan pitch maksimum antar frame (bin), ~1.5 semiton per ~5 ms
+const MAXC = 8;                                                             // kandidat F0 per frame
+const JUMP = 6;                                                             // lompatan pitch maksimum antar frame (bin), ~1.5 semiton per ~6 ms
 const NTH = 32;                                                             // jumlah ambang pYIN
+const MAXV = 40;                                                            // lembah maksimum per tahap per frame
 
 export function analyze(x: Float32Array, sr: number, onProgress?: (p: number) => void): { pt: PitchTrack; notes: Note[] } {
-  const d = Math.max(1, Math.round(sr / 12000)), srA = sr / d, n = Math.floor(x.length / d);
+  const d = Math.max(1, Math.round(sr / 24000)), srA = sr / d, n = Math.floor(x.length / d);
   const xs = new Float32Array(n);
   for (let i = 0; i < n; i++) { let a = 0; for (let k = 0; k < d; k++) a += x[i * d + k]; xs[i] = a / d; }   // rata-rata d sample = low-pass sederhana
-
-  const hopA = 64, hop = hopA * d, W = 384;
-  const tauMin = Math.max(2, Math.floor(srA / FMAX)), tauMax = Math.min(Math.ceil(srA / FMIN), W - 1);
+  const hopA = 128, hop = hopA * d;
+  interface Band { sig: Float32Array; sr: number; k: number; W: number; tmin: number; tmax: number }
+  const band = (k: number, fmin: number, fmax: number, wf: number): Band => {
+    let sig = xs;
+    if (k > 1) { const m = Math.floor(n / k); sig = new Float32Array(m); for (let i = 0; i < m; i++) { let a = 0; for (let q = 0; q < k; q++) a += xs[i * k + q]; sig[i] = a / k; } }
+    const sr2 = srA / k, tmin = Math.max(2, Math.floor(sr2 / fmax)), tmax = Math.ceil(sr2 / fmin);
+    return { sig, sr: sr2, k, W: Math.max(wf === 2.5 ? 256 : 0, Math.round(wf * tmax)), tmin, tmax };
+  };
+  const bands = [band(1, 110, FMAX, 2.5), band(4, 58, 280, 2.2), band(8, FMIN, 75, 2.3)];
   const frames = Math.max(1, Math.floor(n / hopA));
   const f0 = new Float32Array(frames), rms = new Float32Array(frames);
 
   // 1) level tiap frame
+  const RW = Math.max(64, Math.round(0.032 * srA));
   for (let fi = 0; fi < frames; fi++) {
-    const st = fi * hopA - (W >> 1);
+    const st = fi * hopA - (RW >> 1);
     let e = 0;
-    for (let j = 0; j < W; j++) { const v = xs[st + j] ?? 0; e += v * v; }
-    rms[fi] = Math.sqrt(e / W);
+    for (let j = 0; j < RW; j++) { const v = xs[st + j] ?? 0; e += v * v; }
+    rms[fi] = Math.sqrt(e / RW);
   }
   const env = new Float32Array(frames), EW = Math.max(16, Math.round(0.024 * srA));
   for (let fi = 0; fi < frames; fi++) { const st = fi * hopA - (EW >> 1); let e = 0; for (let j = 0; j < EW; j++) { const v = xs[st + j] ?? 0; e += v * v; } env[fi] = Math.sqrt(e / EW); }
   const sorted = Array.from(rms).sort((a, b) => a - b), ref = sorted[Math.floor(sorted.length * 0.95)] || 0;
-  const gate = Math.max(0.002, ref * 0.04);
+  // gerbang level adaptif: dari lantai noise sample sendiri (persentil 10), dibatasi -48..-28 dB dari bagian terkeras
+  const p10 = sorted[Math.floor(sorted.length * 0.10)] || 0;
+  const gate = Math.max(0.0004, Math.min(0.04 * ref, Math.max(0.004 * ref, 2.5 * p10)));
+  // level acuan LOKAL (maks dalam +-150 ms): nada pelan di sebelah nada keras tidak ikut dianggap "kecil" karena acuan global
+  const refLoc = new Float32Array(frames), LR = Math.max(1, Math.round(0.15 * srA / hopA));
+  for (let fi = 0; fi < frames; fi++) { let m = 0; for (let k = Math.max(0, fi - LR); k <= Math.min(frames - 1, fi + LR); k++) if (rms[k] > m) m = rms[k]; refLoc[fi] = m; }
 
   // ambang pYIN: bobot Beta(2,18), kandidat = lembah pertama di bawah tiap ambang
   const TH = new Float64Array(NTH), WT = new Float64Array(NTH);
@@ -75,29 +91,49 @@ export function analyze(x: Float32Array, sr: number, onProgress?: (p: number) =>
 
   // 2) kandidat F0 + peluang bersuara tiap frame
   const candBin = new Float32Array(frames * MAXC), candP = new Float32Array(frames * MAXC), nCand = new Uint8Array(frames), pvA = new Float32Array(frames);
-  const dif = new Float32Array(tauMax + 2), cm = new Float32Array(tauMax + 2);
-  const cTau = new Float64Array(64), cCm = new Float64Array(64), pr = new Float64Array(64), used = new Uint8Array(64);
+  const maxTau = Math.max(...bands.map(b => b.tmax)), dif = new Float32Array(maxTau + 2), cm = new Float32Array(maxTau + 2);
+  const seg = new Float32Array(Math.max(...bands.map(b => b.W + b.tmax)) + 4);
+  const NV = 3 * MAXV + 2, vHz = new Float64Array(NV), vCm = new Float64Array(NV), order = new Int32Array(NV);
+  const cHz = new Float64Array(NV), cCm = new Float64Array(NV), pr = new Float64Array(NV), used = new Uint8Array(NV);
+  let nv = 0;
+
+  // lembah YIN (cmnd) satu frame di sinyal sig yang berpusat di c; menambah ke vHz / vCm, mengembalikan minimum cmnd
+  const valleys = (bd: Band, fi: number): number => {
+    const sig = bd.sig, W = bd.W, tauMin = bd.tmin, tauMax = bd.tmax, srX = bd.sr, st = Math.round(fi * hopA / bd.k) - (W >> 1), len = W + tauMax + 1;
+    for (let j = 0; j < len; j++) seg[j] = sig[st + j] ?? 0;
+    for (let tau = 1; tau <= tauMax; tau++) {
+      let s = 0;
+      for (let j = 0; j < W; j++) { const df = seg[j] - seg[j + tau]; s += df * df; }
+      dif[tau] = s;
+    }
+    let run = 0, minCm = 1, cnt = 0; cm[0] = 1;
+    for (let tau = 1; tau <= tauMax; tau++) { run += dif[tau]; cm[tau] = run > 0 ? dif[tau] * tau / run : 1; }
+    for (let tau = tauMin; tau < tauMax; tau++) {
+      if (cm[tau] < minCm) minCm = cm[tau];
+      if (cm[tau] < 0.75 && cm[tau] < cm[tau - 1] && cm[tau] <= cm[tau + 1] && cnt < MAXV && nv < NV) {
+        const a = cm[tau - 1], b = cm[tau], g = cm[tau + 1], den = a - 2 * b + g;
+        const dl = den > 0 ? Math.max(-1, Math.min(1, 0.5 * (a - g) / den)) : 0;   // interpolasi parabola: akurasi di bawah 1 sample
+        vHz[nv] = srX / (tau + dl); vCm[nv] = b; nv++; cnt++;
+      }
+    }
+    return minCm;
+  };
 
   for (let fi = 0; fi < frames; fi++) {
     if (rms[fi] > 1e-4) {
-      const st = fi * hopA - (W >> 1);
-      for (let tau = 1; tau <= tauMax; tau++) {
-        let s = 0;
-        for (let j = 0; j < W; j++) { const a = xs[st + j] ?? 0, b = xs[st + j + tau] ?? 0, df = a - b; s += df * df; }
-        dif[tau] = s;
-      }
-      let run = 0; cm[0] = 1;
-      for (let tau = 1; tau <= tauMax; tau++) { run += dif[tau]; cm[tau] = run > 0 ? dif[tau] * tau / run : 1; }
+      nv = 0;
+      let minCm = 1;
+      for (const bd of bands) { const m2 = valleys(bd, fi); if (m2 < minCm) minCm = m2; }
 
-      let nc = 0, minCm = 1;
-      for (let tau = tauMin; tau < tauMax; tau++) {
-        if (cm[tau] < minCm) minCm = cm[tau];
-        if (cm[tau] < 0.75 && cm[tau] < cm[tau - 1] && cm[tau] <= cm[tau + 1] && nc < 64) {
-          const a = cm[tau - 1], b = cm[tau], g = cm[tau + 1], den = a - 2 * b + g;
-          const dl = den > 0 ? Math.max(-1, Math.min(1, 0.5 * (a - g) / den)) : 0;   // interpolasi parabola: akurasi di bawah 1 sample
-          cTau[nc] = tau + dl; cCm[nc] = b; pr[nc] = 0; used[nc] = 0; nc++;
-        }
+      // urut frekuensi menurun (= tau menaik), gabung kandidat kembar antar tahap (dalam 40 sen: ambil yang cmnd lebih rendah; kandidat kembar antar band wajar di zona tumpang-tindih)
+      for (let i = 0; i < nv; i++) { let k = i; while (k > 0 && vHz[order[k - 1]] < vHz[i]) { order[k] = order[k - 1]; k--; } order[k] = i; }
+      let nc = 0;
+      for (let q = 0; q < nv; q++) {
+        const i = order[q];
+        if (nc > 0 && cHz[nc - 1] / vHz[i] < 1.0234) { if (vCm[i] < cCm[nc - 1]) { cHz[nc - 1] = vHz[i]; cCm[nc - 1] = vCm[i]; } continue; }
+        cHz[nc] = vHz[i]; cCm[nc] = vCm[i]; nc++;
       }
+      for (let i = 0; i < nc; i++) { pr[i] = 0; used[i] = 0; }
       let pv = 0;
       if (nc > 0) {
         let gi = 0; for (let i = 1; i < nc; i++) if (cCm[i] < cCm[gi]) gi = i;
@@ -109,12 +145,12 @@ export function analyze(x: Float32Array, sr: number, onProgress?: (p: number) =>
         const m = Math.min(MAXC, nc);
         for (let q = 0; q < m; q++) {
           let bi = -1; for (let i = 0; i < nc; i++) if (!used[i] && (bi < 0 || pr[i] > pr[bi])) bi = i;
-          used[bi] = 1; candBin[fi * MAXC + q] = binOf(srA / cTau[bi]); candP[fi * MAXC + q] = pr[bi];
+          used[bi] = 1; candBin[fi * MAXC + q] = binOf(cHz[bi]); candP[fi * MAXC + q] = pr[bi];
         }
         nCand[fi] = m;
       }
-      // frame glide / transisi: lembah dangkal (cm 0.3-0.5) tetap bukti periodik, asal energinya cukup. Tanpa ini glide dibuang jadi "tanpa suara".
-      const soft = Math.max(0, Math.min(1, (0.75 - minCm) / 0.45)) * Math.max(0, Math.min(1, rms[fi] / (0.1 * ref + 1e-9)));
+      // frame glide / transisi / sample berisik: lembah dangkal (cm 0.3-0.5) tetap bukti periodik, asal energinya cukup (relatif ke level LOKAL)
+      const soft = Math.max(0, Math.min(1, (0.75 - minCm) / 0.45)) * Math.max(0, Math.min(1, rms[fi] / (0.1 * refLoc[fi] + 1e-9)));
       pvA[fi] = Math.min(0.98, Math.max(Math.min(1, pv), 0.85 * soft));
     }
     if (onProgress && fi % 200 === 0) onProgress(0.9 * fi / frames);
@@ -123,9 +159,12 @@ export function analyze(x: Float32Array, sr: number, onProgress?: (p: number) =>
   // 3) HMM: state = NBIN bin pitch (25 cent) + 1 state tanpa suara, Viterbi
   const lStay = Math.log(0.99), lSwitch = Math.log(0.01), lToV = Math.log(0.01 / NBIN);
   const trW = new Float64Array(JUMP + 1);
-  for (let k = 0; k <= JUMP; k++) trW[k] = Math.log(0.99 * (JUMP + 1 - k) / ((JUMP + 1) * (JUMP + 1)));
+  // segitiga dengan PUNCAK 0.99 (bukan massa total 0.99): bertahan di pitch yang sama ~tanpa biaya, sama seperti bertahan di "tanpa suara".
+  // Versi lama membagi 0.99 ke 13 bin sehingga tiap frame bersuara kena denda ~2 nat dan jalur bersuara baru menang kalau peluang bersuara > ~0.88
+  // -> sample berisik / akustik / reverb dibuang hampir seluruhnya atau terpecah jadi potongan kecil.
+  for (let k = 0; k <= JUMP; k++) trW[k] = Math.log(0.99 * (JUMP + 1 - k) / (JUMP + 1));
   const bp = new Uint8Array(frames * NBIN), uBack = new Int16Array(frames);
-  let dv: Float64Array = new Float64Array(NBIN), nv: Float64Array = new Float64Array(NBIN), du = 0;
+  let dv: Float64Array = new Float64Array(NBIN), nvv: Float64Array = new Float64Array(NBIN), du = 0;
   const G = new Float64Array(NBIN), SQ2PI = Math.sqrt(2 * Math.PI);
   for (let fi = 0; fi < frames; fi++) {
     const pe = pvA[fi], nc = nCand[fi];
@@ -138,8 +177,8 @@ export function analyze(x: Float32Array, sr: number, onProgress?: (p: number) =>
       }
     } else G.fill(1 / NBIN);
     const lEu = Math.log(1 - pe + 1e-6);
-    // energi tinggi = penyanyi masih bersuara: biaya pindah ke "tanpa suara" dinaikkan (glide / ujung nada tidak gampang kebuang)
-    const hot = Math.max(0, Math.min(1, rms[fi] / (0.15 * ref + 1e-9))), lSw = lSwitch - 1.6 * hot;
+    // energi tinggi (relatif level lokal) = penyanyi masih bersuara: biaya pindah ke "tanpa suara" dinaikkan (glide / ujung nada tidak gampang kebuang)
+    const hot = Math.max(0, Math.min(1, rms[fi] / (0.15 * refLoc[fi] + 1e-9))), lSw = lSwitch - 1.6 * hot;
     for (let b = 0; b < NBIN; b++) G[b] = Math.min(1, 2.5 * G[b]);
     let bestV = -Infinity, bestVi = 0;
     if (fi === 0) {
@@ -155,12 +194,12 @@ export function analyze(x: Float32Array, sr: number, onProgress?: (p: number) =>
           const v = dv[pb] + trW[dd < 0 ? -dd : dd];
           if (v > best) { best = v; code = dd + JUMP; }
         }
-        nv[b] = best + Math.log(pe * (0.9 * G[b] + 0.1 / NBIN) + 1e-12);
+        nvv[b] = best + Math.log(pe * (0.9 * G[b] + 0.1 / NBIN) + 1e-12);
         bp[fi * NBIN + b] = code;
       }
       const stayU = du + lStay, fromV = bestV + lSw;
       if (stayU >= fromV) { uBack[fi] = -1; du = stayU + lEu; } else { uBack[fi] = bestVi; du = fromV + lEu; }
-      const t = dv; dv = nv; nv = t;
+      const t = dv; dv = nvv; nvv = t;
       let mx = du; for (let b = 0; b < NBIN; b++) if (dv[b] > mx) mx = dv[b];
       du -= mx; for (let b = 0; b < NBIN; b++) dv[b] -= mx;
     }
@@ -183,16 +222,20 @@ export function analyze(x: Float32Array, sr: number, onProgress?: (p: number) =>
     f0[fi] = hz;
   }
 
-  // gerbang level: frame yang jauh lebih pelan dari bagian terkeras dianggap tanpa pitch
+  // gerbang level: frame yang hampir tenggelam di lantai noise dianggap tanpa pitch
   for (let i = 0; i < frames; i++) if (rms[i] < gate) f0[i] = 0;
 
-  // celah pendek (<= 3 frame) di antara dua bagian bernada ditambal supaya satu nada tidak terputus
+  // celah di antara dua bagian bernada ditambal supaya satu nada tidak terputus: <= 3 frame bebas, sampai ~70 ms asal pitch kiri-kanan sama dan energi tidak jatuh dalam
+  // (jeda sungguhan antar nada = energi nyaris nol -> tidak ditambal)
+  const GAPMAX = Math.max(4, Math.round(0.07 * sr / hop));
   for (let i = 1; i < frames - 1; i++) {
     if (f0[i]) continue;
     let j = i; while (j < frames && !f0[j]) j++;
-    if (j < frames && j - i <= 3 && f0[i - 1]) {
-      const a = Math.log(f0[i - 1]), b = Math.log(f0[j]);
-      if (Math.abs(a - b) < 0.12) for (let k = i; k < j; k++) f0[k] = Math.exp(a + (b - a) * (k - i + 1) / (j - i + 1));
+    if (j < frames && j - i <= GAPMAX && f0[i - 1]) {
+      const a = Math.log(f0[i - 1]), b = Math.log(f0[j]), short = j - i <= 3;
+      let me = Infinity; for (let k = i; k < j; k++) me = Math.min(me, env[k]);
+      const edge = Math.min(env[i - 1], env[j]);
+      if (Math.abs(a - b) < (short ? 0.12 : 0.06) && (short || me >= 0.2 * edge)) for (let k = i; k < j; k++) f0[k] = Math.exp(a + (b - a) * (k - i + 1) / (j - i + 1));
     }
     i = j;
   }
@@ -202,7 +245,10 @@ export function analyze(x: Float32Array, sr: number, onProgress?: (p: number) =>
 }
 
 // ---------- segmentasi: bagian bernada -> daftar nada ----------
-const MINLEN = 6;
+const MINLEN = 6;       // panjang minimum potongan saat memecah
+const MINNOTE = 8;      // nada final lebih pendek dari ini (~46 ms) dibuang: biasanya kedip tracker / konsonan, bukan nada
+const VALLEY = 0.36;    // rasio lembah/puncak energi (env 24 ms): dip artikulasi 12 dB terukur ~0.32, tremolo 60% ~0.42; di bawah ambang = nada baru
+const MERGE_GAP = 12;   // celah (frame, ~70 ms) maksimum antar dua potongan yang masih boleh digabung jadi satu nada
 
 function trimmedMidi(mid: Float32Array, s: number, e: number): number {
   const len = e - s, m = len >= 10 ? Math.floor(len * 0.2) : 0;   // bagian tengah saja: ujung nada sering berisi glide dari / ke nada lain
@@ -253,10 +299,11 @@ export function segment(pt: PitchTrack): Note[] {
         for (let m = q.s + MINLEN; m < q.e - MINLEN; m++) {
           let isMin = true; for (let u = m - 3; u <= m + 3; u++) if (env[u] < env[m]) { isMin = false; break; }
           if (!isMin) continue;
+          // lembah harus >= ~10 dB di bawah puncak kiri/kanan; tremolo dan dip artikulasi ringan bukan nada baru
           let lm = 0, rm = 0;
           for (let u = Math.max(q.s, m - 40); u < m; u++) lm = Math.max(lm, env[u]);
           for (let u = m + 1; u < Math.min(q.e, m + 41); u++) rm = Math.max(rm, env[u]);
-          if (m - st >= MINLEN && env[m] < 0.5 * Math.min(lm, rm)) { split.push({ s: st, e: m }); st = m; m += MINLEN; }
+          if (m - st >= MINLEN && env[m] < VALLEY * Math.min(lm, rm)) { split.push({ s: st, e: m }); st = m; m += MINLEN; }
         }
         split.push({ s: st, e: q.e });
       }
@@ -268,7 +315,40 @@ export function segment(pt: PitchTrack): Note[] {
     }
     i = j;
   }
-  return notes;
+
+  // a) ekor yang sudah meluruh > 30 dB dari puncak nada (reverb / release panjang) bukan bagian nada: potong
+  for (const nt of notes) {
+    let pk = 0; for (let u = nt.s; u < nt.e; u++) if (env[u] > pk) pk = env[u];
+    while (nt.e - 1 > nt.s + MINLEN && env[nt.e - 1] < 0.03 * pk) nt.e--;
+  }
+  // b) potongan bersebelahan, pitch sama, tanpa lembah energi dalam di antaranya = satu nada yang terputus tracker -> gabung
+  for (let k = 0; k + 1 < notes.length;) {
+    const a = notes[k], b = notes[k + 1];
+    if (b.s - a.e <= MERGE_GAP && Math.abs(a.midi - b.midi) < 0.5) {
+      let pa = 0, pb = 0, vmin = Infinity;
+      for (let u = Math.max(a.s, a.e - 40); u < a.e; u++) pa = Math.max(pa, env[u]);
+      for (let u = b.s; u < Math.min(b.e, b.s + 40); u++) pb = Math.max(pb, env[u]);
+      for (let u = Math.max(a.s, a.e - 6); u < Math.min(b.e, b.s + 6); u++) vmin = Math.min(vmin, env[u]);
+      if (vmin >= VALLEY * Math.min(pa, pb)) {
+        const mm = trimmedMidi(mid, a.s, b.e);
+        notes.splice(k, 2, { s: a.s, e: b.e, midi: mm > 0 ? mm : a.midi, target: mm > 0 ? mm : a.midi });
+        continue;
+      }
+    }
+    k++;
+  }
+  // b2) scoop / jatuhan: potongan pendek di AWAL atau AKHIR rangkaian yang menempel ke nada jauh lebih panjang dan pitch-nya dekat adalah ornamen
+  //     (naik dari bawah, jatuh di ujung), bukan nada sendiri -> diserap ke nada panjang; kontur aslinya tetap terbawa karena render menggeser kurva f0
+  const ORN = 18;
+  for (let k = 0; k < notes.length;) {
+    const a = notes[k], la = a.e - a.s;
+    const prev = k > 0 && a.s - notes[k - 1].e <= 3 ? notes[k - 1] : null, next = k + 1 < notes.length && notes[k + 1].s - a.e <= 3 ? notes[k + 1] : null;
+    if (la < ORN && !prev && next && next.e - next.s >= 2.5 * la && Math.abs(a.midi - next.midi) < 2) { next.s = a.s; notes.splice(k, 1); continue; }
+    if (la < ORN && !next && prev && prev.e - prev.s >= 2.5 * la && Math.abs(a.midi - prev.midi) < 2) { prev.e = a.e; notes.splice(k, 1); continue; }
+    k++;
+  }
+  // c) kedip pendek dibuang
+  return notes.filter(nt => nt.e - nt.s >= MINNOTE);
 }
 
 // ---------- snap ke semiton dengan hysteresis ----------
