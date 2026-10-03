@@ -4,7 +4,7 @@
 // Inti DSP ada di mpcs-dsp.ts (murni), jalan di mpcs-worker.ts.
 
 import { ACCEPT as AUDIO_ACCEPT, isAudio } from './audio-upload-card';
-import { encodeWav, snapTargets, toMono, type Note, type PitchTrack } from './mpcs-dsp';
+import { encodeWav, shiftCurve, snapTargets, toMono, type Note, type PitchTrack } from './mpcs-dsp';
 
 const svg = (inner: string, size = 18): string =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
@@ -192,6 +192,7 @@ function build(): void {
     drawKeys(); drawOv();
     if (!S) return;
     const { lo, hi, pt, notes } = S, hopSec = pt.hop / pt.sr;
+    const sc = shiftCurve(pt, notes);   // geseran per frame persis seperti yang dirender (target + drift + vibrato), jadi garis = yang terdengar
     // baris semiton
     for (let m = lo; m <= hi; m++) {
       const y = (hi - m) * rowH, pc = ((m % 12) + 12) % 12;
@@ -204,7 +205,7 @@ function build(): void {
     // nada
     const bw = Math.max(1.2, hopSec * pps + .6);
     notes.forEach((nt, i) => {
-      const shift = nt.target - nt.midi, x0 = xOf((nt.s - .5) * hopSec), x1 = xOf((nt.e - .5) * hopSec), yc = yOf(nt.target);
+      const x0 = xOf((nt.s - .5) * hopSec), x1 = xOf((nt.e - .5) * hopSec), yc = yOf(nt.target);
       const on = i === sel;
       g.fillStyle = on ? 'rgba(166,108,255,.30)' : 'rgba(166,108,255,.16)';
       g.strokeStyle = on ? '#fff' : 'rgba(166,108,255,.7)'; g.lineWidth = on ? 1.5 : 1;
@@ -213,17 +214,18 @@ function build(): void {
       g.fillStyle = 'rgba(150,104,214,.85)';
       for (let f = nt.s; f < nt.e; f++) {
         if (!pt.f0[f]) continue;
-        const m = 69 + 12 * Math.log2(pt.f0[f] / 440) + shift, h = Math.min(1, pt.rms[f] / S!.ref) * rowH * .42 + .5;
+        const m = 69 + 12 * Math.log2(pt.f0[f] / 440) + sc[f], h = Math.min(1, pt.rms[f] / S!.ref) * rowH * .42 + .5;
         g.fillRect(xOf(f * hopSec - hopSec / 2), yOf(m) - h, bw, h * 2);
       }
       // pitch asli (redup, hanya kalau digeser) dan pitch hasil (oranye)
-      const line = (add: number, style: string, w: number): void => {
+      const line = (add: number | Float32Array, style: string, w: number): void => {
         g.strokeStyle = style; g.lineWidth = w; g.beginPath();
-        for (let f = nt.s; f < nt.e; f++) { if (!pt.f0[f]) continue; const x = xOf(f * hopSec), y = yOf(69 + 12 * Math.log2(pt.f0[f] / 440) + add); f === nt.s ? g.moveTo(x, y) : g.lineTo(x, y); }
+        for (let f = nt.s; f < nt.e; f++) { if (!pt.f0[f]) continue; const x = xOf(f * hopSec), y = yOf(69 + 12 * Math.log2(pt.f0[f] / 440) + (typeof add === 'number' ? add : add[f])); f === nt.s ? g.moveTo(x, y) : g.lineTo(x, y); }
         g.stroke();
       };
-      if (Math.abs(shift) > .01) line(0, 'rgba(255,255,255,.28)', 1);
-      line(shift, '#ff8a3d', 1.4);
+      let moved = false; for (let f = nt.s; f < nt.e; f++) if (pt.f0[f] && Math.abs(sc[f]) > .01) { moved = true; break; }
+      if (moved) line(0, 'rgba(255,255,255,.28)', 1);   // pitch asli (redup) kalau hasilnya berbeda: digeser, drift, atau vibrato diubah
+      line(sc, '#ff8a3d', 1.4);
     });
   }
 
@@ -362,7 +364,7 @@ function build(): void {
     if (!k || !S) return;
     const v = Number(t.value) / 100, list = sel >= 0 ? [S.notes[sel]] : S.notes;
     list.forEach(n => { if (v >= 0.995) delete n[k]; else n[k] = v; });
-    dirty = true; ver++; if (playing) restartPlay();
+    dirty = true; ver++; draw(); if (playing) restartPlay();   // gambar ulang: garis oranye ikut kekuatan drift / vibrato
   });
   const zoom = (k: number): void => {
     if (!S) return;

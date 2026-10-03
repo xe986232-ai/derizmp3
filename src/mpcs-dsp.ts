@@ -347,6 +347,23 @@ export function segment(pt: PitchTrack): Note[] {
     if (la < ORN && !next && prev && prev.e - prev.s >= 2.5 * la && Math.abs(a.midi - prev.midi) < 2) { prev.e = a.e; notes.splice(k, 1); continue; }
     k++;
   }
+  // b3) vibrato lebar (> +-0.75 semiton) melewati hysteresis dan memecah satu nada jadi potongan zig-zag (naik-turun bergantian, tiap potongan ~setengah siklus).
+  //     >= 5 potongan pendek bersambung yang pitch-nya bergantian naik/turun dalam rentang <= 2.4 semiton = satu nada ber-vibrato -> gabung
+  const isShort = (nt: Note): boolean => nt.e - nt.s <= 40;
+  for (let k = 0; k + 4 < notes.length;) {
+    let j = k, lo = notes[k].midi, hi = lo, last = 0;
+    while (j + 1 < notes.length) {
+      const a = notes[j], b = notes[j + 1], dm = b.midi - a.midi, dir = Math.sign(dm);
+      if (b.s - a.e > 3 || !isShort(a) || !isShort(b) || Math.abs(dm) < 0.4 || dir === last) break;
+      const nlo = Math.min(lo, b.midi), nhi = Math.max(hi, b.midi);
+      if (nhi - nlo > 2.4) break;
+      lo = nlo; hi = nhi; last = dir; j++;
+    }
+    if (j - k + 1 >= 5) {
+      const s0 = notes[k].s, e0 = notes[j].e, mm = trimmedMidi(mid, s0, e0);
+      notes.splice(k, j - k + 1, { s: s0, e: e0, midi: mm, target: mm });
+    } else k++;
+  }
   // c) kedip pendek dibuang
   return notes.filter(nt => nt.e - nt.s >= MINNOTE);
 }
@@ -371,13 +388,6 @@ function cubic(x: Float32Array, p: number): number {
   if (i < 1 || i >= x.length - 2) return 0;
   const y0 = x[i - 1], y1 = x[i], y2 = x[i + 1], y3 = x[i + 2];
   return y1 + 0.5 * f * (y2 - y0 + f * (2 * y0 - 5 * y1 + 4 * y2 - y3 + f * (3 * (y1 - y2) + y3 - y0)));
-}
-
-function boxSmooth(a: Float64Array, w: number): Float64Array {
-  const n = a.length, out = new Float64Array(n), pre = new Float64Array(n + 1), h = w >> 1;
-  for (let i = 0; i < n; i++) pre[i + 1] = pre[i] + a[i];
-  for (let i = 0; i < n; i++) { const lo = Math.max(0, i - h), hi = Math.min(n, i + h + 1); out[i] = (pre[hi] - pre[lo]) / (hi - lo); }
-  return out;
 }
 
 // titik pitch (epoch): puncak dengan polaritas dominan; kandidat yang jaraknya tidak konsisten dengan periode dibuang,
@@ -421,41 +431,97 @@ function epochMarks(x: Float32Array, a: number, b: number, F: (t: number) => num
   return marks;
 }
 
+// ---------- pemisah drift (lambat) dan vibrato (cepat) ----------
+// Rata-rata bergerak selebar tepat SATU periode vibrato menghapus vibrato itu sepenuhnya (sinusoid habis di frekuensi 1/T, di fase mana pun).
+// Dua kali berturut-turut (segitiga) supaya sisa akibat laju vibrato yang tidak stabil / periode non-bulat mengecil jadi < 1%.
+// Di ujung nada jendela DIGESER ke dalam (panjangnya tetap satu periode penuh), bukan dipotong: pemotongan meninggalkan sisa vibrato di ~setengah periode pertama / terakhir.
+function boxClamp(a: Float64Array, L: number): Float64Array {
+  const n = a.length, out = new Float64Array(n), pre = new Float64Array(n + 1);
+  for (let i = 0; i < n; i++) pre[i + 1] = pre[i] + a[i];
+  const C = (x: number): number => { const i = Math.min(n - 1, Math.max(0, Math.floor(x))); return pre[i] + (Math.min(n, x) - i) * a[i]; };   // jumlah kumulatif, pecahan diinterpolasi
+  const w = Math.min(L, n);
+  for (let i = 0; i < n; i++) {
+    let lo = i + 0.5 - w / 2, hi = i + 0.5 + w / 2;
+    if (lo < 0) { hi -= lo; lo = 0; } if (hi > n) { lo -= hi - n; hi = n; }
+    out[i] = (C(hi) - C(Math.max(0, lo))) / Math.max(1e-9, hi - Math.max(0, lo));
+  }
+  return out;
+}
+
+// laju vibrato dominan di 3.5..8.5 Hz lewat DFT berjendela Hann pada deviasi pitch; null kalau tidak ada vibrato berarti (< 3 sen) atau nada terlalu pendek
+function vibPeriod(dev: Float64Array, fps: number): number | null {
+  const n = dev.length;
+  if (n < 0.3 * fps) return null;
+  let mu = 0; for (let i = 0; i < n; i++) mu += dev[i]; mu /= n;
+  let bestA = 0, bestF = 0;
+  for (let f = 3.5; f <= 8.5; f += 0.05) {
+    let re = 0, im = 0, ws = 0;
+    for (let i = 0; i < n; i++) { const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * (i + 0.5) / n), p = 2 * Math.PI * f * i / fps, r = (dev[i] - mu) * w; re += r * Math.cos(p); im -= r * Math.sin(p); ws += w; }
+    const amp = 2 * Math.hypot(re, im) / ws;
+    if (amp > bestA) { bestA = amp; bestF = f; }
+  }
+  return bestA > 0.03 ? fps / bestF : null;
+}
+
+function slowPart(dev: Float64Array, fps: number): Float64Array {
+  const T = vibPeriod(dev, fps) ?? 0.2 * fps;
+  return boxClamp(boxClamp(dev, T), T);
+}
+
+// kurva geseran (semiton) satu kelompok nada bersambung: bagian tetap per nada (dihaluskan di zona transisi) + koreksi drift / vibrato per nada.
+// Dipakai BERSAMA oleh render() dan tampilan (shiftCurve) supaya garis yang digambar = yang terdengar.
+function groupShift(g: Note[], f0: Float32Array, hop: number, sr: number, transMs: number): { gs: number; sh: Float64Array } | null {
+  const gs = g[0].s, ge = g[g.length - 1].e, L = ge - gs, fps = sr / hop;
+  if (L < 2) return null;
+  const Z = Math.max(1, Math.round(transMs / 1000 * sr / hop)) | 1, zh = (Z - 1) / 2;   // lebar zona transisi (frame, ganjil)
+  const kern = new Float64Array(Z); { let ks = 0; for (let q = -zh; q <= zh; q++) { kern[q + zh] = 0.5 + 0.5 * Math.cos(Math.PI * q / (zh + 1)); ks += kern[q + zh]; } for (let q = 0; q < Z; q++) kern[q] /= ks; }
+  const step = new Float64Array(L), has = new Uint8Array(L), extra = new Float64Array(L);
+  for (const nt of g) {
+    for (let f = nt.s; f < nt.e; f++) { step[f - gs] = nt.target - nt.midi; has[f - gs] = 1; }
+    const dk = nt.drift ?? 1, vk = nt.vib ?? 1;
+    if (dk !== 1 || vk !== 1) {
+      const len = nt.e - nt.s, dev = new Float64Array(len);
+      for (let q = 0; q < len; q++) { const hz = f0[nt.s + q]; dev[q] = hz ? Math.max(-3, Math.min(3, midiOf(hz) - nt.midi)) : (q ? dev[q - 1] : 0); }
+      const slow = slowPart(dev, fps);
+      for (let q = 0; q < len; q++) extra[nt.s + q - gs] = (dk - 1) * slow[q] + (vk - 1) * (dev[q] - slow[q]);
+    }
+  }
+  for (let f = 1; f < L; f++) if (!has[f]) step[f] = step[f - 1];
+  const sh = new Float64Array(L);
+  for (let f = 0; f < L; f++) {
+    let v = 0; for (let q = -zh; q <= zh; q++) v += kern[q + zh] * step[Math.min(L - 1, Math.max(0, f + q))];
+    sh[f] = v + extra[f];
+  }
+  return { gs, sh };
+}
+
+// nada yang bersambung (celah <= 3 frame) dirender sebagai satu rangkaian supaya geseran bisa berubah mulus di perbatasan
+function groupNotes(notes: Note[]): Note[][] {
+  const sorted = notes.slice().sort((p, q) => p.s - q.s), groups: Note[][] = [];
+  for (const nt of sorted) { const g = groups[groups.length - 1]; if (g && nt.s - g[g.length - 1].e <= 3) g.push(nt); else groups.push([nt]); }
+  return groups;
+}
+
+// geseran (semiton) per frame pitch-track, persis seperti yang dipakai render(): pitch hasil di frame f = midi(f0[f]) + hasil[f]. Untuk menggambar garis hasil.
+export function shiftCurve(pt: PitchTrack, notes: Note[], transMs = 45): Float32Array {
+  const out = new Float32Array(pt.f0.length);
+  for (const g of groupNotes(notes)) { const r = groupShift(g, pt.f0, pt.hop, pt.sr, transMs); if (r) for (let f = 0; f < r.sh.length; f++) out[r.gs + f] = r.sh[f]; }
+  return out;
+}
+
 export function render(x: Float32Array, pt: PitchTrack, notes: Note[], fadeMs = 12, transMs = 45): Float32Array {
   const { sr, hop, f0 } = pt, n = x.length;
   const fade = Math.max(2, Math.round(sr * fadeMs / 1000)) & ~1, hf = fade / 2;
   const acc = new Float32Array(n), W = new Float32Array(n);
   const ramp = (u: number): number => (u <= 0 ? 0 : u >= 1 ? 1 : 0.5 - 0.5 * Math.cos(Math.PI * u));   // naik halus 0 -> 1
 
-  // nada yang bersambung (celah <= 3 frame) dirender sebagai satu rangkaian supaya geseran bisa berubah mulus di perbatasan
-  const sorted = notes.slice().sort((p, q) => p.s - q.s), groups: Note[][] = [];
-  for (const nt of sorted) { const g = groups[groups.length - 1]; if (g && nt.s - g[g.length - 1].e <= 3) g.push(nt); else groups.push([nt]); }
-  const Z = Math.max(1, Math.round(transMs / 1000 * sr / hop)) | 1, zh = (Z - 1) / 2;   // lebar zona transisi (frame, ganjil)
-  const kern = new Float64Array(Z); { let ks = 0; for (let q = -zh; q <= zh; q++) { kern[q + zh] = 0.5 + 0.5 * Math.cos(Math.PI * q / (zh + 1)); ks += kern[q + zh]; } for (let q = 0; q < Z; q++) kern[q] /= ks; }
-  const DW = Math.max(3, Math.round(0.22 * sr / hop)) | 1;                               // jendela pemisah drift (lambat) dan vibrato (cepat)
-
-  for (const g of groups) {
+  for (const g of groupNotes(notes)) {
     const gs = g[0].s, ge = g[g.length - 1].e, L = ge - gs;
-    if (L < 2) continue;
-    // 1) kurva geseran: bagian tetap per nada, dihaluskan di zona transisi; ditambah koreksi drift / vibrato per nada
-    const step = new Float64Array(L), has = new Uint8Array(L), extra = new Float64Array(L);
-    for (const nt of g) {
-      for (let f = nt.s; f < nt.e; f++) { step[f - gs] = nt.target - nt.midi; has[f - gs] = 1; }
-      const dk = nt.drift ?? 1, vk = nt.vib ?? 1;
-      if (dk !== 1 || vk !== 1) {
-        const len = nt.e - nt.s, dev = new Float64Array(len);
-        for (let q = 0; q < len; q++) { const hz = f0[nt.s + q]; dev[q] = hz ? Math.max(-3, Math.min(3, midiOf(hz) - nt.midi)) : (q ? dev[q - 1] : 0); }
-        const slow = boxSmooth(dev, DW);
-        for (let q = 0; q < len; q++) extra[nt.s + q - gs] = (dk - 1) * slow[q] + (vk - 1) * (dev[q] - slow[q]);
-      }
-    }
-    for (let f = 1; f < L; f++) if (!has[f]) step[f] = step[f - 1];
-    const sh = new Float64Array(L);
-    let peak = 0;
-    for (let f = 0; f < L; f++) {
-      let v = 0; for (let q = -zh; q <= zh; q++) v += kern[q + zh] * step[Math.min(L - 1, Math.max(0, f + q))];
-      sh[f] = v + extra[f]; peak = Math.max(peak, Math.abs(sh[f]));
-    }
+    // 1) kurva geseran (dibagi dengan tampilan lewat groupShift)
+    const gsh = groupShift(g, f0, hop, sr, transMs);
+    if (!gsh) continue;
+    const sh = gsh.sh;
+    let peak = 0; for (let f = 0; f < L; f++) peak = Math.max(peak, Math.abs(sh[f]));
     if (peak < 0.005) continue;
 
     // 2) f0 di grup: frame tanpa pitch diisi interpolasi (log) supaya F(t) selalu ada
