@@ -291,9 +291,10 @@ function build(): void {
     notes.forEach((nt, i) => {
       const x0 = xOf((nt.s - .5) * hopSec), x1 = xOf((nt.e - .5) * hopSec), yc = yOf(nt.target);
       const on = i === sel;
-      g.fillStyle = on ? 'rgba(255,92,160,.30)' : 'rgba(255,92,160,.16)';
-      g.strokeStyle = on ? '#fff' : 'rgba(255,92,160,.7)'; g.lineWidth = on ? 1.5 : 1;
-      g.beginPath(); g.roundRect(x0, yc - rowH * .5, Math.max(4, x1 - x0), rowH, Math.min(5, rowH / 2)); g.fill(); g.stroke();
+      if (on) {   // tanpa card pink: hanya garis putih tipis penanda nada terpilih
+        g.strokeStyle = '#fff'; g.lineWidth = 1.5;
+        g.beginPath(); g.roundRect(x0, yc - rowH * .5, Math.max(4, x1 - x0), rowH, Math.min(5, rowH / 2)); g.stroke();
+      }
       // waveform sample asli (min/max per kolom pixel, satu polygon solid) mengikuti garis pitch hasil
       const nF = nt.e - nt.s, cy = new Float32Array(nF); let last = NaN;
       for (let i = 0; i < nF; i++) { const f = nt.s + i; cy[i] = pt.f0[f] ? yOf(69 + 12 * Math.log2(pt.f0[f] / 440) + sc[f]) : NaN; }
@@ -301,17 +302,19 @@ function build(): void {
       for (let i = nF - 1, nx = NaN; i >= 0; i--) { if (cy[i] === cy[i]) nx = cy[i]; else cy[i] = nx; }
       if (nF > 0 && cy[0] === cy[0]) {
         const px = 1 / dpr, xa = Math.max(0, Math.floor(x0 * dpr) / dpr), xb = Math.min(W, x1), n = Math.ceil((xb - xa) / px);
-        const tops = new Float32Array(Math.max(0, n)), bots = new Float32Array(Math.max(0, n)), r = [0, 0], half = rowH * .48 * .92;
+        const tops = new Float32Array(Math.max(0, n)), bots = new Float32Array(Math.max(0, n)), r = [0, 0], half = rowH * .5;
+        peakRange(pk, sr, (nt.s - .5) * hopSec, (nt.e - .5) * hopSec, r);
+        const lp = Math.max(-r[0], r[1]), norm = lp > 1e-4 ? 1 / lp : 1;   // skala per nada: puncak nada ini = tinggi penuh blok, jadi nada pelan pun memenuhi blok
         for (let i = 0; i < n; i++) {
           const x = xa + i * px;
           peakRange(pk, sr, x / pps, (x + px) / pps, r);
           const fi = Math.max(0, Math.min(nF - 1, x / pps / hopSec - nt.s)), i0 = Math.floor(fi), i1 = Math.min(nF - 1, i0 + 1);
           const m = cy[i0] + (cy[i1] - cy[i0]) * (fi - i0);
-          let yt = m - r[1] * pk.norm * half, yb = m - r[0] * pk.norm * half;
+          let yt = m - r[1] * norm * half, yb = m - r[0] * norm * half;
           if (yb - yt < 2 * px) { yt = m - px; yb = m + px; }   // minimal 2 pixel supaya bagian senyap tetap terlihat
           tops[i] = yt; bots[i] = yb;
         }
-        g.fillStyle = 'rgba(214,60,130,.9)';
+        g.fillStyle = '#e0458a';
         fillColumns(g, xa, px, tops, bots, n);
       }
       // pitch asli (redup, hanya kalau digeser) dan pitch hasil (oranye)
