@@ -1,6 +1,7 @@
 // Record Mode: card pattern (kotak berwarna di timeline) bisa diangkat, dibawa bebas ke mana saja, dan digoyang (rotasi saja, tanpa melar).
 // Cara pakai: klik + TAHAN pattern (350ms, jangan geser) -> terangkat jadi overlay -> bawa ke mana saja -> lepas -> memantul balik.
 // Geser cepat tanpa menahan tetap memindah pattern kiri-kanan seperti biasa (logika di main.ts).
+// Playhead utama disembunyikan selama itu dan dipindah jadi garis mini di dalam salinan (tinggi = pattern), jalan sesuai alur.
 // Yang digoyang adalah SALINAN visual (clone) di <body>; pattern aslinya tetap di lane tapi disembunyikan (muncul lagi saat salinan mendarat),
 // sehingga data, jadwal audio, dan riwayat undo tidak tersentuh.
 import { POS_DRAG, POS_FREE, ROT, HOLD_MS, HOLD_SLOP, MAX_TILT, LIFT, REDUCE } from './record-jelly';
@@ -18,6 +19,8 @@ export function initPatternJelly(lanesEl: HTMLElement): void {
   let tx = 0, ty = 0, p0x = 0, p0y = 0, lx = 0, ly = 0;
   let gx = 0, gy = 0;
   let nat = { l: 0, t: 0, r: 0, b: 0 };
+  let phLine: HTMLElement | null = null;  // garis playhead mini di dalam salinan (panjang = tinggi pattern)
+  const phEl = document.getElementById('playhead') as HTMLElement | null;
 
   function measureNatural(): void {
     if (!card) return;
@@ -30,6 +33,23 @@ export function initPatternJelly(lanesEl: HTMLElement): void {
     const vw = root.clientWidth, vh = window.innerHeight, m = 6;
     tx = Math.min(Math.max(tx, Math.min(m - nat.l, 0)), Math.max(vw - m - nat.r, 0));
     ty = Math.min(Math.max(ty, Math.min(m - nat.t, 0)), Math.max(vh - m - nat.b, 0));
+  }
+
+
+  // posisi playhead utama (px, koordinat lanes) dibaca dari style yang sedang berjalan (ikut animasi WAAPI-nya)
+  function playheadX(): number {
+    if (!phEl) return NaN;
+    const m = /^(-?[\d.]+)px/.exec(getComputedStyle(phEl).translate);
+    return m ? parseFloat(m[1]) : 0;
+  }
+  // playhead dipindah ke salinan: muncul hanya saat playhead melewati rentang pattern, lalu jalan sesuai alur
+  function updatePlayheadLine(): void {
+    if (!phLine || !src) return;
+    const px = playheadX(), l = parseFloat(src.style.left) || 0, w = parseFloat(src.style.width) || 0;
+    const rel = px - l;
+    if (!(rel >= 0 && rel <= w)) { phLine.style.display = 'none'; return; }
+    phLine.style.display = 'block';
+    phLine.style.transform = 'translateX(' + rel.toFixed(2) + 'px)';
   }
 
   function start(): void {
@@ -45,6 +65,10 @@ export function initPatternJelly(lanesEl: HTMLElement): void {
     s.width = r.width + 'px'; s.height = r.height + 'px';
     s.margin = '0'; s.zIndex = '450'; s.pointerEvents = 'none';
     s.transformOrigin = 'center center';
+    phLine = document.createElement('div');
+    phLine.className = 'pattern__ph';
+    phLine.style.color = phEl ? getComputedStyle(phEl).color : '#e8e8ee';
+    card.appendChild(phLine);
     const lane = src.parentElement as HTMLElement;
     const col = lane.style.getPropertyValue('--track-color');
     layer = document.createElement('div');
@@ -53,7 +77,8 @@ export function initPatternJelly(lanesEl: HTMLElement): void {
     layer.appendChild(card);
     document.body.appendChild(layer);
     src.classList.add('is-jelly-src');
-    root.classList.add('is-pat-jelly');
+    root.classList.add('is-pat-jelly');   // playhead utama disembunyikan (CSS), diganti garis di salinan
+    updatePlayheadLine();
     last = performance.now();
     if (!raf) raf = requestAnimationFrame(tick);
   }
@@ -64,7 +89,7 @@ export function initPatternJelly(lanesEl: HTMLElement): void {
     if (layer) { layer.remove(); layer = null; }
     if (src) src.classList.remove('is-jelly-src');
     root.classList.remove('is-pat-jelly');
-    src = card = null;
+    src = card = phLine = null;
     x = y = vx = vy = rot = rv = 0; lift = 1;
     held = pending = false; pointerId = -1;
   }
@@ -95,7 +120,7 @@ export function initPatternJelly(lanesEl: HTMLElement): void {
     const dt = Math.min((now - last) / 1000, 1 / 30); last = now;
     for (let i = 0; i < 2; i++) step(dt / 2);
     if (held) { measureNatural(); clampTarget(); }
-    paint();
+    paint(); updatePlayheadLine();
     if (!held && Math.abs(x) < 0.15 && Math.abs(y) < 0.15 && Math.abs(vx) < 1 && Math.abs(vy) < 1 && Math.abs(rot) < 0.1 && Math.abs(rv) < 1) { finish(); return; }
     raf = requestAnimationFrame(tick);
   }
