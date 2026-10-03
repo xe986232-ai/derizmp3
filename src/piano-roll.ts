@@ -69,7 +69,8 @@ let ghostSrc: Ghost[] = [];
 let selected = new Set<number>();
 let undoStack: string[] = [];
 let redoStack: string[] = [];
-let lastLen = 1;
+let lastLen = 1;     // panjang nada baru = panjang nada terakhir yang dibuat / di-resize / DIKLIK
+let lastSlide = false;   // nada baru ikut berstatus slide kalau nada terakhir yang dibuat / diklik / di-toggle adalah slide
 let lastVel = 1;     // velocity terakhir yang diatur di panel Velocity: dipakai nada yang dipasang berikutnya
 let velOpen = false; // panel Velocity (di bawah grid) terbuka / tertutup; tetap sama selama aplikasi hidup
 let velPanel!: HTMLElement, velBtn!: HTMLButtonElement, vc!: HTMLCanvasElement;
@@ -705,6 +706,7 @@ function toggleSlide() {   // semua nada terpilih: kalau sudah slide semua -> ma
   const sel = st.notes.filter(n => selected.has(n.id)), all = sel.every(n => n.sl);
   pushUndo();
   for (const n of sel) { if (all) delete n.sl; else n.sl = true; }
+  lastSlide = !all;   // nada baru mengikuti pilihan terakhir: slide dinyalakan -> nada baru slide, dimatikan -> biasa
   updateUI(); schedule(); flashBtn('slide');
 }
 function selectAll() { selected = new Set(st.notes.map(n => n.id)); updateUI(); schedule(); }
@@ -827,10 +829,11 @@ function onDown(e: PointerEvent) {
   }
   if (h) {                                      // klik di nada: pilih + pindah
     if (e.shiftKey && t === 'select') {
-      if (selected.has(h.n.id)) selected.delete(h.n.id); else selected.add(h.n.id);
+      if (selected.has(h.n.id)) selected.delete(h.n.id); else { selected.add(h.n.id); rememberNote(h.n); }
       updateUI(); schedule(); return;
     }
     if (!selected.has(h.n.id)) { if (!e.shiftKey) selected.clear(); selected.add(h.n.id); }
+    rememberNote(h.n);   // klik nada: nada berikutnya meniru panjang (dan slide) nada ini
     g = {...base, kind: 'move', anchor: {...h.n}, orig: st.notes.filter(n => selected.has(n.id)).map(n => ({...n}))};
     updateUI(); schedule(); return;
   }
@@ -860,6 +863,11 @@ function holdMarquee() {
   updateUI(); schedule();
 }
 
+function rememberNote(n: Note) {   // contoh: klik nada 2 blok + slide -> nada baru yang dipasang juga 2 blok + slide
+  if (n.l >= unit()) lastLen = n.l;
+  lastSlide = !!n.sl;
+}
+
 function addNoteAt(x: number, y: number): Note | null {
   const p = P_MAX - Math.floor(y / rowH);
   if (p < P_MIN || p > P_MAX || x < 0 || x >= total * ppb) return null;
@@ -867,7 +875,7 @@ function addNoteAt(x: number, y: number): Note | null {
   const l = Math.min(lastLen, total - s);
   if (l <= 0) return null;
   pushUndo();
-  const n: Note = {id: st.nextId++, p, s, l, ...(lastVel < 1 ? {v: lastVel} : {})};   // nada baru memakai velocity terakhir yang diatur di panel
+  const n: Note = {id: st.nextId++, p, s, l, ...(lastSlide ? {sl: true} : {}), ...(lastVel < 1 ? {v: lastVel} : {})};   // nada baru memakai velocity terakhir yang diatur di panel
   st.notes.push(n);   // note baru tidak langsung terpilih; baru terpilih kalau diklik lagi
   return n;
 }
