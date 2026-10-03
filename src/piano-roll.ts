@@ -8,8 +8,10 @@ export interface PianoRollOpts {
   track: string;
   pattern: string;
   color?: string;
-  ghosts?: Array<{ key: string; color: string }>;   // nada milik instrumen lain di pattern yang sama: ditampilkan meredup, hanya untuk dilihat (tidak bisa disentuh)
+  ghosts?: Ghost[];   // nada milik instrumen lain di pattern yang sama: ditampilkan meredup; tidak bisa diedit, tapi ditahan = pindah ke VST pemiliknya (lewat open)
+  keepView?: boolean; // dipanggil saat pindah antar VST: pertahankan zoom, scroll & tool, jangan reset tampilan
 }
+export interface Ghost { key: string; color: string; open?: () => void; }   // open: membuka piano roll untuk VST pemilik nada ini
 
 interface Note { id: number; p: number; s: number; l: number; sl?: boolean; }   // p: MIDI, s/l: dalam ketukan
 interface State { notes: Note[]; nextId: number; }
@@ -61,7 +63,7 @@ let ppb = 64, rowH = 18;
 let tool: Tool = 'draw';
 let snapOn = true;   // tombol Snap (lampu indikator): nyala = note menempel ke garis grid yang terlihat
 let color = '#3fbf5f';
-let ghostSrc: Array<{ key: string; color: string }> = [];
+let ghostSrc: Ghost[] = [];
 let selected = new Set<number>();
 let undoStack: string[] = [];
 let redoStack: string[] = [];
@@ -572,6 +574,7 @@ interface Gesture {
   t0: number;                 // waktu mulai (animasi bulatan)
   desel?: boolean;            // tap di area kosong saat ada seleksi: hanya lepas seleksi, jangan pasang nada
   touch?: boolean; moved?: boolean; timer?: number;   // tahan di area kosong (timer) lalu seret = blok / marquee
+  gh?: Ghost;                 // tap awal jatuh di nada VST lain: kalau ditahan sampai HOLD_MS, pindah ke VST itu
 }
 let g: Gesture | null = null;
 const ptrs = new Map<number, {x: number; y: number}>();
@@ -588,6 +591,19 @@ function hit(cx: number, cy: number): {n: Note} | null {
     if (n.p !== p) continue;
     const x0 = n.s * ppb, x1 = (n.s + n.l) * ppb;
     if (cx >= x0 && cx <= x1) return {n};
+  }
+  return null;
+}
+// nada VST lain (ghost) di titik ini; yang digambar paling atas (terakhir) menang. Hanya ghost yang punya open() yang bisa dituju.
+function hitGhost(cx: number, cy: number): Ghost | null {
+  const p = P_MAX - Math.floor(cy / rowH);
+  for (let i = ghostSrc.length - 1; i >= 0; i--) {
+    const gs = ghostSrc[i], gst = states.get(gs.key);
+    if (!gs.open || !gst) continue;
+    for (let j = gst.notes.length - 1; j >= 0; j--) {
+      const n = gst.notes[j];
+      if (n.p === p && cx >= n.s * ppb && cx <= n.s * ppb + Math.max(3, n.l * ppb)) return gs;
+    }
   }
   return null;
 }
@@ -660,12 +676,19 @@ function onDown(e: PointerEvent) {
   // draw di area kosong: tap/klik = pasang nada; seret = nada panjang (mouse) / scroll (sentuh); TAHAN lalu seret = blok nada (marquee)
   const touch = e.pointerType === 'touch', desel = selected.size > 0;
   if (desel && !touch) { selected.clear(); updateUI(); schedule(); }   // ada seleksi: klik kosong cuma melepas seleksi dulu
-  g = {...base, kind: 'tapdraw', desel, touch};
+  g = {...base, kind: 'tapdraw', desel, touch, gh: hitGhost(x, y) || undefined};
   g.timer = window.setTimeout(holdMarquee, HOLD_MS);
 }
 const HOLD_MS = 320;
 function holdMarquee() {
   if (!g || g.kind !== 'tapdraw' || g.moved) return;
+  if (g.gh) {                                   // tahan di nada VST lain: pindah ke VST itu (zoom & scroll tetap)
+    const open = g.gh.open!;
+    g = null; ptrs.clear(); updateUI(); schedule();
+    if (navigator.vibrate) navigator.vibrate(12);
+    open();
+    return;
+  }
   g.timer = undefined; g.kind = 'marquee'; g.base = new Set(); selected.clear();
   if (navigator.vibrate) navigator.vibrate(12);
   updateUI(); schedule();
@@ -1012,16 +1035,22 @@ export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.
   root.style.setProperty('--pr-color', color);
   root.setAttribute('aria-label', opts.track + ' – ' + opts.pattern);
 
+  const keep = !!opts.keepView && isPianoRollOpen();   // pindah antar VST saat piano roll sudah terbuka: tampilan tidak direset
+  const kl = keep ? curL() : 0, kt = keep ? curT() : 0;
   root.hidden = false; void root.offsetWidth; root.classList.add('is-open');
   const vw = sc.clientWidth, vh = sc.clientHeight;
-  ppb = clamp(Math.floor(vw / total), 32, 96); rowH = 18;
+  if (!keep) { ppb = clamp(Math.floor(vw / total), 32, 96); rowH = 18; }
   applySize();
-  const seen = st.notes.length ? st.notes : ghostSrc.flatMap(gs => states.get(gs.key)?.notes ?? []);   // belum ada nada sendiri: pusatkan ke nada instrumen lain
-  const mid = seen.length ? seen.reduce((a, n) => a + n.p, 0) / seen.length : 62;   // mulai di sekitar C4
-  sc.scrollLeft = 0; sc.scrollTop = Math.max(0, (P_MAX - mid) * rowH - vh / 2);
+  if (keep) { sc.scrollLeft = kl; sc.scrollTop = kt; }
+  else {
+    const seen = st.notes.length ? st.notes : ghostSrc.flatMap(gs => states.get(gs.key)?.notes ?? []);   // belum ada nada sendiri: pusatkan ke nada instrumen lain
+    const mid = seen.length ? seen.reduce((a, n) => a + n.p, 0) / seen.length : 62;   // mulai di sekitar C4
+    sc.scrollLeft = 0; sc.scrollTop = Math.max(0, (P_MAX - mid) * rowH - vh / 2);
+  }
   resetAnim(); selBarOn = false; selBar.hidden = true;
   phSig = ''; keysSig = rulerSig = ''; zoomPend = null; zoomFrame = false; window.clearTimeout(zoomEndT); gc.style.transform = ''; drawn.ppb = 0; gridDirty = true;
-  setTool('draw'); updateUI(); redraw();
+  if (!keep) setTool('draw');
+  updateUI(); redraw();
 }
 
 export function closePianoRoll() {

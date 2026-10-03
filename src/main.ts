@@ -559,6 +559,11 @@ let prSeq = 0, prStartBar = 0;   // prStartBar: posisi awal pattern yang sedang 
 function editPattern() {
   const el = selPat; if (!el) return;
   if (el.dataset.clip) return renamePattern();
+  openEdit(el);
+}
+// keepView = pindah dari VST lain lewat tahan nada di piano roll: zoom/scroll tetap, keyboard bawah ikut pindah
+function openEdit(el, keepView = false) {
+  if (!el.isConnected) return;
   const lane = el.parentElement, id = lane.dataset.track;
   const nm = document.getElementById('track-name-' + id);
   if (!el.dataset.prId) el.dataset.prId = 'pat' + (++prSeq);   // kunci supaya nada piano roll tersimpan per pattern
@@ -569,17 +574,20 @@ function editPattern() {
     track: nm ? nm.textContent : 'Track',
     pattern: el.querySelector('.pattern__title').textContent,
     color: lane.style.getPropertyValue('--track-color') || undefined,
+    keepView,
   });
+  if (keepView && kbdCont) { const cont = document.querySelector('.trackheader-container[data-track="' + id + '"]'); if (cont) openKbd(cont, hasSynth(id) ? null : fxRack.derizIds(id)[0] ?? null); }
   renderPlayhead();
 }
 // Masuk ke pattern dari tombol titik tiga di DERIZ: piano roll yang sama, tapi nadanya milik DERIZ ini (dimainkan lewat sampler DERIZ ini)
 const trackColorOf = track => { const c = document.querySelector('.trackheader-container[data-track="' + track + '"]'); return (c && getComputedStyle(c).getPropertyValue('--track-color').trim()) || '#a66cff'; };
-// nada instrumen lain di pattern yang sama (DERIZ lain di track mana pun + Supersaw milik track pattern): ditampilkan meredup di piano roll
+// nada instrumen lain di pattern yang sama (DERIZ lain di track mana pun + Supersaw milik track pattern): ditampilkan meredup di piano roll;
+// ditahan = pindah ke VST pemiliknya (open), jadi tidak perlu keluar-masuk lewat titik tiga
 function patGhosts(el, curKey) {
   const prId = el.dataset.prId, lt = el.parentElement.dataset.track, out = [];
-  const add = (key, track) => { if (key !== curKey && !out.some(g => g.key === key)) out.push({key, color: trackColorOf(track)}); };
-  if (hasSynth(lt)) add(prId, lt);
-  document.querySelectorAll('.trackheader-container').forEach(c => fxRack.derizIds(c.dataset.track).forEach(id => add(patKey(prId, id, lt), c.dataset.track)));
+  const add = (key, track, open) => { if (key !== curKey && !out.some(g => g.key === key)) out.push({key, color: trackColorOf(track), open}); };
+  if (hasSynth(lt)) add(prId, lt, () => openEdit(el, true));
+  document.querySelectorAll('.trackheader-container').forEach(c => fxRack.derizIds(c.dataset.track).forEach(id => add(patKey(prId, id, lt), c.dataset.track, () => enterPatternAs(el, id, true))));
   return out;
 }
 // tombol Edit: kunci nada instrumen track pemilik pattern (Supersaw = polos; DERIZ = DERIZ pertama yang ada di track itu)
@@ -587,7 +595,8 @@ function editKey(el) {
   const lt = el.parentElement.dataset.track, ids = hasSynth(lt) ? [] : fxRack.derizIds(lt);
   return ids.length ? patKey(el.dataset.prId, ids[0], lt) : el.dataset.prId;
 }
-function enterPatternAs(el, fxId) {
+function enterPatternAs(el, fxId, keepView = false) {
+  if (!el.isConnected) return;
   const lane = el.parentElement, track = fxRack.derizTrackOf(fxId); if (track === undefined) return;
   if (!el.dataset.prId) el.dataset.prId = 'pat' + (++prSeq);
   const nm = document.getElementById('track-name-' + track), cont = document.querySelector('.trackheader-container[data-track="' + track + '"]');
@@ -598,6 +607,7 @@ function enterPatternAs(el, fxId) {
     track: (nm ? nm.textContent : 'Track') + (fxRack.derizIds(track).length > 1 ? ' · ' + fxRack.derizLabel(fxId) : ''),
     pattern: el.querySelector('.pattern__title').textContent,
     color: (cont && getComputedStyle(cont).getPropertyValue('--track-color').trim()) || undefined,
+    keepView,
   });
   if (kbdCont && cont) openKbd(cont, fxId);   // keyboard di bawah ikut memainkan DERIZ ini
   renderPlayhead();
