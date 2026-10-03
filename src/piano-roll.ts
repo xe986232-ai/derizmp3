@@ -72,7 +72,7 @@ let redoStack: string[] = [];
 let lastLen = 1;
 let lastVel = 1;     // velocity terakhir yang diatur di panel Velocity: dipakai nada yang dipasang berikutnya
 let velOpen = false; // panel Velocity (di bawah grid) terbuka / tertutup; tetap sama selama aplikasi hidup
-let velPanel!: HTMLElement, velBtn!: HTMLButtonElement, velVal!: HTMLElement, vc!: HTMLCanvasElement;
+let velPanel!: HTMLElement, velBtn!: HTMLButtonElement, vc!: HTMLCanvasElement;
 let hoverP = -1;
 let raf = 0;
 
@@ -293,16 +293,6 @@ const velY = (v: number, h: number) => VEL_PAD_T + (1 - velOf(v)) * velUse(h);
 const velFromY = (y: number, h: number) => clamp(1 - (y - VEL_PAD_T) / velUse(h), VEL_MIN, 1);
 const velX = (n: Note, sx: number) => KEY_W + n.s * ppb - sx;
 const pct = (v: number) => Math.round(velOf(v) * 100) + '%';
-function velShow() {   // angka di tombol panel: nilai yang sedang diseret, atau nilai bersama nada terpilih
-  if (!velVal) return;
-  let txt = '';
-  if (vg) txt = pct(st.notes.find(n => n.id === vg!.anchor)?.v ?? 1);
-  else if (selected.size) {
-    const vs = st.notes.filter(n => selected.has(n.id)).map(n => Math.round(velOf(n.v) * 100));
-    if (vs.length && vs.every(v => v === vs[0])) txt = vs[0] + '%';
-  }
-  if (velVal.textContent !== txt) velVal.textContent = txt;
-}
 function drawVel() {
   if (!velOpen || !vc) return;
   const body = vc.parentElement!, w = body.clientWidth, h = body.clientHeight;
@@ -332,8 +322,16 @@ function drawVel() {
       if (pass) { c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke(); }
     }
   }
+  if (vg) {   // angka persen di samping batang yang sedang diseret
+    const an = st.notes.find(n => n.id === vg!.anchor);
+    if (an) {
+      const x = velX(an, sx), v = velOf(an.v), txt = pct(v), left = x > w - 56;
+      c.font = '600 11px system-ui,sans-serif'; c.textBaseline = 'middle'; c.textAlign = left ? 'right' : 'left';
+      c.fillStyle = '#fff'; c.fillText(txt, left ? x - 11 : x + 11, Math.min(h - 8, Math.max(8, velY(v, h))));
+      c.textAlign = 'start';
+    }
+  }
   c.restore();
-  velShow();
 }
 // batang yang dipegang di titik (px, py): dalam jarak VEL_HIT horizontal; kalau bertumpuk (akor) pilih yang kepalanya paling dekat dengan jari
 function velHit(px: number, py: number, h: number): Note | null {
@@ -386,7 +384,7 @@ function onVelUp(e: PointerEvent) {
 }
 function setVelOpen(open: boolean) {
   velOpen = open;
-  velPanel.classList.toggle('is-open', open);
+  velPanel.classList.toggle('is-open', open); velBtn.classList.toggle('is-open', open);
   velBtn.setAttribute('aria-expanded', String(open));
   velBtn.title = open ? 'Tutup panel Velocity' : 'Buka panel Velocity';
   if (open) requestAnimationFrame(() => { drawVel(); schedule(); });   // tinggi grid berubah (ResizeObserver menggambar ulang grid)
@@ -1090,9 +1088,9 @@ function build(): HTMLElement {
       '<div class="pr__phclip" aria-hidden="true"><div class="pr__ph"><svg width="9" height="20" viewBox="0 0 9 20"><path d="M5 0H4C1.79 0 0 1.79 0 4v8.6c0 .86.27 1.69.78 2.38L4.5 20l3.72-5.02A4 4 0 0 0 9 12.6V4c0-2.21-1.79-4-4-4Z" fill="currentColor"/></svg><i></i></div></div>' +
     '</div>' +
     '<div class="pr__vel">' +
-      '<button type="button" class="pr__velbtn" aria-expanded="false" aria-controls="prVelBody" title="Buka panel Velocity">' + ICON.chev + '<span>Velocity</span><b class="pr__velval" aria-live="off"></b></button>' +
       '<div class="pr__velbody" id="prVelBody"><canvas class="pr__velc" role="img" aria-label="Velocity tiap nada: seret batang untuk mengubah"></canvas></div>' +
-    '</div>';
+    '</div>' +
+    '<button type="button" class="pr__velbtn" aria-expanded="false" aria-controls="prVelBody" aria-label="Panel Velocity" title="Buka panel Velocity">' + ICON.chev + '</button>';
 
   sc = el.querySelector<HTMLElement>('.pr__scroll')!;
   space = el.querySelector<HTMLElement>('.pr__space')!;
@@ -1107,7 +1105,6 @@ function build(): HTMLElement {
   // panel Velocity (buka / tutup di bawah grid)
   velPanel = el.querySelector<HTMLElement>('.pr__vel')!;
   velBtn = el.querySelector<HTMLButtonElement>('.pr__velbtn')!;
-  velVal = el.querySelector<HTMLElement>('.pr__velval')!;
   vc = el.querySelector<HTMLCanvasElement>('.pr__velc')!;
   velBtn.addEventListener('click', () => setVelOpen(!velOpen));
   vc.addEventListener('pointerdown', onVelDown);
