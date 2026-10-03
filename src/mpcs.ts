@@ -115,8 +115,10 @@ function build(): void {
       '</div>' +
       '</div>' +
       '<div class="mpcs__bar">' +
-        `<button type="button" class="mpcs__up" data-a="up">${ICON.up}<span>Upload audio</span></button>` +
-        `<button type="button" class="mpcs__up mpcs__all" data-a="all" aria-pressed="false" title="Pilih semua nada, lalu ketuk satu tuts piano di kiri untuk meratakan semuanya ke nada itu" disabled>${ICON.all}<span>Select all</span></button>` +
+        '<div class="mpcs__ups">' +
+          `<button type="button" class="mpcs__up" data-a="up" title="Upload audio">${ICON.up}<span>Upload</span></button>` +
+          `<button type="button" class="mpcs__up mpcs__all" data-a="all" aria-pressed="false" title="Pilih semua nada, lalu ketuk satu tuts piano di kiri untuk meratakan semuanya ke nada itu" disabled>${ICON.all}<span>Select all</span></button>` +
+        '</div>' +
         `<div class="mpcs__knobs">${KNOB_KEYS.map(knobHtml).join('')}</div>` +
         `<button type="button" class="mpcs__play" data-a="play" aria-label="Putar" disabled>${ICON.play}</button>` +
       '</div>' +
