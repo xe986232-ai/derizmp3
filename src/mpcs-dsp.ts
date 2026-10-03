@@ -546,7 +546,16 @@ function epochMarks(x: Float32Array, a: number, b: number, F: (t: number) => num
     for (const c of cand) { const sc = ncc(m, c, L) - 0.8 * Math.abs(c - exp) / T; if (sc > bs) { bs = sc; best = c; } }
     if (Math.abs(best - exp) > 0.3 * T) best = Math.min(n - 2, Math.round(exp));   // jarak tidak konsisten dengan periode: pakai posisi yang diharapkan
     if (best <= m) best = Math.min(n - 2, m + Math.max(1, Math.round(T)));
-    m = best; marks.push(m + frac(m));
+    m = best;
+    // penyelarasan halus: geser posisi pecahan supaya bentuk gelombang satu periode di sekitar titik ini cocok dengan periode sebelumnya (korelasi, resolusi 0.1 sample),
+    // bukan sekadar puncak + parabola. Puncak tajam / berisik meleset ~0.5-1 sample, dan meleset itu memutar fase harmonik atas antar grain = serak ("burik")
+    const prev = marks[marks.length - 1], p0 = m + frac(m);
+    const Lr = Math.max(6, Math.round(T * 0.5)), cs = (c: number, d: number): number => { let sc = 0, sp = 0, sq = 0; for (let u = -Lr; u <= Lr; u++) { const A = pol * cubic(x, prev + u), B = pol * cubic(x, c + d + u); sc += A * B; sp += A * A; sq += B * B; } return sc / Math.sqrt(sp * sq + 1e-12); };
+    let bd = 0, bv = -2; const vals: number[] = [];
+    for (let q = -10; q <= 10; q++) { const d = q * 0.1, v2 = cs(p0, d); vals.push(v2); if (v2 > bv) { bv = v2; bd = q; } }
+    let dd = bd * 0.1;
+    if (bd > -10 && bd < 10) { const a2 = vals[bd + 9], b2 = vals[bd + 10], c2 = vals[bd + 11], dn = a2 - 2 * b2 + c2; if (dn < 0) dd += 0.1 * Math.max(-0.5, Math.min(0.5, 0.5 * (a2 - c2) / dn)); }
+    marks.push(bv > 0.5 ? p0 + dd : p0);
   }
   return marks;
 }
