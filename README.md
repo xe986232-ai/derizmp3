@@ -28,6 +28,8 @@ Pecah `main.ts` jadi modul: `engine/` (AudioContext, scheduler, graph per track,
 Kode: `src/automation.ts` (data kurva + editor), `src/fx-rack.ts` (`lastTouched`, `setParam`, `fxExport/fxImport`), `src/main.ts` (blok "Automation Clip", `autoPump`).
 
 ## MPCS: knob Center / Variation / Transition
+Tampilan plugin: faceplate logam 3D bergaya DERIZ (miring mengikuti kursor). Isinya hanya tombol Upload audio, tiga knob (Trans, Variation, Center), dan tombol Play / Pause. Editor piano roll, zoom, Snap / Reset, Hasil / Asli, Drift / Vibrato, dan ekspor WAV sudah dihapus dari UI; nada otomatis di-snap ke semiton terdekat saat audio dimuat, dan knob yang mengatur kekuatannya. Kode UI: `src/mpcs.ts` + blok "MPCS" di `src/styles.css`.
+
 Tiga knob global di toolbar MPCS, fungsinya meniru NewTone dan semuanya ikut dirender (bukan hiasan). Nilai dikirim ke Worker lewat `ctl`, dan garis oranye di editor memakai kurva yang sama dengan yang didengar (`shiftCurve`).
 
 | Knob | Bawaan | Fungsi |

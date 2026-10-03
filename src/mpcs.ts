@@ -1,29 +1,22 @@
-// MPCS (Manual Pitch Correct Sample): jendela editor pitch ala Melodyne. Tahap 1 (starter):
-//   upload audio -> analisis di Worker -> blok nada di piano roll -> seret blok ke atas / bawah (snap semiton) -> putar hasil / asli -> ekspor WAV.
+// MPCS (Manual Pitch Correct Sample): plugin ringkas bergaya DERIZ (faceplate logam 3D).
+// Isi hanya: tombol upload audio, tiga knob (Transition / Variation / Center), tombol play / pause.
+//   upload audio -> analisis di Worker -> nada otomatis di-snap ke semiton -> knob mengatur seberapa kuat koreksinya -> putar hasil.
 // Tombol buka sengaja tidak ada di daftar efek: jendela hanya terbuka lewat ketukan beruntun pada judul panel "Effects".
 // Inti DSP ada di mpcs-dsp.ts (murni), jalan di mpcs-worker.ts.
 
 import { ACCEPT as AUDIO_ACCEPT, isAudio } from './audio-upload-card';
-import { DEFAULT_CONTROLS, encodeWav, shiftCurve, snapTargets, toMono, type Controls, type Note, type PitchTrack } from './mpcs-dsp';
+import { DEFAULT_CONTROLS, snapTargets, toMono, type Controls, type Note } from './mpcs-dsp';
 
 const svg = (inner: string, size = 18): string =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
 const ICON = {
-  up: svg('<path d="M12 16V5M7 10l5-5 5 5M5 19h14"/>'),
-  play: svg('<path d="M7 5l12 7-12 7z" fill="currentColor" stroke="none"/>'),
-  stop: svg('<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>'),
-  close: svg('<path d="M6 6l12 12M18 6L6 18"/>', 12),
-  minus: svg('<path d="M6 12h12"/>', 16),
-  plus: svg('<path d="M12 6v12M6 12h12"/>', 16),
-  dl: svg('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>')
+  up: svg('<path d="M12 16V5M7 10l5-5 5 5M5 19h14"/>', 16),
+  play: svg('<path d="M8 5l12 7-12 7z" fill="currentColor" stroke="none"/>', 22),
+  pause: svg('<rect x="6" y="5" width="4.5" height="14" rx="1.2" fill="currentColor" stroke="none"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2" fill="currentColor" stroke="none"/>', 22),
+  close: svg('<path d="M6 6l12 12M18 6L6 18"/>', 12)
 };
 
-const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const BLACK = new Set([1, 3, 6, 8, 10]);
-const noteName = (m: number): string => { const r = Math.round(m); return NAMES[((r % 12) + 12) % 12] + (Math.floor(r / 12) - 1); };
-const fmtShift = (s: number): string => { const c = Math.round(s * 100); return (c > 0 ? '+' : '') + (Math.abs(c) % 100 === 0 ? c / 100 + ' st' : c + ' ct'); };
-
-// Tiga knob global ala NewTone. Markup & kelas sama dengan knob efek (fx-rack.ts) supaya gayanya menyatu dengan DAW.
+// Tiga knob global ala NewTone. Markup & kelas dasar sama dengan knob efek (fx-rack.ts) supaya gayanya menyatu dengan DAW.
 const knobSvg = '<svg viewBox="0 0 36 36" aria-hidden="true" class="circular-chart">' +
   '<path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" stroke-dasharray="75, 100" class="circle-bg" style="transform-origin:18px 18px;transform:rotate(225deg)"></path>' +
   '<path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" stroke-dashoffset="0" stroke-dasharray="0 100" class="circle primary-theme" style="transform:rotate(225deg)"></path>' +
@@ -32,19 +25,16 @@ const knobSvg = '<svg viewBox="0 0 36 36" aria-hidden="true" class="circular-cha
   '<path d="M 18 7.5 L 18 12" class="knob-pos" style="transform:rotate(-135deg)"></path></svg>';
 type KnobKey = keyof Controls;
 const KNOBS: Record<KnobKey, { label: string; tip: string; bipolar?: boolean }> = {
-  center: { label: 'Center', tip: 'Center: tarik pitch pusat tiap nada ke semiton terdekat. 0% = pitch asli, 100% = tepat di nada. Nada yang diseret tangan selalu dikoreksi penuh. Klik dua kali = reset' },
+  transition: { label: 'Trans', bipolar: true, tip: 'Transition: cara pindah antar nada. 50% = luncuran asli dipertahankan. Ke kiri: makin tajam sampai lompat robotik. Ke kanan: makin legato (luncuran lebar). Klik dua kali = reset' },
   variation: { label: 'Variation', tip: 'Variation: variasi alami di dalam nada (vibrato dan pitch yang goyang). 100% = asli, 0% = datar di pusat nada. Klik dua kali = reset' },
-  transition: { label: 'Transition', bipolar: true, tip: 'Transition: cara pindah antar nada. 50% = luncuran asli dipertahankan. Ke kiri: makin tajam sampai lompat robotik. Ke kanan: makin legato (luncuran lebar). Klik dua kali = reset' }
+  center: { label: 'Center', tip: 'Center: tarik pitch pusat tiap nada ke semiton terdekat. 0% = pitch asli, 100% = tepat di nada. Klik dua kali = reset' }
 };
-const KNOB_KEYS = Object.keys(KNOBS) as KnobKey[];
+const KNOB_KEYS: KnobKey[] = ['transition', 'variation', 'center'];   // urutan tampil: Trans, Variation, Center
 const knobHtml = (k: KnobKey): string =>
-  `<div class="mpcs__knob is-off" title="${KNOBS[k].tip}"><div class="knob"><div role="slider" tabindex="0" class="knob-input" data-kn="${k}" aria-label="${KNOBS[k].label}" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${DEFAULT_CONTROLS[k]}"><div class="knobwheel">${knobSvg}</div></div></div>` +
-  `<span>${KNOBS[k].label}</span><output>${Math.round(DEFAULT_CONTROLS[k] * 100)}%</output></div>`;
+  `<div class="mpcs__knob is-off" title="${KNOBS[k].tip}"><div class="knob fxk"><div class="knob-inner"><div role="slider" tabindex="0" class="knob-input" data-kn="${k}" aria-label="${KNOBS[k].label}" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${DEFAULT_CONTROLS[k]}"><div class="knobwheel">${knobSvg}</div></div></div></div>` +
+  `<span class="mpcs__lbl">${KNOBS[k].label}</span><output>${Math.round(DEFAULT_CONTROLS[k] * 100)}%</output></div>`;
 
-interface Session {
-  name: string; sr: number; dur: number; pt: PitchTrack; notes: Note[];
-  orig: AudioBuffer; out: AudioBuffer | null; lo: number; hi: number; ref: number;
-}
+interface Session { name: string; sr: number; dur: number; notes: Note[]; orig: AudioBuffer; out: AudioBuffer | null }
 
 let root: HTMLElement | null = null, openFn: (() => void) | null = null;
 
@@ -71,52 +61,35 @@ function build(): void {
   el.className = 'mpcs'; el.hidden = true;
   el.innerHTML =
     '<div class="mpcs__back"></div>' +
-    '<div class="mpcs__win" role="dialog" aria-modal="true" aria-label="MPCS" tabindex="-1">' +
-      '<header class="mpcs__head"><span class="mpcs__title">MPCS</span><span class="mpcs__sub">Manual Pitch Correct Sample</span>' +
-        `<span class="mpcs__stat" role="status" aria-live="polite"></span><button type="button" class="mpcs__close" aria-label="Tutup MPCS">${ICON.close}</button></header>` +
-      '<div class="mpcs__bar">' +
-        `<button type="button" class="mpcs__btn mpcs__btn--pri" data-a="up">${ICON.up}<span>Upload audio</span></button>` +
-        `<button type="button" class="mpcs__btn mpcs__ico" data-a="play" aria-label="Putar" disabled>${ICON.play}</button>` +
-        '<div class="mpcs__seg" role="group" aria-label="Sumber putar"><button type="button" data-m="out" class="is-on">Hasil</button><button type="button" data-m="orig">Asli</button></div>' +
-        '<button type="button" class="mpcs__btn" data-a="snap" disabled>Snap semua</button>' +
-        '<button type="button" class="mpcs__btn" data-a="reset" disabled>Reset</button>' +
-        KNOB_KEYS.map(knobHtml).join('') +
-        '<label class="mpcs__ctl" hidden title="Drift nada terpilih: variasi lambat pitch asli yang dipertahankan (0 = diratakan ke target). Dikalikan dengan knob Variation"><span>Drift</span><input type="range" min="0" max="100" value="100" data-k="drift" disabled></label>' +
-        '<label class="mpcs__ctl" hidden title="Vibrato nada terpilih: vibrato yang dipertahankan (0 = vibrato dibuang). Dikalikan dengan knob Variation"><span>Vibrato</span><input type="range" min="0" max="100" value="100" data-k="vib" disabled></label>' +
-        `<button type="button" class="mpcs__btn" data-a="wav" disabled>${ICON.dl}<span>WAV</span></button>` +
-        `<span class="mpcs__zoom"><button type="button" class="mpcs__btn mpcs__ico" data-a="zout" aria-label="Perkecil" disabled>${ICON.minus}</button><button type="button" class="mpcs__btn mpcs__ico" data-a="zin" aria-label="Perbesar" disabled>${ICON.plus}</button></span>` +
-      '</div>' +
-      '<canvas class="mpcs__ov" aria-label="Peta posisi sample (ketuk / seret untuk pindah)" hidden></canvas>' +
-      '<div class="mpcs__stage">' +
-        '<canvas class="mpcs__keys" aria-hidden="true"></canvas>' +
-        '<div class="mpcs__scroll"><canvas class="mpcs__cv" role="img" aria-label="Editor pitch"></canvas><i class="mpcs__ph" aria-hidden="true"></i></div>' +
-        `<div class="mpcs__empty"><button type="button" class="mpcs__btn mpcs__btn--pri" data-a="up">${ICON.up}<span>Upload audio</span></button><p>Pakai vokal atau instrumen satu nada (monofonik) yang bersih tanpa efek.</p></div>` +
-        '<div class="mpcs__busy" hidden><i></i></div>' +
-      '</div>' +
+    '<div class="mpcs__win is-off" role="dialog" aria-modal="true" aria-label="MPCS" tabindex="-1">' +
+      `<header class="mpcs__head"><i class="mpcs__led" aria-hidden="true"></i><span class="mpcs__title">MPCS</span><button type="button" class="mpcs__close" aria-label="Tutup MPCS">${ICON.close}</button></header>` +
+      `<button type="button" class="mpcs__up" data-a="up">${ICON.up}<span>Upload audio</span></button>` +
+      `<div class="mpcs__knobs">${KNOB_KEYS.map(knobHtml).join('')}</div>` +
+      `<button type="button" class="mpcs__play" data-a="play" aria-label="Putar" disabled>${ICON.play}</button>` +
+      '<div class="mpcs__glass" aria-hidden="true"></div>' +
       `<input type="file" class="mpcs__file" accept="${AUDIO_ACCEPT}" hidden>` +
     '</div>';
   document.body.appendChild(el);
   root = el;
 
   const win = el.querySelector<HTMLElement>('.mpcs__win')!;
-  const stat = el.querySelector<HTMLElement>('.mpcs__stat')!;
-  const stage = el.querySelector<HTMLElement>('.mpcs__stage')!;
-  const scroll = el.querySelector<HTMLElement>('.mpcs__scroll')!;
-  const cv = el.querySelector<HTMLCanvasElement>('.mpcs__cv')!;
-  const keys = el.querySelector<HTMLCanvasElement>('.mpcs__keys')!;
-  const ph = el.querySelector<HTMLElement>('.mpcs__ph')!;
-  const empty = el.querySelector<HTMLElement>('.mpcs__empty')!;
-  const busy = el.querySelector<HTMLElement>('.mpcs__busy')!;
   const file = el.querySelector<HTMLInputElement>('.mpcs__file')!;
-  const btn = (a: string): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`.mpcs__bar [data-a="${a}"]`)!;
-  const ov = el.querySelector<HTMLCanvasElement>('.mpcs__ov')!;
-  const g = cv.getContext('2d')!, gk = keys.getContext('2d')!, go = ov.getContext('2d')!;
-  const ctl = (k: 'drift' | 'vib'): HTMLInputElement => el.querySelector<HTMLInputElement>(`.mpcs__bar [data-k="${k}"]`)!;
+  const upBtn = el.querySelector<HTMLButtonElement>('.mpcs__up')!;
+  const upTxt = upBtn.querySelector('span')!;
+  const playBtn = el.querySelector<HTMLButtonElement>('.mpcs__play')!;
 
-  // ---------- knob Center / Variation / Transition ----------
+  let S: Session | null = null;
+  let ac: AudioContext | null = null, src: AudioBufferSourceNode | null = null, playing = false, playPos = 0, t0 = 0, loading = false;
+  let dirty = false, rendering = false, ver = 0, worker: Worker | null = null, jobId = 0;
+  const jobs = new Map<number, { ok: (m: any) => void; fail: (e: Error) => void }>();   // eslint-disable-line @typescript-eslint/no-explicit-any
+
+  const say = (t: string): void => { upTxt.textContent = t; };   // satu-satunya umpan balik: teks di tombol upload
+  const setPlayIcon = (on: boolean): void => { playBtn.innerHTML = on ? ICON.pause : ICON.play; playBtn.setAttribute('aria-label', on ? 'Jeda' : 'Putar'); playBtn.classList.toggle('is-on', on); };
+
+  // ---------- knob Transition / Variation / Center ----------
   let kv: Controls = { ...DEFAULT_CONTROLS };
   const knobEl = {} as Record<KnobKey, HTMLElement>;
-  KNOB_KEYS.forEach(k => { knobEl[k] = el.querySelector<HTMLElement>(`.mpcs__bar [data-kn="${k}"]`)!; });
+  KNOB_KEYS.forEach(k => { knobEl[k] = el.querySelector<HTMLElement>(`[data-kn="${k}"]`)!; });
   function paintKnob(k: KnobKey): void {
     const e = knobEl[k], v = kv[k], arc = e.querySelector('.circle')!;
     e.querySelector<SVGElement>('.knob-pos')!.style.transform = `rotate(${-135 + v * 270}deg)`;
@@ -126,13 +99,12 @@ function build(): void {
     e.setAttribute('aria-valuenow', v.toFixed(3)); e.setAttribute('aria-valuetext', KNOBS[k].label + ' ' + t);
     e.closest('.mpcs__knob')!.querySelector('output')!.textContent = t;
   }
-  const paintKnobs = (): void => KNOB_KEYS.forEach(paintKnob);
-  const resetKnobs = (): void => { kv = { ...DEFAULT_CONTROLS }; paintKnobs(); };
+  const resetKnobs = (): void => { kv = { ...DEFAULT_CONTROLS }; KNOB_KEYS.forEach(paintKnob); };
   let restartT = 0;
   const lazyRestart = (): void => { if (!playing) return; clearTimeout(restartT); restartT = window.setTimeout(() => { if (playing) restartPlay(); }, 140); };   // memutar knob tidak memicu render tiap piksel
   function setKnob(k: KnobKey, v: number): void {
     const nv = Math.max(0, Math.min(1, v)); if (!S || nv === kv[k]) return;
-    kv[k] = nv; paintKnob(k); dirty = true; ver++; draw(); info(); lazyRestart();   // draw(): garis oranye ikut berubah persis seperti yang akan terdengar
+    kv[k] = nv; paintKnob(k); dirty = true; ver++; lazyRestart();
   }
   KNOB_KEYS.forEach(k => {
     const e = knobEl[k]; let sx = 0, sy = 0, sv = 0, dr = false;
@@ -149,10 +121,10 @@ function build(): void {
     });
   });
 
-  let S: Session | null = null, sel = -1, pps = 100, W = 0, H = 0, viewH = 0, rowH = 12, dpr = 1;
-  let ac: AudioContext | null = null, src: AudioBufferSourceNode | null = null, playing = false, playPos = 0, t0 = 0, raf = 0, mode: 'out' | 'orig' = 'out';
-  let dirty = false, rendering = false, ver = 0, worker: Worker | null = null, jobId = 0;
-  const jobs = new Map<number, { ok: (m: any) => void; fail: (e: Error) => void }>();   // eslint-disable-line @typescript-eslint/no-explicit-any
+  function enable(on: boolean): void {
+    playBtn.disabled = !on; win.classList.toggle('is-off', !on);
+    KNOB_KEYS.forEach(k => { knobEl[k].closest('.mpcs__knob')!.classList.toggle('is-off', !on); });
+  }
 
   // ---------- worker ----------
   function getWorker(): Worker {
@@ -160,7 +132,7 @@ function build(): void {
     worker = new Worker(new URL('./mpcs-worker.ts', import.meta.url), { type: 'module' });
     worker.onmessage = (e: MessageEvent) => {
       const m = e.data;
-      if (m.type === 'progress') { stat.textContent = 'Menganalisis ' + Math.round(m.p * 100) + '%'; return; }
+      if (m.type === 'progress') { say('Menganalisis ' + Math.round(m.p * 100) + '%'); return; }
       const j = jobs.get(m.id); if (!j) return;
       jobs.delete(m.id);
       if (m.type === 'error') j.fail(new Error(m.msg)); else j.ok(m);
@@ -171,158 +143,25 @@ function build(): void {
   const job = (msg: Record<string, unknown>, transfer: Transferable[] = []): Promise<any> =>   // eslint-disable-line @typescript-eslint/no-explicit-any
     new Promise((ok, fail) => { const id = ++jobId; jobs.set(id, { ok, fail }); getWorker().postMessage({ ...msg, id }, transfer); });
 
-  // ---------- tata letak & gambar ----------
-  const xOf = (sec: number): number => sec * pps;
-  const yOf = (midi: number): number => (S!.hi + 0.5 - midi) * rowH;
-  function layout(): void {
-    dpr = Math.min(2, devicePixelRatio || 1);
-    viewH = stage.clientHeight;
-    const rows = S ? S.hi - S.lo + 1 : 1;
-    rowH = S ? Math.max(16, viewH / rows) : 12;   // baris tidak dipepatkan lagi: kalau rentang nada lebar, kanvas jadi lebih tinggi dan di-scroll
-    H = S ? Math.round(rowH * rows) : viewH;
-    const viewW = scroll.clientWidth;
-    W = S ? Math.max(viewW, Math.ceil(S.dur * pps)) : viewW;
-    while (W * dpr > 16000 && pps > 10) { pps /= 1.25; W = Math.max(viewW, Math.ceil(S!.dur * pps)); }
-    dpr = Math.max(1, Math.min(dpr, Math.sqrt(14e6 / (W * H))));   // batas luas kanvas supaya aman di HP
-    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = H + 'px';
-    keys.width = Math.round(44 * dpr); keys.height = Math.round(viewH * dpr); keys.style.width = '44px'; keys.style.height = viewH + 'px';
-    ph.style.height = H + 'px';
-    draw();
-  }
-  const ro = new ResizeObserver(() => { if (!el.hidden) layout(); });
-  ro.observe(stage);
-
-  function drawKeys(): void {
-    gk.setTransform(dpr, 0, 0, dpr, 0, 0); gk.clearRect(0, 0, 44, viewH);
-    if (!S) return;
-    const off = scroll.scrollTop;
-    for (let m = S.lo; m <= S.hi; m++) {
-      const y = (S.hi - m) * rowH - off, pc = ((m % 12) + 12) % 12;
-      if (y > viewH || y + rowH < 0) continue;
-      gk.fillStyle = BLACK.has(pc) ? '#111118' : '#d9d9e4'; gk.fillRect(0, y, 44, rowH);
-      if (rowH >= 13 || pc === 0) { gk.fillStyle = BLACK.has(pc) ? '#8a8a9a' : '#33333f'; gk.font = '600 9px system-ui,sans-serif'; gk.textBaseline = 'middle'; gk.fillText(noteName(m), 6, y + rowH / 2); }
-    }
-  }
-
-  // peta seluruh sample: bentuk amplitudo + posisi nada + kotak jendela yang sedang terlihat. Ketuk / seret buat pindah.
-  let ovProf: Float32Array | null = null, ovKey = '';
-  function drawOv(): void {
-    if (!S) { ov.hidden = true; return; }
-    ov.hidden = false;
-    const w = ov.clientWidth, h = ov.clientHeight; if (!w || !h) return;
-    const d = Math.min(2, devicePixelRatio || 1);
-    if (ov.width !== Math.round(w * d) || ov.height !== Math.round(h * d)) { ov.width = Math.round(w * d); ov.height = Math.round(h * d); }
-    go.setTransform(d, 0, 0, d, 0, 0); go.clearRect(0, 0, w, h);
-    const key = S.name + '|' + S.pt.rms.length + '|' + w;
-    if (key !== ovKey || !ovProf) {
-      ovKey = key; ovProf = new Float32Array(w);
-      const nF = S.pt.rms.length;
-      for (let f = 0; f < nF; f++) { const px = Math.min(w - 1, Math.floor(f / nF * w)), v = Math.min(1, S.pt.rms[f] / S.ref); if (v > ovProf[px]) ovProf[px] = v; }
-    }
-    go.fillStyle = 'rgba(150,104,214,.35)';
-    for (let px = 0; px < w; px++) { const a = ovProf[px] * h * .45; go.fillRect(px, h / 2 - a, 1, a * 2 + 1); }
-    const rows = S.hi - S.lo + 1, hopSec = S.pt.hop / S.pt.sr;
-    go.fillStyle = '#ff8a3d';
-    for (const n of S.notes) go.fillRect(n.s * hopSec / S.dur * w, (S.hi + .5 - n.target) / rows * h - 1.5, Math.max(2, (n.e - n.s) * hopSec / S.dur * w), 3);
-    go.fillStyle = '#fff'; go.fillRect(Math.min(w - 1, playPos / S.dur * w), 0, 1.5, h);
-    go.strokeStyle = 'rgba(255,255,255,.9)'; go.lineWidth = 1.2; go.fillStyle = 'rgba(255,255,255,.08)';
-    const vx = scroll.scrollLeft / W * w, vw = Math.min(w, scroll.clientWidth / W * w), vy = scroll.scrollTop / H * h, vh = Math.min(h, viewH / H * h);
-    go.beginPath(); go.roundRect(vx + .5, vy + .5, Math.max(4, vw - 1), Math.max(4, vh - 1), 3); go.fill(); go.stroke();
-  }
-  const ovGo = (e: PointerEvent): void => {
-    if (!S) return;
-    const r = ov.getBoundingClientRect(), fx = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), fy = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
-    scroll.scrollLeft = fx * W - scroll.clientWidth / 2; scroll.scrollTop = fy * H - viewH / 2;
-  };
-  let ovDrag = false;
-  ov.addEventListener('pointerdown', e => { ovDrag = true; ov.setPointerCapture(e.pointerId); ovGo(e); });
-  ov.addEventListener('pointermove', e => { if (ovDrag) ovGo(e); });
-  const ovEnd = (): void => { ovDrag = false; };
-  ov.addEventListener('pointerup', ovEnd); ov.addEventListener('pointercancel', ovEnd);
-  scroll.addEventListener('scroll', () => { drawKeys(); drawOv(); }, { passive: true });
-
-  function draw(): void {
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.clearRect(0, 0, W, H);
-    drawKeys(); drawOv();
-    if (!S) return;
-    const { lo, hi, pt, notes } = S, hopSec = pt.hop / pt.sr;
-    const sc = shiftCurve(pt, notes, undefined, kv);   // geseran per frame persis seperti yang dirender (target, knob, drift, vibrato), jadi garis = yang terdengar
-    // baris semiton
-    for (let m = lo; m <= hi; m++) {
-      const y = (hi - m) * rowH, pc = ((m % 12) + 12) % 12;
-      g.fillStyle = BLACK.has(pc) ? '#17171e' : '#1f1f28'; g.fillRect(0, y, W, rowH);
-      if (pc === 0) { g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(0, y + rowH - 1, W, 1); }
-    }
-    // garis detik
-    g.font = '9px system-ui,sans-serif'; g.textBaseline = 'top';
-    for (let s = 0; s <= S.dur; s++) { const x = Math.round(xOf(s)) + .5; g.fillStyle = 'rgba(255,255,255,.06)'; g.fillRect(x, 0, 1, H); g.fillStyle = '#6c6c7c'; g.fillText(s + 's', x + 3, 2); }
-    // nada
-    const bw = Math.max(1.2, hopSec * pps + .6);
-    notes.forEach((nt, i) => {
-      const x0 = xOf((nt.s - .5) * hopSec), x1 = xOf((nt.e - .5) * hopSec), yc = yOf(nt.target);
-      const on = i === sel;
-      g.fillStyle = on ? 'rgba(166,108,255,.30)' : 'rgba(166,108,255,.16)';
-      g.strokeStyle = on ? '#fff' : 'rgba(166,108,255,.7)'; g.lineWidth = on ? 1.5 : 1;
-      g.beginPath(); g.roundRect(x0, yc - rowH * .5, Math.max(4, x1 - x0), rowH, Math.min(5, rowH / 2)); g.fill(); g.stroke();
-      // amplitudo (ungu) mengikuti pitch hasil
-      g.fillStyle = 'rgba(150,104,214,.85)';
-      for (let f = nt.s; f < nt.e; f++) {
-        if (!pt.f0[f]) continue;
-        const m = 69 + 12 * Math.log2(pt.f0[f] / 440) + sc[f], h = Math.min(1, pt.rms[f] / S!.ref) * rowH * .42 + .5;
-        g.fillRect(xOf(f * hopSec - hopSec / 2), yOf(m) - h, bw, h * 2);
-      }
-      // pitch asli (redup, hanya kalau digeser) dan pitch hasil (oranye)
-      const line = (add: number | Float32Array, style: string, w: number): void => {
-        g.strokeStyle = style; g.lineWidth = w; g.beginPath();
-        for (let f = nt.s; f < nt.e; f++) { if (!pt.f0[f]) continue; const x = xOf(f * hopSec), y = yOf(69 + 12 * Math.log2(pt.f0[f] / 440) + (typeof add === 'number' ? add : add[f])); f === nt.s ? g.moveTo(x, y) : g.lineTo(x, y); }
-        g.stroke();
-      };
-      let moved = false; for (let f = nt.s; f < nt.e; f++) if (pt.f0[f] && Math.abs(sc[f]) > .01) { moved = true; break; }
-      if (moved) line(0, 'rgba(255,255,255,.28)', 1);   // pitch asli (redup) kalau hasilnya berbeda: digeser, drift, atau vibrato diubah
-      line(sc, '#ff8a3d', 1.4);
-    });
-  }
-
-  // ---------- status ----------
-  function info(): void {
-    if (!S) { stat.textContent = ''; return; }
-    ctl('drift').parentElement!.hidden = sel < 0; ctl('vib').parentElement!.hidden = sel < 0;   // Drift / Vibrato = pengaturan per nada, hanya muncul kalau ada nada terpilih (yang global: knob Variation)
-    if (sel >= 0) { const n = S.notes[sel], eff = (n.man ? 1 : kv.center) * (n.target - n.midi); ctl('drift').value = String(Math.round((n.drift ?? 1) * 100)); ctl('vib').value = String(Math.round((n.vib ?? 1) * 100)); stat.textContent = noteName(n.midi) + (Math.round((n.midi - Math.round(n.midi)) * 100) ? ' ' + fmtShift(n.midi - Math.round(n.midi)) : '') + ' → ' + noteName(n.target) + '  (' + fmtShift(eff) + (n.man ? ', manual' : '') + ')'; }
-    else stat.textContent = S.notes.length ? S.notes.length + ' nada terdeteksi' : 'Tidak ada nada terdeteksi';
-  }
-  function enable(on: boolean): void { ['play', 'snap', 'reset', 'wav', 'zin', 'zout'].forEach(a => { btn(a).disabled = !on; }); ctl('drift').disabled = !on; ctl('vib').disabled = !on; KNOB_KEYS.forEach(k => { knobEl[k].closest('.mpcs__knob')!.classList.toggle('is-off', !on); }); }
-  function setBusy(on: boolean): void { busy.hidden = !on; }
-
   // ---------- muat & analisis ----------
   async function load(f: File): Promise<void> {
-    if (!isAudio(f)) { stat.textContent = 'File bukan audio'; return; }
-    stopPlay(); enable(false); setBusy(true); empty.hidden = true; stat.textContent = 'Membaca audio';
+    if (loading) return;
+    if (!isAudio(f)) { say('File bukan audio'); setTimeout(() => { if (!loading) say('Upload audio'); }, 1800); return; }
+    loading = true; upBtn.disabled = true; stopPlay(); playPos = 0; enable(false); say('Membaca audio');
     try {
       ac ??= new AudioContext();
       const buf = await ac.decodeAudioData(await f.arrayBuffer());
       const mono = toMono(Array.from({ length: buf.numberOfChannels }, (_, c) => buf.getChannelData(c).slice()));
-      stat.textContent = 'Menganalisis 0%';
+      say('Menganalisis 0%');
       const r = await job({ type: 'analyze', x: mono, sr: buf.sampleRate }, [mono.buffer]);
-      const notes: Note[] = r.notes, pt: PitchTrack = r.pt;
+      const notes: Note[] = r.notes;
       snapTargets(notes); resetKnobs();   // target = semiton terdekat (hysteresis); Center 0% jadi audio belum berubah sampai knob diputar
-      let lo = 48, hi = 72;
-      if (notes.length) {
-        lo = Math.floor(Math.min(...notes.map(n => Math.min(n.midi, n.target)))) - 3; hi = Math.ceil(Math.max(...notes.map(n => Math.max(n.midi, n.target)))) + 3;
-        while (hi - lo < 23) { lo--; hi++; }
-        if (hi - lo > 84) { const c = (hi + lo) >> 1; lo = c - 42; hi = c + 42; }
-      }
-      const sorted = Array.from(pt.rms).sort((a, b) => a - b);
-      S = { name: f.name.replace(/\.[^.]+$/, ''), sr: buf.sampleRate, dur: buf.duration, pt, notes, orig: buf, out: null, lo, hi, ref: sorted[Math.floor(sorted.length * .95)] || 0.1 };
-      sel = -1; dirty = true; playPos = 0; ph.style.transform = 'translateX(0)';
-      pps = Math.max(40, Math.min(220, scroll.clientWidth / Math.max(1, buf.duration)));
-      scroll.scrollLeft = 0; layout(); info(); enable(true);
-      if (notes.length) { const mt = notes.reduce((a, n) => a + n.target, 0) / notes.length; scroll.scrollTop = Math.max(0, yOf(mt) - viewH / 2); drawKeys(); drawOv(); } else scroll.scrollTop = 0;
-      if (!notes.length) { btn('snap').disabled = true; btn('reset').disabled = true; }
+      S = { name: f.name.replace(/\.[^.]+$/, ''), sr: buf.sampleRate, dur: buf.duration, notes, orig: buf, out: null };
+      dirty = true; ver++; upBtn.title = f.name; enable(true); say('Ganti audio');
     } catch (err) {
-      S = null; empty.hidden = false; draw(); stat.textContent = 'Gagal memuat audio';
+      S = null; say('Gagal memuat audio'); upBtn.title = '';
       console.error(err);
-    } finally { setBusy(false); }
+    } finally { loading = false; upBtn.disabled = false; }
   }
 
   // ---------- render hasil (di Worker), lalu putar ----------
@@ -338,140 +177,60 @@ function build(): void {
     } finally { rendering = false; }
     return dirty ? ensureRendered() : S.out;
   }
-  const edit = (): void => { dirty = true; ver++; draw(); info(); if (playing) restartPlay(); };
 
   function stopPlay(): void {
     if (src) { src.onended = null; try { src.stop(); } catch { /* sudah berhenti */ } src.disconnect(); src = null; }
-    if (playing) { playing = false; btn('play').innerHTML = ICON.play; btn('play').setAttribute('aria-label', 'Putar'); }
-    cancelAnimationFrame(raf); raf = 0;
+    if (playing) { playing = false; setPlayIcon(false); }
   }
+  const pause = (): void => { if (playing && ac) playPos = Math.max(0, ac.currentTime - t0); stopPlay(); };   // posisi disimpan, jadi Play berikutnya lanjut dari situ
   async function startPlay(): Promise<void> {
     if (!S || !ac) return;
     await ac.resume();
-    let b: AudioBuffer | null = S.orig;
-    if (mode === 'out') { btn('play').disabled = true; stat.textContent = 'Merender'; try { b = await ensureRendered(); } finally { btn('play').disabled = false; } info(); }
+    playBtn.disabled = true;
+    let b: AudioBuffer | null = null;
+    try { b = await ensureRendered(); } catch (err) { console.error(err); } finally { playBtn.disabled = !S; }
     if (!b || !S) return;
     stopPlay();
     if (playPos >= S.dur - .02) playPos = 0;
     src = ac.createBufferSource(); src.buffer = b; src.connect(ac.destination);
-    src.onended = () => { if (playing) { playPos = 0; stopPlay(); moveHead(0); } };
-    src.start(0, playPos); t0 = ac.currentTime - playPos; playing = true;
-    btn('play').innerHTML = ICON.stop; btn('play').setAttribute('aria-label', 'Berhenti');
-    const tick = (): void => {
-      if (!playing || !ac) return;
-      playPos = Math.min(S!.dur, ac.currentTime - t0); moveHead(playPos, true);
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
+    src.onended = () => { if (playing) { playPos = 0; stopPlay(); } };
+    src.start(0, playPos); t0 = ac.currentTime - playPos; playing = true; setPlayIcon(true);
   }
-  function restartPlay(): void { if (playing) { playPos = Math.max(0, (ac?.currentTime ?? 0) - t0); void startPlay(); } }
-  function moveHead(sec: number, follow = false): void {
-    const x = xOf(sec); ph.style.transform = `translateX(${x}px)`; drawOv();
-    if (follow) { const v = scroll.clientWidth; if (x < scroll.scrollLeft || x > scroll.scrollLeft + v * .9) scroll.scrollLeft = Math.max(0, x - v * .1); }
-  }
-
-  // ---------- seret blok ----------
-  let drag: { i: number; y0: number; base: number; moved: boolean; id: number } | null = null;
-  let pan: { x0: number; y0: number; sl: number; st: number; px: number; moved: boolean; id: number; mouse: boolean } | null = null;
-  const hit = (x: number, y: number): number => {
-    if (!S) return -1;
-    const hopSec = S.pt.hop / S.pt.sr; let best = -1, bd = 1e9;
-    S.notes.forEach((n, i) => {
-      const x0 = xOf((n.s - .5) * hopSec) - 4, x1 = xOf((n.e - .5) * hopSec) + 4, yc = yOf(n.target), pad = Math.max(rowH * .7, 16);
-      if (x < x0 || x > x1 || Math.abs(y - yc) > pad) return;
-      const d = Math.abs(y - yc); if (d < bd) { bd = d; best = i; }
-    });
-    return best;
-  };
-  cv.addEventListener('pointerdown', e => {
-    if (!S) return;
-    const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, i = hit(x, y);
-    if (i < 0) { pan = { x0: e.clientX, y0: e.clientY, sl: scroll.scrollLeft, st: scroll.scrollTop, px: x, moved: false, id: e.pointerId, mouse: e.pointerType === 'mouse' }; cv.setPointerCapture(e.pointerId); return; }
-    sel = i; drag = { i, y0: e.clientY, base: Math.round(S.notes[i].target), moved: false, id: e.pointerId };
-    cv.setPointerCapture(e.pointerId); draw(); info();
-  });
-  cv.addEventListener('pointermove', e => {
-    if (pan && e.pointerId === pan.id) {
-      const dx = e.clientX - pan.x0, dy = e.clientY - pan.y0;
-      if (!pan.moved && Math.hypot(dx, dy) < 6) return;
-      pan.moved = true; scroll.scrollTop = pan.st - dy; if (pan.mouse) scroll.scrollLeft = pan.sl - dx;
-      return;
-    }
-    if (!drag || !S || e.pointerId !== drag.id) return;
-    const dy = drag.y0 - e.clientY;
-    if (!drag.moved && Math.abs(dy) < 4) return;
-    drag.moved = true;
-    const t = Math.max(S.lo + 1, Math.min(S.hi - 1, drag.base + Math.round(dy / rowH)));
-    if (t !== S.notes[drag.i].target || !S.notes[drag.i].man) { S.notes[drag.i].target = t; S.notes[drag.i].man = true; edit(); }   // diseret tangan: dikoreksi penuh, di luar knob Center
-  });
-  const endDrag = (e: PointerEvent): void => {
-    if (drag && e.pointerId === drag.id) drag = null;
-    if (pan && e.pointerId === pan.id) {
-      const p = pan; pan = null;
-      if (!p.moved && e.type === 'pointerup' && S) { sel = -1; playPos = Math.max(0, Math.min(S.dur, p.px / pps)); moveHead(playPos); if (playing) restartPlay(); draw(); info(); }   // ketuk kosong = pindah playhead
-    }
-  };
-  cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
+  function restartPlay(): void { if (playing && ac) { playPos = Math.max(0, ac.currentTime - t0); void startPlay(); } }
+  const toggle = (): void => { if (playing) pause(); else void startPlay(); };
 
   // ---------- tombol ----------
-  const snapAll = (): void => { if (!S) return; S.notes.forEach(n => { delete n.man; }); snapTargets(S.notes); kv.center = 1; paintKnob('center'); edit(); };   // auto-tune penuh: snap semua nada (hysteresis: pitch di perbatasan tidak bikin target loncat) dan Center 100%
-  const resetAll = (): void => { if (!S) return; S.notes.forEach(n => { delete n.drift; delete n.vib; delete n.man; }); snapTargets(S.notes); resetKnobs(); ctl('drift').value = '100'; ctl('vib').value = '100'; edit(); };
-  el.querySelector('.mpcs__bar')!.addEventListener('input', e => {   // kontrol ekspresi: drift / vibrato
-    const t = e.target as HTMLInputElement, k = t.dataset.k as 'drift' | 'vib' | undefined;
-    if (!k || !S) return;
-    const v = Number(t.value) / 100, list = sel >= 0 ? [S.notes[sel]] : S.notes;
-    list.forEach(n => { if (v >= 0.995) delete n[k]; else n[k] = v; });
-    dirty = true; ver++; draw(); if (playing) restartPlay();   // gambar ulang: garis oranye ikut kekuatan drift / vibrato
+  el.addEventListener('click', e => {
+    const b = (e.target as Element).closest<HTMLButtonElement>('button'); if (!b || b.disabled) return;
+    if (b.dataset.a === 'up') file.click(); else if (b.dataset.a === 'play') toggle();
   });
-  const zoom = (k: number): void => {
-    if (!S) return;
-    const c = (scroll.scrollLeft + scroll.clientWidth / 2) / pps; pps = Math.max(20, Math.min(600, pps * k));
-    layout(); scroll.scrollLeft = Math.max(0, c * pps - scroll.clientWidth / 2); moveHead(playPos);
-  };
-  async function exportWav(): Promise<void> {
-    if (!S) return;
-    btn('wav').disabled = true; stat.textContent = 'Merender';
-    try {
-      const b = await ensureRendered(); if (!b) return;
-      const url = URL.createObjectURL(new Blob([encodeWav(b.getChannelData(0), S.sr)], { type: 'audio/wav' }));
-      const a = document.createElement('a'); a.href = url; a.download = 'mpcs-' + S.name + '.wav'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 4000);
-    } finally { btn('wav').disabled = false; info(); }
-  }
-  el.querySelector('.mpcs__bar')!.addEventListener('click', e => {
-    const b = (e.target as Element).closest<HTMLElement>('button'); if (!b || (b as HTMLButtonElement).disabled) return;
-    if (b.dataset.m) { mode = b.dataset.m as 'out' | 'orig'; el.querySelectorAll('.mpcs__seg button').forEach(x => x.classList.toggle('is-on', x === b)); if (playing) restartPlay(); return; }
-    switch (b.dataset.a) {
-      case 'up': file.click(); break;
-      case 'play': playing ? stopPlay() : void startPlay(); break;
-      case 'snap': snapAll(); break;
-      case 'reset': resetAll(); break;
-      case 'wav': void exportWav(); break;
-      case 'zin': zoom(1.4); break;
-      case 'zout': zoom(1 / 1.4); break;
-    }
-  });
-  empty.querySelector('button')!.addEventListener('click', () => file.click());
   file.addEventListener('change', () => { const f = file.files?.[0]; file.value = ''; if (f) void load(f); });
   el.addEventListener('dragover', e => e.preventDefault());
   el.addEventListener('drop', e => { e.preventDefault(); const f = e.dataTransfer?.files[0]; if (f) void load(f); });
+
+  // ---------- efek 3D: faceplate miring mengikuti kursor (mouse saja, mati saat reduced-motion), kilau mengikuti arah cahaya ----------
+  const untilt = (): void => { win.classList.remove('is-tilting'); win.style.setProperty('--rx', '0deg'); win.style.setProperty('--ry', '0deg'); win.style.setProperty('--mx', '50%'); win.style.setProperty('--my', '0%'); };
+  el.addEventListener('pointermove', e => {
+    if (reduce || e.pointerType !== 'mouse' || (e.target as Element).closest('.knob-input.is-dragging')) return;
+    const r = win.getBoundingClientRect(), px = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), py = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
+    win.classList.add('is-tilting');
+    win.style.setProperty('--ry', ((px - .5) * 9).toFixed(2) + 'deg'); win.style.setProperty('--rx', ((.5 - py) * 7).toFixed(2) + 'deg');
+    win.style.setProperty('--mx', (px * 100).toFixed(1) + '%'); win.style.setProperty('--my', (py * 100).toFixed(1) + '%');
+  });
+  el.addEventListener('pointerleave', untilt);
 
   // ---------- buka / tutup ----------
   const onKey = (e: KeyboardEvent): void => {
     e.stopPropagation();   // pintasan DAW (Space, tuts keyboard) tidak ikut jalan selagi MPCS terbuka
     if (e.key === 'Escape') { e.preventDefault(); close(); return; }
-    const onBtn = (e.target as Element).closest?.('button');
-    if (e.key === ' ' && !onBtn && S) { e.preventDefault(); playing ? stopPlay() : void startPlay(); }
-    else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && sel >= 0 && S && !(e.target as Element).closest?.('.knob-input')) {
-      e.preventDefault(); const n = S.notes[sel], t = Math.max(S.lo + 1, Math.min(S.hi - 1, Math.round(n.target) + (e.key === 'ArrowUp' ? 1 : -1)));
-      if (t !== n.target) { n.target = t; n.man = true; edit(); }
-    }
+    if (e.key === ' ' && !(e.target as Element).closest?.('button') && S) { e.preventDefault(); toggle(); }
   };
   el.addEventListener('keydown', onKey); el.addEventListener('keyup', e => e.stopPropagation());
   el.querySelector('.mpcs__close')!.addEventListener('click', () => close());
   el.querySelector('.mpcs__back')!.addEventListener('pointerdown', () => close());
 
   function close(): void {
-    stopPlay();
+    stopPlay(); untilt();
     const done = (): void => { el.hidden = true; };
     if (reduce) { done(); return; }
     el.querySelector('.mpcs__back')!.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, fill: 'forwards' });
@@ -480,8 +239,7 @@ function build(): void {
   openFn = () => {
     if (!el.hidden) return;
     el.getAnimations({ subtree: true }).forEach(a => a.cancel());
-    el.hidden = false; empty.hidden = !!S;
-    layout(); info();
+    el.hidden = false;
     if (!reduce) win.animate([{ opacity: 0, transform: 'translateY(14px) scale(.94)' }, { opacity: 1, transform: 'none' }], { duration: 380, easing: 'cubic-bezier(.34,1.3,.64,1)' });
     win.focus({ preventScroll: true });
   };
