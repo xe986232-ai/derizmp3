@@ -77,8 +77,12 @@
   <div class="fx__clip">
     <div class="fx__panel" id="fxBody">
       <header class="fx__head fx__item" style="--i:0"><h2 class="fx__title">Effects</h2></header>
+      <div class="fx__pages fx__item" style="--i:1" id="fxPages" data-page="plugin" role="tablist" aria-label="Halaman panel efek">
+        <button type="button" role="tab" class="fx__page" id="fxPagePlugin" data-page="plugin" aria-selected="true" aria-controls="fxList">Plugin</button>
+        <button type="button" role="tab" class="fx__page" id="fxPageEffect" data-page="effect" aria-selected="false" aria-controls="fxList" tabindex="-1">Effect</button>
+      </div>
       <div class="fx__body">
-        <div class="fx__top fx__item" style="--i:1">
+        <div class="fx__top fx__item" style="--i:2">
           <button type="button" class="fx__add" id="fxAdd" aria-haspopup="menu" aria-expanded="false" aria-label="Tambah efek" title="Tambah efek"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
         </div>
         <div class="fx__list" id="fxList"></div>

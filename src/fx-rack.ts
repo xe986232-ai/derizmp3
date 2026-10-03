@@ -323,6 +323,9 @@ function paintDeriz(card: HTMLElement, fx: Fx): void {
 
 const tabNames = (d: EffectDef): string[] => [...new Set(d.params.map(p => p.tab).filter((t): t is string => !!t))];
 
+type FxPage = 'plugin' | 'effect';   // halaman panel: Plugin (VST / instrumen: DERIZ, Supersaw) dan Effect (Reverb, EQ, Filter, dll.)
+const pageOf = (type: FxType): FxPage => (defOf(type).synth ? 'plugin' : 'effect');
+
 function cardHtml(fx: Fx, i: number): string {
   const d = { ...defOf(fx.type) }; if (fx.type === 'deriz') { const no = derizNo(fx.id); if (no > 1) d.name += ' ' + no; }
   const tabs = tabNames(d), cur = Math.min(fx.tab ?? 0, Math.max(0, tabs.length - 1));
@@ -334,7 +337,7 @@ function cardHtml(fx: Fx, i: number): string {
   const body = fx.type === 'deriz' ? derizHtml(fx) : tabs.length
     ? tabs.map((t, k) => `<div class="fxc__knobs fxc__panel" role="tabpanel" data-tab="${k}"${k === cur ? '' : ' hidden'}>${d.params.filter(p => p.tab === t).map(p => cellHtml(d, fx, p)).join('')}</div>`).join('')
     : `<div class="fxc__knobs">${d.params.map(p => cellHtml(d, fx, p)).join('')}</div>`;
-  return `<section class="fxc${fx.on ? '' : ' is-off'}${fx.min ? ' is-min' : ''}${tabs.length ? ' has-tabs' : ''}${fx.type === 'deriz' ? ' fxc--deriz' : ''}" data-fx="${fx.id}" style="--i:${i}" aria-label="${d.name}">` +
+  return `<section class="fxc${fx.on ? '' : ' is-off'}${fx.min ? ' is-min' : ''}${tabs.length ? ' has-tabs' : ''}${fx.type === 'deriz' ? ' fxc--deriz' : ''}" data-fx="${fx.id}" data-kind="${pageOf(fx.type)}" style="--i:${i}" aria-label="${d.name}">` +
     `<header class="fxc__head"><h3 class="fxc__name"><button type="button" class="fxc__title" aria-expanded="${!fx.min}" title="Klik untuk minimize / maximize">${d.name}</button></h3>${tabBar}` +
     (fx.type === 'deriz' ? `<button type="button" class="fxc__pat" aria-haspopup="menu" aria-expanded="false" aria-label="Pattern: pilih pattern untuk diisi DERIZ" title="Masuk ke pattern">${ICON_PAT}</button>` : '') +
     `<button type="button" class="fxc__pwr" role="switch" aria-checked="${fx.on}" aria-label="${d.name} nyala / mati" title="Nyala / mati"></button>` +
@@ -440,7 +443,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     clearOvAnim();   // animasi tutup sebelumnya (fill: forwards) jangan menahan opacity 0 di buka berikutnya
     closePicker(true); closeMenu(true); hideTip();
     const ph = document.createElement('div');
-    ph.className = 'fxc-ph'; ph.dataset.fx = String(fx.id);
+    ph.className = 'fxc-ph'; ph.dataset.fx = String(fx.id); ph.dataset.kind = 'plugin';
     ph.innerHTML = '<span>DERIZ terbuka di tengah layar</span><button type="button" class="fxc-ph__btn">Kembalikan</button>';
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     card.replaceWith(ph);
@@ -684,8 +687,34 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   window.addEventListener('blur', kbReleaseAll);
 
   // Tombol "+": di atas saat belum ada efek, pindah ke bawah daftar setelah ada efek (dengan animasi geser halus)
+  // ---------- dua halaman: Plugin | Effect (tab kiri-kanan langsung terlihat, bukan di dalam tombol / menu) ----------
+  const pagesEl = document.getElementById('fxPages')!;
+  const pageBtns = [...pagesEl.querySelectorAll<HTMLButtonElement>('.fx__page')];
+  let page: FxPage = 'plugin';
+  const ADD_LABEL: Record<FxPage, string> = { plugin: 'Tambah plugin', effect: 'Tambah efek' };
+  function syncPage(): void {
+    list.dataset.page = page; pagesEl.dataset.page = page;
+    pageBtns.forEach(b => { const on = b.dataset.page === page; b.setAttribute('aria-selected', String(on)); b.tabIndex = on ? 0 : -1; });
+    addBtn.setAttribute('aria-label', ADD_LABEL[page]); addBtn.title = ADD_LABEL[page];
+  }
+  function setPage(next: FxPage, focus = false): void {
+    if (next === page) return;
+    closePicker(true); closeMenu(true); hideTip();
+    page = next; syncPage();
+    layout(false);   // tombol + ikut posisi halaman ini (tengah kalau kosong, di bawah kartu kalau sudah ada isi)
+    if (focus) pageBtns.find(b => b.dataset.page === page)?.focus({ preventScroll: true });
+  }
+  pagesEl.addEventListener('click', e => { const b = (e.target as Element).closest<HTMLButtonElement>('.fx__page'); if (b) setPage(b.dataset.page as FxPage); });
+  pagesEl.addEventListener('keydown', e => {
+    e.stopPropagation();   // panah / Space di sini tidak boleh memicu pintasan DAW (mundur, putar)
+    if (e.key === 'ArrowLeft' || e.key === 'Home') { e.preventDefault(); setPage('plugin', true); }
+    else if (e.key === 'ArrowRight' || e.key === 'End') { e.preventDefault(); setPage('effect', true); }
+  });
+  pagesEl.addEventListener('keyup', e => e.stopPropagation());
+  syncPage();
+
   function layout(animate: boolean): void {
-    const has = fxs().length > 0;
+    const has = fxs().some(f => pageOf(f.type) === page);
     if (bodyEl.classList.contains('has-fx') === has) return;
     const first = topEl.getBoundingClientRect().top;
     bodyEl.classList.toggle('has-fx', has);
@@ -737,11 +766,12 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     if (pick || !cur) return;
     closeMenu(true);
     const have = new Set(fxs().map(f => f.type));
-    const choices = EFFECTS.filter(d => !d.synth || d.type === 'deriz');   // plugin instrumen tidak dipilih manual, kecuali DERIZ (boleh banyak)
+    // halaman Plugin: hanya DERIZ (boleh banyak; Supersaw otomatis ada di track synth). Halaman Effect: Reverb, EQ, Filter, dll.
+    const choices = EFFECTS.filter(d => page === 'plugin' ? d.type === 'deriz' : !d.synth);
     const el = document.createElement('div');
     el.className = 'fx-pick';
     el.setAttribute('role', 'menu');
-    el.setAttribute('aria-label', 'Pilih efek');
+    el.setAttribute('aria-label', page === 'plugin' ? 'Pilih plugin' : 'Pilih efek');
     el.innerHTML = choices.map((d, k) => {
       const used = d.type !== 'deriz' && have.has(d.type);
       return `<button type="button" role="menuitem" class="fx-pick__item" data-type="${d.type}" style="--i:${k}"${used ? ' disabled title="Sudah ditambahkan"' : ''}>` +
