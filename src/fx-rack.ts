@@ -369,6 +369,7 @@ export interface FxRack {
   derizLabel(fxId: number): string;           // "DERIZ", "DERIZ 2", ...
   derizOff(id: number): void;
   derizStop(): void;   // lepas semua nada DERIZ dan batalkan yang terjadwal
+  derizWarm(): boolean;   // siapkan semua sampler DERIZ sebelum play; true = ada yang harus dibuat dari nol (beri jeda awal lebih panjang)
 }
 
 export interface AudioHost { ctx: AudioContext; dest: AudioNode }
@@ -607,6 +608,24 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     for (const e of synths.values()) e.s?.releaseAll();
     liveRel.clear();
     for (const [id, h] of heads) { if (h.t0 > h.ctx.currentTime) { heads.delete(id); h.el?.remove(); } else h.tEnd = Math.min(h.tEnd, h.ctx.currentTime); }   // yang belum mulai dibatalkan, yang jalan berhenti di tempat
+  }
+  // Siapkan sampler (worklet + sample) SEBELUM nada pertama diputar. Membuat worklet dan mengirim sample butuh puluhan ms per plugin; kalau baru
+  // dikerjakan saat nada pertama, nada itu terlambat dan thread audio tersendat tepat di awal play. true = ada yang disiapkan dari nol.
+  const trackOfFx = (id: number): string | undefined => { for (const [t, r] of racks) if (r.some(f => f.id === id)) return t; return undefined; };
+  function warmFx(fx: Fx, track: string): boolean {
+    const z = fx.deriz; if (!z || !fx.on) return false;
+    const { ctx, dest } = host(), e = synths.get(fx.id);
+    const cold = !e || e.ctx !== ctx || !e.s || !e.s.hasBuffer(z.buf);
+    if (cold) derizSynth(fx, ctx).then(s => {
+      const z2 = fx.deriz; if (!z2) return;
+      s.routeTo(trackInput(ctx, dest, track)); s.setBuffer(z2.buf);
+    }, () => { /* gagal dibuat */ });
+    return cold;
+  }
+  function derizWarm(): boolean {
+    let cold = false;
+    for (const [track, r] of racks) for (const fx of r) if (fx.type === 'deriz' && warmFx(fx, track)) cold = true;
+    return cold;
   }
   function kbParams(fx: Fx): void {   // knob Speed / Pitch / Volume diputar saat nada ditahan: ikut berubah mulus
     const s = synths.get(fx.id)?.s; if (s) s.params(...derizArgs(fx));
@@ -1026,6 +1045,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     const live = cardById(fx.id);   // kartu bisa saja sudah dihapus / track diganti selama decode
     if (!live) return;
     updateDerizUi(live, fx); paintDeriz(live, fx);
+    { const tk = trackOfFx(fx.id); if (tk !== undefined) warmFx(fx, tk); }   // sampler disiapkan sekarang (bukan saat nada pertama)
     // analisis spektrogram di latar (animasi di canvas tetap jalan), hasilnya digambar begitu selesai
     const z = fx.deriz, cardOf = (): HTMLElement | null => cardById(fx.id);
     if (!z) return;
@@ -1331,7 +1351,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     addInstrument,
     closePicker,
     hasDeriz: track => !!derizOf(track),
-    derizPlay, derizOn, derizOff, derizStop,
+    derizPlay, derizOn, derizOff, derizStop, derizWarm,
     derizOwnsPlain: (track, fxId) => plainOwner.get(track) === fxId,
     derizIds: track => (racks.get(track) ?? []).filter(f => f.type === 'deriz').map(f => f.id),
     derizAll: () => [...racks.entries()].flatMap(([track, r]) => r.filter(f => f.type === 'deriz' && f.on && f.deriz).map(f => ({ id: f.id, track }))),

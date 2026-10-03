@@ -18,9 +18,17 @@
 // Pesan ke prosesor: buf (data sample), on / off (nada), p (parameter live), kill (hentikan semua).
 
 const WORKLET_SRC = `
+// Scope worklet dipakai bersama oleh SEMUA plugin DERIZ dalam satu AudioContext, jadi tiga variabel ini berlaku lintas plugin.
+// FULL_FRAMES: jatah frame WSOLA berkualitas penuh per blok audio (semua plugin digabung). Di atas jatah, frame yang tetap wajib dibuat
+// memakai pencarian ringan (tanpa penyelarasan sub-sampel, ~40% lebih murah) dan prefetch dilewati: kualitas turun sedikit,
+// bukan gresek / putus. Di bawah jatah hasilnya identik dengan sebelumnya.
+// MAX_VOICES: batas nada aktif per plugin (nada paling tua / yang sudah dilepas dilepas cepat 4 ms bila terlampaui).
+const FULL_FRAMES = 4, MAX_VOICES = 12;
+let gT = -1, gUsed = 0;
 class DerizSampler extends AudioWorkletProcessor {
   constructor() {
     super();
+    this.pStamp = 0; this.seq = 0; this.fastK = Math.exp(-1 / (0.004 * sampleRate));   // pStamp: nomor versi parameter live (lihat msg / apply)
     this.ch = null; this.mono = null; this.len = 0; this.bufRate = sampleRate; this.ons = [];
     this.wins = new Map();
     // tabel kernel sinc berjendela Blackman (HW lobus tiap sisi, TR entri per lobus) untuk resampling anti-alias saat nada naik
@@ -40,13 +48,20 @@ class DerizSampler extends AudioWorkletProcessor {
   }
   msg(m) {
     if (m.t === 'buf') { this.pend = []; this.setBuf(m); }
-    else if (m.t === 'on' || m.t === 'off' || m.t === 'glide') { if (m.at && m.at > currentTime) this.pend.push(m); else this.apply(m); }
-    else if (m.t === 'p') { this.speed = m.speed; this.pitch = m.pitch; this.vol = m.vol; }
+    else if (m.t === 'on' || m.t === 'off' || m.t === 'glide') {
+      if (m.t === 'on') m.ps = this.pStamp;   // versi parameter saat nada ini diterima
+      if (m.at && m.at > currentTime) this.pend.push(m); else this.apply(m);
+    }
+    else if (m.t === 'p') { this.pStamp++; this.speed = m.speed; this.pitch = m.pitch; this.vol = m.vol; }
     else if (m.t === 'relall') { this.pend = []; for (const v of this.voices) v.rel = true; }
     else if (m.t === 'kill') { this.recycleAll(); this.pend = []; }
   }
   apply(m) {
-    if (m.t === 'on') { this.speed = m.speed; this.pitch = m.pitch; this.vol = m.vol; this.start(m); }
+    if (m.t === 'on') {
+      // parameter yang dibawa nada ini sudah usang kalau knob diputar (pesan 'p') setelah nada diterima: jangan menimpa nilai yang lebih baru
+      if (m.ps === this.pStamp) { this.speed = m.speed; this.pitch = m.pitch; this.vol = m.vol; }
+      this.start(m);
+    }
     else if (m.t === 'glide') { for (const v of this.voices) if (v.id === m.id) { v.gf = v.semis; v.gt = m.semis; v.g0 = m.at || currentTime; v.gd = Math.max(0.005, m.dur); } }
     else { for (const v of this.voices) if (v.id === m.id) v.rel = true; }
   }
@@ -58,34 +73,10 @@ class DerizSampler extends AudioWorkletProcessor {
     if (due.length) { this.pend = rest; for (const m of due) this.apply(m); }
   }
   setBuf(m) {
+    // Semua pekerjaan berat (padding, mix mono, deteksi onset) sudah dikerjakan di main thread (DerizSynth.setBuffer): di sini hanya menyimpan,
+    // supaya memuat sample tidak menahan thread audio puluhan ms (yang dulu membuat SEMUA suara putus).
     this.bufRate = m.rate; this.wins.clear(); this.st.fill(0); this.recycleAll();
-    const minLen = Math.ceil(0.09 * m.rate) + 8;   // sample lebih pendek dari satu frame: tambah nol supaya aman dibaca
-    this.ch = m.ch.map(a => { if (a.length >= minLen) return a; const p = new Float32Array(minLen); p.set(a); return p; });
-    this.len = this.ch[0].length;
-    const mono = new Float32Array(this.len), a = this.ch[0], b = this.ch[1];
-    for (let i = 0; i < this.len; i++) mono[i] = b ? (a[i] + b[i]) * 0.5 : a[i];
-    this.mono = mono;
-    this.ons = this.detect(mono, m.rate);
-  }
-  // deteksi onset: lonjakan energi blok 4 ms terhadap rata-rata ~32 ms sebelumnya, lalu cari titik serangan di dalam blok
-  detect(x, rate) {
-    const B = Math.max(32, Math.round(0.004 * rate)), nb = Math.floor(x.length / B), e = new Float32Array(nb);
-    let emax = 0;
-    for (let j = 0; j < nb; j++) { let s = 0; for (let k = 0; k < B; k++) { const v = x[j * B + k]; s += v * v; } e[j] = s / B; if (e[j] > emax) emax = e[j]; }
-    const floor = emax * 0.003, ons = [], gap = 0.06 * rate;
-    let last = -1e9;
-    for (let j = 3; j < nb; j++) {
-      let avg = 0, cnt = 0;
-      for (let q = 2; q <= 9 && j - q >= 0; q++) { avg += e[j - q]; cnt++; }
-      avg /= cnt;
-      if (e[j] > 5 * avg + 1e-12 && e[j] > floor && j * B - last > gap) {
-        const a0 = Math.max(0, (j - 1) * B), a1 = Math.min(x.length, (j + 1) * B);
-        let pk = 0; for (let i = a0; i < a1; i++) { const v = Math.abs(x[i]); if (v > pk) pk = v; }
-        let s = a0; while (s < a1 && Math.abs(x[s]) < 0.35 * pk) s++;
-        ons.push(s); last = s;
-      }
-    }
-    return ons;
+    this.ch = m.ch; this.len = this.ch[0].length; this.mono = m.mono; this.ons = m.ons;
   }
   // jendela per ukuran frame: W = Hann ternormalisasi (jumlah 4 geseran = 1), S = jendela awal (sama dengan kondisi tunak tapi tanpa frame sebelumnya)
   getWin(N) {
@@ -104,8 +95,16 @@ class DerizSampler extends AudioWorkletProcessor {
     const N = 4 * Math.max(8, Math.round(Math.min(0.085, Math.max(0.03, dur)) * rate / 4));
     const start = Math.max(0, m.start);
     let oi = 0; while (oi < this.ons.length && this.ons[oi] < start + 0.01 * rate) oi++;   // onset persis di awal = bagian dari frame pertama
+    // batas polifoni: lewat MAX_VOICES, nada yang sudah dilepas (lalu yang paling tua) dilepas cepat (4 ms) supaya tidak klik dan tidak ikut membebani
+    let live = 0; for (const x of this.voices) if (!x.fast) live++;
+    while (live >= MAX_VOICES) {
+      let vic = null;
+      for (const x of this.voices) if (!x.fast && (!vic || (x.rel && !vic.rel) || (x.rel === vic.rel && x.age < vic.age))) vic = x;
+      if (!vic) break;
+      vic.rel = true; vic.fast = true; vic.relK = this.fastK; live--;
+    }
     this.voices.push({
-      id: m.id, semis: m.semis, N: N, nom: start, prev: 0, first: true, last: false, oi: oi,
+      id: m.id, semis: m.semis, N: N, nom: start, prev: 0, first: true, last: false, oi: oi, age: ++this.seq, fast: false,
       w: 0, cEnd: 0, vEnd: 0, rd: 0, rho: P0 * rate / sampleRate, size: size,
       T: this.takeRing(size),
       env: 0, rel: false, atk: 1 / (0.002 * sampleRate), relK: Math.exp(-1 / (0.04 * sampleRate)),
@@ -125,14 +124,18 @@ class DerizSampler extends AudioWorkletProcessor {
   // Cache hasil pencarian: search0 adalah fungsi MURNI dari (c0, tp, N) dan sample, jadi nada yang sama diputar ulang
   // (pola berulang / loop) menghasilkan urutan frame yang persis sama dan tidak perlu mencari lagi. Hasil identik bit-per-bit.
   // Tabel hash langsung (direct-mapped) di typed array: tanpa alokasi di thread audio. Per slot: [tp, c0, c, fr, N].
-  search(c0, tp, N, Hs) {
+  // light = true (anggaran frame penuh blok ini habis): pencarian tanpa langkah sub-sampel, dan hasilnya TIDAK disimpan di cache
+  // (cache hanya berisi hasil kualitas penuh, jadi nada yang sama kelak tetap mendapat hasil penuh yang identik).
+  search(c0, tp, N, Hs, light) {
     const t = this.st, h = (((Math.imul(c0, 73856093) ^ Math.imul((tp * 64) | 0, 19349663) ^ Math.imul(N, 83492791)) >>> 0) & 65535) * 5;
-    if (t[h + 4] === N && t[h] === tp && t[h + 1] === c0) { this.fr = t[h + 3]; return t[h + 2]; }
-    const c = this.search0(c0, tp, N, Hs);
+    if (t[h + 4] === N && t[h] === tp && t[h + 1] === c0) { this.fr = t[h + 3]; return t[h + 2]; }   // cache kena: hampir gratis, tidak memakai anggaran
+    gUsed++;
+    if (light) return this.search0(c0, tp, N, Hs, true);
+    const c = this.search0(c0, tp, N, Hs, false);
     t[h] = tp; t[h + 1] = c0; t[h + 2] = c; t[h + 3] = this.fr; t[h + 4] = N;
     return c;
   }
-  search0(c0, tp, N, Hs) {
+  search0(c0, tp, N, Hs, light) {
     const x = this.mono, L = this.len, maxC = L - N, W = Hs;
     this.fr = 0;
     const tI = Math.floor(tp), tf = tp - tI;
@@ -154,7 +157,7 @@ class DerizSampler extends AudioWorkletProcessor {
     for (let cand = lo; cand <= hi; cand += 16) { const sc = score(cand, 8) * bias(cand); if (sc > best) { best = sc; bc = cand; } }
     best = -1e30; let fc = bc;
     for (let cand = Math.max(lo, bc - 16); cand <= Math.min(hi, bc + 16); cand++) { const sc = score(cand, 4) * bias(cand); if (sc > best) { best = sc; fc = cand; } }
-    if (fc > 1 && fc < maxC - 3) {
+    if (!light && fc > 1 && fc < maxC - 3) {
       // sub-sampel: skor langsung di posisi pecahan (interpolasi kubik), bagi dua lima kali (resolusi akhir ~1/32 sampel)
       const scoreF = (pos, st) => {
         const b0 = Math.floor(pos), f = pos - b0, f2 = f * f, f3 = f2 * f;
@@ -216,7 +219,7 @@ class DerizSampler extends AudioWorkletProcessor {
       if (v.oi < ons.length && ons[v.oi] - pre <= v.nom) {
         c = Math.max(0, Math.min(maxC, ons[v.oi] - pre)); v.nom = c; v.oi++; mode = 2;
       } else {
-        c = this.search(Math.round(v.nom), v.prev + Hs, N, Hs); fr = this.fr;
+        c = this.search(Math.round(v.nom), v.prev + Hs, N, Hs, gUsed >= FULL_FRAMES); fr = this.fr;   // anggaran frame penuh per blok dibagi semua plugin
         if (v.oi < ons.length) { const cm = ons[v.oi] - pre - 1; if (c + (fr < 0 ? -1 : 0) + N + 3 > cm + N) { /* dekat onset */ } if (c > cm) { c = cm; fr = 0; } }
         if (c < 0) { c = 0; fr = 0; }
         if (c < 3 || c + N + 4 >= L) fr = 0;   // pinggir sample: tanpa pecahan
@@ -270,6 +273,7 @@ class DerizSampler extends AudioWorkletProcessor {
   }
   process(inputs, outputs) {
     const out = outputs[0], oL = out[0], oR = out[1] || out[0], n = oL.length;
+    if (currentTime !== gT) { gT = currentTime; gUsed = 0; }   // blok baru: anggaran frame penuh direset (dibagi semua plugin DERIZ)
     this.flush();
     if (!this.voices.length) { this.idle(); return true; }
     const g0 = this.volS; this.volS += (this.vol - this.volS) * 0.25; const g1 = this.volS;
@@ -290,7 +294,7 @@ class DerizSampler extends AudioWorkletProcessor {
       while (!v.last && v.cEnd < v.need) { this.gen(v); made++; }
     }
     // prefetch: sisa jatah dipakai voice yang cadangan frame-nya kurang dari 2 hop (ring buffer 32768 jauh lebih besar dari itu)
-    while (made < this.PF) {
+    while (made < this.PF && gUsed < FULL_FRAMES) {   // anggaran habis: prefetch dilewati (tidak wajib), frame wajib sudah dibuat di atas
       let bv = null, bm = 0;
       for (let vi = 0; vi < nv; vi++) {
         const v = vs[vi];
@@ -351,6 +355,29 @@ registerProcessor('deriz-sampler', DerizSampler);
 
 const loaded = new WeakSet<BaseAudioContext>();
 
+// Deteksi onset (dulu di worklet): lonjakan energi blok 4 ms terhadap rata-rata ~32 ms sebelumnya, lalu cari titik serangan di dalam blok.
+// Dikerjakan di main thread supaya memuat sample tidak menahan thread audio; hasilnya identik dengan versi worklet sebelumnya.
+export function detectOnsets(x: Float32Array, rate: number): number[] {
+  const B = Math.max(32, Math.round(0.004 * rate)), nb = Math.floor(x.length / B), e = new Float32Array(nb);
+  let emax = 0;
+  for (let j = 0; j < nb; j++) { let s = 0; for (let k = 0; k < B; k++) { const v = x[j * B + k]; s += v * v; } e[j] = s / B; if (e[j] > emax) emax = e[j]; }
+  const floor = emax * 0.003, ons: number[] = [], gap = 0.06 * rate;
+  let last = -1e9;
+  for (let j = 3; j < nb; j++) {
+    let avg = 0, cnt = 0;
+    for (let q = 2; q <= 9 && j - q >= 0; q++) { avg += e[j - q]; cnt++; }
+    avg /= cnt;
+    if (e[j] > 5 * avg + 1e-12 && e[j] > floor && j * B - last > gap) {
+      const a0 = Math.max(0, (j - 1) * B), a1 = Math.min(x.length, (j + 1) * B);
+      let pk = 0; for (let i = a0; i < a1; i++) { const v = Math.abs(x[i]); if (v > pk) pk = v; }
+      let s = a0; while (s < a1 && Math.abs(x[s]) < 0.35 * pk) s++;
+      ons.push(s); last = s;
+    }
+  }
+  return ons;
+}
+const onsetCache = new WeakMap<AudioBuffer, number[]>();   // buffer yang dipakai beberapa DERIZ: deteksi onset cukup sekali
+
 export class DerizSynth {
   private sent: AudioBuffer | null = null;
   private target: AudioNode | null = null;
@@ -370,12 +397,23 @@ export class DerizSynth {
     this.node.disconnect(); this.node.connect(dest); this.target = dest;
   }
 
-  setBuffer(buf: AudioBuffer): void {   // kirim data sample sekali per buffer
+  hasBuffer(buf: AudioBuffer): boolean { return this.sent === buf; }   // sample ini sudah dikirim ke worklet (nada pertama tidak perlu menunggu)
+
+  setBuffer(buf: AudioBuffer): void {   // kirim data sample sekali per buffer; semua persiapan berat dikerjakan di sini (main thread), bukan di worklet
     if (this.sent === buf) return;
     this.sent = buf;
+    const minLen = Math.ceil(0.09 * buf.sampleRate) + 8;   // sample lebih pendek dari satu frame: tambah nol supaya aman dibaca
     const ch: Float32Array[] = [];
-    for (let c = 0; c < Math.min(2, buf.numberOfChannels); c++) ch.push(buf.getChannelData(c).slice());
-    this.node.port.postMessage({ t: 'buf', ch, rate: buf.sampleRate }, ch.map(a => a.buffer));
+    for (let c = 0; c < Math.min(2, buf.numberOfChannels); c++) {
+      let a = buf.getChannelData(c).slice();
+      if (a.length < minLen) { const p = new Float32Array(minLen); p.set(a); a = p; }
+      ch.push(a);
+    }
+    const len = ch[0].length, mono = new Float32Array(len), l = ch[0], r = ch[1];
+    for (let i = 0; i < len; i++) mono[i] = r ? (l[i] + r[i]) * 0.5 : l[i];
+    let ons = onsetCache.get(buf);
+    if (!ons) { ons = detectOnsets(mono, buf.sampleRate); onsetCache.set(buf, ons); }
+    this.node.port.postMessage({ t: 'buf', ch, mono, ons, rate: buf.sampleRate }, [...ch.map(a => a.buffer), mono.buffer]);
   }
 
   // at (opsional) = waktu AudioContext tempat nada mulai / dilepas; kosong = sekarang

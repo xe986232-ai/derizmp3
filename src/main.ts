@@ -816,8 +816,15 @@ function audio() {
     // latencyHint 'playback': buffer keluaran lebih besar, jadi lonjakan beban sesaat (banyak VST / reverb) tidak langsung jadi gresek.
     // Kualitas suara tidak berubah; harganya jeda (latency) sedikit lebih besar. Browser yang tidak mendukung mengabaikan opsi ini.
     actx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'playback' });
-    master = actx.createGain(); master.gain.value = 1;   // unity gain: suara asli, tanpa kompresor/limiter
-    master.connect(actx.destination);
+    master = actx.createGain(); master.gain.value = 1;   // unity gain: suara asli, tanpa kompresor
+    // Pengaman clipping: lurus sempurna sampai 0.9 (suara asli tidak tersentuh), di atasnya melengkung halus menuju 1.0 (sama dengan limiter lembut
+    // tiap plugin DERIZ). Banyak track dijumlah bisa melewati 1.0 dan jadi kresek karena terpotong keras di output; ini menggantinya dengan lengkung halus.
+    // Pra-gain 1/4 supaya lengkung menjangkau sampai +-4.0 sebelum terpotong. Tanpa oversampling dan tanpa latency.
+    const guardPre = actx.createGain(), guard = actx.createWaveShaper(), GN = 4097, GR = 4, curve = new Float32Array(GN);
+    guardPre.gain.value = 1 / GR;
+    for (let i = 0; i < GN; i++) { const x = (i / (GN - 1) * 2 - 1) * GR, ax = Math.abs(x); curve[i] = Math.sign(x) * (ax <= 0.9 ? ax : 0.9 + 0.1 * Math.tanh((ax - 0.9) / 0.1)); }
+    guard.curve = curve; guard.oversample = 'none';
+    master.connect(guardPre); guardPre.connect(guard); guard.connect(actx.destination);
   }
   if (actx.state === 'suspended') actx.resume();
   return actx;
@@ -1352,7 +1359,8 @@ function scheduleClips(countIn) {
   document.querySelectorAll('.trackheader-container').forEach(c => {
     const sl = c.querySelector('input[type=range]'); if (sl) setTrackVolume(c.dataset.track, +sl.value);
   });
-  startPos = posBars; startCtx = ctx.currentTime + .05 + lead;   // jeda kecil supaya penjadwalan tidak telat (+ 1 bar count-in)
+  const cold = fxRack.derizWarm();   // sampler DERIZ yang belum siap disiapkan lebih dulu; kalau ada yang dari nol, start ditunda sebentar supaya nada pertama tidak terlambat
+  startPos = posBars; startCtx = ctx.currentTime + .05 + lead + (cold ? .4 : 0);   // jeda kecil supaya penjadwalan tidak telat (+ 1 bar count-in)
   metroCancel(ctx);                                                // klik lama (tempo lama) dibatalkan
   if (countIn) for (let i = 0; i < 4; i++) metroClick(ctx, startCtx - (4 - i) * beat, i === 0);
   nextBeat = Math.ceil(startPos * 4 - 1e-6); lastBeat = -1;
