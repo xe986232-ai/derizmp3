@@ -371,7 +371,7 @@ html[data-theme="jembut"] .lane{background-image:
 @media (max-height:520px){:root{--kbd-h:150px;--kh:100px;--bh:60px}.whitekey.pitch-visible .pitch-label{display:none}}
 
 /* ===== PANEL TRACK: BUKA / TUTUP ===== */
-.tracklist{overflow-x:clip;transition:width .38s var(--ease-out)}
+.tracklist{overflow-x:clip}   /* lebar & posisi timeline dianimasikan dari main.ts (setPanel) lewat Web Animations, bukan transisi CSS */
 .tracklist--collapsed{width:64px}
 .trackheader__content-rows{flex:none;width:223px;transition:opacity .22s ease,visibility 0s linear 0s}
 .tracklist--collapsed .trackheader__content-rows{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s ease,visibility 0s linear .15s}

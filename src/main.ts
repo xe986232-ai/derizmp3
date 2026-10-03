@@ -1061,19 +1061,31 @@ lanesEl.addEventListener('pointerdown', e => {
 
 // ===== Buka / tutup panel track: klik icon instrumen di track mana saja, atau tombol panah di atas =====
 const tlistEl = document.querySelector('.tracklist'), panelToggle = document.getElementById('panelToggle');
+// Animasi buka/tutup dijalankan lewat transform di compositor (tanpa layout ulang timeline tiap frame):
+// tata letak langsung ke posisi akhir, lalu timeline "digeser balik" dengan translateX yang menyusut ke 0,
+// sementara lebar kolom track dianimasikan terpisah (isinya hanya beberapa card, jadi ringan).
+const PANEL_MS = 380;
+let panelAnims = [];
 function setPanel(collapsed) {
+  const w0 = tlistEl.offsetWidth;                          // lebar yang sedang tampil (juga benar kalau animasi sebelumnya belum selesai)
+  panelAnims.forEach(a => a.cancel()); panelAnims = [];
   tlistEl.classList.toggle('tracklist--collapsed', collapsed);
   const t = collapsed ? 'Buka panel track' : 'Tutup panel track';
   panelToggle.setAttribute('aria-expanded', String(!collapsed));
   panelToggle.setAttribute('aria-label', t); panelToggle.title = t;
   document.querySelectorAll('.trackheader__left-content').forEach(b => b.title = t);
   closeMenu(true); closeAddMenu(true); dismissAdd(true);
-  // timeline bergeser selama panel beranimasi: ruler & toolbar pattern ikut disesuaikan
-  const t0 = performance.now();
-  (function follow() {
-    paintRuler(); patBarPlace();
-    if (performance.now() - t0 < 450) requestAnimationFrame(follow); else { paintRuler(true); patBarPlace(); }
-  })();
+  const w1 = tlistEl.offsetWidth;                          // lebar akhir (CSS tidak lagi punya transisi width)
+  if (!REDUCE && w0 !== w1 && tlistEl.animate) {
+    const o = {duration: PANEL_MS, easing: EASE_OUT};
+    panelAnims = [
+      // margin-right menjaga "jejak" kolom di layout tetap w1 selama lebarnya bergerak w0 → w1
+      tlistEl.animate([{width: w0 + 'px', marginRight: (w1 - w0) + 'px'}, {width: w1 + 'px', marginRight: '0px'}], o),
+      tlEl.animate([{transform: 'translate3d(' + (w0 - w1) + 'px,0,0)'}, {transform: 'translate3d(0,0,0)'}], o)
+    ];
+  }
+  // posisi layout timeline sudah final sejak awal: ruler & toolbar pattern cukup disesuaikan sekali
+  paintRuler(); patBarPlace();   // tanpa force: kanvas ruler sudah menutup area di luar layar (margin 1 layar), tidak perlu digambar ulang
 }
 const panelCollapsed = () => tlistEl.classList.contains('tracklist--collapsed');
 panelToggle.addEventListener('click', () => setPanel(!panelCollapsed()));
