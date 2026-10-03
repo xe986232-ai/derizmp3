@@ -116,7 +116,7 @@ function build(): void {
       '<canvas class="mpcs__ov" aria-label="Peta posisi sample (ketuk / seret untuk pindah)" hidden></canvas>' +
       '<div class="mpcs__stage">' +
         '<canvas class="mpcs__keys" aria-hidden="true"></canvas>' +
-        '<div class="mpcs__scroll"><canvas class="mpcs__cv" role="img" aria-label="Editor pitch"></canvas><i class="mpcs__ph" aria-hidden="true"></i></div>' +
+        '<div class="mpcs__scroll"><div class="mpcs__plane"><canvas class="mpcs__cv" role="img" aria-label="Editor pitch"></canvas><i class="mpcs__ph" aria-hidden="true" title="Seret kiri / kanan untuk menaruh titik start"></i></div></div>' +
         `<div class="mpcs__empty"><button type="button" class="mpcs__up" data-a="up">${ICON.up}<span>Upload audio</span></button><p>Pakai vokal atau instrumen satu nada (monofonik) yang bersih tanpa efek.</p></div>` +
         '<div class="mpcs__busy" hidden><i></i></div>' +
         `<div class="mpcs__zoom" role="group" aria-label="Zoom" hidden><span class="mpcs__zg" aria-hidden="true" title="Zoom waktu">${ICON.zh}</span>` +
@@ -545,6 +545,40 @@ function build(): void {
     const t = twoPtrs();
     zoomTo(pinch.pps * Math.max(28, t.dx) / pinch.dx, pinch.zy * Math.max(28, t.dy) / pinch.dy, pinch.sec, pinch.row, t.mx, t.my); zoomNote();
   }
+
+  // ---------- seret playhead ----------
+  // Kepala / garis playhead bisa diseret kiri-kanan untuk menaruh titik start (dan titik potong Cut). Titik genggam dijaga supaya garis tidak melompat ke jari;
+  // dekat tepi tampilan, area ikut bergulir. Kalau sedang diputar: berhenti selama diseret, lalu lanjut putar dari titik baru saat dilepas.
+  let phd: { id: number; off: number; cx: number; was: boolean; raf: number } | null = null;
+  function phTick(): void {
+    if (!phd || !S) return;
+    phd.raf = 0;
+    const r = scroll.getBoundingClientRect(), EDGE = 28, dl = phd.cx - r.left, dr = r.right - phd.cx;
+    const v = dl < EDGE ? -(EDGE - Math.max(0, dl)) / EDGE * 16 : dr < EDGE ? (EDGE - Math.max(0, dr)) / EDGE * 16 : 0;
+    if (v) scroll.scrollLeft += v;
+    playPos = Math.max(0, Math.min(S.dur, (phd.cx - r.left + scroll.scrollLeft - phd.off) / pps));
+    moveHead(playPos);
+    clearTimeout(zT); stat.textContent = 'Start ' + playPos.toFixed(2) + ' s';
+    if (v) phd.raf = requestAnimationFrame(phTick);   // terus bergulir selagi jari menahan di tepi
+  }
+  const phMove = (e: PointerEvent): void => { if (!phd || e.pointerId !== phd.id) return; phd.cx = e.clientX; if (!phd.raf) phd.raf = requestAnimationFrame(phTick); };
+  function phEnd(e: PointerEvent): void {
+    if (!phd || e.pointerId !== phd.id) return;
+    const d = phd; phd = null; cancelAnimationFrame(d.raf);
+    window.removeEventListener('pointermove', phMove); window.removeEventListener('pointerup', phEnd); window.removeEventListener('pointercancel', phEnd);
+    ph.classList.remove('is-drag');
+    clearTimeout(zT); zT = window.setTimeout(info, 1400);
+    if (d.was) void startPlay();
+  }
+  ph.addEventListener('pointerdown', e => {
+    if (!S || phd) return;
+    e.preventDefault(); e.stopPropagation();
+    const r = scroll.getBoundingClientRect();
+    phd = { id: e.pointerId, off: e.clientX - r.left + scroll.scrollLeft - xOf(playPos), cx: e.clientX, was: playing, raf: 0 };
+    if (playing) stopPlay();
+    ph.classList.add('is-drag');
+    window.addEventListener('pointermove', phMove); window.addEventListener('pointerup', phEnd); window.addEventListener('pointercancel', phEnd);
+  });
 
   // ---------- seret blok ----------
   let drag: { i: number; y0: number; base: number; moved: boolean; id: number } | null = null;

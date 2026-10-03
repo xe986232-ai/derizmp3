@@ -1378,7 +1378,13 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs__zb:hover{background:rgba(255,255,255,.16)}
 .mpcs__zb:active{transform:scale(.88)}
 .mpcs__zb:focus-visible{outline:2px solid #fff;outline-offset:1px}
-.mpcs__ph{position:absolute;top:0;height:100%;left:0;width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 8px rgba(255,255,255,.55);pointer-events:none;will-change:transform}
+/* playhead: garis putih 2px di tengah area sentuh selebar 16px, kepala segitiga di atas (area sentuh 34x30 untuk jari); bisa diseret untuk menaruh titik start */
+.mpcs__plane{position:relative;display:block;width:fit-content;overflow:hidden}   /* overflow: kepala playhead di ujung tidak ikut melebarkan area scroll */
+.mpcs__ph{position:absolute;top:0;left:0;height:100%;width:16px;margin-left:-8px;background:linear-gradient(90deg,transparent 7px,#fff 7px 9px,transparent 9px);filter:drop-shadow(0 0 4px rgba(255,255,255,.5));cursor:ew-resize;touch-action:none;will-change:transform}
+.mpcs__ph::before{content:"";position:absolute;top:0;left:50%;width:18px;height:15px;margin-left:-9px;background:#fff;clip-path:polygon(0 0,100% 0,100% 50%,50% 100%,0 50%);transition:transform .15s var(--ease-out)}
+.mpcs__ph::after{content:"";position:absolute;top:0;left:50%;width:34px;height:30px;margin-left:-17px}
+.mpcs__ph:hover::before,.mpcs__ph.is-drag::before{transform:scale(1.18)}
+.mpcs__ph.is-drag{filter:drop-shadow(0 0 7px rgba(255,255,255,.85))}
 .mpcs__empty{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px;background:linear-gradient(180deg,#07070a,#15151b);text-align:center}
 .mpcs__empty[hidden]{display:none}
 .mpcs__empty p{margin:0;max-width:320px;color:#a8a8b4;font-size:12px;line-height:1.5}
@@ -1430,4 +1436,4 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs__play:focus-visible{outline:2px solid #fff;outline-offset:6px}
 @media (max-height:520px){.mpcs__win{width:min(580px,100%);height:min(300px,100%)}.mpcs__head{min-height:34px;padding-top:4px;padding-bottom:4px}.mpcs__mid{padding:8px 10px;gap:5px}.mpcs__ov{height:22px}.mpcs__bar{padding:6px 12px 9px}}
 @media (max-width:420px){.mpcs__win{height:min(520px,100%)}.mpcs__bar{gap:10px 12px}.mpcs__ups{order:1;flex:1 1 auto;width:auto}.mpcs__play{order:2}.mpcs__knobs{display:flex;order:3;flex:1 0 100%;justify-content:center;gap:20px}.mpcs__lcd{max-width:none}.mpcs__title{letter-spacing:.2em}}   /* HP portrait: upload + play satu baris, tiga knob di baris bawahnya */
-@media (prefers-reduced-motion:reduce){.mpcs__win{transform:none!important;transition:none!important}.mpcs__busy i{animation:none;width:100%}.mpcs__up,.mpcs__play,.mpcs__close,.mpcs__drag,.mpcs__knob,.mpcs__zb,.mpcs__zoom{transition:none}}
+@media (prefers-reduced-motion:reduce){.mpcs__win{transform:none!important;transition:none!important}.mpcs__busy i{animation:none;width:100%}.mpcs__up,.mpcs__play,.mpcs__close,.mpcs__drag,.mpcs__knob,.mpcs__zb,.mpcs__zoom,.mpcs__ph::before{transition:none}}
