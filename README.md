@@ -41,3 +41,8 @@ Knob Drift / Vibrato per nada hanya muncul kalau ada nada terpilih. "Snap semua"
 Kode: `src/mpcs-dsp.ts` (`Controls`, `transitionMs`, `groupShift`), `src/mpcs.ts` (knob + wiring), `src/mpcs-worker.ts` (meneruskan `ctl`).
 
 Tes: `node tools/mpcs-knobs.ts` (Center / Variation / Transition diukur pada audio hasil render dengan estimator terpisah). `node tools/mpcs-eval.ts` dan `mpcs-eval-hard.ts` tetap dipakai untuk regresi; dengan kontrol tidak diberikan hasilnya identik dengan sebelum knob ada.
+
+## MPCS: luncuran lebar, scoop, dan jatuhan (supaya hasil benar-benar lurus)
+Masalah sebelumnya: vokal yang meluncur lebar antar nada (2-5 semiton), naik dari bawah (scoop), atau jatuh di ujung nada dipecah tracker jadi beberapa potongan pendek, dan tiap potongan "dibulatkan" ke semitonnya sendiri. Hasilnya tangga semiton yang terdengar seperti slide, walau Center 100% / Variation 0% / Transition 0%.
+Perbaikan (`segment()`, langkah b4 di `src/mpcs-dsp.ts`): rangkaian potongan pendek di antara dua nada panjang dihapus dan perbatasan nada ditaruh di titik tengah luncuran (satu lompatan bersih); scoop / jatuhan berlapis di awal / akhir rangkaian diserap ke nada panjangnya. Batas simpangan yang dikoreksi dinaikkan dari 3 ke 5 semiton.
+Tes: `node tools/mpcs-straight.ts` mengukur pitch hasil render (estimator terpisah) pada vokal sintetis dengan scoop 1.5-3 st, luncuran 100-150 ms, jatuhan 1-2 st, vibrato + drift. Terburuk sebelum: rms 90 sen, simpangan dalam 40 ms sampai 230 sen. Sesudah: rms 5.7 sen.

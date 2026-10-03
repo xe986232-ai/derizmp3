@@ -382,6 +382,65 @@ export function segment(pt: PitchTrack): Note[] {
       notes.splice(k, j - k + 1, { s: s0, e: e0, midi: mm, target: mm });
     } else k++;
   }
+  // b4) luncuran lebar & scoop / jatuhan berlapis. Penyanyi jarang pindah nada seketika: ada luncuran 50-200 ms yang menyapu 2-5 semiton, dan tracker memecahnya jadi
+  //     beberapa potongan pendek yang masing-masing "dibulatkan" ke semitonnya sendiri -> hasil koreksi berupa TANGGA semiton yang terdengar sebagai slide.
+  //     (1) luncuran: rangkaian potongan pendek bersambung di antara dua nada panjang, pitch-nya menyapu dari satu nada ke nada lain -> dihapus; perbatasan nada panjang
+  //         ditaruh di titik tengah luncuran (tempat pitch melewati titik tengah kedua nada), jadi pindah nada tepat satu lompatan.
+  //     (2) scoop / jatuhan: rangkaian potongan pendek di awal / akhir sebuah rangkaian nada yang mendekati / menjauhi nada panjang -> diserap ke nada panjang itu
+  //         (kontur aslinya tetap terbawa karena render mengurangi deviasi f0 terhadap pusat nada).
+  const SHORT = Math.max(6, Math.round(0.1 * pt.sr / pt.hop));       // potongan <= ~100 ms = kandidat luncuran / ornamen
+  const CHAINMAX = Math.max(10, Math.round(0.24 * pt.sr / pt.hop));   // total rangkaian ornamen <= ~240 ms
+  const near = (a: Note, b: Note): boolean => b.s - a.e <= 3;
+  // potongan yang MENYAPU (pitch di seperempat awal vs akhir berbeda >= 0.6 semiton) adalah luncuran, bukan nada tetap (grace note): boleh diserap lebih jauh
+  const sweep = (f: Note): number => {
+    const q = Math.max(1, Math.floor((f.e - f.s) / 4)), a: number[] = [], b: number[] = [];
+    for (let u = f.s; u < f.s + q; u++) if (mid[u] > 0) a.push(mid[u]);
+    for (let u = f.e - q; u < f.e; u++) if (mid[u] > 0) b.push(mid[u]);
+    return a.length && b.length ? median(b) - median(a) : 0;
+  };
+  const ornOk = (frag: Note[], N: Note, sgn: number): boolean => frag.every(f => Math.abs(f.midi - N.midi) <= (frag.length > 1 ? 4.2 : 2.2)) ||
+    (frag.length === 1 && Math.abs(frag[0].midi - N.midi) <= 3.4 && sweep(frag[0]) * sgn >= 0.6);   // sgn = +1 kalau menuju N naik (scoop), -1 kalau turun (jatuhan)
+  const isLong = (nt: Note): boolean => nt.e - nt.s > SHORT;
+  for (let guard = 0, changed = true; changed && guard < 200; guard++) {
+    changed = false;
+    // (1) luncuran antara dua nada panjang
+    for (let k = 0; k < notes.length && !changed; k++) {
+      const A = notes[k]; if (!isLong(A)) continue;
+      let j = k + 1; while (j < notes.length && !isLong(notes[j]) && near(notes[j - 1], notes[j])) j++;
+      if (j === k + 1 || j >= notes.length || !near(notes[j - 1], notes[j])) continue;
+      const B = notes[j], frag = notes.slice(k + 1, j);
+      const span = frag[frag.length - 1].e - frag[0].s;
+      if (span > CHAINMAX) continue;
+      const lo = Math.min(A.midi, B.midi) - 0.6, hi = Math.max(A.midi, B.midi) + 0.6, dir = Math.sign(B.midi - A.midi);
+      if (Math.abs(B.midi - A.midi) < 0.6 || !frag.every(f => f.midi >= lo && f.midi <= hi)) continue;
+      let mono = true; for (let q = 1; q < frag.length; q++) if ((frag[q].midi - frag[q - 1].midi) * dir < -0.3) mono = false;
+      if (!mono) continue;
+      const cut = (A.midi + B.midi) / 2; let bnd = -1;
+      for (let u = frag[0].s; u < frag[frag.length - 1].e; u++) if (mid[u] > 0 && (mid[u] - cut) * dir >= 0) { bnd = u; break; }
+      if (bnd < 0) bnd = Math.round((frag[0].s + frag[frag.length - 1].e) / 2);
+      A.e = bnd; B.s = bnd; notes.splice(k + 1, j - k - 1); changed = true;
+    }
+    if (changed) continue;
+    // (2a) scoop di awal rangkaian: potongan pendek menanjak ke nada panjang
+    for (let k = 0; k < notes.length && !changed; k++) {
+      if (k > 0 && near(notes[k - 1], notes[k])) continue;
+      let j = k; while (j < notes.length && !isLong(notes[j]) && (j === k || near(notes[j - 1], notes[j]))) j++;
+      if (j === k || j >= notes.length || !near(notes[j - 1], notes[j])) continue;
+      const N = notes[j], frag = notes.slice(k, j), span = N.s - frag[0].s;
+      if (span > CHAINMAX || N.e - N.s < 2 * span || !ornOk(frag, N, Math.sign(N.midi - frag[0].midi))) continue;
+      N.s = frag[0].s; notes.splice(k, j - k); changed = true;
+    }
+    if (changed) continue;
+    // (2b) jatuhan di akhir rangkaian
+    for (let k = notes.length - 1; k >= 0 && !changed; k--) {
+      if (k + 1 < notes.length && near(notes[k], notes[k + 1])) continue;
+      let j = k; while (j >= 0 && !isLong(notes[j]) && (j === k || near(notes[j], notes[j + 1]))) j--;
+      if (j === k || j < 0 || !near(notes[j], notes[j + 1])) continue;
+      const N = notes[j], frag = notes.slice(j + 1, k + 1), span = frag[frag.length - 1].e - N.e;
+      if (span > CHAINMAX || N.e - N.s < 2 * span || !ornOk(frag, N, Math.sign(frag[0].midi - N.midi))) continue;
+      N.e = frag[frag.length - 1].e; notes.splice(j + 1, k - j); changed = true;
+    }
+  }
   // c) kedip pendek dibuang
   return notes.filter(nt => nt.e - nt.s >= MINNOTE);
 }
@@ -516,7 +575,7 @@ function groupShift(g: Note[], f0: Float32Array, hop: number, sr: number, R: Ctl
     for (let f = nt.s; f < nt.e; f++) rhoF[f - gs] = R.glide * dk;
     if (dk !== 1 || vk !== 1 || jw) {
       const len = nt.e - nt.s, dev = new Float64Array(len);
-      for (let q = 0; q < len; q++) { const hz = f0[nt.s + q]; dev[q] = hz ? Math.max(-3, Math.min(3, midiOf(hz) - nt.midi)) : (q ? dev[q - 1] : 0); }
+      for (let q = 0; q < len; q++) { const hz = f0[nt.s + q]; dev[q] = hz ? Math.max(-5, Math.min(5, midiOf(hz) - nt.midi)) : (q ? dev[q - 1] : 0); }
       const slow = slowPart(dev, fps);
       for (let q = 0; q < len; q++) {
         const gf = nt.s + q - gs, nrm = (dk - 1) * slow[q] + (vk - 1) * (dev[q] - slow[q]);
