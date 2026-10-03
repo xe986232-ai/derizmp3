@@ -127,11 +127,11 @@ const soft = (hex: string, a: number): string => { const k = hexRgb(hex); return
 // Warna nada: pastel (campuran warna track + putih) dengan garis tepi gelap & teks gelap, seperti nada hijau muda di FL Studio
 const hexRgb = (h: string): number[] => { const m = h.replace('#', ''), f = m.length === 3 ? m.split('').map(x => x + x).join('') : m, n = parseInt(f, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 const mixRgb = (a: number[], b: number[], t: number): string => 'rgb(' + a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(',') + ')';
-let noteTh = { c: '', fill: '', sel: '', edge: '', text: '' };
+let noteTh = { c: '', fill: '', sel: '', text: '' };
 function noteTheme() {
   if (noteTh.c !== color) {
     const k = hexRgb(color), W = [255, 255, 255], B = [0, 0, 0];
-    noteTh = { c: color, fill: mixRgb(k, W, 0.3), sel: mixRgb(k, W, 0.72), edge: mixRgb(k, B, 0.5), text: mixRgb(k, B, 0.78) };
+    noteTh = { c: color, fill: mixRgb(k, W, 0.3), sel: mixRgb(k, W, 0.72), text: mixRgb(k, B, 0.78) };
   }
   return noteTh;
 }
@@ -149,20 +149,24 @@ function eachVLine(sx: number, vw: number, fn: (x: number, beat: number, level: 
   }
 }
 
+// Tepi nada dirapatkan ke pixel perangkat (bukan pecahan): tepi tajam, tidak buram / bergerigi. Tanpa garis tepi.
+function noteRect(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const k = c.getTransform().a || 1, q = (v: number) => Math.round(v * k) / k;
+  const x0 = q(x), y0 = q(y), x1 = Math.max(x0 + 1 / k, q(x + w)), y1 = Math.max(y0 + 1 / k, q(y + h));
+  c.beginPath(); c.roundRect(x0, y0, x1 - x0, y1 - y0, Math.min(r, (x1 - x0) / 2, (y1 - y0) / 2));
+}
 function drawNoteBody(c: CanvasRenderingContext2D, n: Note, sx: number, sy: number, sel: boolean) {
   const x = n.s * ppb - sx, w = Math.max(3, n.l * ppb), y = (P_MAX - n.p) * rowH - sy;
   const th = noteTheme();
-  const a0 = c.globalAlpha;   // a0 = transparansi dasar (mis. animasi hapus); velocity hanya menipiskan badan nada, tanda pilih / label tetap jelas
+  const a0 = c.globalAlpha;   // a0 = transparansi dasar (mis. animasi hapus); velocity hanya menipiskan badan nada, label tetap jelas
   c.globalAlpha = a0 * velAlpha(n.v);
-  c.fillStyle = sel ? th.sel : th.fill; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 2); c.fill();
-  c.strokeStyle = sel ? '#fff' : th.edge; c.lineWidth = sel ? 1.5 : 1; c.stroke();
-  if (w > 5 && rowH >= 9) { c.fillStyle = 'rgba(255,255,255,.3)'; c.fillRect(x + 1.5, y + 2, w - 3, 1); }   // kilau tipis di tepi atas
+  c.fillStyle = sel ? th.sel : th.fill; noteRect(c, x + 0.5, y + 1, w - 1, rowH - 2, 2); c.fill();   // terpilih = lebih terang
   c.globalAlpha = a0;
   if (n.sl) {   // slide: lebih terang + tanda panah miring di kiri
-    c.fillStyle = 'rgba(255,255,255,.3)'; c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 2); c.fill();
+    c.fillStyle = 'rgba(255,255,255,.3)'; noteRect(c, x + 0.5, y + 1, w - 1, rowH - 2, 2); c.fill();
     if (w > 18 && rowH >= 12) { c.strokeStyle = th.text; c.lineWidth = 1.5; c.beginPath(); c.moveTo(x + 5, y + rowH - 5); c.lineTo(x + 12, y + 5); c.stroke(); }
   }
-  if (w > (n.sl ? 44 : 30) && rowH >= 14) { c.fillStyle = th.text; c.fillText(pname(n.p), x + (n.sl ? 17 : 5), y + rowH / 2 + 0.5); }
+  if (w > (n.sl ? 44 : 30) && rowH >= 14) { c.fillStyle = th.text; c.fillText(pname(n.p), Math.round(x + (n.sl ? 17 : 5)), Math.round(y + rowH / 2 + 0.5)); }
 }
 // bulatan putih di LUAR ujung kanan note (tidak menyentuh badan note); k = skala animasi
 function drawHandle(c: CanvasRenderingContext2D, n: Note, sx: number, sy: number, k: number) {
@@ -188,11 +192,12 @@ function gridCovers(l: number, t: number) {
 function drawGrid(zoomOnly = false) {
   const tg = performance.now();   // zoomOnly: frame ini hanya zoom, note tidak berubah -> lewati deteksi note baru / hilang
   const vw0 = sc.clientWidth, vh0 = sc.clientHeight, sl = sc.scrollLeft, stp = sc.scrollTop;
-  const mx = Math.round(vw0 * OV_X), my = Math.round(vh0 * OV_Y);
+  const dense = (window.devicePixelRatio || 1) > 2;   // layar rapat (HP 3x): canvas digambar tajam di 3x, overscan dikecilkan supaya jumlah pixel tetap wajar
+  const mx = Math.round(vw0 * (dense ? 0.25 : OV_X)), my = Math.round(vh0 * (dense ? 0.2 : OV_Y));
   const vw = vw0 + 2 * mx, vh = vh0 + 2 * my;           // ukuran canvas (vw/vh di bawah = ukuran canvas)
   const sx = Math.max(0, sl - mx), sy = Math.max(0, stp - my);   // konten di pojok kiri-atas canvas
   gclip.style.width = vw0 + 'px'; gclip.style.height = vh0 + 'px';
-  const c = fit(gc, vw, vh, 2);
+  const c = fit(gc, vw, vh, 3);
   c.fillStyle = PR.beyond; c.fillRect(0, 0, vw, vh);
   const xr = Math.min(vw, total * ppb - sx);
   const r0 = Math.max(0, Math.floor(sy / rowH)), r1 = Math.min(ROWS - 1, Math.floor((sy + vh) / rowH));
@@ -225,12 +230,11 @@ function drawGrid(zoomOnly = false) {
   };
   for (const gs of ghostSrc) {   // nada instrumen lain: di belakang nada yang sedang diedit, warna meredup
     const gst = states.get(gs.key); if (!gst || !gst.notes.length) continue;
-    c.fillStyle = gs.color; c.strokeStyle = gs.color; c.lineWidth = 1;
+    c.fillStyle = gs.color; c.globalAlpha = .3;
     for (const n of gst.notes) {
       if (!visible(n)) continue;
       const x = n.s * ppb - sx, w = Math.max(3, n.l * ppb), y = (P_MAX - n.p) * rowH - sy;
-      c.beginPath(); c.roundRect(x + 0.5, y + 1, w - 1, rowH - 2, 3);
-      c.globalAlpha = .28; c.fill(); c.globalAlpha = .5; c.stroke();
+      noteRect(c, x + 0.5, y + 1, w - 1, rowH - 2, 2); c.fill();
     }
     c.globalAlpha = 1;
   }
