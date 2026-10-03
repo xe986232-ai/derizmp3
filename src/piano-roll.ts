@@ -112,14 +112,17 @@ function fit(c: HTMLCanvasElement, w: number, h: number, cap = 8) {
 }
 
 // garis vertikal bertingkat: bar > ketukan > 1/2 > 1/4 > 1/8
-// Latar & grid: warna semula (gelap keunguan). Garis grid terang tipis bertingkat: bar > ketukan > 1/2 > 1/4 > 1/8
+// Latar: warna semula. Garis grid & penggaris bukan putih lagi, tapi biru-ungu lembut (satu rona dengan latar) supaya tidak bertabrakan dengan nada.
+const GRID = '138,143,200';   // rgb dasar garis grid
+const gl = (a: number): string => 'rgba(' + GRID + ',' + a + ')';
 const PR = {
-  bg: '#101016', rowWhite: '#1f1f29', rowBlack: '#17171e', beyond: '#101016', hover: 'rgba(255,255,255,.05)',
-  rowLine: 'rgba(255,255,255,.05)', octLine: 'rgba(255,255,255,.22)',
-  ruler: '#1e1e26', rulerLine: '#33333f', rulerText: '#e8e8f0', rulerTick1: '#8a8a9a', rulerTick2: '#55556a', rulerTick3: '#3c3c4c', dim: '#8a8a9a'
+  bg: '#101016', rowWhite: '#1f1f29', rowBlack: '#17171e', beyond: '#101016', hover: gl(0.07),
+  rowLine: gl(0.07), octLine: gl(0.3),
+  ruler: '#1e1e26', rulerLine: '#2c2c3d', rulerText: '#d9dcf2', rulerTick1: '#7f84b4', rulerTick2: '#4f5382', rulerTick3: '#363a5c', dim: '#7f84b4'
 };
-const LEVELS: Array<[number, number]> = [[4, 0.42], [1, 0.2], [0.5, 0.11], [0.25, 0.08], [0.125, 0.06]];
-const LEVEL_FILL = LEVELS.map(l => 'rgba(255,255,255,' + l[1] + ')');
+const LEVELS: Array<[number, number]> = [[4, 0.34], [1, 0.17], [0.5, 0.1], [0.25, 0.07], [0.125, 0.05]];
+const LEVEL_FILL = LEVELS.map(l => gl(l[1]));
+const soft = (hex: string, a: number): string => { const k = hexRgb(hex); return 'rgba(' + k[0] + ',' + k[1] + ',' + k[2] + ',' + a + ')'; };
 
 // Warna nada: pastel (campuran warna track + putih) dengan garis tepi gelap & teks gelap, seperti nada hijau muda di FL Studio
 const hexRgb = (h: string): number[] => { const m = h.replace('#', ''), f = m.length === 3 ? m.split('').map(x => x + x).join('') : m, n = parseInt(f, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
@@ -128,7 +131,7 @@ let noteTh = { c: '', fill: '', sel: '', edge: '', text: '' };
 function noteTheme() {
   if (noteTh.c !== color) {
     const k = hexRgb(color), W = [255, 255, 255], B = [0, 0, 0];
-    noteTh = { c: color, fill: mixRgb(k, W, 0.42), sel: mixRgb(k, W, 0.8), edge: mixRgb(k, B, 0.55), text: mixRgb(k, B, 0.72) };
+    noteTh = { c: color, fill: mixRgb(k, W, 0.3), sel: mixRgb(k, W, 0.72), edge: mixRgb(k, B, 0.5), text: mixRgb(k, B, 0.78) };
   }
   return noteTh;
 }
@@ -204,7 +207,7 @@ function drawGrid(zoomOnly = false) {
     eachVLine(sx, vw, (x, _b, li) => { c.fillStyle = LEVEL_FILL[li]; c.fillRect(x - 0.5, 0, 1, vh); });
     // garis akhir pattern
     const ex = Math.round(total * ppb - sx);
-    if (ex >= 0 && ex <= vw) { c.fillStyle = color; c.fillRect(ex - 1, 0, 2, vh); }
+    if (ex >= 0 && ex <= vw) { c.fillStyle = soft(color, 0.55); c.fillRect(ex - 1, 0, 2, vh); }
   }
   // nada
   const now = performance.now(); let animating = false;
@@ -237,7 +240,7 @@ function drawGrid(zoomOnly = false) {
     const src = slideSource(st.notes, n); if (!src) continue;
     const x0 = n.s * ppb - sx, x1 = (n.s + glideBeats(n)) * ppb - sx;
     if (x1 < 0 || x0 > vw) continue;
-    c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = 1.5; c.beginPath();
+    c.strokeStyle = noteTheme().sel; c.lineWidth = 1.5; c.beginPath();
     c.moveTo(x0, (P_MAX - src.p + 0.5) * rowH - sy); c.lineTo(x1, (P_MAX - n.p + 0.5) * rowH - sy); c.stroke();
   }
   for (const n of st.notes) {
@@ -261,7 +264,7 @@ function drawGrid(zoomOnly = false) {
   // marquee
   if (g && g.kind === 'marquee') {
     const a = g.x0 - sx, b = g.y0 - sy, w = g.x - g.x0, h = g.y - g.y0;
-    c.fillStyle = 'rgba(120,190,255,.16)'; c.strokeStyle = '#8ecbff'; c.lineWidth = 1.5;   // kotak seleksi biru muda ala FL Studio
+    c.fillStyle = 'rgba(154,160,255,.14)'; c.strokeStyle = '#9aa0ff'; c.lineWidth = 1.5;   // kotak seleksi biru-ungu lembut, serona dengan grid
     c.beginPath(); c.roundRect(a + 0.5, b + 0.5, w, h, 4); c.fill(); c.stroke();
   }
 }
@@ -327,7 +330,7 @@ function drawRuler() {
     else { c.fillStyle = PR.rulerTick3; c.fillRect(x - 0.5, RULER_H - 6, 1, 6); }
   });
   const ex = Math.round(total * ppb - sx);
-  if (ex >= 0 && ex <= vw) { c.fillStyle = color; c.fillRect(ex - 1, 0, 2, RULER_H); }
+  if (ex >= 0 && ex <= vw) { c.fillStyle = soft(color, 0.55); c.fillRect(ex - 1, 0, 2, RULER_H); }
   c.fillStyle = PR.rulerLine; c.fillRect(0, RULER_H - 1, vw, 1);
 }
 
@@ -357,7 +360,7 @@ function drawVel() {
   // area batang
   c.save(); c.beginPath(); c.rect(KEY_W - 7, 0, w - KEY_W + 7, h); c.clip();   // sedikit melewati tepi kiri: kepala batang nada di awal pattern tidak terpotong
   eachVLine(sx, w - KEY_W, (x, _b, li) => { c.fillStyle = LEVEL_FILL[li]; c.fillRect(KEY_W + x - 0.5, 0, 1, h); });
-  for (const t of [0, 0.25, 0.5, 0.75, 1]) { c.fillStyle = t === 0.5 || t === 0 || t === 1 ? 'rgba(255,255,255,.12)' : 'rgba(255,255,255,.05)'; c.fillRect(KEY_W, Math.round(velY(t, h)), w - KEY_W, 1); }
+  for (const t of [0, 0.25, 0.5, 0.75, 1]) { c.fillStyle = t === 0.5 || t === 0 || t === 1 ? gl(0.22) : gl(0.09); c.fillRect(KEY_W, Math.round(velY(t, h)), w - KEY_W, 1); }
   const ex = Math.round(KEY_W + total * ppb - sx);
   if (ex >= KEY_W && ex <= w) { c.fillStyle = color; c.fillRect(ex - 1, 0, 2, h); }
   const base = h - VEL_PAD_B;
