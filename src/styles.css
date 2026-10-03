@@ -1213,3 +1213,10 @@ html.is-reorder,html.is-reorder *{cursor:grabbing !important;user-select:none;-w
 .pattern.is-jelly-src{opacity:0;transition:none}   /* pattern asli disembunyikan selama salinannya dibawa; muncul lagi saat salinan mendarat */
 .pattern__ph{position:absolute;left:0;top:0;bottom:0;width:1px;z-index:3;background:currentColor;pointer-events:none;display:none;will-change:transform}   /* sama seperti .playhead-body: 1px, tanpa shadow */
 html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas, playhead utama hilang (ada di salinan pattern) */
+
+/* ===== Knob DERIZ: bentuk knob dari desain panel (badan bergerigi logam + cincin + tanda skala) ===== */
+.fxc--deriz .fxk{width:64px;height:64px;border:0;border-radius:0;background:none}
+.fxc--deriz .fxk .knob-inner{background:none;border-radius:0}
+.fxc--deriz .fxk .dk .circle-bg{stroke:#5a5a66;stroke-width:1.5;fill:none}
+.fxc--deriz .fxk .dk .circle{stroke-width:4.2;stroke-linecap:round;fill:none}
+.fxc--deriz .fxk .dk .knob-pos{stroke:none;fill:none;transform-origin:75px 75px;filter:drop-shadow(0 3px 3px rgba(0,0,0,.65))}

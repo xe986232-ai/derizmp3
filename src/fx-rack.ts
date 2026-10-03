@@ -96,6 +96,23 @@ const knobSvg = `<svg viewBox="0 0 36 36" aria-hidden="true" class="circular-cha
   `<path d="M18 5.7857142857142865 a 12.214285714285714 12.214285714285714 0 0 1 0 24.428571428571427 a 12.214285714285714 12.214285714285714 0 0 1 0 -24.428571428571427" stroke="var(--background-tinted-base)" fill="none" class="circle-inner-stroke"></path>` +
   `<path d="M 18 7.5 L 18 12" class="knob-pos" style="transform:rotate(-135deg)"></path></svg>`;
 
+// Knob DERIZ: bentuk knob dari desain panel (badan bergerigi + cincin + tanda skala). Kelas .circle-bg / .circle / .knob-pos sama
+// dengan knob lain, jadi paintKnob tidak berubah; .knob-pos membungkus badan + penunjuk, jadi seluruh knob ikut berputar.
+let dkSeq = 0;
+const derizKnobSvg = (): string => {
+  const u = 'dkg' + (++dkSeq);   // id gradien unik per knob (tidak bentrok antar-card)
+  return `<svg viewBox="0 0 150 150" aria-hidden="true" class="circular-chart dk"><defs><linearGradient id="${u}" x1="7554.29" y1="40.3094" x2="7554.29" y2="155.375" gradientUnits="userSpaceOnUse"><stop stop-color="#CACACA"/><stop offset="0.21875" stop-color="#6F6F6F"/><stop offset="0.8125" stop-opacity="0.89"/><stop offset="1" stop-color="#1A1A1A" stop-opacity="0.89"/></linearGradient></defs>` +
+    `<path d="M75 12.17 a62.83 62.83 0 0 1 0 125.66 a62.83 62.83 0 0 1 0 -125.66" pathLength="100" stroke-dasharray="75 100" class="circle-bg" style="transform-origin:75px 75px;transform:rotate(225deg)"></path>` +
+    `<path d="M75 12.17 a62.83 62.83 0 0 1 0 125.66 a62.83 62.83 0 0 1 0 -125.66" pathLength="100" stroke-dasharray="0 100" class="circle primary-theme" style="transform-origin:75px 75px;transform:rotate(225deg)"></path>` +
+    `<g transform="translate(-7479.05 -22.0854)" stroke="none"><path fill-rule="evenodd" clip-rule="evenodd" fill="#949494" fill-opacity=".85" d="M7552.54 23.6551H7551.78V30.4707C7535.55 31.0143 7520.79 37.3612 7509.51 47.5025L7505.03 43.0213L7504.49 43.5564L7509.51 48.5728C7509.69 48.402 7509.88 48.2322 7510.07 48.0634L7510.05 48.0447C7521.19 38.0413 7535.76 31.7796 7551.78 31.2368V31.2636C7552.03 31.2551 7552.28 31.248 7552.54 31.2423V23.6551ZM7501.28 46.7681L7506.27 51.7586C7506.1 51.9418 7505.92 52.1259 7505.75 52.3111L7505.73 52.2924C7495.47 63.3579 7488.96 77.9547 7488.23 94.0572H7488.26C7488.25 94.3092 7488.24 94.5615 7488.23 94.8142H7481.38V94.0572H7487.47C7488.2 77.7433 7494.79 62.9553 7505.19 51.7506L7500.74 47.3036L7501.28 46.7681ZM7481.38 99.3563H7488.23C7488.24 99.609 7488.25 99.8613 7488.26 100.113H7488.23C7488.96 116.216 7495.47 130.813 7505.73 141.878L7505.75 141.859C7505.92 142.045 7506.1 142.229 7506.27 142.412L7501.28 147.403L7500.74 146.867L7505.19 142.42C7494.79 131.215 7488.2 116.427 7487.47 100.113H7481.38V99.3563ZM7608.34 147.402L7602.56 141.629C7602.73 141.443 7602.9 141.256 7603.07 141.068L7603.09 141.088C7612.94 130.122 7619.16 115.835 7619.87 100.113H7619.84C7619.85 99.8613 7619.86 99.609 7619.87 99.3563H7628.24V100.113H7620.64C7619.92 116.047 7613.62 130.524 7603.63 141.63L7608.87 146.867L7608.34 147.402ZM7628.24 94.8142H7619.87C7619.86 94.5615 7619.85 94.3092 7619.84 94.0572H7619.87C7619.16 78.3353 7612.94 64.0488 7603.09 53.083L7603.07 53.1025C7602.9 52.9146 7602.73 52.7277 7602.56 52.5417L7608.34 46.7683L7608.87 47.3033L7603.63 52.5408C7613.62 63.6463 7619.92 78.124 7620.64 94.0572H7628.24V94.8142ZM7605.13 43.5566L7599.38 49.304C7599.19 49.1302 7599.01 48.9573 7598.83 48.7855L7598.84 48.7662C7587.95 38.6644 7573.64 32.2001 7557.84 31.3053V31.3322C7557.58 31.3179 7557.33 31.305 7557.08 31.2936V23.6551H7557.84V30.5383C7573.85 31.4347 7588.35 37.9845 7599.39 48.2244L7604.59 43.021L7605.13 43.5566Z"></path></g>` +
+    `<g class="knob-pos" style="transform:rotate(-135deg)"><g transform="translate(-7479.05 -22.0854)" stroke="none">` +
+    `<path fill="#4F4F4F" d="M7512.59 58.2087C7518.5 60.5343 7525.37 60.2433 7531.3 56.8225C7537.11 53.4663 7540.77 47.8134 7541.79 41.6717C7545.82 40.7798 7550 40.3094 7554.29 40.3094C7559.11 40.3094 7563.79 40.9017 7568.27 42.0175C7569.33 48.0917 7572.97 53.6695 7578.73 56.9939C7584.34 60.2328 7590.8 60.666 7596.49 58.7288C7602.69 65.4196 7607.33 73.5888 7609.8 82.6493C7604.9 86.6042 7601.76 92.6618 7601.76 99.4522C7601.76 105.881 7604.57 111.654 7609.03 115.606C7606.39 123.756 7601.98 131.108 7596.25 137.21C7590.63 135.376 7584.28 135.845 7578.76 139.034C7573.12 142.291 7569.5 147.712 7568.36 153.644C7563.86 154.775 7559.15 155.375 7554.29 155.375C7549.97 155.375 7545.75 154.898 7541.7 153.993C7540.6 147.992 7536.97 142.495 7531.27 139.205C7525.43 135.834 7518.67 135.503 7512.82 137.719C7506.86 131.518 7502.27 123.983 7499.56 115.606C7504.02 111.654 7506.83 105.881 7506.83 99.4522C7506.83 92.6617 7503.69 86.604 7498.79 82.6491C7501.33 73.3525 7506.14 64.9943 7512.59 58.2087Z"></path><path fill="#000" fill-opacity=".2" d="M7512.59 58.2087C7518.5 60.5343 7525.37 60.2433 7531.3 56.8225C7537.11 53.4663 7540.77 47.8134 7541.79 41.6717C7545.82 40.7798 7550 40.3094 7554.29 40.3094C7559.11 40.3094 7563.79 40.9017 7568.27 42.0175C7569.33 48.0917 7572.97 53.6695 7578.73 56.9939C7584.34 60.2328 7590.8 60.666 7596.49 58.7288C7602.69 65.4196 7607.33 73.5888 7609.8 82.6493C7604.9 86.6042 7601.76 92.6618 7601.76 99.4522C7601.76 105.881 7604.57 111.654 7609.03 115.606C7606.39 123.756 7601.98 131.108 7596.25 137.21C7590.63 135.376 7584.28 135.845 7578.76 139.034C7573.12 142.291 7569.5 147.712 7568.36 153.644C7563.86 154.775 7559.15 155.375 7554.29 155.375C7549.97 155.375 7545.75 154.898 7541.7 153.993C7540.6 147.992 7536.97 142.495 7531.27 139.205C7525.43 135.834 7518.67 135.503 7512.82 137.719C7506.86 131.518 7502.27 123.983 7499.56 115.606C7504.02 111.654 7506.83 105.881 7506.83 99.4522C7506.83 92.6617 7503.69 86.604 7498.79 82.6491C7501.33 73.3525 7506.14 64.9943 7512.59 58.2087Z"></path>` +
+    `<rect x="7553.29" y="41.8235" width="3.028" height="12.112" rx="1.514" fill="#B6B6B6"></rect></g></g>` +
+    // pencahayaan (gradien terang atas -> gelap bawah) pada kubah tengah: statis, tidak ikut berputar supaya arah cahaya tetap
+    `<g transform="translate(-7479.05 -22.0854)" stroke="none"><circle cx="7554.05" cy="97.0855" r="38" fill="url(#${u})" fill-opacity=".4"></circle>` +
+    `<circle cx="7554.05" cy="97.0855" r="34.0656" fill="none" stroke="#414141" stroke-opacity=".9" stroke-width=".757"></circle></g></svg>`;
+};
+
 function paintKnob(el: HTMLElement, v: number, p: Param, name: string): void {
   (el.querySelector('.knob-pos') as SVGElement).style.transform = `rotate(${-KNOB_SWEEP / 2 + v * KNOB_SWEEP}deg)`;
   const arc = el.querySelector('.circle')!;
@@ -116,12 +133,12 @@ function paintSlider(el: HTMLElement, v: number, p: Param, name: string): void {
 const paintCtl = (el: HTMLElement, v: number, p: Param, name: string): void => (p.slider ? paintSlider : paintKnob)(el, v, p, name);
 const CTL = '.knob-input, .vsl';   // knob atau slider vertikal
 
-const cellHtml = (d: EffectDef, fx: Fx, p: Param): string => p.slider
+const cellHtml = (d: EffectDef, fx: Fx, p: Param, sv: () => string = () => knobSvg): string => p.slider
   ? `<div class="fxc__cell"><div role="slider" tabindex="0" class="vsl" data-k="${p.key}" aria-orientation="vertical" aria-label="${d.name} ${p.label}" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${fx.v[p.key]}">` +
     `<span class="vsl__fill"></span><span class="vsl__thumb"></span></div><span class="fxc__label">${p.label}</span></div>`
   : `<div class="fxc__cell"><div class="knob fxk"><div class="knob-inner">` +
     `<div role="slider" tabindex="0" class="knob-input" data-k="${p.key}" aria-label="${d.name} ${p.label}" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${fx.v[p.key]}">` +
-    `<div class="knobwheel">${knobSvg}</div></div></div></div><span class="fxc__label">${p.label}</span></div>`;
+    `<div class="knobwheel">${sv()}</div></div></div></div><span class="fxc__label">${p.label}</span></div>`;
 
 // ---------- DERIZ: canvas audio ----------
 const ICON_UP = svg('<path d="M12 16V5M7 10l5-5 5 5M5 19h14"/>', 16);
@@ -134,7 +151,7 @@ const visS = (z: DerizData): number => (z.start - z.view) * z.zoom;   // posisi 
 const DERIZ_PAD = 6;   // jarak kiri/kanan canvas: garis start di 0 / 1 dan ujung waveform sejajar, pegangan tidak terpotong
 
 // Tinggi isi sama dengan card knob (Reverb / EQ): canvas 72 px (= tinggi knob) + satu baris label, dalam wadah .fxc__knobs yang sama.
-const dKnob = (fx: Fx, key: string): string => cellHtml(defOf('deriz'), fx, defOf('deriz').params.find(p => p.key === key)!);   // satu knob DERIZ berdasarkan key
+const dKnob = (fx: Fx, key: string): string => cellHtml(defOf('deriz'), fx, defOf('deriz').params.find(p => p.key === key)!, derizKnobSvg);   // satu knob DERIZ berdasarkan key
 function derizHtml(fx: Fx): string {
   const z = fx.deriz;
   return `<div class="fxc__knobs deriz"><div class="fxc__cell deriz__cell"><div class="deriz__row">` +
