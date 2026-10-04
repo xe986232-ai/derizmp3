@@ -1409,22 +1409,16 @@ function tick() {
 }
 // Scheduler metronome: tiap 25 ms menjadwalkan klik ketukan yang jatuh dalam 120 ms ke depan (pakai jam AudioContext)
 // Nada synth dari piano roll: antrean terurut waktu, dijadwalkan bersama klik metronome (lookahead yang sama)
-let synthQ = [], synthI = 0, dzQ = [], dzI = 0;   // dzQ: nada DERIZ, dijadwalkan jauh lebih awal (worklet menahan dan membunyikannya tepat waktu), jadi main thread yang tersendat tidak membuat nada telat / menumpuk
+let synthQ = [], synthI = 0;
 // Membuat voice (Supersaw: ~25 node per nada) memakan main thread. Lookahead dibuat lebih panjang dan kerja per pump dibatasi ~3 ms:
 // nada yang masih jauh ditunda ke pump berikutnya (25 ms lagi), jadi banyak nada sekaligus tidak menahan satu frame pun.
-const SYNTH_AHEAD = .35, DERIZ_AHEAD = 1.5;
+const SYNTH_AHEAD = .35;
 function synthPump(ctx, ahead) {
   const t0 = performance.now();
   while (synthI < synthQ.length && synthQ[synthI].when <= ahead) {
     if (synthQ[synthI].when > ctx.currentTime + .1 && performance.now() - t0 > 3) break;
     const n = synthQ[synthI++];
-    playNote(ctx, master, n.track, n.p, n.when, n.dur, n.glides, n.vel);
-  }
-  const lim = ctx.currentTime + DERIZ_AHEAD;
-  while (dzI < dzQ.length && dzQ[dzI].when <= lim) {
-    if (dzQ[dzI].when > ctx.currentTime + .1 && performance.now() - t0 > 3) break;
-    const n = dzQ[dzI++];
-    fxRack.derizPlay(n.track, n.p, n.when, n.dur, n.glides, n.fxId, n.vel);
+    if (n.deriz) fxRack.derizPlay(n.track, n.p, n.when, n.dur, n.glides, n.fxId, n.vel); else playNote(ctx, master, n.track, n.p, n.when, n.dur, n.glides, n.vel);
   }
 }
 // Nada satu pattern (kunci nada = key) dijadwalkan ke instrumen track "track"; deriz = lewat sampler DERIZ track itu
@@ -1447,11 +1441,11 @@ function queueNotes(el, key, track, deriz, bs, fxId) {
     const e1 = {p: n.p, cur: n.p, sb: Math.max(s, from), eb: e, glides: [], vel: n.v};   // velocity nada sumber berlaku untuk seluruh luncuran
     ent.set(n, e1); list.push(e1);
   });
-  list.forEach(en => (deriz ? dzQ : synthQ).push({track, deriz, fxId, p: en.p, vel: en.vel, when: startCtx + (en.sb - from) * bs, dur: (en.eb - en.sb) * bs,
+  list.forEach(en => synthQ.push({track, deriz, fxId, p: en.p, vel: en.vel, when: startCtx + (en.sb - from) * bs, dur: (en.eb - en.sb) * bs,
     glides: en.glides.length ? en.glides.map(g => ({when: startCtx + (g.b - from) * bs, from: g.from, to: g.to, dur: g.d * bs})) : undefined}));
 }
 function buildSynthQueue() {
-  synthQ = []; synthI = 0; dzQ = []; dzI = 0;
+  synthQ = []; synthI = 0;
   const bs = SEC_PER_BAR / 4;   // detik per ketukan
   const derizAll = fxRack.derizAll();
   lanesEl.querySelectorAll('.pattern[data-pr-id]').forEach(el => {
@@ -1459,7 +1453,7 @@ function buildSynthQueue() {
     if (hasSynth(track)) queueNotes(el, id, track, false, bs);   // Supersaw milik track pattern ini
     for (const d of derizAll) queueNotes(el, patKey(id, d.id, track), d.track, true, bs, d.id);   // semua DERIZ (di track mana pun) yang mengisi pattern ini
   });
-  synthQ.sort((a, b) => a.when - b.when); dzQ.sort((a, b) => a.when - b.when);
+  synthQ.sort((a, b) => a.when - b.when);
 }
 function metroPump() {
   if (!playing) return;
@@ -1509,7 +1503,7 @@ function startPlay() {
 }
 function pausePlay() {
   if (playing) posBars = Math.min(BARS, startPos + Math.max(0, actx.currentTime - startCtx) / SEC_PER_BAR);   // posisi terakhir dari jam audio (playhead bergerak lewat animasi, bukan lewat tick)
-  playing = false; cancelAnimationFrame(playRaf); playRaf = 0; stopClips(actx); stopAllSynth(actx); fxRack.derizStop(); synthQ = []; dzQ = []; clearInterval(metroTimer); metroTimer = 0; metroCancel(actx, true); metroUI.beat(-1); syncTransportUI(); phHeld = false; renderStatic();
+  playing = false; cancelAnimationFrame(playRaf); playRaf = 0; stopClips(actx); stopAllSynth(actx); fxRack.derizStop(); synthQ = []; clearInterval(metroTimer); metroTimer = 0; metroCancel(actx, true); metroUI.beat(-1); syncTransportUI(); phHeld = false; renderStatic();
 }
 const togglePlay = () => playing ? pausePlay() : startPlay();
 function toStart() {
