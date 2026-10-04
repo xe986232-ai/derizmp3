@@ -8,6 +8,11 @@ const ICON_ZONE = 8 + 13 + 7;   // px dari tepi kiri header: padding + lebar ico
 const HOLD_MS = 450;            // lama menahan
 const HOLD_SLOP = 10;           // px maksimum bergeser selama menahan (lebih dari ini = batal)
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const MENU_LABEL = 'Sesuaikan Tempo';   // menyamakan tempo audio clip dengan BPM project
+const svg = (d: string): string => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+const IC_METRO = svg('<path d="M9.6 3h4.8l3.4 18H6.2z"/><path d="M12 16.5L16.2 7"/><path d="M9.8 16.5h4.4"/>');
+const IC_MINUS = svg('<path d="M6 12h12"/>');
+const IC_PLUS = svg('<path d="M12 6v12M6 12h12"/>');
 
 export interface ClipIconMenuHooks {
   onOpen?(pattern: HTMLElement): void;     // card muncul (main.ts menyembunyikan menu bulat)
@@ -47,70 +52,93 @@ export function initClipIconMenu(lanesEl: HTMLElement, hooks: ClipIconMenuHooks)
 
     const place = (): void => {   // taruh di bawah icon (atau di atas kalau tidak muat), tetap di dalam layar
       const w = c.offsetWidth, h = c.offsetHeight;
-      below = icon.bottom + 6 + h <= innerHeight - 8 || icon.top - 6 - h < 8;
-      const top = below ? icon.bottom + 6 : icon.top - 6 - h;
-      c.style.left = Math.max(8, Math.min(icon.left, innerWidth - w - 8)) + 'px';
+      below = icon.bottom + 8 + h <= innerHeight - 8 || icon.top - 8 - h < 8;
+      const top = below ? icon.bottom + 8 : icon.top - 8 - h;
+      const left = Math.max(8, Math.min(icon.left - 12, innerWidth - w - 8));
+      c.style.left = left + 'px';
       c.style.top = Math.max(8, Math.min(top, innerHeight - h - 8)) + 'px';
-      c.style.transformOrigin = (icon.left + icon.width / 2 - c.offsetLeft) + 'px ' + (below ? '0' : h + 'px');   // tumbuh dari icon
+      const ax = Math.max(18, Math.min(icon.left + icon.width / 2 - left, w - 18));   // panah menunjuk tepat ke icon
+      c.style.setProperty('--ax', ax + 'px'); c.dataset.side = below ? 'b' : 't';
+      c.style.transformOrigin = ax + 'px ' + (below ? '0' : h + 'px');   // tumbuh dari icon
     };
 
     // --- tampilan 2: input BPM ---
     const tempoView = (): HTMLElement => {
-      const projectBpm = hooks.getProjectBpm();
       const v = document.createElement('div'); v.className = 'clip-card__tempo';
-      const lbl = document.createElement('label'); lbl.className = 'clip-card__lbl'; lbl.textContent = 'BPM audio ini';
-      const row = document.createElement('div'); row.className = 'clip-card__row';
+      const title = document.createElement('div'); title.className = 'clip-card__title'; title.textContent = 'Masukkan BPM vocal';
+      const stepper = document.createElement('div'); stepper.className = 'clip-card__stepper';
+      const mkStep = (label: string, ic: string): HTMLButtonElement => {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'clip-card__step'; b.setAttribute('aria-label', label); b.innerHTML = ic; return b;
+      };
+      const minus = mkStep('Kurangi 1 BPM', IC_MINUS), plus = mkStep('Tambah 1 BPM', IC_PLUS);
+      const field = document.createElement('div'); field.className = 'clip-card__field';
       const inp = document.createElement('input');
       inp.className = 'clip-card__input'; inp.type = 'text'; inp.inputMode = 'decimal'; inp.autocomplete = 'off';
-      inp.id = 'clipTempoInput'; lbl.htmlFor = inp.id;
-      inp.value = fmt(hooks.getClipBpm(pattern) ?? projectBpm);
-      const go = document.createElement('button'); go.type = 'button'; go.className = 'clip-card__go'; go.textContent = 'Stretch';
-      const hint = document.createElement('div'); hint.className = 'clip-card__hint';
-      const idle = 'Diselaraskan ke ' + fmt(projectBpm) + ' BPM project';
-      hint.textContent = idle;
-      row.append(inp, go); v.append(lbl, row, hint);
+      inp.setAttribute('aria-label', 'BPM vocal');
+      inp.value = fmt(hooks.getClipBpm(pattern) ?? hooks.getProjectBpm());
+      const unit = document.createElement('span'); unit.className = 'clip-card__unit'; unit.textContent = 'BPM';
+      field.append(inp, unit); stepper.append(minus, field, plus);
+      const go = document.createElement('button'); go.type = 'button'; go.className = 'clip-card__go'; go.textContent = 'Terapkan';
+      const err = document.createElement('div'); err.className = 'clip-card__err'; err.setAttribute('role', 'alert'); err.hidden = true;
+      v.append(title, stepper, go, err);
+
+      const showErr = (msg: string): void => {
+        err.textContent = msg; err.hidden = false;
+        if (card === c) place();
+        if (!REDUCE) err.animate([{opacity: 0, transform: 'translateY(-4px)'}, {opacity: 1, transform: 'none'}], {duration: 180, easing: 'ease-out'});
+      };
+      const clearErr = (): void => { if (!err.hidden) { err.hidden = true; if (card === c) place(); } };
+      const nudge = (d: number): void => {
+        const cur = parseFloat(inp.value.replace(',', '.'));
+        inp.value = fmt(Math.max(20, Math.min(400, (isFinite(cur) ? cur : hooks.getProjectBpm()) + d))); clearErr();
+      };
+      minus.addEventListener('click', () => nudge(-1));
+      plus.addEventListener('click', () => nudge(1));
 
       let busy = false;
       const submit = async (): Promise<void> => {
         if (busy) return;
         const bpm = parseFloat(inp.value.replace(',', '.'));
         if (!isFinite(bpm) || bpm < 20 || bpm > 400) {
-          hint.textContent = 'Isi BPM antara 20 dan 400'; hint.className = 'clip-card__hint is-err';
-          inp.classList.remove('is-shake'); void inp.offsetWidth; inp.classList.add('is-shake'); inp.focus();
+          showErr('BPM harus antara 20 dan 400');
+          field.classList.remove('is-shake'); void field.offsetWidth; field.classList.add('is-shake'); inp.focus();
           return;
         }
-        busy = true; inp.disabled = true; go.disabled = true;
+        busy = true; inp.disabled = minus.disabled = plus.disabled = go.disabled = true; clearErr();
         go.replaceChildren(Object.assign(document.createElement('span'), {className: 'clip-card__spin'}));
-        hint.textContent = 'Memproses…'; hint.className = 'clip-card__hint';
         try {
           await hooks.applyTempo(pattern, bpm);
           close();
-        } catch (err) {
-          busy = false; inp.disabled = false; go.disabled = false; go.textContent = 'Stretch';
-          hint.textContent = (err as Error).message || 'Gagal memproses audio'; hint.className = 'clip-card__hint is-err';
-          if (card === c) { place(); inp.focus(); }
+        } catch (e) {
+          busy = false; inp.disabled = minus.disabled = plus.disabled = go.disabled = false; go.textContent = 'Terapkan';
+          showErr((e as Error).message || 'Gagal memproses audio');
+          if (card === c) inp.focus();
         }
       };
       go.addEventListener('click', submit);
-      inp.addEventListener('input', () => { if (hint.className.includes('is-err')) { hint.textContent = idle; hint.className = 'clip-card__hint'; } });
+      inp.addEventListener('input', clearErr);
       inp.addEventListener('keydown', (e: KeyboardEvent) => {
         e.stopPropagation();   // ketikan tidak boleh sampai ke pintasan keyboard DAW (spasi = play, tombol piano, dst)
         if (e.key === 'Enter') { e.preventDefault(); void submit(); }
         else if (e.key === 'Escape') { e.preventDefault(); close(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); nudge(1); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); nudge(-1); }
       });
       inp.addEventListener('keyup', (e: KeyboardEvent) => e.stopPropagation());
       return v;
     };
 
+    const inner = document.createElement('div'); inner.className = 'clip-card__in';
+    c.appendChild(inner);
     const showTempo = (): void => {
       const w0 = c.offsetWidth, h0 = c.offsetHeight;
       const v = tempoView();
-      c.replaceChildren(v);
+      inner.replaceChildren(v);
       place();
       const w1 = c.offsetWidth, h1 = c.offsetHeight;
       if (!REDUCE) {
-        c.animate([{width: w0 + 'px', height: h0 + 'px'}, {width: w1 + 'px', height: h1 + 'px'}], {duration: 210, easing: 'cubic-bezier(.2,.9,.3,1)'});
-        v.animate([{opacity: 0, transform: 'translateY(5px)'}, {opacity: 1, transform: 'none'}], {duration: 190, delay: 50, easing: 'ease-out', fill: 'backwards'});
+        c.animate([{width: w0 + 'px', height: h0 + 'px'}, {width: w1 + 'px', height: h1 + 'px'}], {duration: 240, easing: 'cubic-bezier(.2,.9,.3,1)'});
+        v.animate([{opacity: 0, transform: 'translateY(6px) scale(.97)'}, {opacity: 1, transform: 'none'}], {duration: 210, delay: 60, easing: 'ease-out', fill: 'backwards'});
       }
       const inp = v.querySelector('input') as HTMLInputElement;
       inp.focus({preventScroll: true}); inp.select();
@@ -119,9 +147,10 @@ export function initClipIconMenu(lanesEl: HTMLElement, hooks: ClipIconMenuHooks)
     // --- tampilan 1: menu ---
     const it = document.createElement('button');
     it.type = 'button'; it.className = 'clip-card__item'; it.setAttribute('role', 'menuitem');
-    it.textContent = 'Tempo';
+    const ico = document.createElement('span'); ico.className = 'clip-card__ico'; ico.innerHTML = IC_METRO;
+    it.append(ico, document.createTextNode(MENU_LABEL));
     it.addEventListener('click', showTempo);
-    c.appendChild(it);
+    inner.appendChild(it);
     document.body.appendChild(c);
     place();
     card = c;
