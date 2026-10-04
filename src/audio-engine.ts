@@ -209,12 +209,12 @@ export function trackLevels(track: string): [number, number] {
 }
 
 // ---------- effect per track: equalizer -> filter -> reverb ----------
-// Jalur: gain track -> [EQ: low shelf -> mid peaking -> high shelf] -> [Filter: low-pass -> high-pass] -> [Delay: delay-fx.ts] -> dry -> output, dan -> convolver -> wet -> output (reverb).
+// Jalur: gain track -> [EQ: low shelf -> low-mid -> mid -> high-mid peaking -> high shelf -> output] -> [Filter: low-pass -> high-pass] -> [Delay: delay-fx.ts] -> dry -> output, dan -> convolver -> wet -> output (reverb).
 // Mix reverb memakai crossfade equal-power. Urutan di jalur audio selalu EQ, Filter, Delay, lalu reverb (tidak tergantung urutan card).
 export interface ReverbParams { on: boolean; mix: number; size: number }   // mix 0..1, size 0..1 (-> gema 0,4 s .. 5 s)
 const reverbs = new Map<string, ReverbParams>();
 const dests = new Map<string, AudioNode>();
-export interface EqParams { on: boolean; low: number; mid: number; high: number }   // tiap band 0..1, 0,5 = 0 dB
+export interface EqParams { on: boolean; v: Record<string, number> }   // semua nilai 0..1: gain per band (key band, 0,5 = 0 dB), <band>F = frekuensi, <band>Q = lebar (hanya band peaking), out = level akhir
 const eqs = new Map<string, EqParams>();
 // Filter ala DJ: satu knob Cutoff. Tengah = bypass, ke kiri = low-pass (makin kiri makin gelap), ke kanan = high-pass (makin kanan makin tipis).
 export interface FilterParams { on: boolean; cutoff: number; reso: number }   // cutoff 0..1 (0,5 = bypass), reso 0..1
@@ -230,6 +230,20 @@ export const filterHz = (cutoff: number): number => {
 export const filterQ = (reso: number): number => 0.707 + clamp01(reso) * 11.3;   // 0.707 (datar) .. 12 (resonansi tajam)
 export const EQ_RANGE_DB = 12;   // knob penuh = ±12 dB
 export const eqDb = (v: number): number => (Math.max(0, Math.min(1, v)) - 0.5) * 2 * EQ_RANGE_DB;
+// Equalizer 5 band: Low shelf, Low-Mid / Mid / High-Mid (peaking), High shelf. Tiap band punya jangkauan frekuensi sendiri (skala log) supaya band tidak saling menyeberang jauh.
+// Default frekuensi Low / Mid / High sama dengan EQ lama (150 Hz / 1 kHz / 6 kHz, Q 0,8), band baru gain 0 dB, jadi project lama terdengar sama persis.
+export interface EqBand { key: string; name: string; short: string; type: 'lowshelf' | 'peaking' | 'highshelf'; lo: number; hi: number; def: number; q: boolean; defQ: number }
+export const EQ_BANDS: EqBand[] = [
+  { key: 'low', name: 'Low', short: 'LOW', type: 'lowshelf', lo: 20, hi: 500, def: 150, q: false, defQ: 0.7 },
+  { key: 'lm', name: 'Low-Mid', short: 'LM', type: 'peaking', lo: 80, hi: 1600, def: 400, q: true, defQ: 1 },
+  { key: 'mid', name: 'Mid', short: 'MID', type: 'peaking', lo: 200, hi: 6000, def: 1000, q: true, defQ: 0.8 },
+  { key: 'hm', name: 'High-Mid', short: 'HM', type: 'peaking', lo: 800, hi: 12000, def: 3200, q: true, defQ: 1 },
+  { key: 'high', name: 'High', short: 'HIGH', type: 'highshelf', lo: 1500, hi: 20000, def: 6000, q: false, defQ: 0.7 },
+];
+export const eqHz = (b: EqBand, v: number): number => b.lo * Math.pow(b.hi / b.lo, clamp01(v));
+export const eqFreqV = (b: EqBand, hz: number): number => clamp01(Math.log(Math.max(b.lo, hz) / b.lo) / Math.log(b.hi / b.lo));
+export const eqQ = (v: number): number => 0.3 * Math.pow(8 / 0.3, clamp01(v));   // 0,3 (lebar) .. 8 (sempit), log
+export const eqQV = (q: number): number => clamp01(Math.log(Math.max(0.3, q) / 0.3) / Math.log(8 / 0.3));
 // De-esser: pereda desis "S" (worklet, lihat deesser.ts). Selalu di awal jalur efek, sebelum EQ / Filter / Reverb, supaya desis tidak ikut diperkeras atau dipantulkan reverb.
 export interface DeesserParams { on: boolean; freq: number; thresh: number; amount: number }   // semua 0..1
 const deessers = new Map<string, DeesserParams>();
@@ -239,7 +253,7 @@ export const deesserThr = (v: number): number => -60 + clamp01(v) * 50;         
 export const deesserMaxDb = (v: number): number => clamp01(v) * 20;                      // reduksi maksimum 0 .. 20 dB
 interface Chain {
   ctx: BaseAudioContext; topo: string; ds: AudioWorkletNode | null; dl: DelayUnit | null;
-  low: BiquadFilterNode; mid: BiquadFilterNode; high: BiquadFilterNode;
+  low: BiquadFilterNode; lm: BiquadFilterNode; mid: BiquadFilterNode; hm: BiquadFilterNode; high: BiquadFilterNode; eo: GainNode;
   lp: BiquadFilterNode; hp: BiquadFilterNode;
   dry: GainNode; wet: GainNode; conv: ConvolverNode; decay: number;
 }
@@ -276,7 +290,7 @@ function syncFx(track: string): void {
   const dsOn = !!ds && deesserLoaded(ctx);      // node baru dipasang setelah modul worklet siap (beberapa ms)
   if (!rv && !eq && !fl && !dsOn && !dly) {              // semua card efek dihapus: kembali ke jalur langsung
     if (ch) {
-      g.disconnect(); [ch.low, ch.mid, ch.high, ch.lp, ch.hp, ch.dry, ch.wet, ch.conv].forEach(n => n.disconnect());
+      g.disconnect(); [ch.low, ch.lm, ch.mid, ch.hm, ch.high, ch.eo, ch.lp, ch.hp, ch.dry, ch.wet, ch.conv].forEach(n => n.disconnect());
       if (ch.ds) ch.ds.disconnect();
       if (ch.dl) { ch.dl.output.disconnect(); ch.dl.dispose(); ch.dl = null; }
       g.connect(dest); chains.delete(track);
@@ -284,16 +298,14 @@ function syncFx(track: string): void {
     return;
   }
   if (!ch || ch.ctx !== ctx) {
-    const low = ctx.createBiquadFilter(), mid = ctx.createBiquadFilter(), high = ctx.createBiquadFilter();
-    low.type = 'lowshelf'; low.frequency.value = 150;
-    mid.type = 'peaking'; mid.frequency.value = 1000; mid.Q.value = 0.8;
-    high.type = 'highshelf'; high.frequency.value = 6000;
+    const [low, lm, mid, hm, high] = EQ_BANDS.map(b => { const n = ctx.createBiquadFilter(); n.type = b.type; n.frequency.value = b.def; if (b.q) n.Q.value = b.defQ; return n; });
+    const eo = ctx.createGain();
     const lp = ctx.createBiquadFilter(), hp = ctx.createBiquadFilter();
     lp.type = 'lowpass'; lp.frequency.value = 20000; lp.Q.value = 0.707;
     hp.type = 'highpass'; hp.frequency.value = 20; hp.Q.value = 0.707;
     const conv = ctx.createConvolver();
     conv.normalize = false;   // normalisasi dilakukan sendiri di makeImpulse
-    ch = { ctx, topo: '', ds: null, dl: null, low, mid, high, lp, hp, dry: ctx.createGain(), wet: ctx.createGain(), conv, decay: 0 };
+    ch = { ctx, topo: '', ds: null, dl: null, low, lm, mid, hm, high, eo, lp, hp, dry: ctx.createGain(), wet: ctx.createGain(), conv, decay: 0 };
     chains.set(track, ch);
   }
   if (dsOn && ds && !ch.ds) ch.ds = createDeesser(ctx, { fc: deesserHz(ds.freq), thr: deesserThr(ds.thresh), max: deesserMaxDb(ds.amount), on: ds.on });
@@ -301,12 +313,12 @@ function syncFx(track: string): void {
   if (!dly && ch.dl) { ch.dl.output.disconnect(); ch.dl.dispose(); ch.dl = null; ch.topo = ''; }
   const topo = (dsOn ? 'd' : '-') + (eq ? 'e' : '-') + (fl ? 'f' : '-') + (dly ? 'y' : '-') + (rv ? 'r' : '-');
   if (topo !== ch.topo) {                        // susun ulang jalur sesuai efek yang ada
-    g.disconnect(); [ch.low, ch.mid, ch.high, ch.lp, ch.hp, ch.dry, ch.wet, ch.conv].forEach(n => n.disconnect());
+    g.disconnect(); [ch.low, ch.lm, ch.mid, ch.hm, ch.high, ch.eo, ch.lp, ch.hp, ch.dry, ch.wet, ch.conv].forEach(n => n.disconnect());
     if (ch.ds) { ch.ds.disconnect(); if (!dsOn) ch.ds = null; }
     if (ch.dl) ch.dl.output.disconnect();
     let s: AudioNode = g;
     if (dsOn && ch.ds) { s.connect(ch.ds); s = ch.ds; }
-    if (eq) { s.connect(ch.low); ch.low.connect(ch.mid); ch.mid.connect(ch.high); s = ch.high; }
+    if (eq) { s.connect(ch.low); ch.low.connect(ch.lm); ch.lm.connect(ch.mid); ch.mid.connect(ch.hm); ch.hm.connect(ch.high); ch.high.connect(ch.eo); s = ch.eo; }
     if (fl) { s.connect(ch.lp); ch.lp.connect(ch.hp); s = ch.hp; }
     if (dly && ch.dl) { s.connect(ch.dl.input); s = ch.dl.output; }
     if (rv) { s.connect(ch.dry); ch.dry.connect(dest); s.connect(ch.conv); ch.conv.connect(ch.wet); ch.wet.connect(dest); }
@@ -317,9 +329,13 @@ function syncFx(track: string): void {
   if (dsOn && ds && ch.ds) ch.ds.port.postMessage({ t: 'p', fc: deesserHz(ds.freq), thr: deesserThr(ds.thresh), max: deesserMaxDb(ds.amount), on: ds.on });
   if (dly && ch.dl) ch.dl.update(dly);
   if (eq) {
-    ch.low.gain.setTargetAtTime(eq.on ? eqDb(eq.low) : 0, now, .02);
-    ch.mid.gain.setTargetAtTime(eq.on ? eqDb(eq.mid) : 0, now, .02);
-    ch.high.gain.setTargetAtTime(eq.on ? eqDb(eq.high) : 0, now, .02);
+    const nodes = [ch.low, ch.lm, ch.mid, ch.hm, ch.high], v = eq.v;
+    EQ_BANDS.forEach((b, i) => {
+      nodes[i].gain.setTargetAtTime(eq.on ? eqDb(v[b.key] ?? 0.5) : 0, now, .02);
+      nodes[i].frequency.setTargetAtTime(eqHz(b, v[b.key + 'F'] ?? eqFreqV(b, b.def)), now, .02);
+      if (b.q) nodes[i].Q.setTargetAtTime(eqQ(v[b.key + 'Q'] ?? eqQV(b.defQ)), now, .02);
+    });
+    ch.eo.gain.setTargetAtTime(eq.on ? Math.pow(10, eqDb(v.out ?? 0.5) / 20) : 1, now, .02);
   }
   if (fl) {   // dua biquad seri: yang tidak aktif dibiarkan di luar jangkauan dengar (20 kHz / 20 Hz), Q datar
     const m = fl.on ? filterMode(fl.cutoff) : 'off', hz = filterHz(fl.cutoff), q = filterQ(fl.reso);
@@ -360,7 +376,7 @@ export function setDeesser(track: string, p: DeesserParams | null): void {
 
 // null = track tidak punya equalizer
 export function setEq(track: string, p: EqParams | null): void {
-  if (p) eqs.set(track, { ...p }); else eqs.delete(track);
+  if (p) eqs.set(track, { on: p.on, v: { ...p.v } }); else eqs.delete(track);
   syncFx(track);
 }
 

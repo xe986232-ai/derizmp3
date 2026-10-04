@@ -6,7 +6,7 @@
 // Efek / plugin baru cukup ditambah ke EFFECTS (nama, parameter) dan ke applyAudio().
 // DERIZ: plugin sampler dengan canvas audio (spektrogram, zoom) + upload file; nada (tuts + Pitch) dan kecepatan (Speed) terpisah (deriz-synth.ts).
 
-import { setReverb, setEq, setFilter, setDeesser, setDelay, delayLevels, reverbSeconds, eqDb, filterMode, filterHz, deesserHz, deesserThr, deesserMaxDb, decodeStandalone, trackInput } from './audio-engine';
+import { setReverb, setEq, setFilter, setDeesser, setDelay, delayLevels, reverbSeconds, eqDb, EQ_BANDS, eqHz, eqFreqV, eqQ, eqQV, EQ_RANGE_DB, filterMode, filterHz, deesserHz, deesserThr, deesserMaxDb, decodeStandalone, trackInput } from './audio-engine';
 import { DerizSynth } from './deriz-synth';
 import { dbgSched, dbgSent, dbgSpec } from './audio-debug';
 import { openMpcs } from './mpcs';
@@ -15,6 +15,7 @@ import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } f
 import { velGain } from './velocity';
 import { getMasterPitch, onMasterPitch } from './master-pitch';
 import type { DelayParams } from './delay-fx';
+import { EQ_COLORS, bandOf, bandVals, hitNode, hzAt, dbAt, paintEqCanvas, eqReadout } from './eq-ui';
 import { DELAY_PARAMS, delayHtml, paintDk, paintDelayUi, paintMeter, linkedPartner } from './delay-ui';
 
 type FxType = 'reverb' | 'eq' | 'filter' | 'deesser' | 'delay' | 'supersaw' | 'deriz' | 'mpcs';
@@ -53,11 +54,14 @@ const EFFECTS: EffectDef[] = [
     ]
   },
   {
-    type: 'eq', name: 'Equalizer',
+    type: 'eq', name: 'Equalizer',   // 5 band (gain + frekuensi + Q) dan Output; kartunya punya grafik respons sendiri (eq-ui.ts)
     params: [
-      { key: 'low', label: 'Low', def: 0.5, bipolar: true, fmt: fmtDb },
-      { key: 'mid', label: 'Mid', def: 0.5, bipolar: true, fmt: fmtDb },
-      { key: 'high', label: 'High', def: 0.5, bipolar: true, fmt: fmtDb }
+      ...EQ_BANDS.flatMap((b): Param[] => [
+        { key: b.key, label: b.name + ' Gain', hint: b.name + ' (gain)', def: 0.5, bipolar: true, fmt: fmtDb },
+        { key: b.key + 'F', label: b.name + ' Freq', hint: b.name + ' (frekuensi)', def: eqFreqV(b, b.def), fmt: v => fmtHz(eqHz(b, v)) },
+        ...(b.q ? [{ key: b.key + 'Q', label: b.name + ' Q', hint: b.name + ' (lebar band)', def: eqQV(b.defQ), fmt: (v: number) => 'Q ' + eqQ(v).toFixed(2) }] : [])
+      ]),
+      { key: 'out', label: 'Output', hint: 'Output (level akhir EQ)', def: 0.5, bipolar: true, fmt: fmtDb }
     ]
   },
   {
@@ -108,7 +112,7 @@ function applyAudio(track: string): void {
   const rack = racks.get(track) ?? [];
   const r = rack.find(f => f.type === 'reverb'), e = rack.find(f => f.type === 'eq'), fl = rack.find(f => f.type === 'filter'), ds = rack.find(f => f.type === 'deesser'), dl = rack.find(f => f.type === 'delay'), s = rack.find(f => f.type === 'supersaw');
   setReverb(track, r ? { on: r.on, mix: r.v.mix, size: r.v.size } : null);
-  setEq(track, e ? { on: e.on, low: e.v.low, mid: e.v.mid, high: e.v.high } : null);
+  setEq(track, e ? { on: e.on, v: e.v } : null);
   setFilter(track, fl ? { on: fl.on, cutoff: fl.v.cutoff, reso: fl.v.reso } : null);
   setDeesser(track, ds ? { on: ds.on, freq: ds.v.freq, thresh: ds.v.thresh, amount: ds.v.amount } : null);
   setDelay(track, dl ? { on: dl.on, ...(dl.v as Omit<DelayParams, 'on'>) } : null);
@@ -342,6 +346,34 @@ const tabNames = (d: EffectDef): string[] => [...new Set(d.params.map(p => p.tab
 type FxPage = 'plugin' | 'effect';   // halaman panel: Plugin (VST / instrumen: DERIZ, Supersaw) dan Effect (Reverb, EQ, Filter, dll.)
 const pageOf = (type: FxType): FxPage => (defOf(type).synth ? 'plugin' : 'effect');
 
+// ---------- Equalizer: grafik + pilih band + knob band terpilih (Freq / Gain / Q) + Output ----------
+function eqCell(d: EffectDef, fx: Fx, p: Param, cap: string): string {
+  return `<div class="fxc__cell"><div class="knob fxk"><div class="knob-inner">` +
+    `<div role="slider" tabindex="0" class="knob-input" data-k="${p.key}" aria-label="${d.name} ${p.label}" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${fx.v[p.key]}">` +
+    `<div class="knobwheel">${knobSvg}</div></div></div></div><span class="fxc__label">${cap}</span></div>`;
+}
+function eqKnobsHtml(d: EffectDef, fx: Fx): string {
+  const b = EQ_BANDS[bandOf(fx)], par = (k: string): Param => d.params.find(x => x.key === k)!;
+  return eqCell(d, fx, par(b.key + 'F'), 'Freq') + eqCell(d, fx, par(b.key), 'Gain') +
+    (b.q ? eqCell(d, fx, par(b.key + 'Q'), 'Q') : `<div class="fxc__cell eq__noq" aria-hidden="true"><div class="knob fxk"></div><span class="fxc__label">Q</span></div>`) +
+    eqCell(d, fx, par('out'), 'Output');
+}
+function eqHtml(fx: Fx, d: EffectDef): string {
+  const sel = bandOf(fx);
+  return `<div class="eq"><div class="eq__graph"><canvas class="eq__cv" role="img" aria-label="Grafik respons Equalizer: seret titik untuk mengatur frekuensi dan gain"></canvas></div>` +
+    `<p class="eq__read" aria-live="off"></p>` +
+    `<div class="eq__bands" role="tablist" aria-label="Band Equalizer">${EQ_BANDS.map((b, i) =>
+      `<button type="button" role="tab" class="eq__band" data-band="${i}" aria-selected="${i === sel}" style="--c:${EQ_COLORS[i]}"><i aria-hidden="true"></i>${b.short}</button>`).join('')}</div>` +
+    `<div class="fxc__knobs eq__knobs">${eqKnobsHtml(d, fx)}</div></div>`;
+}
+function paintEq(card: HTMLElement, fx: Fx): void {
+  const cv = card.querySelector<HTMLCanvasElement>('.eq__cv'); if (!cv) return;
+  const sel = bandOf(fx);
+  paintEqCanvas(cv, fx.v, fx.on, sel);
+  const rd = card.querySelector('.eq__read'); if (rd) rd.textContent = eqReadout(fx.v, sel);
+  card.querySelectorAll<HTMLElement>('.eq__band').forEach(b => b.setAttribute('aria-selected', String(+b.dataset.band! === sel)));
+}
+
 function cardHtml(fx: Fx, i: number): string {
   if (fx.type === 'mpcs') {   // MPCS: kartu ringkas (judul + buka + titik tiga); isinya ada di jendela MPCS
     return `<section class="fxc fxc--mpcs" data-fx="${fx.id}" data-kind="plugin" style="--i:${i}" aria-label="MPCS">` +
@@ -365,10 +397,10 @@ function cardHtml(fx: Fx, i: number): string {
     ? `<div class="fxc__tabs" role="tablist" aria-label="Kategori ${d.name}">` +
       tabs.map((t, k) => `<button type="button" role="tab" class="fxc__tab" data-tab="${k}" aria-selected="${k === cur}">${t}</button>`).join('') + `</div>`
     : '';
-  const body = fx.type === 'deriz' ? derizHtml(fx) : tabs.length
+  const body = fx.type === 'deriz' ? derizHtml(fx) : fx.type === 'eq' ? eqHtml(fx, d) : tabs.length
     ? tabs.map((t, k) => `<div class="fxc__knobs fxc__panel" role="tabpanel" data-tab="${k}"${k === cur ? '' : ' hidden'}>${d.params.filter(p => p.tab === t).map(p => cellHtml(d, fx, p)).join('')}</div>`).join('')
     : `<div class="fxc__knobs">${d.params.map(p => cellHtml(d, fx, p)).join('')}</div>`;
-  return `<section class="fxc${fx.on ? '' : ' is-off'}${fx.min ? ' is-min' : ''}${tabs.length ? ' has-tabs' : ''}${fx.type === 'deriz' ? ' fxc--deriz' : ''}" data-fx="${fx.id}" data-kind="${pageOf(fx.type)}" style="--i:${i}" aria-label="${d.name}">` +
+  return `<section class="fxc${fx.on ? '' : ' is-off'}${fx.min ? ' is-min' : ''}${tabs.length ? ' has-tabs' : ''}${fx.type === 'deriz' ? ' fxc--deriz' : ''}${fx.type === 'eq' ? ' fxc--eq' : ''}" data-fx="${fx.id}" data-kind="${pageOf(fx.type)}" style="--i:${i}" aria-label="${d.name}">` +
     `<header class="fxc__head"><h3 class="fxc__name"><button type="button" class="fxc__title" aria-expanded="${!fx.min}" title="Klik untuk minimize / maximize">${d.name}</button></h3>${tabBar}` +
     (fx.type === 'deriz' ? `<button type="button" class="fxc__pat" aria-haspopup="menu" aria-expanded="false" aria-label="Pattern: pilih pattern untuk diisi DERIZ" title="Masuk ke pattern">${ICON_PAT}</button>` : '') +
     `<button type="button" class="fxc__pwr" role="switch" aria-checked="${fx.on}" aria-label="${d.name} nyala / mati" title="Nyala / mati"></button>` +
@@ -456,9 +488,9 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   // canvas DERIZ digambar ulang saat ukurannya berubah (panel efek dibuka / ditutup, layar diputar)
   const ro = new ResizeObserver(es => es.forEach(en => {
     const card = (en.target as Element).closest<HTMLElement>('.fxc'), fx = card && find(card);
-    if (card && fx) paintDeriz(card, fx);
+    if (card && fx) { if (fx.type === 'eq') paintEq(card, fx); else paintDeriz(card, fx); }
   }));
-  const watch = (card: Element): void => { const cv = card.querySelector('.deriz__canvas'); if (cv) ro.observe(cv); };
+  const watch = (card: Element): void => { const cv = card.querySelector('.deriz__canvas, .eq__cv'); if (cv) ro.observe(cv); };
 
   // ---------- DERIZ: overlay di tengah layar. Kartu aslinya dipindah ke jendela (satu instance, state tetap sinkron); di panel tinggal placeholder ----------
   let ovOpen: { card: HTMLElement; ph: HTMLElement; opener: HTMLElement | null } | null = null;
@@ -987,6 +1019,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
       const p = d.params.find(x => x.key === k.dataset.k)!;
       paintCtl(k, fx.v[p.key], p, d.name, fx.v);
     });
+    if (fx.type === 'eq') paintEq(card, fx);
   };
 
   function addEffect(type: FxType): void {
@@ -1113,6 +1146,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     if (cur) { touched = { track: cur, fxId: fx.id, key: p.key, fxName: nameOf(fx), label: p.label }; touchCb?.(touched); }   // knob ini jadi calon Automation Clip
     paintCtl(el, v, p, defOf(fx.type).name, fx.v);
     if (fx.type === 'delay') delaySync(fx, p, before, v);
+    if (fx.type === 'eq') { const c = el.closest<HTMLElement>('.fxc'); if (c) paintEq(c, fx); }
     if (cur) applyAudio(cur);
     if (fx.type === 'deriz') kbParams(fx);
     if (!tip.hidden) showTip(el, fmtOf(fx, p, v));
@@ -1164,6 +1198,56 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     showTip(el, fmtOf(c.fx, c.p, c.fx.v[c.p.key]), 900);
   });
   onRoots('blur', e => { if ((e.target as Element).matches?.(CTL) && !drag) hideTip(); }, true);
+
+  // ---------- Equalizer: pilih band, seret node di grafik (x = frekuensi, y = gain), roda mouse = Q ----------
+  const eqKnob = (card: HTMLElement, fx: Fx, key: string, n: number): void => {   // atur satu parameter lewat jalur yang sama dengan knob (automation, suara, tampilan ikut)
+    const el = card.querySelector<HTMLElement>(`[data-k="${key}"]`), p = defOf('eq').params.find(x => x.key === key);
+    if (el && p) setVal(el, fx, p, n);
+  };
+  function eqSelect(card: HTMLElement, fx: Fx, i: number): void {
+    if (bandOf(fx) === i && card.querySelector('.eq__knobs [data-k]')) { fx.tab = i; return; }
+    fx.tab = i; hideTip();
+    const kn = card.querySelector<HTMLElement>('.eq__knobs'); if (kn) kn.innerHTML = eqKnobsHtml(defOf('eq'), fx);
+    paintAll(card, fx);
+  }
+  let eqDrag: { card: HTMLElement; fx: Fx; cv: HTMLCanvasElement; i: number } | null = null;
+  const eqXY = (cv: HTMLElement, e: PointerEvent | MouseEvent): { x: number; y: number; w: number; h: number } => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, w: r.width, h: r.height }; };
+  onRoots('pointerdown', e => {
+    const cv = (e.target as Element).closest<HTMLCanvasElement>('.eq__cv'); if (!cv || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const card = cv.closest<HTMLElement>('.fxc'), fx = card && find(card); if (!card || !fx) return;
+    const { x, y, w, h } = eqXY(cv, e), i = hitNode(fx.v, w, h, x, y, bandOf(fx));
+    if (i < 0) return;
+    eqSelect(card, fx, i);
+    eqDrag = { card, fx, cv, i }; cv.setPointerCapture(e.pointerId); e.preventDefault();
+    paintEq(card, fx);
+  });
+  onRoots('pointermove', e => {
+    if (!eqDrag) return;
+    const { card, fx, cv, i } = eqDrag, b = EQ_BANDS[i], { x, y, w, h } = eqXY(cv, e);
+    eqKnob(card, fx, b.key + 'F', eqFreqV(b, hzAt(x, w)));
+    eqKnob(card, fx, b.key, 0.5 + dbAt(y, h) / (2 * EQ_RANGE_DB));
+  });
+  const eqEnd = (): void => { eqDrag = null; };
+  onRoots('pointerup', eqEnd); onRoots('pointercancel', eqEnd); onRoots('lostpointercapture', eqEnd);
+  onRoots('dblclick', e => {   // dobel klik node = kembalikan band itu ke default (gain 0 dB, frekuensi & Q awal)
+    const cv = (e.target as Element).closest<HTMLCanvasElement>('.eq__cv'); if (!cv) return;
+    const card = cv.closest<HTMLElement>('.fxc'), fx = card && find(card); if (!card || !fx) return;
+    const { x, y, w, h } = eqXY(cv, e), i = hitNode(fx.v, w, h, x, y, bandOf(fx)); if (i < 0) return;
+    const b = EQ_BANDS[i]; eqSelect(card, fx, i);
+    eqKnob(card, fx, b.key, 0.5); eqKnob(card, fx, b.key + 'F', eqFreqV(b, b.def)); if (b.q) eqKnob(card, fx, b.key + 'Q', eqQV(b.defQ));
+  });
+  onRoots('wheel', e => {
+    const cv = (e.target as Element).closest<HTMLCanvasElement>('.eq__cv'); if (!cv) return;
+    const card = cv.closest<HTMLElement>('.fxc'), fx = card && find(card); if (!card || !fx) return;
+    const b = EQ_BANDS[bandOf(fx)]; if (!b.q) return;
+    e.preventDefault();
+    const k = b.key + 'Q'; eqKnob(card, fx, k, (fx.v[k] ?? eqQV(b.defQ)) - Math.sign(e.deltaY) * 0.04);
+  }, { passive: false });
+  onRoots('click', e => {
+    const bt = (e.target as Element).closest<HTMLButtonElement>('.eq__band'); if (!bt) return;
+    const card = bt.closest<HTMLElement>('.fxc'), fx = card && find(card); if (!card || !fx) return;
+    eqSelect(card, fx, +bt.dataset.band!); paintEq(card, fx);
+  });
 
   // ---------- DERIZ: upload audio ke canvas (tombol, "Ganti", atau drag & drop file) ----------
   async function loadDeriz(card: HTMLElement, file: File): Promise<void> {
@@ -1390,6 +1474,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
       fx.on = !fx.on;
       card.classList.toggle('is-off', !fx.on);
       pwr.setAttribute('aria-checked', String(fx.on));
+      if (fx.type === 'eq') paintEq(card, fx);
       applyAudio(cur);
       return;
     }
@@ -1459,6 +1544,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     const el = cardById(fx.id)?.querySelector<HTMLElement>(`[data-k="${key}"]`);
     if (el) paintCtl(el, v, p, defOf(fx.type).name, fx.v);
     if (fx.type === 'delay') delaySync(fx, p, before, v);
+    if (fx.type === 'eq') { const c = cardById(fx.id); if (c) paintEq(c, fx); }
     applyAudio(track);
     if (fx.type === 'deriz') kbParams(fx);
   }
