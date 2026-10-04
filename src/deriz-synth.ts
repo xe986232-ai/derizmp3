@@ -27,7 +27,10 @@ const WORKLET_SRC = `
 // luar jatah ringan dibuat TANPA pencarian korelasi (posisi nominal saja, jauh lebih murah). Sampai 12 nada: persis seperti sebelumnya.
 // Di atas itu kualitas turun sedikit (tertutup campuran yang padat), tapi biaya satu blok audio punya batas, jadi HP yang lambat tidak
 // kehabisan waktu per blok (itu yang membuat suara loncat / tersendat / nada menumpuk saat banyak DERIZ main bersamaan).
-const FULL_FRAMES = 4, MAX_VOICES = 12;
+// GLOBAL_VOICES: batas lunak jumlah nada aktif semua plugin. Biaya audio per nada tetap (resampling), jadi tanpa batas ini 8 DERIZ x akor bisa
+// jauh melewati waktu yang tersedia per blok di HP dan seluruh suara tersendat / loncat. Lewat batas ini nada baru menggantikan nada tertua
+// plugin yang sama (cara kerja polifoni terbatas di sampler biasa).
+const FULL_FRAMES = 4, MAX_VOICES = 12, GLOBAL_VOICES = 20;
 let gT = -1, gUsed = 0, gTotal = 0;
 const frameTier = () => gTotal > 24 ? (gUsed >= 2 ? 2 : gUsed >= 1 ? 1 : 0) : gTotal > 12 ? (gUsed >= 5 ? 2 : gUsed >= 2 ? 1 : 0) : (gUsed >= FULL_FRAMES ? 1 : 0);   // 0 penuh, 1 ringan, 2 tanpa pencarian
 const fullBudget = () => gTotal > 24 ? 1 : gTotal > 12 ? 2 : FULL_FRAMES;
@@ -103,7 +106,8 @@ class DerizSampler extends AudioWorkletProcessor {
     let oi = 0; while (oi < this.ons.length && this.ons[oi] < start + 0.01 * rate) oi++;   // onset persis di awal = bagian dari frame pertama
     // batas polifoni: lewat MAX_VOICES, nada yang sudah dilepas (lalu yang paling tua) dilepas cepat (4 ms) supaya tidak klik dan tidak ikut membebani
     let live = 0; for (const x of this.voices) if (!x.fast) live++;
-    while (live >= MAX_VOICES) {
+    const cap = gTotal >= GLOBAL_VOICES ? Math.max(1, Math.min(MAX_VOICES, live)) : MAX_VOICES;   // penuh global: ganti satu nada milik plugin ini
+    while (live >= cap) {
       let vic = null;
       for (const x of this.voices) if (!x.fast && (!vic || (x.rel && !vic.rel) || (x.rel === vic.rel && x.age < vic.age))) vic = x;
       if (!vic) break;

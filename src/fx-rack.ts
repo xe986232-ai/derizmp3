@@ -575,6 +575,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     for (const [id, h] of heads) {
       const z = h.fx.deriz, now = headTime(h.ctx);
       if (!z) { headFinish(h); heads.delete(id); continue; }
+      if (now < h.t0 - 0.05 && !h.el) continue;   // nada masih jauh di depan (dijadwalkan lebih awal): belum perlu menyentuh DOM
       const t = Math.min(now, h.tEnd);
       if (t > h.last) { h.pos = Math.min(1, h.pos + (t - h.last) * derizSpeed(h.fx.v.speed) / z.dur); h.last = t; }   // Speed dibaca tiap frame: knob diputar saat nada ditahan ikut terasa
       const stage = cardById(h.fx.id)?.querySelector<HTMLElement>('.deriz__stage') ?? null;   // kartu bisa di panel atau di overlay; kalau tidak terlihat, posisi tetap dihitung
