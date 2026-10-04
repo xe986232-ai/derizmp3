@@ -1,4 +1,5 @@
-// Tahan icon microphone di header pattern audio clip -> muncul card putih berisi menu "Tempo" (animasi masuk + keluar).
+// Tahan icon di header pattern -> muncul card putih berisi menu (animasi masuk + keluar).
+// Audio clip (icon microphone): menu "Tempo". Pattern nada (icon piano): menu baru, isinya menyusul (sekarang masih placeholder).
 // Tempo: isi BPM asli audio clip (mis. vokal 126), lalu clip di-stretch (pitch tetap) mengikuti BPM project (mis. 130).
 // Icon-nya pseudo-element CSS (.pattern__head::before), jadi tidak bisa diberi listener sendiri:
 // area icon dihitung dari posisi sentuhan relatif ke kiri header (padding 8px + icon 13px + toleransi jari).
@@ -9,6 +10,7 @@ const HOLD_MS = 450;            // lama menahan
 const HOLD_SLOP = 10;           // px maksimum bergeser selama menahan (lebih dari ini = batal)
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const MENU_LABEL = 'Sesuaikan Tempo';   // menyamakan tempo audio clip dengan BPM project
+const PATTERN_MENU_LABEL = 'Menu Pattern';   // placeholder pattern nada: fungsinya ditambahkan nanti
 
 export interface ClipIconMenuHooks {
   onOpen?(pattern: HTMLElement): void;     // card muncul (main.ts menyembunyikan menu bulat)
@@ -16,6 +18,7 @@ export interface ClipIconMenuHooks {
   getProjectBpm(): number;                 // BPM project sekarang
   getClipBpm(pattern: HTMLElement): number | null;   // BPM yang pernah diisi untuk clip ini (null = belum)
   applyTempo(pattern: HTMLElement, bpm: number): Promise<void>;   // stretch clip; lempar Error(pesan) kalau gagal
+  onPatternMenu?(pattern: HTMLElement): void;   // item menu pada pattern nada diketuk (belum ada fungsi)
 }
 
 export function initClipIconMenu(lanesEl: HTMLElement, hooks: ClipIconMenuHooks): void {
@@ -24,7 +27,7 @@ export function initClipIconMenu(lanesEl: HTMLElement, hooks: ClipIconMenuHooks)
   let sx = 0, sy = 0;
 
   const iconHead = (t: EventTarget | null): HTMLElement | null =>
-    t instanceof Element ? t.closest('.pattern[data-clip] .pattern__head') as HTMLElement | null : null;
+    t instanceof Element ? t.closest('.pattern:not([data-au-id]) .pattern__head') as HTMLElement | null : null;   // audio clip + pattern nada (Automation Clip tidak)
 
   const close = (instant = false): void => {
     const c = card; if (!c) return;
@@ -121,8 +124,13 @@ export function initClipIconMenu(lanesEl: HTMLElement, hooks: ClipIconMenuHooks)
     // --- tampilan 1: menu ---
     const it = document.createElement('button');
     it.type = 'button'; it.className = 'clip-card__item'; it.setAttribute('role', 'menuitem');
-    it.textContent = MENU_LABEL;
-    it.addEventListener('click', showTempo);
+    if (pattern.dataset.clip) {
+      it.textContent = MENU_LABEL;
+      it.addEventListener('click', showTempo);
+    } else {
+      it.textContent = PATTERN_MENU_LABEL;
+      it.addEventListener('click', () => { hooks.onPatternMenu && hooks.onPatternMenu(pattern); close(); });
+    }
     inner.appendChild(it);
     document.body.appendChild(c);
     place();
