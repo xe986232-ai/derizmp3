@@ -100,7 +100,7 @@ function build(): void {
   el.innerHTML =
     '<div class="mpcs__back"></div>' +
     '<div class="mpcs__win is-off" role="dialog" aria-modal="true" aria-label="MPCS" tabindex="-1">' +
-      `<header class="mpcs__head"><i class="mpcs__led" aria-hidden="true"></i><span class="mpcs__title">MPCS</span><div class="mpcs__lcd"><span class="mpcs__stat" role="status" aria-live="polite"></span></div><button type="button" class="mpcs__drag" aria-label="Seret hasil olahan ke plugin DERIZ" title="Tahan lalu seret ke plugin DERIZ: hasil olahan masuk jadi sample DERIZ" disabled>${ICON.drag}</button><button type="button" class="mpcs__close" aria-label="Tutup MPCS">${ICON.close}</button></header>` +
+      `<header class="mpcs__head"><i class="mpcs__led" aria-hidden="true"></i><span class="mpcs__title">MPCS</span><div class="mpcs__lcd"><span class="mpcs__stat" role="status" aria-live="polite"></span></div><button type="button" class="mpcs__drag" aria-label="Seret hasil olahan ke plugin DERIZ atau timeline" title="Tahan lalu seret: ke plugin DERIZ = jadi sample DERIZ, ke timeline = jadi track audio clip" disabled>${ICON.drag}</button><button type="button" class="mpcs__close" aria-label="Tutup MPCS">${ICON.close}</button></header>` +
       '<div class="mpcs__mid">' +
       '<canvas class="mpcs__ov" aria-label="Peta posisi sample (ketuk / seret untuk pindah)" hidden></canvas>' +
       '<div class="mpcs__stage">' +
@@ -624,7 +624,7 @@ function build(): void {
   const LIFT = 38;   // di layar sentuh ikon melayang di atas jari supaya tidak tertutup; titik jatuhnya = posisi ikon
   let dg: { id: number; x0: number; y0: number; touch: boolean; ghost: HTMLElement | null; over: HTMLElement | null; res: Promise<AudioBuffer | null> | null; name: string } | null = null;
   const stageAt = (x: number, y: number): HTMLElement | null => {
-    for (const n of document.elementsFromPoint(x, y)) { if (n.closest('.mpcs')) continue; return n.closest<HTMLElement>('.deriz__stage'); }   // elemen pertama di bawah MPCS (kartu yang disembunyikan tetap ikut hit-test)
+    for (const n of document.elementsFromPoint(x, y)) { if (n.closest('.mpcs')) continue; return n.closest<HTMLElement>('.deriz__stage') ?? n.closest<HTMLElement>('.workspace'); }   // elemen pertama di bawah MPCS (kartu yang disembunyikan tetap ikut hit-test); kanvas DERIZ = jadi sample, timeline = jadi track audio clip baru
     return null;
   };
   const dgPoint = (e: PointerEvent): { x: number; y: number } => ({ x: e.clientX, y: e.clientY - (dg?.touch ? LIFT : 0) });
@@ -647,17 +647,18 @@ function build(): void {
     if (!dg || e.pointerId !== dg.id) return;
     const d = dg; dg = null;
     window.removeEventListener('pointermove', dgMove); window.removeEventListener('pointerup', dgEnd); window.removeEventListener('pointercancel', dgEnd);
-    if (!d.ghost) { stat.textContent = 'Tahan lalu seret ke plugin DERIZ'; window.setTimeout(info, 1800); return; }   // ketukan tanpa geser
+    if (!d.ghost) { stat.textContent = 'Tahan lalu seret ke DERIZ / timeline'; window.setTimeout(info, 1800); return; }   // ketukan tanpa geser
     d.over?.classList.remove('is-over');
     const p = { x: e.clientX, y: e.clientY - (d.touch ? LIFT : 0) }, target = e.type === 'pointerup' ? stageAt(p.x, p.y) : null;
-    if (!target) { d.ghost.remove(); el.classList.remove('is-dragout'); stat.textContent = 'Lepas di atas plugin DERIZ'; window.setTimeout(info, 1800); return; }   // jatuh di tempat lain: kartu kembali
+    if (!target) { d.ghost.remove(); el.classList.remove('is-dragout'); stat.textContent = 'Lepas di atas plugin DERIZ atau timeline'; window.setTimeout(info, 1800); return; }   // jatuh di tempat lain: kartu kembali
     d.ghost.classList.add('is-busy');
     const out = await d.res;
     d.ghost.remove(); el.classList.remove('is-dragout');
     if (!out || !target.isConnected) { stat.textContent = out ? 'Plugin DERIZ sudah tidak ada' : 'Gagal merender'; window.setTimeout(info, 1800); return; }
     const f = new File([encodeWavFloat(out.getChannelData(0), out.sampleRate)], d.name + '-MPCS.wav', { type: 'audio/wav' });
-    target.dispatchEvent(new CustomEvent('mpcs-sample', { bubbles: true, detail: { file: f } }));
-    stopPlay(); untilt(); el.hidden = true;   // sample sudah di DERIZ: MPCS ditutup supaya DERIZ kelihatan
+    if (target.classList.contains('workspace')) document.dispatchEvent(new CustomEvent('mpcs-audioclip', { detail: { file: f, x: p.x } }));   // timeline: main.ts bikin track Audio clip baru, clip diletakkan di bar tempat dilepas
+    else target.dispatchEvent(new CustomEvent('mpcs-sample', { bubbles: true, detail: { file: f } }));
+    stopPlay(); untilt(); el.hidden = true;   // hasil sudah terpasang (DERIZ / timeline): MPCS ditutup supaya terlihat
   }
   dragBtn.addEventListener('pointerdown', e => {
     if (!S || dragBtn.disabled || dg) return;

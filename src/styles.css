@@ -1427,6 +1427,7 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs__ghost svg{width:18px;height:18px}
 .mpcs__ghost.is-hot{box-shadow:inset 0 1px 0 rgba(255,255,255,.28),inset 0 -1px 2px rgba(0,0,0,.6),0 0 0 2px #4a0a25,0 0 0 3px #ff5c9e}
 .mpcs__ghost.is-busy{opacity:.6}
+.workspace.is-over{box-shadow:inset 0 0 0 2px #ff5c9e,inset 0 0 28px rgba(255,92,158,.22)}   /* hasil MPCS diseret di atas timeline */
 /* panel tengah perak (aluminium sikat) berisi layar editor hitam berbingkai */
 .mpcs__mid{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;gap:6px;padding:10px 12px;
   background:

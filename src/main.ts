@@ -1,6 +1,6 @@
 // @ts-nocheck
 import '@fontsource/syncopate/700.css';   // font judul plugin DERIZ (dibundel, tidak butuh internet)
-import { openAudioUploadCard } from './audio-upload-card';
+import { openAudioUploadCard, trackAudioFiles } from './audio-upload-card';
 import { initEffectsPanel } from './effects-panel';
 import { initTrackMeters } from './track-meters';
 import { initTrackReorder } from './track-reorder';
@@ -1649,7 +1649,7 @@ function toast(msg, ms = 3200) {
 function growTimeline(n) {   // timeline memanjang supaya audio panjang (lagu) muat utuh
   BARS = n; sizeRuler(); paintRuler(true);
 }
-async function importAudio(trackId, file) {
+async function importAudio(trackId, file, dropX = null) {   // dropX = clientX tempat clip dilepas (dari MPCS); null = mulai dari bar 1
   const ctx = audio(), laneSel = '.lane[data-track="' + trackId + '"]';
   toast('Memuat audio…', 0);
   let buf;
@@ -1658,13 +1658,24 @@ async function importAudio(trackId, file) {
   const lane = lanesEl.querySelector(laneSel);
   if (!lane) { toast('', 1); return; }   // track sudah dihapus selama decode
   const durBars = buf.duration / SEC_PER_BAR;
-  if (durBars > BARS) growTimeline(Math.min(MAX_BARS, Math.ceil(durBars) + 1));
-  const width = Math.max(BAR_W / 2, Math.min(durBars * BAR_W, W));
-  const el = createPattern(lane, {start: 0, width}, {clip: addBuffer(buf), off: 0});
+  const startBar = dropX == null ? 0 : Math.max(0, Math.floor((dropX - lanesEl.getBoundingClientRect().left) / BAR_W));   // dilepas di bar mana (dibulatkan ke bar)
+  if (startBar + durBars > BARS) growTimeline(Math.min(MAX_BARS, Math.ceil(startBar + durBars) + 1));
+  const start = Math.min(startBar * BAR_W, Math.max(0, W - BAR_W / 2));
+  const width = Math.max(BAR_W / 2, Math.min(durBars * BAR_W, W - start));
+  const el = createPattern(lane, {start, width}, {clip: addBuffer(buf), off: 0});
   el.querySelector('.pattern__title').textContent = file.name.replace(/\.[^.]+$/, '').slice(0, 40) || 'Audio';
-  wsEl.scrollTo({left: 0, behavior: 'smooth'});
+  if (dropX == null) wsEl.scrollTo({left: 0, behavior: 'smooth'});
   toast(durBars > MAX_BARS ? 'Audio dipotong: timeline maksimum ' + MAX_BARS + ' bar' : 'Audio ditambahkan ke timeline');
 }
+// hasil olahan MPCS dilepas di timeline: bikin track Audio clip baru, clip-nya diletakkan di bar tempat dilepas
+document.addEventListener('mpcs-audioclip', e => {
+  const {file, x} = e.detail || {};
+  if (!file) return;
+  addTrack(INSTRUMENTS.find(i => i.n === 'Audio clip'));
+  const id = trackSeq;
+  trackAudioFiles.set(id, file);
+  importAudio(id, file, x);
+});
 // waveform digambar ulang hanya kalau jendela audio berubah (panjang / offset), bukan saat zoom
 function syncWaves() {
   lanesEl.querySelectorAll('.pattern[data-clip]').forEach(p => {
