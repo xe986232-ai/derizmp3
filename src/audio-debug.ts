@@ -11,6 +11,8 @@
 //   Underrun        angka dari browser sendiri (AudioContext.playbackStats) kalau browser mendukung: bukti langsung suara putus, dari penyebab APA PUN.
 import { derizHooks, setDerizDebug, type DerizStat } from './deriz-synth';
 
+declare const __BUILD__: string;
+const BUILD = typeof __BUILD__ === 'undefined' ? 'dev' : __BUILD__;
 const KEY = 'derizmp3.audioDebug';
 const EVENT_MAX = 6;
 
@@ -24,9 +26,11 @@ interface Agg {
   tr: number; bud: number;
   sched: number; schedMin: number; schedTight: number; schedLate: number;   // sisi main thread (jadwal nada)
   stall: number; stallMax: number;                                         // timer main thread molor
+  loaf: number; loafScript: number; loafRender: number; loafMax: number;   // frame lambat (> 50 ms) dari browser: jumlah, total ms di skrip, total ms render, terlama
+  cul: Map<string, { n: number; ms: number; max: number }>;                // skrip penyebab frame lambat
 }
 const fresh = (): Agg => ({ n: 0, sum: 0, max: 0, maxAt: 0, late: 0, vmax: 0, iamax: 0, full: 0, light: 0, hit: 0, nOn: 0, nLate: 0, ltSum: 0, ltMax: 0,
-  stealH: 0, stealT: 0, noBuf: 0, penDrop: 0, trN: 0, trSlow: 0, trMax: 0, lateSkip: 0, spK: 0, spO: 0, pcK: 0, pcO: 0, spFrom: 0, spTo: 0, wait: 0, waitMax: 0, clamp: 0, clampMax: 0, tr: -1, bud: 0, sched: 0, schedMin: Infinity, schedTight: 0, schedLate: 0, stall: 0, stallMax: 0 });
+  stealH: 0, stealT: 0, noBuf: 0, penDrop: 0, trN: 0, trSlow: 0, trMax: 0, lateSkip: 0, spK: 0, spO: 0, pcK: 0, pcO: 0, spFrom: 0, spTo: 0, wait: 0, waitMax: 0, clamp: 0, clampMax: 0, tr: -1, bud: 0, sched: 0, schedMin: Infinity, schedTight: 0, schedLate: 0, stall: 0, stallMax: 0, loaf: 0, loafScript: 0, loafRender: 0, loafMax: 0, cul: new Map() });
 
 let on = false, a = fresh(), t0 = 0, ctxRef: BaseAudioContext | null = null, ctxBase: { dur: number; ev: number } | null = null;
 let events: string[] = [];
@@ -86,6 +90,23 @@ export function dbgRun(startCtx: number, ctx?: BaseAudioContext): void {   // ti
   underrun();   // ambil dasar hitungan underrun SEKARANG (bukan menunggu laporan pertama), supaya underrun di awal Play ikut terhitung
   render();
 }
+// Frame lambat (Long Animation Frames, Chrome 123+): browser sendiri menyebut skrip mana yang menahan main thread, jadi macet 700 ms bisa dicari asalnya.
+interface LoafScript { duration: number; invoker?: string; sourceFunctionName?: string; sourceURL?: string; sourceCharPosition?: number; type?: string }
+interface Loaf extends PerformanceEntry { renderStart: number; scripts: LoafScript[]; blockingDuration?: number }
+let loafObs: PerformanceObserver | null = null;
+function onLoaf(list: PerformanceObserverEntryList): void {
+  if (!on) return;
+  for (const e of list.getEntries() as Loaf[]) {
+    if (e.duration < 50) continue;
+    const sc = e.scripts ?? [], sum = sc.reduce((x, y) => x + y.duration, 0), render = e.renderStart ? Math.max(0, e.startTime + e.duration - e.renderStart) : 0;
+    a.loaf++; a.loafScript += sum; a.loafRender += render; if (e.duration > a.loafMax) a.loafMax = e.duration;
+    const top = [...sc].sort((x, y) => y.duration - x.duration)[0];
+    const name = top ? ((top.invoker || top.sourceFunctionName || top.type || '?') + ' @' + (top.sourceURL ?? '').split('/').pop()?.slice(0, 24) + ':' + (top.sourceCharPosition ?? '')) : 'tanpa skrip (layout / render)';
+    const c = a.cul.get(name) ?? { n: 0, ms: 0, max: 0 }; c.n++; c.ms += top ? top.duration : e.duration; c.max = Math.max(c.max, e.duration); a.cul.set(name, c);
+    events.push('@' + f1(Math.max(0, (ctxRef ? ctxRef.currentTime : 0) - t0)) + 's  frame lambat ' + ms(e.duration) + ' (skrip ' + ms(sum) + ', render ' + ms(render) + ') ' + name.slice(0, 60));
+    if (events.length > EVENT_MAX + 4) events.shift();
+  }
+}
 function stallTick(): void {
   const now = performance.now();
   if (lastTick && document.visibilityState === 'visible') {
@@ -123,6 +144,10 @@ function lines(): string[] {
   const fr = a.full + a.light + a.hit;
   L.push('Frame WSOLA: penuh ' + a.full + ', ringan ' + a.light + ', cache ' + a.hit + (fr ? ' (cache ' + pct(a.hit, fr) + ')' : ''));
   L.push('Main thread: macet > 50 ms ' + a.stall + 'x' + (a.stall ? ' (maks ' + ms(a.stallMax) + ')' : ''));
+  if (loafObs || a.loaf) {
+    L.push('Frame lambat > 50 ms: ' + a.loaf + 'x' + (a.loaf ? ' (terlama ' + ms(a.loafMax) + ', total skrip ' + ms(a.loafScript) + ', render ' + ms(a.loafRender) + ')' : ''));
+    for (const [k, c] of [...a.cul].sort((x, y) => y[1].ms - x[1].ms).slice(0, 3)) L.push('  ' + k.slice(0, 70) + ': ' + c.n + 'x, total ' + ms(c.ms) + ', maks ' + ms(c.max));
+  } else L.push('Frame lambat: tidak didukung di browser ini');
   const u = underrun();
   L.push(u ? 'Underrun browser: ' + u.ev + 'x (' + ms(u.dur) + ' senyap)' : 'Underrun browser: tidak didukung di browser ini');
   return L;
@@ -133,7 +158,7 @@ function deviceLine(): string {
     (navigator.hardwareConcurrency || '?') + ' core', navigator.userAgent].filter(Boolean).join(' | ');
 }
 export function dbgReport(): string {
-  return ['DERIZ audio debug', deviceLine(), ...lines(), ...(events.length ? ['Kejadian terakhir:', ...events] : ['Kejadian: tidak ada'])].join('\n');
+  return ['DERIZ audio debug | versi ' + BUILD, deviceLine(), ...lines(), ...(events.length ? ['Kejadian terakhir:', ...events] : ['Kejadian: tidak ada'])].join('\n');
 }
 
 // ---------- panel ----------
@@ -141,7 +166,7 @@ function ensureUI(): NonNullable<typeof ui> {
   if (ui) return ui;
   const root = document.createElement('div');
   root.className = 'adbg'; root.setAttribute('role', 'status');
-  root.innerHTML = '<div class="adbg__bar"><b>DEBUG AUDIO</b><span class="adbg__sum"></span><span class="adbg__btns">' +
+  root.innerHTML = '<div class="adbg__bar"><b>DEBUG AUDIO</b><small style="opacity:.6;margin-left:6px">' + BUILD.split(' ')[0] + '</small><span class="adbg__sum"></span><span class="adbg__btns">' +
     '<button type="button" data-a="reset">Reset</button><button type="button" data-a="copy">Salin</button><button type="button" data-a="min" aria-label="Kecilkan">–</button></span></div>' +
     '<div class="adbg__body"></div><div class="adbg__log"></div>';
   document.body.appendChild(root);
@@ -179,6 +204,7 @@ export function setAudioDebug(v: boolean, save = true): void {
   on = v;
   if (save) { try { localStorage.setItem(KEY, v ? '1' : '0'); } catch { /* penyimpanan diblokir: tetap berlaku sampai halaman ditutup */ } }
   derizHooks.stat = v ? ingest : null;
+  try { loafObs?.disconnect(); loafObs = null; if (v && PerformanceObserver.supportedEntryTypes?.includes('long-animation-frame')) { loafObs = new PerformanceObserver(onLoaf); loafObs.observe({ type: 'long-animation-frame' }); } } catch { loafObs = null; }
   setDerizDebug(v);
   clearInterval(renderTimer); clearInterval(stallTimer); renderTimer = stallTimer = 0;
   if (v) {
