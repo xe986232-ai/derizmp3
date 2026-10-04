@@ -66,6 +66,7 @@ export function initPatternJelly(lanesEl: HTMLElement): void {
     if (!src) return;
     const r = src.getBoundingClientRect();
     card = src.cloneNode(true) as HTMLElement;
+    card.style.setProperty('--bar', getComputedStyle(src).getPropertyValue('--bar'));   // --bar kini di #lanes; kartu di body tidak mewarisinya
     card.querySelector('.pattern__handle')?.remove();
     card.classList.remove('is-selected', 'is-dragging', 'is-settling');
     card.classList.add('is-jelly');

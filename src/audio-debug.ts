@@ -163,6 +163,7 @@ function lines(): string[] {
     for (const [k, c] of [...a.cul].sort((x, y) => y[1].ms - x[1].ms).slice(0, 3)) L.push('  ' + k.slice(0, 70) + ': ' + c.n + 'x, total ' + ms(c.ms) + ', maks ' + ms(c.max));
   } else L.push('Frame lambat: tidak didukung di browser ini');
   if (a.loafForced) L.push('  dari skrip frame lambat, layout/gaya yang dipaksa: ' + ms(a.loafForced));
+  L.push('DOM: ' + document.getElementsByTagName('*').length + ' elemen, ' + (document.getElementById('lanes')?.getElementsByTagName('*').length ?? 0) + ' di timeline');
   if (a.zm.size) {
     L.push('Zoom, tahap (jumlah, total, maks):');
     for (const [k, c] of [...a.zm].sort((x, y) => (x[0] < y[0] ? -1 : 1))) L.push('  ' + k + ': ' + c.n + 'x, ' + ms(c.ms) + ', maks ' + ms(c.max));

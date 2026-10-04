@@ -1745,7 +1745,7 @@ let paintRaf = 0;
 wsEl.addEventListener('scroll', () => { if (!paintRaf) paintRaf = requestAnimationFrame(() => { paintRaf = 0; paintRuler(); }); }, {passive: true});
 window.addEventListener('resize', () => paintRuler(true));
 const zoomVarCache = {};
-function setZoomVar(k, v) { if (zoomVarCache[k] !== v) { zoomVarCache[k] = v; document.documentElement.style.setProperty(k, v); } }   // hanya tulis kalau berubah (ambang zoom jarang terlewati)
+function setZoomVar(k, v) { if (zoomVarCache[k] !== v) { zoomVarCache[k] = v; lanesEl.style.setProperty(k, v); } }   // hanya tulis kalau berubah (ambang zoom jarang terlewati)
 function setZoom(next, clientX) {
   next = Math.max(BAR_MIN, Math.min(BAR_MAX, next));
   if (Math.abs(next - BAR_W) < 0.01) return;
@@ -1759,8 +1759,9 @@ function setZoom(next, clientX) {
   lap('1 baca ukuran (bisa paksa layout)');
   dismissAdd(true);
   BAR_W = next;
-  const rs = document.documentElement.style;
-  rs.setProperty('--bar', BAR_W + 'px');
+  // Variabel zoom ditulis di #lanes, BUKAN :root: perubahan variabel yang diwariskan di akar memaksa hitung ulang gaya SELURUH halaman (piano roll, panel efek, overlay, menu).
+  // Pemakainya (.lane, .pattern, mini piano-roll di pattern) semuanya ada di dalam #lanes; pattern-jelly menyalin --bar ke kartu yang diangkat.
+  lanesEl.style.setProperty('--bar', BAR_W + 'px');
   setZoomVar('--beat-a', BAR_W >= 56 ? .08 : 0);
   setZoomVar('--sub-a', BAR_W >= 160 ? .045 : 0);
   setZoomVar('--mid-a', BAR_W >= 640 ? .035 : 0);
@@ -1772,8 +1773,10 @@ function setZoom(next, clientX) {
   });
   lap('3 left/width semua pattern');
   sizeRuler(); lap('4 sizeRuler');
+  void getComputedStyle(wsEl).display; lap('5a gaya dihitung ulang (paksa)');
+  void wsEl.scrollWidth; lap('5b layout (paksa)');
   wsEl.scrollTo({left: wsEl.scrollLeft + x * (ratio - 1), behavior: 'instant'});
-  lap('5 scrollTo (paksa layout)');
+  lap('5c scrollTo');
   paintRuler(true); lap('6 paintRuler');
   if (selPat) handleSide(selPat);
   lap('7 handleSide');
