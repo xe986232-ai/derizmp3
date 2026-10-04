@@ -106,6 +106,18 @@ ok(Math.max(...onn.stats.map(m => m.vmax)) >= 6 && Math.max(...onn.stats.map(m =
   ok(S('penDrop') === 4, 'jadwal terhapus saat sample baru: ' + S('penDrop') + ' (diharapkan 4)');
 }
 
+// ---- 3b. pesan nada tertunda di jalan: dikirim di jam 1,0 s, diterima worklet di jam 1,6 s ----
+{
+  const { make, posted } = load(performance, Date), s = makeSample(), n = make();
+  T = 0; give(n, s); n.msg({ t: 'dbg', on: true });
+  T = 1.6;
+  n.msg({ t: 'on', id: 1, semis: 0, start: 0, speed: 1, pitch: 0, vol: 0.9, at: 1.0, vel: 1, sent: 1.0 });    // tertunda 600 ms di jalan
+  n.msg({ t: 'on', id: 2, semis: 0, start: 0, speed: 1, pitch: 0, vol: 0.9, at: 1.7, vel: 1, sent: 1.599 });  // normal (1 ms)
+  for (let b = 0; b < 400; b++) { T = 1.6 + b * BLK / SR; n.process([], [[new Float32Array(BLK), new Float32Array(BLK)]]); }
+  const st = posted.filter(m => m.t === 'st'), S = (k: string) => st.reduce((x, m) => x + m[k], 0);
+  ok(S('trN') === 2 && S('trSlow') === 1 && Math.abs(Math.max(...st.map(m => m.trMax)) - 600) < 0.5, 'pesan tertunda di jalan: ' + S('trSlow') + ' dari ' + S('trN') + ', terlama ' + Math.max(...st.map(m => m.trMax)).toFixed(0) + ' ms (diharapkan 1 dari 2, 600 ms)');
+}
+
 // ---- 4. blok telat: timer presisi, lalu timer kasar 1 ms (Date.now) ----
 // Beban buatan hanya di blok 400..409 (sekitar detik 1,07; ketiga DERIZ sedang bunyi): tiap DERIZ menambah X ms ke jam palsu.
 {

@@ -19,12 +19,14 @@ interface Agg {
   full: number; light: number; hit: number;
   nOn: number; nLate: number; ltSum: number; ltMax: number;
   stealH: number; stealT: number; noBuf: number; penDrop: number;
+  trN: number; trSlow: number; trMax: number;                               // pesan nada main thread -> worklet
+  wait: number; waitMax: number; clamp: number; clampMax: number;           // sisi main thread: menunggu sampler siap, nada yang jadwalnya sudah lewat saat benar-benar dikirim
   tr: number; bud: number;
   sched: number; schedMin: number; schedTight: number; schedLate: number;   // sisi main thread (jadwal nada)
   stall: number; stallMax: number;                                         // timer main thread molor
 }
 const fresh = (): Agg => ({ n: 0, sum: 0, max: 0, maxAt: 0, late: 0, vmax: 0, iamax: 0, full: 0, light: 0, hit: 0, nOn: 0, nLate: 0, ltSum: 0, ltMax: 0,
-  stealH: 0, stealT: 0, noBuf: 0, penDrop: 0, tr: -1, bud: 0, sched: 0, schedMin: Infinity, schedTight: 0, schedLate: 0, stall: 0, stallMax: 0 });
+  stealH: 0, stealT: 0, noBuf: 0, penDrop: 0, trN: 0, trSlow: 0, trMax: 0, wait: 0, waitMax: 0, clamp: 0, clampMax: 0, tr: -1, bud: 0, sched: 0, schedMin: Infinity, schedTight: 0, schedLate: 0, stall: 0, stallMax: 0 });
 
 let on = false, a = fresh(), t0 = 0, ctxRef: BaseAudioContext | null = null, ctxBase: { dur: number; ev: number } | null = null;
 let events: string[] = [];
@@ -42,7 +44,8 @@ function ingest(m: DerizStat, ctx: BaseAudioContext): void {
   a.tr = m.tr; a.bud = m.bud;
   a.n += m.n; a.sum += m.sum; a.late += m.late; a.full += m.full; a.light += m.light; a.hit += m.hit;
   a.nOn += m.nOn; a.nLate += m.nLate; a.ltSum += m.ltSum;
-  a.stealH += m.stealH; a.stealT += m.stealT; a.noBuf += m.noBuf; a.penDrop += m.penDrop;
+  a.stealH += m.stealH; a.stealT += m.stealT; a.noBuf += m.noBuf; a.penDrop += m.penDrop; a.trN += m.trN; a.trSlow += m.trSlow;
+  if (m.trMax > a.trMax) a.trMax = m.trMax;
   if (m.max > a.max) { a.max = m.max; a.maxAt = m.maxAt - t0; }
   if (m.vmax > a.vmax) a.vmax = m.vmax;
   if (m.iamax > a.iamax) a.iamax = m.iamax;
@@ -51,6 +54,7 @@ function ingest(m: DerizStat, ctx: BaseAudioContext): void {
   const bits: string[] = [];
   if (m.late) bits.push(m.late + ' blok telat (maks ' + ms(m.max) + ')');
   if (m.nLate) bits.push(m.nLate + ' nada telat (maks ' + ms(m.ltMax) + ')');
+  if (m.trSlow) bits.push(m.trSlow + ' pesan nada tertunda (maks ' + ms(m.trMax) + ')');
   if (m.stealH) bits.push(m.stealH + ' nada terpotong');
   if (m.noBuf) bits.push(m.noBuf + ' nada tanpa sample');
   if (m.penDrop) bits.push(m.penDrop + ' jadwal terhapus');
@@ -65,6 +69,11 @@ export function dbgSched(leadSec: number): void {   // dipanggil tiap nada terja
   if (l < a.schedMin) a.schedMin = l;
   if (l < 50) a.schedTight++;
   if (l < 0) a.schedLate++;
+}
+export function dbgSent(waitMs: number, lateSec: number): void {   // dipanggil saat nada benar-benar dikirim ke worklet: waitMs = menunggu sampler siap; lateSec > 0 = jadwal nada sudah lewat sebesar itu
+  if (!on) return;
+  a.wait++; if (waitMs > a.waitMax) a.waitMax = waitMs;
+  if (lateSec > 0.005) { a.clamp++; if (lateSec * 1000 > a.clampMax) a.clampMax = lateSec * 1000; }
 }
 export function dbgRun(startCtx: number, ctx?: BaseAudioContext): void {   // tiap Play: hitungan mulai dari nol, waktu kejadian relatif terhadap awal lagu
   if (!on) return;
@@ -101,6 +110,8 @@ function lines(): string[] {
   L.push('Blok telat: ' + a.late + ' / ' + a.n + ' (' + pct(a.late, a.n) + '), jatah ' + bud.toFixed(2) + ' ms');
   L.push('Nada telat (worklet): ' + a.nLate + ' / ' + a.nOn + ', terlama ' + ms(a.ltMax) + (a.nLate ? ', rata ' + ms(a.ltSum / a.nLate) : ''));
   L.push('Nada dijadwalkan: ' + a.sched + ', sisa waktu terpendek ' + (a.sched ? ms(a.schedMin) : '-') + ', < 50 ms: ' + a.schedTight + ', sudah lewat: ' + a.schedLate);
+  L.push('Pesan nada di jalan (main -> worklet): terlama ' + ms(a.trMax) + ', > 100 ms: ' + a.trSlow + ' / ' + a.trN);
+  L.push('Di main thread: tunggu sampler terlama ' + ms(a.waitMax) + ', jadwal sudah lewat saat dikirim: ' + a.clamp + (a.clamp ? ' (maks ' + ms(a.clampMax) + ')' : ''));
   L.push('Nada dipotong (batas 12/plugin): ditahan ' + a.stealH + ', ekor ' + a.stealT);
   L.push('Nada hilang: tanpa sample ' + a.noBuf + ', jadwal terhapus ' + a.penDrop);
   L.push('Beban puncak: ' + a.vmax + ' voice di ' + a.iamax + ' DERIZ sekaligus');
@@ -153,7 +164,7 @@ function render(): void {
   const k = ensureUI(), L = lines();
   k.body.textContent = L.join('\n');
   k.log.textContent = events.length ? events.join('\n') : 'Belum ada kejadian bermasalah.';
-  const bad = a.late + a.nLate + a.stealH + a.noBuf + a.penDrop + a.stall + (underrun()?.ev ?? 0);
+  const bad = a.late + a.nLate + a.trSlow + a.stealH + a.noBuf + a.penDrop + a.stall + (underrun()?.ev ?? 0);
   k.sum.textContent = bad ? bad + ' masalah' : 'aman';
   k.root.classList.toggle('is-bad', bad > 0);
 }

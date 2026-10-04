@@ -36,6 +36,7 @@ function gClear() {
   G.full = 0; G.light = 0; G.hit = 0;                                                  // frame WSOLA: penuh / ringan / dari cache
   G.nOn = 0; G.nLate = 0; G.ltSum = 0; G.ltMax = 0;                                    // nada terjadwal: total, telat (> 6 ms), jumlah + terlama
   G.stealH = 0; G.stealT = 0; G.noBuf = 0; G.penDrop = 0;                              // nada ditahan yang dipotong, ekor yang dipercepat, nada tanpa sample, jadwal terhapus
+  G.trN = 0; G.trSlow = 0; G.trMax = 0;                                                // pesan nada main thread -> worklet: jumlah, yang tiba > 100 ms setelah dikirim, tertunda terlama (ms)
 }
 gClear();
 function finBlock(self) {
@@ -50,9 +51,9 @@ function finBlock(self) {
   G.cur = 0; G.act = false; G.vc = 0; G.ia = 0;
   if (gT >= G.nextRep) {
     G.nextRep = gT + 0.5;
-    if (G.n || G.nOn || G.noBuf || G.penDrop || G.stealH || G.stealT) {
+    if (G.n || G.nOn || G.noBuf || G.penDrop || G.stealH || G.stealT || G.trN) {
       self.port.postMessage({ t: 'st', ct: gT, tr: CLK_RES, bud: 128 / sampleRate * 1000, n: G.n, sum: G.sum, max: G.max, maxAt: G.maxAt, late: G.late, vmax: G.vmax, iamax: G.iamax,
-        full: G.full, light: G.light, hit: G.hit, nOn: G.nOn, nLate: G.nLate, ltSum: G.ltSum, ltMax: G.ltMax, stealH: G.stealH, stealT: G.stealT, noBuf: G.noBuf, penDrop: G.penDrop });
+        full: G.full, light: G.light, hit: G.hit, nOn: G.nOn, nLate: G.nLate, ltSum: G.ltSum, ltMax: G.ltMax, stealH: G.stealH, stealT: G.stealT, noBuf: G.noBuf, penDrop: G.penDrop, trN: G.trN, trSlow: G.trSlow, trMax: G.trMax });
       gClear();
     }
   }
@@ -83,6 +84,7 @@ class DerizSampler extends AudioWorkletProcessor {
     else if (m.t === 'buf') { if (G.on) G.penDrop += this.pend.length; this.pend = []; this.setBuf(m); }
     else if (m.t === 'on' || m.t === 'off' || m.t === 'glide') {
       if (m.t === 'on') m.ps = this.pStamp;   // versi parameter saat nada ini diterima
+      if (G.on && m.t === 'on' && m.sent !== undefined) { const tr = (currentTime - m.sent) * 1000; G.trN++; if (tr > 100) G.trSlow++; if (tr > G.trMax) G.trMax = tr; }   // berapa lama pesan ini di jalan dari main thread sampai diproses worklet (jam AudioContext yang sama)
       if (m.at && m.at > currentTime) this.pend.push(m); else this.apply(m);
     }
     else if (m.t === 'p') { this.pStamp++; this.speed = m.speed; this.pitch = m.pitch; this.vol = m.vol; }
@@ -429,6 +431,7 @@ export interface DerizStat {
   full: number; light: number; hit: number;
   nOn: number; nLate: number; ltSum: number; ltMax: number;
   stealH: number; stealT: number; noBuf: number; penDrop: number;
+  trN: number; trSlow: number; trMax: number;   // pesan nada main thread -> worklet: jumlah, tiba > 100 ms setelah dikirim, tertunda terlama (ms)
 }
 export const derizHooks: { on: boolean; stat: ((m: DerizStat, ctx: BaseAudioContext) => void) | null } = { on: false, stat: null };
 const liveSynths = new Set<DerizSynth>();
@@ -482,7 +485,7 @@ export class DerizSynth {
   // at (opsional) = waktu AudioContext tempat nada mulai / dilepas; kosong = sekarang
   // vel (opsional) = penguatan nada ini 0..1 (1 = tidak berubah)
   noteOn(id: number, semis: number, start: number, speed: number, pitch: number, vol: number, at = 0, vel = 1): void {
-    this.node.port.postMessage({ t: 'on', id, semis, start, speed, pitch, vol, at, vel });
+    this.node.port.postMessage({ t: 'on', id, semis, start, speed, pitch, vol, at, vel, sent: this.ctx.currentTime });   // sent: untuk statistik Debug Audio (waktu pesan di jalan)
   }
   noteOff(id: number, at = 0): void { this.node.port.postMessage({ t: 'off', id, at }); }
   glide(id: number, semis: number, at: number, dur: number): void { this.node.port.postMessage({ t: 'glide', id, semis, at, dur }); }   // slide: meluncur ke `semis` mulai `at` selama `dur` detik

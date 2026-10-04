@@ -8,7 +8,7 @@
 
 import { setReverb, setEq, setFilter, setDeesser, reverbSeconds, eqDb, filterMode, filterHz, deesserHz, deesserThr, deesserMaxDb, decodeStandalone, trackInput } from './audio-engine';
 import { DerizSynth } from './deriz-synth';
-import { dbgSched } from './audio-debug';
+import { dbgSched, dbgSent } from './audio-debug';
 import { openMpcs } from './mpcs';
 import { isAudio, ACCEPT as AUDIO_ACCEPT } from './audio-upload-card';
 import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } from './synth-engine';
@@ -597,9 +597,11 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     const fx = derizOf(track, fxId); if (!fx) return;
     const { ctx, dest } = host(), id = ++kbSeq;
     dbgSched(when - ctx.currentTime);   // statistik Debug Audio: sisa waktu sebelum nada ini mulai (tidak berefek kalau debug mati)
+    const tw = performance.now();
     derizSynth(fx, ctx).then(s => {
       const z = fx.deriz; if (!z) return;
       s.routeTo(trackInput(ctx, dest, track)); s.setBuffer(z.buf);
+      dbgSent(performance.now() - tw, ctx.currentTime - when);
       const [sp, pi, vo] = derizArgs(fx), at = Math.max(when, ctx.currentTime);
       s.noteOn(id, midi - KROOT, derizStart(z), sp, pi, vo, at, velGain(vel));
       if (glides) for (const g of glides) s.glide(id, g.to - KROOT, Math.max(g.when, at), g.dur);
