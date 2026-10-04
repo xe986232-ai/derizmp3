@@ -11,6 +11,7 @@ import { initClipIconMenu } from './clip-icon-menu';
 import { STRETCH_MIN, STRETCH_MAX } from './time-stretch';
 import { initLandscape } from './landscape';
 import { initMenuPanel, setProjectIO } from './menu-panel';
+import { setExportIO } from './export-audio';
 import { hasSynth, startVoice, releaseVoice, playNote, stopAllSynth } from './synth-engine';
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
@@ -933,7 +934,7 @@ let kbdCont = null, kbdOct = 3, kbdN = 0;
 const baseMidi = () => 12 + 12 * kbdOct;   // C3 = 48 (C4 = 60 = middle C)
 
 // --- suara (WebAudio, polifonik) ---
-let actx = null, master = null; const voices = new Map();
+let actx = null, master = null, guardOut = null; const voices = new Map();
 function audio() {
   if (!actx) {
     // latencyHint 'playback': buffer keluaran lebih besar, jadi lonjakan beban sesaat (banyak VST / reverb) tidak langsung jadi gresek.
@@ -947,7 +948,7 @@ function audio() {
     guardPre.gain.value = 1 / GR;
     for (let i = 0; i < GN; i++) { const x = (i / (GN - 1) * 2 - 1) * GR, ax = Math.abs(x); curve[i] = Math.sign(x) * (ax <= 0.9 ? ax : 0.9 + 0.1 * Math.tanh((ax - 0.9) / 0.1)); }
     guard.curve = curve; guard.oversample = 'none';
-    master.connect(guardPre); guardPre.connect(guard); guard.connect(actx.destination);
+    master.connect(guardPre); guardPre.connect(guard); guard.connect(actx.destination); guardOut = guard;   // guardOut: titik rekam export audio (sama dengan yang sampai ke speaker)
   }
   if (actx.state === 'suspended') actx.resume();
   return actx;
@@ -1974,3 +1975,29 @@ async function projectRestore(rec) {
   undoStack = []; redoStack = []; histCur = histCapture(); histSync();
 }
 setProjectIO({snapshot: projectSnapshot, restore: projectRestore, toast});
+
+// ===== Export audio: merekam keluaran master selama project diputar dari bar 1 (lihat export-audio.ts) =====
+const contentEndBar = () => {   // ujung kanan clip / pattern paling akhir di timeline, dalam bar
+  let m = 0;
+  lanesEl.querySelectorAll('.pattern[data-clip], .pattern[data-pr-id]').forEach(p => { m = Math.max(m, (pl(p) + pw(p)) / BAR_W); });
+  return Math.min(m, BARS);
+};
+let expSaved = null;
+setExportIO({
+  ctx: () => audio(),
+  tap: () => guardOut,
+  contentSec: () => contentEndBar() * SEC_PER_BAR,
+  begin() {
+    expSaved = {pos: posBars, mark: startMark, on: metro.on, ci: metro.countIn};
+    pausePlay(); posBars = 0; metro.on = false; metro.countIn = false;   // tanpa metronome dan count-in
+    startPlay();
+    return startCtx;
+  },
+  isPlaying: () => playing,
+  nowSec: () => actx.currentTime - startCtx,
+  end() {   // aman dipanggil berulang
+    if (playing) pausePlay();
+    if (expSaved) { posBars = expSaved.pos; startMark = expSaved.mark; metro.on = expSaved.on; metro.countIn = expSaved.ci; expSaved = null; renderPlayhead(); }
+  },
+  toast,
+});

@@ -2,6 +2,7 @@
 // Panel menimpa layar (tidak mendorong timeline). Tutup: klik tombol lagi, klik di luar panel, atau Esc.
 // Saat piano roll terbuka tombolnya disembunyikan (CSS) supaya tidak menimpa tombol X piano roll, dan panel ikut menutup.
 
+import { runExport, FMT_KEY, type ExportFormat } from './export-audio';
 import { saveProject, loadProject, deleteProject, listProjects, projectExists, recordToJson, jsonToRecord } from './project-store';
 
 // Jembatan ke main.ts (yang memegang data timeline): snapshot dan pemulihan project
@@ -22,6 +23,7 @@ const IC_DEL = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stro
 const svgi = (d: string, w = 20): string => '<svg viewBox="0 0 24 24" width="' + w + '" height="' + w + '" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
 const IC_FOLDER = svgi('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>');
 const IC_GEAR = svgi('<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>');
+const IC_EXPORT = svgi('<path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>');
 const IC_CHEV = svgi('<path d="M9 5l7 7-7 7"/>', 16);
 const IC_BACK = svgi('<path d="M15 5l-7 7 7 7"/>', 18);
 
@@ -55,7 +57,8 @@ export function initMenuPanel(): MenuPanel {
         // halaman utama: daftar kategori
         '<nav class="mp__page" data-page="home" aria-label="Kategori menu">' +
           '<button type="button" class="mp__cat mp__item" style="--i:1" data-go="project">' + IC_FOLDER + '<span class="mp__cat__t"><b>Project</b><small>Simpan &amp; buka project</small></span>' + IC_CHEV + '</button>' +
-          '<button type="button" class="mp__cat mp__item" style="--i:2" data-go="settings">' + IC_GEAR + '<span class="mp__cat__t"><b>Pengaturan</b><small>Preferensi aplikasi</small></span>' + IC_CHEV + '</button>' +
+          '<button type="button" class="mp__cat mp__item" style="--i:2" data-go="export">' + IC_EXPORT + '<span class="mp__cat__t"><b>Export</b><small>Simpan hasil jadi MP3 / WAV</small></span>' + IC_CHEV + '</button>' +
+          '<button type="button" class="mp__cat mp__item" style="--i:3" data-go="settings">' + IC_GEAR + '<span class="mp__cat__t"><b>Pengaturan</b><small>Preferensi aplikasi</small></span>' + IC_CHEV + '</button>' +
         '</nav>' +
         // kategori Project
         '<section class="mp__page" data-page="project" aria-label="Project" hidden>' +
@@ -68,6 +71,21 @@ export function initMenuPanel(): MenuPanel {
             '<div class="mp__sub"><span>File project</span><button type="button" class="mp__imp">Buka .json</button></div>' +
             '<ul class="mp__files"></ul><p class="mp__hint mp__empty">Belum ada project tersimpan.</p>' +
             '<input type="file" class="mp__impfile" accept="application/json,.json" hidden>' +
+          '</div>' +
+        '</section>' +
+        // kategori Export
+        '<section class="mp__page" data-page="export" aria-label="Export" hidden>' +
+          '<div class="mp__card mp__item mp__set" style="--i:1">' +
+            '<div class="mp__sub"><span>Format file</span></div>' +
+            '<div class="mp__seg" role="radiogroup" aria-label="Format export">' +
+              '<button type="button" class="mp__segbtn" role="radio" data-xfmt="mp3">MP3</button>' +
+              '<button type="button" class="mp__segbtn" role="radio" data-xfmt="wav">WAV</button>' +
+            '</div>' +
+            '<p class="mp__hint mp__xhint"></p>' +
+          '</div>' +
+          '<div class="mp__card mp__item" style="--i:2">' +
+            '<button type="button" class="mp__expbtn">' + IC_EXPORT + '<span>Export Audio</span></button>' +
+            '<p class="mp__hint">Memutar project dari bar 1 sampai akhir isi timeline lalu merekamnya, jadi lama export sama dengan durasi lagu. Tab jangan ditutup atau dipindah.</p>' +
           '</div>' +
         '</section>' +
         // kategori Pengaturan
@@ -161,8 +179,28 @@ export function initMenuPanel(): MenuPanel {
   try { recSaved = localStorage.getItem(REC_KEY) === '1'; } catch { /* abaikan */ }
   setRec(recSaved, false);
 
-  // ===== Halaman kategori (home / project / settings) =====
-  const TITLES: Record<string, string> = {home: 'Menu', project: 'Project', settings: 'Pengaturan'};
+  // ===== Export: pilihan format (disimpan di browser) + tombol Export Audio =====
+  const xfBtns = [...panel.querySelectorAll<HTMLButtonElement>('[data-xfmt]')];
+  const xHint = panel.querySelector('.mp__xhint') as HTMLElement;
+  const XHINTS: Record<string, string> = {mp3: 'MP3 192 kbps, ukuran kecil, cocok untuk dibagikan.', wav: 'WAV 16-bit stereo tanpa kompresi, kualitas penuh, ukuran besar.'};
+  let xfmt: ExportFormat = 'mp3';
+  const setXfmt = (v: string, save: boolean): void => {
+    xfmt = v === 'wav' ? 'wav' : 'mp3';
+    xfBtns.forEach(b => { const on = b.dataset.xfmt === xfmt; b.classList.toggle('is-on', on); b.setAttribute('aria-checked', String(on)); });
+    xHint.textContent = XHINTS[xfmt];
+    if (save) { try { localStorage.setItem(FMT_KEY, xfmt); } catch { /* penyimpanan diblokir: tetap berlaku sampai halaman ditutup */ } }
+  };
+  xfBtns.forEach(b => b.addEventListener('click', () => setXfmt(b.dataset.xfmt as string, true)));
+  let xfSaved = 'mp3';
+  try { xfSaved = localStorage.getItem(FMT_KEY) || 'mp3'; } catch { /* abaikan */ }
+  setXfmt(xfSaved, false);
+  panel.querySelector('.mp__expbtn')!.addEventListener('click', () => {
+    apply(false, true);   // panel menutup supaya overlay progres terlihat
+    setTimeout(() => { void runExport(xfmt, curName); }, 260);
+  });
+
+  // ===== Halaman kategori (home / project / export / settings) =====
+  const TITLES: Record<string, string> = {home: 'Menu', project: 'Project', export: 'Export', settings: 'Pengaturan'};
   const pages = [...panel.querySelectorAll<HTMLElement>('.mp__page')];
   const titleEl = panel.querySelector('.mp__title') as HTMLElement;
   const backBtn = panel.querySelector('.mp__back') as HTMLButtonElement;
