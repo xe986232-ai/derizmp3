@@ -23,8 +23,14 @@ const WORKLET_SRC = `
 // memakai pencarian ringan (tanpa penyelarasan sub-sampel, ~40% lebih murah) dan prefetch dilewati: kualitas turun sedikit,
 // bukan gresek / putus. Di bawah jatah hasilnya identik dengan sebelumnya.
 // MAX_VOICES: batas nada aktif per plugin (nada paling tua / yang sudah dilepas dilepas cepat 4 ms bila terlampaui).
+// gTotal: jumlah nada aktif SEMUA plugin digabung. Makin banyak nada sekaligus, makin kecil jatah frame berkualitas penuh per blok, dan frame di
+// luar jatah ringan dibuat TANPA pencarian korelasi (posisi nominal saja, jauh lebih murah). Sampai 12 nada: persis seperti sebelumnya.
+// Di atas itu kualitas turun sedikit (tertutup campuran yang padat), tapi biaya satu blok audio punya batas, jadi HP yang lambat tidak
+// kehabisan waktu per blok (itu yang membuat suara loncat / tersendat / nada menumpuk saat banyak DERIZ main bersamaan).
 const FULL_FRAMES = 4, MAX_VOICES = 12;
-let gT = -1, gUsed = 0;
+let gT = -1, gUsed = 0, gTotal = 0;
+const frameTier = () => gTotal > 24 ? (gUsed >= 2 ? 2 : gUsed >= 1 ? 1 : 0) : gTotal > 12 ? (gUsed >= 5 ? 2 : gUsed >= 2 ? 1 : 0) : (gUsed >= FULL_FRAMES ? 1 : 0);   // 0 penuh, 1 ringan, 2 tanpa pencarian
+const fullBudget = () => gTotal > 24 ? 1 : gTotal > 12 ? 2 : FULL_FRAMES;
 class DerizSampler extends AudioWorkletProcessor {
   constructor() {
     super();
@@ -103,6 +109,7 @@ class DerizSampler extends AudioWorkletProcessor {
       if (!vic) break;
       vic.rel = true; vic.fast = true; vic.relK = this.fastK; live--;
     }
+    gTotal++;
     this.voices.push({
       id: m.id, semis: m.semis, N: N, nom: start, prev: 0, first: true, last: false, oi: oi, age: ++this.seq, fast: false,
       w: 0, cEnd: 0, vEnd: 0, rd: 0, rho: P0 * rate / sampleRate, size: size,
@@ -130,6 +137,7 @@ class DerizSampler extends AudioWorkletProcessor {
     const t = this.st, h = (((Math.imul(c0, 73856093) ^ Math.imul((tp * 64) | 0, 19349663) ^ Math.imul(N, 83492791)) >>> 0) & 65535) * 5;
     if (t[h + 4] === N && t[h] === tp && t[h + 1] === c0) { this.fr = t[h + 3]; return t[h + 2]; }   // cache kena: hampir gratis, tidak memakai anggaran
     gUsed++;
+    if (light === 2) { this.fr = 0; return Math.max(0, Math.min(this.len - N, c0)); }   // tanpa pencarian: posisi nominal, tidak disimpan di cache
     if (light) return this.search0(c0, tp, N, Hs, true);
     const c = this.search0(c0, tp, N, Hs, false);
     t[h] = tp; t[h + 1] = c0; t[h + 2] = c; t[h + 3] = this.fr; t[h + 4] = N;
@@ -183,7 +191,7 @@ class DerizSampler extends AudioWorkletProcessor {
     const r = this.clean.length ? this.clean.pop() : null;
     return r && r[0].length === size ? r : [new Float32Array(size), new Float32Array(size)];   // kolam kosong: alokasi seperti dulu
   }
-  recycle(v) { if (this.clean.length + this.dirty.length < 2 * this.POOL) this.dirty.push(v.T); }
+  recycle(v) { gTotal--; if (this.clean.length + this.dirty.length < 2 * this.POOL) this.dirty.push(v.T); }
   recycleAll() { for (const v of this.voices) this.recycle(v); this.voices = []; }
   // satu langkah perawatan per blok senggang: bersihkan satu buffer bekas (harus nol lagi: ujung kiri sinc dibaca sebagai nol), atau isi kolam sampai POOL
   idle() {
@@ -219,7 +227,7 @@ class DerizSampler extends AudioWorkletProcessor {
       if (v.oi < ons.length && ons[v.oi] - pre <= v.nom) {
         c = Math.max(0, Math.min(maxC, ons[v.oi] - pre)); v.nom = c; v.oi++; mode = 2;
       } else {
-        c = this.search(Math.round(v.nom), v.prev + Hs, N, Hs, gUsed >= FULL_FRAMES); fr = this.fr;   // anggaran frame penuh per blok dibagi semua plugin
+        c = this.search(Math.round(v.nom), v.prev + Hs, N, Hs, frameTier()); fr = this.fr;   // anggaran frame penuh per blok dibagi semua plugin
         if (v.oi < ons.length) { const cm = ons[v.oi] - pre - 1; if (c + (fr < 0 ? -1 : 0) + N + 3 > cm + N) { /* dekat onset */ } if (c > cm) { c = cm; fr = 0; } }
         if (c < 0) { c = 0; fr = 0; }
         if (c < 3 || c + N + 4 >= L) fr = 0;   // pinggir sample: tanpa pecahan
@@ -294,7 +302,7 @@ class DerizSampler extends AudioWorkletProcessor {
       while (!v.last && v.cEnd < v.need) { this.gen(v); made++; }
     }
     // prefetch: sisa jatah dipakai voice yang cadangan frame-nya kurang dari 2 hop (ring buffer 32768 jauh lebih besar dari itu)
-    while (made < this.PF && gUsed < FULL_FRAMES) {   // anggaran habis: prefetch dilewati (tidak wajib), frame wajib sudah dibuat di atas
+    while (made < this.PF && gUsed < fullBudget()) {   // anggaran habis: prefetch dilewati (tidak wajib), frame wajib sudah dibuat di atas
       let bv = null, bm = 0;
       for (let vi = 0; vi < nv; vi++) {
         const v = vs[vi];
