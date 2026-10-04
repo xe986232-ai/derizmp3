@@ -316,7 +316,6 @@ window.addEventListener('scroll', closeMenu, true);
 
 // Klik area kosong di timeline -> kartu "Add" -> pattern kosong
 const lanesEl = document.getElementById('lanes');
-initClipIconMenu(lanesEl);   // tap 3x icon microphone pada audio clip -> card putih "Tempo"
 let addCard = null, ghost = null;
 function dismissAdd(instant) {
   const els = [addCard, ghost]; addCard = ghost = null;
@@ -537,6 +536,24 @@ function patBarPlace() {
   patBar.style.top = (above < 0 ? lane.offsetTop + lane.offsetHeight + 8 : above) + 'px';   // track paling atas: toolbar turun ke bawah pattern
 }
 wsEl.addEventListener('scroll', () => { patBarPlace(); closePatMenu(); }, {passive: true});
+// Tahan icon microphone pada audio clip -> card putih "Tempo"; menu bulat (copy, delete, dst) hilang selama card terbuka
+let barHidByCard = false, barHideAnim = null;
+initClipIconMenu(lanesEl, {
+  onOpen() {
+    closePatMenu();
+    if (patBar.hidden) return;
+    barHidByCard = true;
+    if (REDUCE) { patBar.hidden = true; return; }
+    barHideAnim = patBar.animate([{opacity: 1, transform: 'scale(1)'}, {opacity: 0, transform: 'scale(.8)'}], {duration: 150, easing: 'ease-in', fill: 'forwards'});
+    barHideAnim.onfinish = () => { if (barHidByCard) patBar.hidden = true; if (barHideAnim) barHideAnim.cancel(); barHideAnim = null; };
+  },
+  onClose() {
+    if (!barHidByCard) return;
+    barHidByCard = false;
+    if (barHideAnim) { barHideAnim.cancel(); barHideAnim = null; }
+    if (patBar.hidden && selPat) patBarShow(selPat);   // pattern masih terpilih: menu bulat muncul lagi
+  }
+});
 window.addEventListener('resize', patBarPlace);
 
 function shakeBar() { patBar.classList.remove('is-shake'); void patBar.offsetWidth; patBar.classList.add('is-shake'); }
