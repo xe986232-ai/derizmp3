@@ -3,6 +3,7 @@
 // Saat piano roll terbuka tombolnya disembunyikan (CSS) supaya tidak menimpa tombol X piano roll, dan panel ikut menutup.
 
 import { runExport, FMT_KEY, type ExportFormat } from './export-audio';
+import { setAudioDebug, loadAudioDebug } from './audio-debug';
 import { saveProject, loadProject, deleteProject, listProjects, projectExists, recordToJson, jsonToRecord } from './project-store';
 
 // Jembatan ke main.ts (yang memegang data timeline): snapshot dan pemulihan project
@@ -123,6 +124,12 @@ export function initMenuPanel(): MenuPanel {
               '<button type="button" class="mp__switch" role="switch" aria-checked="true" aria-label="Master Loudness" data-loud><i></i></button>' +
             '</div>' +
           '</div>' +
+          '<div class="mp__card mp__item mp__set" style="--i:6">' +
+            '<div class="mp__row">' +
+              '<span class="mp__row__t"><b>Debug Audio</b><small>Panel statistik beban, nada telat &amp; nada terpotong saat Play (untuk mencari penyebab glitch)</small></span>' +
+              '<button type="button" class="mp__switch" role="switch" aria-checked="false" aria-label="Debug Audio" data-adbg><i></i></button>' +
+            '</div>' +
+          '</div>' +
         '</section>' +
       '</div>' +
     '</div>';
@@ -199,6 +206,16 @@ export function initMenuPanel(): MenuPanel {
   let loudSaved = true;
   try { loudSaved = localStorage.getItem(LOUD_KEY) !== '0'; } catch { /* abaikan */ }
   setLoud(loudSaved, false);
+
+  // ===== Pengaturan: Debug Audio (panel statistik mengambang; bawaan MATI, kerja tambahan nol saat mati) =====
+  const adbgBtn = panel.querySelector('[data-adbg]') as HTMLButtonElement;
+  const setAdbg = (on: boolean, save: boolean): void => {
+    adbgBtn.classList.toggle('is-on', on);
+    adbgBtn.setAttribute('aria-checked', String(on));
+    setAudioDebug(on, save);
+  };
+  adbgBtn.addEventListener('click', () => setAdbg(adbgBtn.getAttribute('aria-checked') !== 'true', true));
+  setAdbg(loadAudioDebug(), false);
 
   // ===== Export: pilihan format (disimpan di browser) + tombol Export Audio =====
   const xfBtns = [...panel.querySelectorAll<HTMLButtonElement>('[data-xfmt]')];

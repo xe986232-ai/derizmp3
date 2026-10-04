@@ -1538,3 +1538,16 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .xpo__cancel{align-self:flex-end;border:0;border-radius:999px;padding:8px 16px;background:rgba(255,255,255,.1);color:var(--text);font-size:13px;font-weight:600;cursor:pointer}
 .xpo__cancel:hover{background:rgba(255,255,255,.18)}
 .xpo__cancel:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Debug Audio: panel statistik mengambang (Pengaturan > Debug Audio). Tidak menangkap sentuhan di luar tombolnya. */
+.adbg{position:fixed;left:8px;top:calc(env(safe-area-inset-top,0px) + 56px);z-index:450;width:min(330px,calc(100vw - 16px));border-radius:10px;background:rgba(10,12,16,.86);color:#d6f5e4;box-shadow:0 8px 24px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.12);font:11px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;pointer-events:none}
+.adbg.is-bad{color:#ffe1d6;box-shadow:0 8px 24px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,120,80,.55)}
+.adbg__bar{display:flex;align-items:center;gap:8px;padding:6px 8px;pointer-events:auto}
+.adbg__bar b{font-size:11px;letter-spacing:.06em}
+.adbg__sum{flex:1;min-width:0;opacity:.85}
+.adbg__btns{display:flex;gap:4px}
+.adbg__btns button{border:0;border-radius:6px;padding:3px 8px;background:rgba(255,255,255,.14);color:inherit;font:inherit;cursor:pointer}
+.adbg__btns button:active{background:rgba(255,255,255,.28)}
+.adbg__body,.adbg__log{margin:0;padding:0 8px 6px;white-space:pre-wrap;word-break:break-word;user-select:text}
+.adbg__log{border-top:1px solid rgba(255,255,255,.12);padding-top:5px;opacity:.9}
+.adbg.is-min .adbg__body,.adbg.is-min .adbg__log{display:none}

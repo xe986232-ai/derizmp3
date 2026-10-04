@@ -11,6 +11,7 @@ import { initClipIconMenu } from './clip-icon-menu';
 import { STRETCH_MIN, STRETCH_MAX } from './time-stretch';
 import { initLandscape } from './landscape';
 import { initMenuPanel, setProjectIO } from './menu-panel';
+import { dbgRun } from './audio-debug';
 import { mpcsExport, mpcsImport } from './mpcs';
 import { setExportIO } from './export-audio';
 import { hasSynth, startVoice, releaseVoice, playNote, stopAllSynth } from './synth-engine';
@@ -1512,7 +1513,7 @@ function scheduleClips(countIn) {
   const clips = clipPlacements();
   schedSig = placementSig();
   playClips(ctx, master, clips, posBars, SEC_PER_BAR, startCtx);
-  stopAllSynth(ctx); fxRack.derizStop(); buildSynthQueue(); synthPump(ctx, ctx.currentTime + SYNTH_AHEAD);
+  stopAllSynth(ctx); fxRack.derizStop(); dbgRun(startCtx, ctx); buildSynthQueue(); synthPump(ctx, ctx.currentTime + SYNTH_AHEAD);   // dbgRun: hitungan Debug Audio mulai dari nol tiap Play
   startPhAnim();
 }
 function startPlay() {

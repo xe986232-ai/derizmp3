@@ -82,3 +82,23 @@ Drag nada, geser, dan zoom dibuat lebih ringan tanpa mengubah hasil gambar (grid
 - **Geser murni** tidak lagi memicu gambar ulang grid setelah jari berhenti (`commitZoom`).
 - **Drag / resize**: nada hidup di-cache per gesture (tanpa `find()` per nada per gerakan), frame dilewati kalau masih di kotak snap yang sama, deteksi nada baru / hilang tidak membuat Map / Set baru tiap frame.
 - **`notifyChange` ditunda** selama gesture (JSON + render ulang pratinjau pattern di timeline), dikirim langsung saat jari lepas atau piano roll ditutup.
+
+## Debug Audio (mencari penyebab glitch DERIZ di HP)
+Pengaturan > **Debug Audio** (bawaan MATI) memunculkan panel kecil yang mengambang saat Play. Tidak mengubah suara (dites bit-per-bit sama dengan kode sebelumnya); saat mati tidak ada kerja tambahan.
+
+| Baris | Artinya |
+|---|---|
+| **Beban DERIZ** | Waktu kerja semua plugin DERIZ per blok audio (128 sampel) dibanding jatahnya (~2,67 ms di 48 kHz), plus blok terberat dan waktunya. |
+| **Blok telat** | Jumlah blok yang kerjanya melewati jatah. Kalau timer worklet hanya 1 ms (tanpa `performance`), hanya blok yang PASTI lewat jatah yang dihitung, jadi angkanya batas bawah. |
+| **Nada telat (worklet)** | Nada terjadwal yang baru diproses > 6 ms setelah waktunya. Ini gejala melodi "tiba-tiba ngebut". |
+| **Nada dijadwalkan** | Sisi main thread: sisa waktu terpendek antara nada dikirim dan waktu mulainya; "sudah lewat" = jadwal sudah terlambat saat dikirim. |
+| **Nada dipotong** | Batas 12 nada per plugin: *ditahan* = nada yang masih ditekan terpotong (terdengar "tidak bunyi"), *ekor* = nada yang sudah dilepas dipercepat hilang. |
+| **Nada hilang** | Tanpa sample (worklet belum menerima audio) atau jadwal terhapus karena sample baru masuk. |
+| **Beban puncak / Frame WSOLA** | Voice dan DERIZ yang bunyi bersamaan paling banyak; frame penuh / ringan / dari cache. |
+| **Main thread** | Timer 25 ms yang molor > 50 ms (tab sibuk: DOM, waveform, undo). |
+| **Underrun browser** | Dari `AudioContext.playbackStats` kalau browser mendukung: bukti langsung suara putus, dari penyebab APA PUN (bukan hanya DERIZ). |
+
+Hitungan direset tiap Play (atau tombol Reset). Kejadian bermasalah dicatat per jendela 0,5 detik dengan waktu relatif terhadap awal lagu (`@12.5s`), supaya bisa dicocokkan dengan bagian melodinya. Tombol **Salin** menyalin laporan teks (termasuk info perangkat) untuk ditempel ke chat.
+
+Kode: `src/audio-debug.ts` (agregasi + panel), `src/deriz-synth.ts` (objek `G` + `finBlock` di worklet, `derizHooks`), `src/fx-rack.ts` (`dbgSched` di `derizPlay`), `src/menu-panel.ts` (switch), `src/main.ts` (`dbgRun` tiap Play).
+Tes: `node --experimental-transform-types tools/deriz-debug-test.ts` (suara identik debug mati vs nyala, hitungan blok / nada telat / terpotong / hilang, timer presisi vs kasar, tambahan beban).

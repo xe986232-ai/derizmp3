@@ -17,7 +17,7 @@
 //
 // Pesan ke prosesor: buf (data sample), on / off (nada), p (parameter live), kill (hentikan semua).
 
-const WORKLET_SRC = `
+export const WORKLET_SRC = `
 // Scope worklet dipakai bersama oleh SEMUA plugin DERIZ dalam satu AudioContext, jadi tiga variabel ini berlaku lintas plugin.
 // FULL_FRAMES: jatah frame WSOLA berkualitas penuh per blok audio (semua plugin digabung). Di atas jatah, frame yang tetap wajib dibuat
 // memakai pencarian ringan (tanpa penyelarasan sub-sampel, ~40% lebih murah) dan prefetch dilewati: kualitas turun sedikit,
@@ -25,6 +25,38 @@ const WORKLET_SRC = `
 // MAX_VOICES: batas nada aktif per plugin (nada paling tua / yang sudah dilepas dilepas cepat 4 ms bila terlampaui).
 const FULL_FRAMES = 4, MAX_VOICES = 12;
 let gT = -1, gUsed = 0;
+// ---- Statistik debug (Pengaturan > Debug Audio). Mati = hanya satu cek boolean per blok, hasil suara TIDAK berubah. ----
+// Satu objek G untuk semua plugin DERIZ dalam AudioContext ini; dikirim ke main thread tiap 0,5 detik (selisihnya saja, lalu direset).
+// Waktu: performance.now() kalau ada di scope worklet; kalau tidak, Date.now() (resolusi 1 ms, CLK_RES = 1) dan 'telat' hanya dihitung bila PASTI lewat jatah.
+const HAS_PERF = typeof performance !== 'undefined' && !!performance.now, CLK_RES = HAS_PERF ? 0 : 1;
+const clk = HAS_PERF ? () => performance.now() : () => Date.now();
+const G = { on: false, cur: 0, act: false, vc: 0, ia: 0, nextRep: 0 };
+function gClear() {
+  G.n = 0; G.sum = 0; G.max = 0; G.maxAt = 0; G.late = 0; G.vmax = 0; G.iamax = 0;   // blok: jumlah aktif, total ms, terberat (ms + waktu), jumlah > jatah, voice / plugin aktif tertinggi
+  G.full = 0; G.light = 0; G.hit = 0;                                                  // frame WSOLA: penuh / ringan / dari cache
+  G.nOn = 0; G.nLate = 0; G.ltSum = 0; G.ltMax = 0;                                    // nada terjadwal: total, telat (> 6 ms), jumlah + terlama
+  G.stealH = 0; G.stealT = 0; G.noBuf = 0; G.penDrop = 0;                              // nada ditahan yang dipotong, ekor yang dipercepat, nada tanpa sample, jadwal terhapus
+}
+gClear();
+function finBlock(self) {
+  if (G.act) {
+    const bud = 128 / sampleRate * 1000;
+    G.n++; G.sum += G.cur;
+    if (G.cur > G.max) { G.max = G.cur; G.maxAt = gT; }
+    if (G.cur - CLK_RES > bud) G.late++;
+    if (G.vc > G.vmax) G.vmax = G.vc;
+    if (G.ia > G.iamax) G.iamax = G.ia;
+  }
+  G.cur = 0; G.act = false; G.vc = 0; G.ia = 0;
+  if (gT >= G.nextRep) {
+    G.nextRep = gT + 0.5;
+    if (G.n || G.nOn || G.noBuf || G.penDrop || G.stealH || G.stealT) {
+      self.port.postMessage({ t: 'st', ct: gT, tr: CLK_RES, bud: 128 / sampleRate * 1000, n: G.n, sum: G.sum, max: G.max, maxAt: G.maxAt, late: G.late, vmax: G.vmax, iamax: G.iamax,
+        full: G.full, light: G.light, hit: G.hit, nOn: G.nOn, nLate: G.nLate, ltSum: G.ltSum, ltMax: G.ltMax, stealH: G.stealH, stealT: G.stealT, noBuf: G.noBuf, penDrop: G.penDrop });
+      gClear();
+    }
+  }
+}
 class DerizSampler extends AudioWorkletProcessor {
   constructor() {
     super();
@@ -47,7 +79,8 @@ class DerizSampler extends AudioWorkletProcessor {
     this.port.onmessage = e => this.msg(e.data);
   }
   msg(m) {
-    if (m.t === 'buf') { this.pend = []; this.setBuf(m); }
+    if (m.t === 'dbg') { G.on = !!m.on; gClear(); G.cur = 0; G.act = false; G.nextRep = 0; }
+    else if (m.t === 'buf') { if (G.on) G.penDrop += this.pend.length; this.pend = []; this.setBuf(m); }
     else if (m.t === 'on' || m.t === 'off' || m.t === 'glide') {
       if (m.t === 'on') m.ps = this.pStamp;   // versi parameter saat nada ini diterima
       if (m.at && m.at > currentTime) this.pend.push(m); else this.apply(m);
@@ -60,6 +93,7 @@ class DerizSampler extends AudioWorkletProcessor {
     if (m.t === 'on') {
       // parameter yang dibawa nada ini sudah usang kalau knob diputar (pesan 'p') setelah nada diterima: jangan menimpa nilai yang lebih baru
       if (m.ps === this.pStamp) { this.speed = m.speed; this.pitch = m.pitch; this.vol = m.vol; }
+      if (G.on && m.at) { G.nOn++; const lt = (currentTime - m.at) * 1000; if (lt > 6) { G.nLate++; G.ltSum += lt; if (lt > G.ltMax) G.ltMax = lt; } }   // nada terjadwal baru diproses > 6 ms setelah waktunya
       this.start(m);
     }
     else if (m.t === 'glide') { for (const v of this.voices) if (v.id === m.id) { v.gf = v.semis; v.gt = m.semis; v.g0 = m.at || currentTime; v.gd = Math.max(0.005, m.dur); } }
@@ -88,7 +122,7 @@ class DerizSampler extends AudioWorkletProcessor {
     w = { W, S }; this.wins.set(N, w); return w;
   }
   start(m) {
-    if (!this.ch) return;
+    if (!this.ch) { if (G.on) G.noBuf++; return; }   // sample belum sampai: nada ini hilang
     const rate = this.bufRate, size = 1 << 15;
     const P0 = Math.pow(2, (m.semis + this.pitch) / 12);
     const dur = P0 < 1 ? 0.04 / Math.sqrt(P0) : 0.04 * Math.pow(P0, 0.35);   // rendah: muat beberapa periode; tinggi: hop lebih panjang supaya modulasi frame (x rasio nada) tidak jadi dengung
@@ -101,6 +135,7 @@ class DerizSampler extends AudioWorkletProcessor {
       let vic = null;
       for (const x of this.voices) if (!x.fast && (!vic || (x.rel && !vic.rel) || (x.rel === vic.rel && x.age < vic.age))) vic = x;
       if (!vic) break;
+      if (G.on) { if (vic.rel) G.stealT++; else G.stealH++; }   // H = nada yang masih ditahan terpotong (terdengar 'tidak bunyi'), T = ekor nada yang sudah dilepas
       vic.rel = true; vic.fast = true; vic.relK = this.fastK; live--;
     }
     this.voices.push({
@@ -128,9 +163,10 @@ class DerizSampler extends AudioWorkletProcessor {
   // (cache hanya berisi hasil kualitas penuh, jadi nada yang sama kelak tetap mendapat hasil penuh yang identik).
   search(c0, tp, N, Hs, light) {
     const t = this.st, h = (((Math.imul(c0, 73856093) ^ Math.imul((tp * 64) | 0, 19349663) ^ Math.imul(N, 83492791)) >>> 0) & 65535) * 5;
-    if (t[h + 4] === N && t[h] === tp && t[h + 1] === c0) { this.fr = t[h + 3]; return t[h + 2]; }   // cache kena: hampir gratis, tidak memakai anggaran
+    if (t[h + 4] === N && t[h] === tp && t[h + 1] === c0) { if (G.on) G.hit++; this.fr = t[h + 3]; return t[h + 2]; }   // cache kena: hampir gratis, tidak memakai anggaran
     gUsed++;
-    if (light) return this.search0(c0, tp, N, Hs, true);
+    if (light) { if (G.on) G.light++; return this.search0(c0, tp, N, Hs, true); }
+    if (G.on) G.full++;
     const c = this.search0(c0, tp, N, Hs, false);
     t[h] = tp; t[h + 1] = c0; t[h + 2] = c; t[h + 3] = this.fr; t[h + 4] = N;
     return c;
@@ -272,6 +308,14 @@ class DerizSampler extends AudioWorkletProcessor {
     if (c >= maxC || v.nom >= maxC) { v.last = true; v.cEnd = wpos + N; }   // sample habis: sisa ekor ikut dimainkan (sudah memudar)
   }
   process(inputs, outputs) {
+    if (!G.on) return this.run(inputs, outputs);
+    if (currentTime !== gT) finBlock(this);   // blok baru: tutup hitungan blok sebelumnya (dan kirim laporan kalau sudah 0,5 detik)
+    const had = this.voices.length > 0, t0 = clk();
+    const r = this.run(inputs, outputs);
+    if (had || this.voices.length) { G.cur += clk() - t0; G.act = true; G.vc += this.voices.length; G.ia++; }
+    return r;
+  }
+  run(inputs, outputs) {
     const out = outputs[0], oL = out[0], oR = out[1] || out[0], n = oL.length;
     if (currentTime !== gT) { gT = currentTime; gUsed = 0; }   // blok baru: anggaran frame penuh direset (dibagi semua plugin DERIZ)
     this.flush();
@@ -378,10 +422,29 @@ export function detectOnsets(x: Float32Array, rate: number): number[] {
 }
 const onsetCache = new WeakMap<AudioBuffer, number[]>();   // buffer yang dipakai beberapa DERIZ: deteksi onset cukup sekali
 
+// ---- Debug audio (Pengaturan > Debug Audio): statistik dari worklet dikirim lewat hook ini (modul ini sengaja tanpa import supaya bisa dites di Node) ----
+export interface DerizStat {
+  t: 'st'; ct: number; tr: number; bud: number;   // ct: waktu AudioContext saat laporan; tr: resolusi timer worklet (ms; 0 = performance.now); bud: jatah per blok (ms)
+  n: number; sum: number; max: number; maxAt: number; late: number; vmax: number; iamax: number;
+  full: number; light: number; hit: number;
+  nOn: number; nLate: number; ltSum: number; ltMax: number;
+  stealH: number; stealT: number; noBuf: number; penDrop: number;
+}
+export const derizHooks: { on: boolean; stat: ((m: DerizStat, ctx: BaseAudioContext) => void) | null } = { on: false, stat: null };
+const liveSynths = new Set<DerizSynth>();
+export function setDerizDebug(on: boolean): void {   // nyalakan / matikan pencatatan di semua worklet DERIZ (yang dibuat sesudahnya ikut)
+  derizHooks.on = on;
+  for (const s of liveSynths) s.node.port.postMessage({ t: 'dbg', on });
+}
+
 export class DerizSynth {
   private sent: AudioBuffer | null = null;
   private target: AudioNode | null = null;
-  private constructor(readonly ctx: AudioContext, readonly node: AudioWorkletNode) {}
+  private constructor(readonly ctx: AudioContext, readonly node: AudioWorkletNode) {
+    node.port.onmessage = (e: MessageEvent) => { const m = e.data; if (m && m.t === 'st') derizHooks.stat?.(m as DerizStat, ctx); };
+    liveSynths.add(this);
+    if (derizHooks.on) node.port.postMessage({ t: 'dbg', on: true });
+  }
 
   static async create(ctx: AudioContext): Promise<DerizSynth> {
     if (!loaded.has(ctx)) {
@@ -427,6 +490,7 @@ export class DerizSynth {
   params(speed: number, pitch: number, vol: number): void { this.node.port.postMessage({ t: 'p', speed, pitch, vol }); }
 
   dispose(): void {
+    liveSynths.delete(this);
     this.node.port.postMessage({ t: 'kill' });
     this.node.disconnect(); this.target = null;
   }
