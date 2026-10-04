@@ -36,7 +36,9 @@ function gClear() {
   G.full = 0; G.light = 0; G.hit = 0;                                                  // frame WSOLA: penuh / ringan / dari cache
   G.nOn = 0; G.nLate = 0; G.ltSum = 0; G.ltMax = 0;                                    // nada terjadwal: total, telat (> 6 ms), jumlah + terlama
   G.stealH = 0; G.stealT = 0; G.noBuf = 0; G.penDrop = 0;                              // nada ditahan yang dipotong, ekor yang dipercepat, nada tanpa sample, jadwal terhapus
-  G.trN = 0; G.trSlow = 0; G.trMax = 0; G.lateSkip = 0;                                                // pesan nada main thread -> worklet: jumlah, yang tiba > 100 ms setelah dikirim, tertunda terlama (ms)
+  G.trN = 0; G.trSlow = 0; G.trMax = 0; G.lateSkip = 0;
+  G.spK = 0; G.spO = 0; G.pcK = 0; G.pcO = 0; G.spFrom = 0; G.spTo = 0;               // Speed / Pitch di worklet berubah nilainya: K = lewat knob (pesan p), O = dibawa nada (on); O = tidak diharapkan kalau knob tidak disentuh
+                                             // pesan nada main thread -> worklet: jumlah, yang tiba > 100 ms setelah dikirim, tertunda terlama (ms)
 }
 gClear();
 function finBlock(self) {
@@ -51,9 +53,9 @@ function finBlock(self) {
   G.cur = 0; G.act = false; G.vc = 0; G.ia = 0;
   if (gT >= G.nextRep) {
     G.nextRep = gT + 0.5;
-    if (G.n || G.nOn || G.noBuf || G.penDrop || G.stealH || G.stealT || G.trN || G.lateSkip) {
+    if (G.n || G.nOn || G.noBuf || G.penDrop || G.stealH || G.stealT || G.trN || G.lateSkip || G.spK || G.spO || G.pcK || G.pcO) {
       self.port.postMessage({ t: 'st', ct: gT, tr: CLK_RES, bud: 128 / sampleRate * 1000, n: G.n, sum: G.sum, max: G.max, maxAt: G.maxAt, late: G.late, vmax: G.vmax, iamax: G.iamax,
-        full: G.full, light: G.light, hit: G.hit, nOn: G.nOn, nLate: G.nLate, ltSum: G.ltSum, ltMax: G.ltMax, stealH: G.stealH, stealT: G.stealT, noBuf: G.noBuf, penDrop: G.penDrop, trN: G.trN, trSlow: G.trSlow, trMax: G.trMax, lateSkip: G.lateSkip });
+        full: G.full, light: G.light, hit: G.hit, nOn: G.nOn, nLate: G.nLate, ltSum: G.ltSum, ltMax: G.ltMax, stealH: G.stealH, stealT: G.stealT, noBuf: G.noBuf, penDrop: G.penDrop, trN: G.trN, trSlow: G.trSlow, trMax: G.trMax, lateSkip: G.lateSkip, spK: G.spK, spO: G.spO, pcK: G.pcK, pcO: G.pcO, spFrom: G.spFrom, spTo: G.spTo });
       gClear();
     }
   }
@@ -93,14 +95,22 @@ class DerizSampler extends AudioWorkletProcessor {
       if (G.on && m.t === 'on' && m.sent !== undefined) { const tr = (currentTime - m.sent) * 1000; G.trN++; if (tr > 100) G.trSlow++; if (tr > G.trMax) G.trMax = tr; }   // berapa lama pesan ini di jalan dari main thread sampai diproses worklet (jam AudioContext yang sama)
       if (m.at && m.at > currentTime) this.pend.push(m); else this.apply(m);
     }
-    else if (m.t === 'p') { this.pStamp++; this.speed = m.speed; this.pitch = m.pitch; this.vol = m.vol; }
+    else if (m.t === 'p') { this.pStamp++; this.setPar(m, 0); }
     else if (m.t === 'relall') { this.pend = []; this.sq = []; this.si = 0; this.lag.clear(); for (const v of this.voices) v.rel = true; }
     else if (m.t === 'kill') { this.recycleAll(); this.pend = []; this.sq = []; this.si = 0; this.lag.clear(); }
+  }
+  // satu-satunya tempat Speed / Pitch / Volume worklet berubah (statistik Debug Audio: siapa yang mengubahnya, knob atau nada)
+  setPar(m, viaNote) {
+    if (G.on && this.seen) {
+      if (m.speed !== this.speed) { if (viaNote) G.spO++; else G.spK++; G.spFrom = this.speed; G.spTo = m.speed; }
+      if (m.pitch !== this.pitch) { if (viaNote) G.pcO++; else G.pcK++; }
+    }
+    this.seen = true; this.speed = m.speed; this.pitch = m.pitch; this.vol = m.vol;
   }
   apply(m) {
     if (m.t === 'on') {
       // parameter yang dibawa nada ini sudah usang kalau knob diputar (pesan 'p') setelah nada diterima: jangan menimpa nilai yang lebih baru
-      if (m.ps === this.pStamp) { this.speed = m.speed; this.pitch = m.pitch; this.vol = m.vol; }
+      if (m.ps === this.pStamp) this.setPar(m, 1);
       if (G.on && m.at) { G.nOn++; const lt = (currentTime - m.at) * 1000; if (lt > 6) { G.nLate++; G.ltSum += lt; if (lt > G.ltMax) G.ltMax = lt; } }   // nada terjadwal baru diproses > 6 ms setelah waktunya
       this.start(m);
     }
@@ -460,6 +470,7 @@ export interface DerizStat {
   nOn: number; nLate: number; ltSum: number; ltMax: number;
   stealH: number; stealT: number; noBuf: number; penDrop: number;
   trN: number; trSlow: number; trMax: number;   // pesan nada main thread -> worklet: jumlah, tiba > 100 ms setelah dikirim, tertunda terlama (ms)
+  spK: number; spO: number; pcK: number; pcO: number; spFrom: number; spTo: number;   // Speed / Pitch berubah di worklet: lewat knob (K) atau dibawa nada (O)
   lateSkip: number;   // nada jadwal yang telat lebih dari panjangnya sehingga dilewati
 }
 export const derizHooks: { on: boolean; stat: ((m: DerizStat, ctx: BaseAudioContext) => void) | null } = { on: false, stat: null };
