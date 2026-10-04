@@ -1529,6 +1529,19 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs.is-full .mpcs__ups{order:0;flex:none;width:180px}
 .mpcs.is-full .mpcs__play{order:0}
 .mpcs.is-full .mpcs__glass{display:none}
+/* layar penuh: menu dipadatkan jadi satu baris tipis supaya hampir seluruh tinggi layar jadi piano roll */
+.mpcs.is-full .mpcs__head{min-height:32px;padding-top:3px;padding-bottom:3px}
+.mpcs.is-full .mpcs__mid{padding:6px 8px;gap:5px}
+.mpcs.is-full .mpcs__bar{gap:6px 16px;padding:6px 12px max(9px,env(safe-area-inset-bottom,0px))}
+.mpcs.is-full .mpcs__ups{width:auto;gap:6px}
+.mpcs.is-full .mpcs__ups .mpcs__up{flex:none;flex-direction:row;gap:5px;min-width:0;height:30px;padding:0 11px;font-size:11px;letter-spacing:0}
+.mpcs.is-full .mpcs__ups .mpcs__up svg{width:14px;height:14px}
+.mpcs.is-full .mpcs__knob{display:grid;grid-template-columns:auto auto;grid-template-rows:auto auto;align-items:center;justify-items:start;column-gap:7px;row-gap:0;min-width:0}
+.mpcs.is-full .mpcs__knob .fxk{grid-row:1/3;width:32px;height:32px}
+.mpcs.is-full .mpcs__knob .mpcs__lbl{align-self:end;font-size:9px}
+.mpcs.is-full .mpcs__knob output{align-self:start;margin-top:0;font-size:10px}
+.mpcs.is-full .mpcs__play{width:34px;height:34px}
+.mpcs.is-full .mpcs__play svg{width:16px;height:16px}
 @media (prefers-reduced-motion:reduce){.mpcs__win{transform:none!important;transition:none!important}.mpcs__busy i{animation:none;width:100%}.mpcs__up,.mpcs__play,.mpcs__close,.mpcs__full,.mpcs__drag,.mpcs__knob,.mpcs__zb,.mpcs__zoom,.mpcs__ph::before{transition:none}}
 /* ===== Export audio (panel menu + overlay progres) ===== */
 .mp__expbtn{position:relative;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:14px;border:0;border-radius:14px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;
