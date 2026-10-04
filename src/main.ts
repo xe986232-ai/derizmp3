@@ -595,7 +595,7 @@ async function applyClipTempo(el, clipBpm) {
   toast('Tempo ' + (Math.round(clipBpm * 100) / 100) + ' → ' + BPM + ' BPM');
 }
 
-// Tahan icon microphone pada audio clip -> card putih: "Sesuaikan Tempo"; menu bulat (copy, delete, dst) hilang selama card terbuka
+// Tahan icon microphone pada audio clip -> card putih "Tempo"; menu bulat (copy, delete, dst) hilang selama card terbuka
 let barHidByCard = false, barHideAnim = null;
 initClipIconMenu(lanesEl, {
   getProjectBpm: () => BPM,

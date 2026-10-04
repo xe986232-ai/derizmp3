@@ -1,5 +1,5 @@
-// Tahan icon microphone di header pattern audio clip -> muncul card putih berisi menu (animasi masuk + keluar):
-//   "Sesuaikan Tempo": isi BPM asli audio clip (mis. vokal 126), lalu clip di-stretch (pitch tetap) mengikuti BPM project (mis. 130).
+// Tahan icon microphone di header pattern audio clip -> muncul card putih berisi menu "Tempo" (animasi masuk + keluar).
+// Tempo: isi BPM asli audio clip (mis. vokal 126), lalu clip di-stretch (pitch tetap) mengikuti BPM project (mis. 130).
 // Icon-nya pseudo-element CSS (.pattern__head::before), jadi tidak bisa diberi listener sendiri:
 // area icon dihitung dari posisi sentuhan relatif ke kiri header (padding 8px + icon 13px + toleransi jari).
 // Tutup card: ketuk di luar, Esc, scroll, atau selesai stretch.
@@ -104,9 +104,9 @@ export function initClipIconMenu(lanesEl: HTMLElement, hooks: ClipIconMenuHooks)
 
     const inner = document.createElement('div'); inner.className = 'clip-card__in';
     c.appendChild(inner);
-    // ganti isi card dengan animasi ukuran + fade (dipakai tampilan Tempo)
-    const swapTo = (v: HTMLElement): void => {
+    const showTempo = (): void => {
       const w0 = c.offsetWidth, h0 = c.offsetHeight;
+      const v = tempoView();
       inner.replaceChildren(v);
       place();
       const w1 = c.offsetWidth, h1 = c.offsetHeight;
@@ -114,23 +114,16 @@ export function initClipIconMenu(lanesEl: HTMLElement, hooks: ClipIconMenuHooks)
         c.animate([{width: w0 + 'px', height: h0 + 'px'}, {width: w1 + 'px', height: h1 + 'px'}], {duration: 200, easing: 'cubic-bezier(.2,.9,.3,1)'});
         v.animate([{opacity: 0}, {opacity: 1}], {duration: 160, delay: 50, easing: 'ease-out', fill: 'backwards'});
       }
-    };
-    const showTempo = (): void => {
-      const v = tempoView();
-      swapTo(v);
       const inp = v.querySelector('input') as HTMLInputElement;
       inp.focus({preventScroll: true}); inp.select();
     };
 
     // --- tampilan 1: menu ---
-    const menuItem = (label: string, fn: () => void): HTMLButtonElement => {
-      const b = document.createElement('button');
-      b.type = 'button'; b.className = 'clip-card__item'; b.setAttribute('role', 'menuitem');
-      b.textContent = label; b.addEventListener('click', fn);
-      return b;
-    };
-    const menuEl = (): HTMLElement => { const m = document.createElement('div'); m.append(menuItem(MENU_LABEL, showTempo)); return m; };
-    inner.appendChild(menuEl());
+    const it = document.createElement('button');
+    it.type = 'button'; it.className = 'clip-card__item'; it.setAttribute('role', 'menuitem');
+    it.textContent = MENU_LABEL;
+    it.addEventListener('click', showTempo);
+    inner.appendChild(it);
     document.body.appendChild(c);
     place();
     card = c;
