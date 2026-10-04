@@ -234,13 +234,13 @@ function openMenu(btn) {
   const rnTarget = lastPat && rnPats.includes(lastPat) ? lastPat : rnPats[0] || null;   // pattern terakhir dipilih di track ini, kalau tidak ada: yang paling kiri
   menu.innerHTML =
     '<button role="menuitem" class="track-menu__item" data-act="rename"' + (rnTarget ? '' : ' disabled title="Track ini belum punya pattern"') + '>' +
-      '<span class="soundtrap-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.9 2.9a2.4 2.4 0 0 1 3.4 0l.8.8a2.4 2.4 0 0 1 0 3.4L8.9 19.3a2 2 0 0 1-.9.5l-4.4 1.1a.8.8 0 0 1-1-1L3.7 15.5a2 2 0 0 1 .5-.9L16.9 2.9Zm1.7 1.7L6 17.2l-.6 2.4 2.4-.6L20.4 6.4l-1.8-1.8Z"/></svg></span>' +
+      '<span class="app-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.9 2.9a2.4 2.4 0 0 1 3.4 0l.8.8a2.4 2.4 0 0 1 0 3.4L8.9 19.3a2 2 0 0 1-.9.5l-4.4 1.1a.8.8 0 0 1-1-1L3.7 15.5a2 2 0 0 1 .5-.9L16.9 2.9Zm1.7 1.7L6 17.2l-.6 2.4 2.4-.6L20.4 6.4l-1.8-1.8Z"/></svg></span>' +
       '<span>Ganti nama pattern</span></button>' +
     '<button role="menuitem" class="track-menu__item" data-act="duplicate"' + (cont.dataset.ins === 'Automation' ? ' disabled title="Track Automation tidak bisa diduplikat"' : '') + '>' +
-      '<span class="soundtrap-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8.5 2.5h9A3 3 0 0 1 20.5 5.5v9a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-9a3 3 0 0 1 3-3Zm0 2a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-9Z"/><path d="M3.5 8.5a1 1 0 0 1 1 1v8a2 2 0 0 0 2 2h8a1 1 0 1 1 0 2h-8a4 4 0 0 1-4-4v-8a1 1 0 0 1 1-1Z"/></svg></span>' +
+      '<span class="app-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8.5 2.5h9A3 3 0 0 1 20.5 5.5v9a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-9a3 3 0 0 1 3-3Zm0 2a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-9Z"/><path d="M3.5 8.5a1 1 0 0 1 1 1v8a2 2 0 0 0 2 2h8a1 1 0 1 1 0 2h-8a4 4 0 0 1-4-4v-8a1 1 0 0 1 1-1Z"/></svg></span>' +
       '<span>Duplicate track</span></button>' +
     '<button role="menuitem" class="track-menu__item track-menu__item--danger" data-act="delete">' +
-      '<span class="soundtrap-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5.397 9.652a1.166 1.166 0 0 0-1.165 1.165V21.71a1.165 1.165 0 0 0 1.165 1.165h13.206a1.166 1.166 0 0 0 1.165-1.165V10.817a1.165 1.165 0 0 0-2.33 0v9.728H6.562v-9.728a1.165 1.165 0 0 0-1.165-1.165Zm8.545-8.527h-3.884a1.165 1.165 0 1 0 0 2.33h3.884a1.165 1.165 0 0 0 0-2.33Z"/><path d="M11.223 17.05v-6.215a1.165 1.165 0 0 0-2.33 0v6.214a1.165 1.165 0 0 0 2.33 0Zm3.884 0v-6.215a1.165 1.165 0 1 0-2.33 0v6.214a1.165 1.165 0 0 0 2.33 0Zm3.496-12.041H5.397a1.165 1.165 0 1 0 0 2.33h13.206a1.165 1.165 0 1 0 0-2.33Z"/></svg></span>' +
+      '<span class="app-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5.397 9.652a1.166 1.166 0 0 0-1.165 1.165V21.71a1.165 1.165 0 0 0 1.165 1.165h13.206a1.166 1.166 0 0 0 1.165-1.165V10.817a1.165 1.165 0 0 0-2.33 0v9.728H6.562v-9.728a1.165 1.165 0 0 0-1.165-1.165Zm8.545-8.527h-3.884a1.165 1.165 0 1 0 0 2.33h3.884a1.165 1.165 0 0 0 0-2.33Z"/><path d="M11.223 17.05v-6.215a1.165 1.165 0 0 0-2.33 0v6.214a1.165 1.165 0 0 0 2.33 0Zm3.884 0v-6.215a1.165 1.165 0 1 0-2.33 0v6.214a1.165 1.165 0 0 0 2.33 0Zm3.496-12.041H5.397a1.165 1.165 0 1 0 0 2.33h13.206a1.165 1.165 0 1 0 0-2.33Z"/></svg></span>' +
       '<span>Delete track</span></button>' +
     '<button role="menuitem" class="track-menu__item" data-act="color" aria-expanded="false">' +
       '<span class="track-menu__dot" style="background:' + cur + '"></span><span>Color</span>' +
@@ -934,7 +934,7 @@ const kbdEl = document.getElementById('kbd'), kbdKeys = document.getElementById(
 const kbdOctLabel = document.getElementById('kbdOctLabel'), kbdOctDown = document.getElementById('kbdOctDown'), kbdOctUp = document.getElementById('kbdOctUp');
 const KEY_W = 68, WK = 66, BK = 44, OCT_W = 7 * KEY_W, KB_C0 = 136, KB_END = 3534;   // ukuran dari markup keyboard
 const KSEL = '.whitekey, .blackkey';
-// tombol komputer -> semitone dari C di oktaf dasar (susunan sama seperti Soundtrap: ZXCVBNM,. dan QWERTYUIOP)
+// tombol komputer -> semitone dari C di oktaf dasar (susunan ZXCVBNM,. dan QWERTYUIOP)
 const KMAP = {z:0,s:1,x:2,d:3,c:4,v:5,g:6,b:7,h:8,n:9,j:10,m:11,',':12,l:13,'.':14,'1':15,q:16,w:17,'3':18,e:19,'4':20,r:21,'5':22,t:23,y:24,'7':25,u:26,'8':27,i:28,o:29,'0':30,p:31};
 let kbdCont = null, kbdOct = 3, kbdN = 0;
 const baseMidi = () => 12 + 12 * kbdOct;   // C3 = 48 (C4 = 60 = middle C)
@@ -1310,8 +1310,8 @@ function addTrack(t) {
   const nm = cont.querySelector('[id^="track-name-"]');
   nm.id = 'track-name-' + id; nm.textContent = name;
   cont.querySelector('.trackheader__track-name-button').title = name;
-  if (t.n === 'Audio clip') cont.querySelector('.trackheader__instrument-button .soundtrap-icon').innerHTML = ICON_AUDIO_CLIP;
-  if (t.n === 'Automation') cont.querySelector('.trackheader__instrument-button .soundtrap-icon').innerHTML = ICON_AUTO;   // track khusus Automation Clip (dibuat dari titik tiga di transport)
+  if (t.n === 'Audio clip') cont.querySelector('.trackheader__instrument-button .app-icon').innerHTML = ICON_AUDIO_CLIP;
+  if (t.n === 'Automation') cont.querySelector('.trackheader__instrument-button .app-icon').innerHTML = ICON_AUTO;   // track khusus Automation Clip (dibuat dari titik tiga di transport)
   cont.querySelector('input[type=range]').setAttribute('aria-label', 'Volume, ' + name);
   const lane = document.createElement('div');
   lane.className = 'lane'; lane.dataset.track = id; lane.style.setProperty('--track-color', t.c);

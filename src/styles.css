@@ -10,8 +10,8 @@ html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--text);font:13px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;overflow:hidden}
 button{font:inherit;color:inherit;cursor:pointer}
 .st-button--naked,.btn-plain{background:none;border:0;padding:0}
-.soundtrap-icon{display:inline-flex;width:18px;height:18px}
-.soundtrap-icon svg{width:100%;height:100%;fill:currentColor}
+.app-icon{display:inline-flex;width:18px;height:18px}
+.app-icon svg{width:100%;height:100%;fill:currentColor}
 
 /* top bar */
 
@@ -36,7 +36,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .icon-button:hover{background:var(--line);color:var(--text)}
 .solo-mute{display:flex;gap:2px}
 .solo-mute__button{width:22px;height:22px;display:grid;place-items:center;border-radius:4px;color:var(--muted)}
-.solo-mute__button .soundtrap-icon{width:14px;height:14px}
+.solo-mute__button .app-icon{width:14px;height:14px}
 .trackheader__rec-mode-button,.trackheader__automation-button{color:var(--muted)}
 .trackheader__rec-mode-button i{display:block;width:10px;height:10px;border-radius:50%;border:2px solid var(--muted)}
 .trackheader__slider{flex:1;min-width:40px}
@@ -82,7 +82,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .playhead{position:absolute;top:-20px;left:-4px;z-index:4;pointer-events:none;color:#ff5a6e;transform:translateX(0);will-change:translate}
 .playhead-body{position:absolute;left:4px;top:20px;bottom:0;width:1px;background:currentColor;height:100vh}
 .playhead-head svg{display:block;fill:currentColor}
-/* ===== Soundtrap look ===== */
+/* ===== Tampilan utama ===== */
 :root{
   --bg:#13131a;--panel:#13131a;--card:#25252f;--line:#2b2b37;--text:#f2f2f6;--muted:#b9b9c9;
   --accent:#5b3de8;--accent-soft:rgba(91,61,232,.28);--lane:72px;
@@ -97,7 +97,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .trackheader__border-left{width:5px;background:var(--accent)}
 .trackheader__left-content{width:51px;align-items:center;justify-content:flex-start;padding:0 0 0 8px}
 .trackheader__instrument-button{width:35px;height:35px;border-radius:50%;background:var(--accent)}
-.trackheader__instrument-button .soundtrap-icon{width:20px;height:20px}
+.trackheader__instrument-button .app-icon{width:20px;height:20px}
 .trackheader__content-rows{justify-content:center;gap:2px;padding:0 10px 0 0}
 .trackheader__top-row{height:24px}
 .trackheader__track-name-button{font-weight:400;font-size:14px;color:var(--text)}
@@ -124,10 +124,10 @@ button{font:inherit;color:inherit;cursor:pointer}
   linear-gradient(var(--accent),var(--accent)) 5px 50%/calc(var(--slider-progress,50%) - 5px) 6px no-repeat,#30303c}
 .addtrack{margin:4px;width:calc(100% - 8px);height:44px;justify-content:center;gap:8px;border:0;border-radius:16px;background:#1f1f29;color:var(--text);font-size:15px;font-weight:600}
 .addtrack:hover{background:#262633;color:var(--text)}
-.addtrack .soundtrap-icon{width:16px!important;height:16px!important}
+.addtrack .app-icon{width:16px!important;height:16px!important}
 .playhead{color:#e8e8ee}
 .trackheader,.trackheader--selected{box-shadow:none}   /* track tidak terpilih: polos, tanpa outline */
-.trackheader{background-color:#1f1f27}                 /* warna card polos (diambil dari referensi Soundtrap) */
+.trackheader{background-color:#1f1f27}                 /* warna card polos */
 .trackheader--selected{background-color:var(--card)}   /* #25252f */
 /* sentuhan "glass" hanya untuk track yang dipilih; track lain tetap card biasa */
 .trackheader::before,.trackheader::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .3s ease}
@@ -151,15 +151,15 @@ button{font:inherit;color:inherit;cursor:pointer}
 /* knob pan sejajar tepat di bawah tombol titik tiga (tengah 26px vs 28px) */
 .trackheader__bottom-row-inner{margin-right:-1px;padding-right:0}
 .icon-button{padding:0;flex:none;width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:50%}
-.icon-button .soundtrap-icon{display:block;flex:none}
-.icon-button .soundtrap-icon svg{display:block}
+.icon-button .app-icon{display:block;flex:none}
+.icon-button .app-icon svg{display:block}
 .trackheader__instrument-button{background:var(--track-color,var(--accent))}
 .icon-button[aria-expanded="true"]{background:var(--line);color:var(--text)}
 .track-menu{position:fixed;z-index:50;min-width:150px;padding:6px;background:#2b2b37;border:1px solid rgba(255,255,255,.08);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.45)}
 .track-menu__item{display:flex;align-items:center;gap:10px;width:100%;height:36px;padding:0 10px;background:none;border:0;border-radius:8px;color:var(--text);font-size:14px;text-align:left}
 .track-menu__item:hover,.track-menu__item:focus-visible{background:rgba(255,255,255,.08);outline:none}
 .track-menu__item--danger{color:var(--text)}
-.track-menu__item .soundtrap-icon{width:16px;height:16px}
+.track-menu__item .app-icon{width:16px;height:16px}
 .track-menu__dot{width:16px;height:16px;border-radius:50%;flex:none}
 .track-menu__swatches{display:flex;flex-wrap:wrap;gap:8px;padding:6px 10px 10px;max-width:190px}
 .track-menu__swatches[hidden]{display:none}
@@ -196,10 +196,10 @@ button{font:inherit;color:inherit;cursor:pointer}
 .icon-button:hover{transform:scale(1.12)}
 .icon-button:active,.addtrack:active,.trackheader__rec-mode-button:active,.track-menu__item:active{transform:scale(.92);transition-duration:.08s}
 .addtrack:hover{transform:translateY(-2px)}
-.addtrack .soundtrap-icon{transition:transform .4s var(--ease-spring)}
-.addtrack:hover .soundtrap-icon{transform:rotate(90deg)}
-.trackheader__more-options .soundtrap-icon,.track-menu__chev{transition:transform .35s var(--ease-spring)}
-.trackheader__more-options[aria-expanded="true"] .soundtrap-icon,.track-menu__item[aria-expanded="true"] .track-menu__chev{transform:rotate(90deg)}
+.addtrack .app-icon{transition:transform .4s var(--ease-spring)}
+.addtrack:hover .app-icon{transform:rotate(90deg)}
+.trackheader__more-options .app-icon,.track-menu__chev{transition:transform .35s var(--ease-spring)}
+.trackheader__more-options[aria-expanded="true"] .app-icon,.track-menu__item[aria-expanded="true"] .track-menu__chev{transform:rotate(90deg)}
 .trackheader{transition:transform .3s var(--ease-out),box-shadow .3s ease,background-color .2s ease}
 .trackheader:not(.trackheader--selected):hover{background-color:#24242d}
 .trackheader--selected:hover{transform:translateY(-1px);box-shadow:var(--bevel-hover)}
@@ -309,7 +309,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 /* ===== MENU TAMBAH TRACK ===== */
 @keyframes slideX{from{opacity:0;transform:translate(var(--dx,0px),var(--dy,8px))}to{opacity:1;transform:none}}
 .trackheader-container.is-new{animation:none}
-.addtrack[aria-expanded="true"] .soundtrap-icon{transform:rotate(45deg)}
+.addtrack[aria-expanded="true"] .app-icon{transform:rotate(45deg)}
 .add-menu{position:fixed;z-index:55;padding:8px;background:#2b2b37;border:1px solid rgba(255,255,255,.08);border-radius:18px;box-shadow:none;animation:menuIn .3s var(--ease-spring) backwards}
 .add-menu__item{display:block;width:100%;height:44px;padding:0 14px;background:none;border:0;border-radius:12px;color:var(--text);font-size:14px;text-align:left;
   animation:slideX .3s var(--ease-out) backwards;animation-delay:calc(var(--i,0)*40ms);transition:transform .25s var(--ease-spring),background-color .2s ease}
@@ -435,11 +435,11 @@ html[data-theme="jembut"] .lane{background-image:
 .transport-controls__button:hover{background:rgba(255,255,255,.08)}
 .transport-controls__button:active{transform:scale(.88);transition-duration:.08s}
 .transport-controls__button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.transport-controls__button .soundtrap-icon{width:22px;height:22px}
-.transport-controls__button .soundtrap-icon svg{display:block}
+.transport-controls__button .app-icon{width:22px;height:22px}
+.transport-controls__button .app-icon svg{display:block}
 .transport-controls .play{width:46px;height:46px;margin-right:4px;background:#f2f2f6;color:#16161d}
 .transport-controls .play:hover{background:#fff}
-.transport-controls .play .soundtrap-icon{width:24px;height:24px}
+.transport-controls .play .app-icon{width:24px;height:24px}
 @media (max-width:420px){
   .studioheader__transport-controls-mobile{padding:8px 8px}
   .transport-controls{gap:4px}
@@ -1360,7 +1360,7 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .transportbar :is(.hist-btn,.transport-controls__button):hover:not(:disabled){background:transparent;border-color:var(--tb-line-hi);color:#fff}
 .transportbar :is(.hist-btn,.transport-controls__button):active:not(:disabled){transform:scale(.9);transition-duration:.08s}
 .transportbar :is(.hist-btn,.transport-controls__button):disabled{opacity:.35;cursor:default}
-.transportbar .transport-controls__button .soundtrap-icon{width:16px;height:16px}
+.transportbar .transport-controls__button .app-icon{width:16px;height:16px}
 .transportbar .more-btn svg{display:block;width:16px;height:16px;fill:currentColor;stroke:none}
 .transportbar .hist-ico svg{display:block;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 .transportbar .metro-btn{font-size:13px}
@@ -1369,7 +1369,7 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .transportbar .pitch-btn.is-on:hover:not(:disabled){border-color:#c9a2ff;color:#c9a2ff;background:transparent}
 .transportbar .play{width:var(--tb-play);height:var(--tb-play);margin:0;border-color:rgba(255,255,255,.9);color:#fff}
 .transportbar .play:hover:not(:disabled){border-color:#fff}
-.transportbar .play .soundtrap-icon{width:18px;height:18px}
+.transportbar .play .app-icon{width:18px;height:18px}
 .transportbar :is(.more-btn,.metro-btn,.pitch-btn)[aria-expanded="true"]{border-color:#fff}
 .transportbar .metro-btn.is-on{border-color:var(--accent);color:var(--accent);background:transparent}
 .transportbar .metro-btn.is-on:hover:not(:disabled){border-color:#c9a2ff;color:#c9a2ff;background:transparent}
