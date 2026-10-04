@@ -6,7 +6,7 @@
 // Efek / plugin baru cukup ditambah ke EFFECTS (nama, parameter) dan ke applyAudio().
 // DERIZ: plugin sampler dengan canvas audio (spektrogram, zoom) + upload file; nada (tuts + Pitch) dan kecepatan (Speed) terpisah (deriz-synth.ts).
 
-import { setReverb, setEq, setFilter, setDeesser, setDelay, delayLevels, reverbSeconds, eqDb, EQ_BANDS, eqHz, eqFreqV, eqQ, eqQV, EQ_RANGE_DB, eqSpectrum, EQ_FFT_BINS, filterMode, filterHz, deesserHz, deesserThr, deesserMaxDb, decodeStandalone, trackInput } from './audio-engine';
+import { setReverb, setEq, setFilter, setDeesser, setDelay, delayLevels, reverbSeconds, reverbPreSec, reverbToneHz, reverbLowHz, eqDb, EQ_BANDS, eqHz, eqFreqV, eqQ, eqQV, EQ_RANGE_DB, eqSpectrum, EQ_FFT_BINS, filterMode, filterHz, deesserHz, deesserThr, deesserMaxDb, decodeStandalone, trackInput } from './audio-engine';
 import { DerizSynth } from './deriz-synth';
 import { dbgSched, dbgSent, dbgSpec } from './audio-debug';
 import { openMpcs } from './mpcs';
@@ -50,7 +50,10 @@ const EFFECTS: EffectDef[] = [
     type: 'reverb', name: 'Reverb',
     params: [
       { key: 'mix', label: 'Mix', hint: 'Mix (campuran reverb)', def: 0.3, fmt: v => Math.round(v * 100) + '%' },
-      { key: 'size', label: 'Size', hint: 'Size (lama gema)', def: 0.4, fmt: v => reverbSeconds(v).toFixed(1) + ' s' }
+      { key: 'size', label: 'Size', hint: 'Size (lama gema)', def: 0.4, fmt: v => reverbSeconds(v).toFixed(1) + ' s' },
+      { key: 'pre', label: 'Pre-Delay', hint: 'Pre-Delay (jeda sebelum gema)', def: 0, fmt: v => Math.round(reverbPreSec(v) * 1000) + ' ms' },
+      { key: 'tone', label: 'Tone', hint: 'Tone (gelap / terang gema)', def: 1, fmt: v => fmtHz(reverbToneHz(v)) },
+      { key: 'low', label: 'Low Cut', hint: 'Low Cut (buang bass gema)', def: 0, fmt: v => fmtHz(reverbLowHz(v)) }
     ]
   },
   {
@@ -111,7 +114,7 @@ let cur: string | null = null, seq = 0;
 function applyAudio(track: string): void {
   const rack = racks.get(track) ?? [];
   const r = rack.find(f => f.type === 'reverb'), e = rack.find(f => f.type === 'eq'), fl = rack.find(f => f.type === 'filter'), ds = rack.find(f => f.type === 'deesser'), dl = rack.find(f => f.type === 'delay'), s = rack.find(f => f.type === 'supersaw');
-  setReverb(track, r ? { on: r.on, mix: r.v.mix, size: r.v.size } : null);
+  setReverb(track, r ? { on: r.on, mix: r.v.mix, size: r.v.size, pre: r.v.pre, tone: r.v.tone, low: r.v.low } : null);
   setEq(track, e ? { on: e.on, v: e.v } : null);
   setFilter(track, fl ? { on: fl.on, cutoff: fl.v.cutoff, reso: fl.v.reso } : null);
   setDeesser(track, ds ? { on: ds.on, freq: ds.v.freq, thresh: ds.v.thresh, amount: ds.v.amount } : null);
@@ -391,21 +394,21 @@ function rvKnob(d: EffectDef, fx: Fx, key: string, cap: string, cls: string): st
   const p = d.params.find(x => x.key === key)!;
   return `<div class="fxc__cell rv__cell ${cls}"><div class="knob fxk"><div class="knob-inner">` +
     `<div role="slider" tabindex="0" class="knob-input" data-k="${p.key}" aria-label="${d.name} ${p.label}" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${fx.v[p.key]}">` +
-    `<div class="knobwheel">${knobSvg}</div></div></div></div><span class="fxc__label">${cap}</span></div>`;
+    `<div class="knobwheel">${knobSvg}</div></div></div></div><span class="fxc__label">${cap}</span><span class="rv__val" data-v="${p.key}"></span></div>`;
 }
 function reverbHtml(fx: Fx, d: EffectDef): string {
   return `<div class="rv"><div class="rv__unit"><div class="rv__top"><svg viewBox="0 0 240 64" aria-hidden="true">` +
     `<path class="rv__tape" d="M60 54 Q60 61 67 61 H173 Q180 61 180 54"/>${RV_REEL(60)}${RV_REEL(180)}<path class="rv__dec" d=""/></svg></div>` +
     `<div class="rv__main"><span class="rv__wm" aria-hidden="true">REVERB</span>` +
-    rvKnob(d, fx, 'size', 'Size', 'rv__small') + rvKnob(d, fx, 'mix', 'Mix', 'rv__big') +
-    `<div class="rv__lcd" aria-hidden="true"><span class="rv__k">DECAY</span><b data-v="size"></b><span class="rv__k">MIX</span><b data-v="mix"></b></div></div></div></div>`;
+    rvKnob(d, fx, 'pre', 'Pre', 'rv__small') + rvKnob(d, fx, 'size', 'Size', 'rv__small') + rvKnob(d, fx, 'mix', 'Mix', 'rv__big') +
+    rvKnob(d, fx, 'tone', 'Tone', 'rv__small') + rvKnob(d, fx, 'low', 'Low Cut', 'rv__small') + `</div></div></div>`;
 }
 function paintRv(card: HTMLElement, fx: Fx): void {
   const d = defOf('reverb');
-  card.querySelectorAll<HTMLElement>('.rv__lcd [data-v]').forEach(e => { const p = d.params.find(x => x.key === e.dataset.v); if (p) e.textContent = p.fmt(fx.v[p.key]); });
+  card.querySelectorAll<HTMLElement>('.rv__val[data-v]').forEach(e => { const p = d.params.find(x => x.key === e.dataset.v); if (p) e.textContent = p.fmt(fx.v[p.key]); });
   const path = card.querySelector<SVGPathElement>('.rv__dec'); if (!path) return;
   // kurva gema: amplitudo meluruh eksponensial selama RT60 (jendela 5 detik), digambar simetris di antara dua reel
-  const rt = reverbSeconds(fx.v.size), N = 32, x0 = 90, W = 60, top: string[] = [], bot: string[] = [];
+  const rt = reverbSeconds(fx.v.size), pre = Math.max(0, Math.min(1, fx.v.pre ?? 0)), N = 32, x0 = 90 + pre * 14, W = 60 - pre * 14, top: string[] = [], bot: string[] = [];
   for (let i = 0; i <= N; i++) { const t = i / N, a = Math.exp(-6.9 * (t * 5) / rt), x = (x0 + t * W).toFixed(1); top.push(`${x} ${(32 - 17 * a).toFixed(1)}`); bot.unshift(`${x} ${(32 + 17 * a).toFixed(1)}`); }
   path.setAttribute('d', 'M' + top.join(' L') + ' L' + bot.join(' L') + ' Z');
   path.style.opacity = String(0.4 + 0.6 * Math.max(0, Math.min(1, fx.v.mix)));

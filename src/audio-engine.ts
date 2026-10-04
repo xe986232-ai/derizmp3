@@ -211,7 +211,10 @@ export function trackLevels(track: string): [number, number] {
 // ---------- effect per track: equalizer -> filter -> reverb ----------
 // Jalur: gain track -> [EQ: low shelf -> low-mid -> mid -> high-mid peaking -> high shelf -> output] -> [Filter: low-pass -> high-pass] -> [Delay: delay-fx.ts] -> dry -> output, dan -> convolver -> wet -> output (reverb).
 // Mix reverb memakai crossfade equal-power. Urutan di jalur audio selalu EQ, Filter, Delay, lalu reverb (tidak tergantung urutan card).
-export interface ReverbParams { on: boolean; mix: number; size: number }   // mix 0..1, size 0..1 (-> gema 0,4 s .. 5 s)
+export interface ReverbParams { on: boolean; mix: number; size: number; pre?: number; tone?: number; low?: number }   // mix 0..1, size 0..1 (-> gema 0,4 s .. 5 s); pre = pre-delay, tone = peredam treble gema, low = potong bass gema (kosong = bawaan, suara sama seperti sebelum knob ini ada)
+export const reverbPreSec = (v: number): number => 0.2 * Math.max(0, Math.min(1, v));                                   // pre-delay 0 .. 200 ms
+export const reverbToneHz = (v: number): number => 1500 * Math.pow(20000 / 1500, Math.max(0, Math.min(1, v)));          // tone: 1,5 kHz .. 20 kHz (log); 1 = terbuka
+export const reverbLowHz = (v: number): number => 20 * Math.pow(50, Math.max(0, Math.min(1, v)));                       // low cut: 20 Hz .. 1 kHz (log); 0 = mati
 const reverbs = new Map<string, ReverbParams>();
 const dests = new Map<string, AudioNode>();
 export interface EqParams { on: boolean; v: Record<string, number> }   // semua nilai 0..1: gain per band (key band, 0,5 = 0 dB), <band>F = frekuensi, <band>Q = lebar (hanya band peaking), out = level akhir
@@ -255,7 +258,7 @@ interface Chain {
   ctx: BaseAudioContext; topo: string; ds: AudioWorkletNode | null; dl: DelayUnit | null;
   low: BiquadFilterNode; lm: BiquadFilterNode; mid: BiquadFilterNode; hm: BiquadFilterNode; high: BiquadFilterNode; eo: GainNode; an: AnalyserNode;
   lp: BiquadFilterNode; hp: BiquadFilterNode;
-  dry: GainNode; wet: GainNode; conv: ConvolverNode; decay: number;
+  dry: GainNode; wet: GainNode; conv: ConvolverNode; pd: DelayNode; rh: BiquadFilterNode; rl: BiquadFilterNode; decay: number;
 }
 const chains = new Map<string, Chain>();
 
@@ -290,7 +293,7 @@ function syncFx(track: string): void {
   const dsOn = !!ds && deesserLoaded(ctx);      // node baru dipasang setelah modul worklet siap (beberapa ms)
   if (!rv && !eq && !fl && !dsOn && !dly) {              // semua card efek dihapus: kembali ke jalur langsung
     if (ch) {
-      g.disconnect(); [ch.low, ch.lm, ch.mid, ch.hm, ch.high, ch.eo, ch.lp, ch.hp, ch.dry, ch.wet, ch.conv].forEach(n => n.disconnect());
+      g.disconnect(); [ch.low, ch.lm, ch.mid, ch.hm, ch.high, ch.eo, ch.lp, ch.hp, ch.dry, ch.wet, ch.conv, ch.pd, ch.rh, ch.rl].forEach(n => n.disconnect());
       if (ch.ds) ch.ds.disconnect();
       if (ch.dl) { ch.dl.output.disconnect(); ch.dl.dispose(); ch.dl = null; }
       g.connect(dest); chains.delete(track);
@@ -306,7 +309,10 @@ function syncFx(track: string): void {
     hp.type = 'highpass'; hp.frequency.value = 20; hp.Q.value = 0.707;
     const conv = ctx.createConvolver();
     conv.normalize = false;   // normalisasi dilakukan sendiri di makeImpulse
-    ch = { ctx, topo: '', ds: null, dl: null, low, lm, mid, hm, high, eo, an, lp, hp, dry: ctx.createGain(), wet: ctx.createGain(), conv, decay: 0 };
+    const pd = ctx.createDelay(0.5), rh = ctx.createBiquadFilter(), rl = ctx.createBiquadFilter();   // pre-delay, low cut (high-pass), tone (low-pass): hanya di jalur wet
+    rh.type = 'highpass'; rh.frequency.value = 20; rh.Q.value = 0.707;
+    rl.type = 'lowpass'; rl.frequency.value = 20000; rl.Q.value = 0.707;
+    ch = { ctx, topo: '', ds: null, dl: null, low, lm, mid, hm, high, eo, an, lp, hp, dry: ctx.createGain(), wet: ctx.createGain(), conv, pd, rh, rl, decay: 0 };
     chains.set(track, ch);
   }
   if (dsOn && ds && !ch.ds) ch.ds = createDeesser(ctx, { fc: deesserHz(ds.freq), thr: deesserThr(ds.thresh), max: deesserMaxDb(ds.amount), on: ds.on });
@@ -314,7 +320,7 @@ function syncFx(track: string): void {
   if (!dly && ch.dl) { ch.dl.output.disconnect(); ch.dl.dispose(); ch.dl = null; ch.topo = ''; }
   const topo = (dsOn ? 'd' : '-') + (eq ? 'e' : '-') + (fl ? 'f' : '-') + (dly ? 'y' : '-') + (rv ? 'r' : '-');
   if (topo !== ch.topo) {                        // susun ulang jalur sesuai efek yang ada
-    g.disconnect(); [ch.low, ch.lm, ch.mid, ch.hm, ch.high, ch.eo, ch.lp, ch.hp, ch.dry, ch.wet, ch.conv].forEach(n => n.disconnect());
+    g.disconnect(); [ch.low, ch.lm, ch.mid, ch.hm, ch.high, ch.eo, ch.lp, ch.hp, ch.dry, ch.wet, ch.conv, ch.pd, ch.rh, ch.rl].forEach(n => n.disconnect());
     if (ch.ds) { ch.ds.disconnect(); if (!dsOn) ch.ds = null; }
     if (ch.dl) ch.dl.output.disconnect();
     let s: AudioNode = g;
@@ -322,7 +328,7 @@ function syncFx(track: string): void {
     if (eq) { s.connect(ch.low); ch.low.connect(ch.lm); ch.lm.connect(ch.mid); ch.mid.connect(ch.hm); ch.hm.connect(ch.high); ch.high.connect(ch.eo); ch.eo.connect(ch.an); s = ch.eo; }
     if (fl) { s.connect(ch.lp); ch.lp.connect(ch.hp); s = ch.hp; }
     if (dly && ch.dl) { s.connect(ch.dl.input); s = ch.dl.output; }
-    if (rv) { s.connect(ch.dry); ch.dry.connect(dest); s.connect(ch.conv); ch.conv.connect(ch.wet); ch.wet.connect(dest); }
+    if (rv) { s.connect(ch.dry); ch.dry.connect(dest); s.connect(ch.pd); ch.pd.connect(ch.conv); ch.conv.connect(ch.rh); ch.rh.connect(ch.rl); ch.rl.connect(ch.wet); ch.wet.connect(dest); }
     else s.connect(dest);
     ch.topo = topo;
   }
@@ -351,6 +357,9 @@ function syncFx(track: string): void {
     const m = rv.on ? Math.max(0, Math.min(1, rv.mix)) : 0;
     ch.dry.gain.setTargetAtTime(Math.cos(m * Math.PI / 2), now, .02);
     ch.wet.gain.setTargetAtTime(Math.sin(m * Math.PI / 2), now, .02);
+    ch.pd.delayTime.setTargetAtTime(reverbPreSec(rv.pre ?? 0), now, .03);
+    ch.rl.frequency.setTargetAtTime(reverbToneHz(rv.tone ?? 1), now, .02);
+    ch.rh.frequency.setTargetAtTime(reverbLowHz(rv.low ?? 0), now, .02);
   }
 }
 

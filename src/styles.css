@@ -1714,12 +1714,12 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .rv__dec{fill:rgba(255,255,255,.1);stroke:#f3f6fa;stroke-width:1.2;stroke-linejoin:round;transition:opacity .2s ease}
 @keyframes rvSpin{to{transform:rotate(360deg)}}
 .fxc--rv.is-off .rv__reel,.fxc--rv.is-min .rv__reel{animation-play-state:paused}
-.rv__main{position:relative;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;padding:14px 14px 34px;background:linear-gradient(180deg,#f7f9fc,#e3eaf2)}
+.rv__main{position:relative;display:grid;grid-template-columns:1fr 1fr auto 1fr 1fr;align-items:center;gap:2px;padding:14px 10px 34px;background:linear-gradient(180deg,#f7f9fc,#e3eaf2)}
 .rv__wm{position:absolute;left:0;right:0;bottom:-4px;text-align:center;font:700 15cqw/1 'Syncopate',system-ui,sans-serif;letter-spacing:.03em;color:#cdd7e3;pointer-events:none;user-select:none;-webkit-user-select:none;z-index:0;white-space:nowrap}
 .rv__cell{position:relative;z-index:1;gap:6px;min-width:0}
 .rv__main .fxc__label{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#4a5f78}
 .rv__big .fxk{width:84px;height:84px}
-.rv__small .fxk{width:48px;height:48px}
+.rv__small .fxk{width:44px;height:44px}
 .fxc--rv .fxk{border-radius:50%}
 .fxc--rv .fxk .knob-inner{border-radius:50%;background:radial-gradient(circle at 36% 28%,#fff 0%,#eef2f7 60%,#d8e0ea 100%);box-shadow:0 6px 14px rgba(40,60,90,.3),inset 0 -2px 3px rgba(40,60,90,.15)}
 .fxc--rv .fxk .circle-bg{stroke:rgba(60,80,110,.22);stroke-width:2.6}
@@ -1728,21 +1728,19 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .fxc--rv .fxk .circle-inner-stroke{stroke:rgba(60,80,110,.12)}
 .fxc--rv .fxk .knob-pos{stroke:#1a1d24;stroke-width:2.4}
 .fxc--rv .knob-input:focus-visible{outline:2px solid #f08a24;outline-offset:3px;border-radius:50%}
-.rv__lcd{position:relative;z-index:1;justify-self:center;display:grid;gap:1px;min-width:74px;padding:7px 10px;border-radius:12px;background:#10131a;color:#f3f6fa;text-align:center;font-variant-numeric:tabular-nums;box-shadow:inset 0 2px 6px rgba(0,0,0,.7),0 1px 0 rgba(255,255,255,.6)}
-.rv__k{font-size:8px;font-weight:700;letter-spacing:.18em;color:#7e8aa0}
-.rv__lcd b{font-size:13px;font-weight:700;color:#ffa653;margin-bottom:3px;white-space:nowrap}
-.rv__lcd b:last-child{margin-bottom:0;color:#f3f6fa}
+.rv__val{min-height:1em;font-size:10px;font-weight:700;color:#2b3f58;font-variant-numeric:tabular-nums;white-space:nowrap;text-align:center}
+.rv__main .fxc__label{white-space:nowrap}
 .fxc--rv .fxc__pwr{background:#f08a24}
 /* maximize */
-.derizov .derizov__win.is-rv{width:min(520px,100%)}
+.derizov .derizov__win.is-rv{width:min(580px,100%)}
 .derizov .fxc--rv{padding:8px 10px 10px}
 .derizov .fxc--rv .fxc__head{min-height:26px}
 .derizov .fxc--rv .fxc__body{padding-right:0}
 .derizov .fxc--rv .rv__top svg{max-height:130px}
 .derizov .fxc--rv .rv__big .fxk{width:116px;height:116px}
-.derizov .fxc--rv .rv__small .fxk{width:64px;height:64px}
-.derizov .fxc--rv .rv__main{padding:20px 22px 44px}
-.derizov .fxc--rv .rv__lcd b{font-size:15px}
+.derizov .fxc--rv .rv__small .fxk{width:58px;height:58px}
+.derizov .fxc--rv .rv__main{padding:20px 16px 44px;gap:6px}
+.derizov .fxc--rv .rv__val{font-size:12px}
 @media (prefers-reduced-motion:reduce){.rv__reel{animation:none}}
 
 /* ---------- HP landscape (tinggi layar pendek): Equalizer & Delay diperkecil supaya muat utuh tanpa terpotong ---------- */
@@ -1781,6 +1779,6 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
   .fxc--rv .rv__big .fxk,.derizov .fxc--rv .rv__big .fxk{width:64px;height:64px}
   .fxc--rv .rv__small .fxk,.derizov .fxc--rv .rv__small .fxk{width:38px;height:38px}
   .fxc--rv .rv__wm{font-size:11cqw;bottom:-3px}
-  .fxc--rv .rv__lcd,.derizov .fxc--rv .rv__lcd{min-width:64px;padding:4px 8px}
-  .fxc--rv .rv__lcd b,.derizov .fxc--rv .rv__lcd b{font-size:11px;margin-bottom:1px}
+  .fxc--rv .rv__val,.derizov .fxc--rv .rv__val{display:none}
+  .fxc--rv .rv__main .fxc__label{font-size:8px;letter-spacing:.08em}
 }
