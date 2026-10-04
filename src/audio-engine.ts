@@ -253,7 +253,7 @@ export const deesserThr = (v: number): number => -60 + clamp01(v) * 50;         
 export const deesserMaxDb = (v: number): number => clamp01(v) * 20;                      // reduksi maksimum 0 .. 20 dB
 interface Chain {
   ctx: BaseAudioContext; topo: string; ds: AudioWorkletNode | null; dl: DelayUnit | null;
-  low: BiquadFilterNode; lm: BiquadFilterNode; mid: BiquadFilterNode; hm: BiquadFilterNode; high: BiquadFilterNode; eo: GainNode;
+  low: BiquadFilterNode; lm: BiquadFilterNode; mid: BiquadFilterNode; hm: BiquadFilterNode; high: BiquadFilterNode; eo: GainNode; an: AnalyserNode;
   lp: BiquadFilterNode; hp: BiquadFilterNode;
   dry: GainNode; wet: GainNode; conv: ConvolverNode; decay: number;
 }
@@ -300,12 +300,13 @@ function syncFx(track: string): void {
   if (!ch || ch.ctx !== ctx) {
     const [low, lm, mid, hm, high] = EQ_BANDS.map(b => { const n = ctx.createBiquadFilter(); n.type = b.type; n.frequency.value = b.def; if (b.q) n.Q.value = b.defQ; return n; });
     const eo = ctx.createGain();
+    const an = ctx.createAnalyser(); an.fftSize = 4096; an.smoothingTimeConstant = 0.82; an.minDecibels = -110; an.maxDecibels = -10;   // spektrum untuk grafik Equalizer
     const lp = ctx.createBiquadFilter(), hp = ctx.createBiquadFilter();
     lp.type = 'lowpass'; lp.frequency.value = 20000; lp.Q.value = 0.707;
     hp.type = 'highpass'; hp.frequency.value = 20; hp.Q.value = 0.707;
     const conv = ctx.createConvolver();
     conv.normalize = false;   // normalisasi dilakukan sendiri di makeImpulse
-    ch = { ctx, topo: '', ds: null, dl: null, low, lm, mid, hm, high, eo, lp, hp, dry: ctx.createGain(), wet: ctx.createGain(), conv, decay: 0 };
+    ch = { ctx, topo: '', ds: null, dl: null, low, lm, mid, hm, high, eo, an, lp, hp, dry: ctx.createGain(), wet: ctx.createGain(), conv, decay: 0 };
     chains.set(track, ch);
   }
   if (dsOn && ds && !ch.ds) ch.ds = createDeesser(ctx, { fc: deesserHz(ds.freq), thr: deesserThr(ds.thresh), max: deesserMaxDb(ds.amount), on: ds.on });
@@ -318,7 +319,7 @@ function syncFx(track: string): void {
     if (ch.dl) ch.dl.output.disconnect();
     let s: AudioNode = g;
     if (dsOn && ch.ds) { s.connect(ch.ds); s = ch.ds; }
-    if (eq) { s.connect(ch.low); ch.low.connect(ch.lm); ch.lm.connect(ch.mid); ch.mid.connect(ch.hm); ch.hm.connect(ch.high); ch.high.connect(ch.eo); s = ch.eo; }
+    if (eq) { s.connect(ch.low); ch.low.connect(ch.lm); ch.lm.connect(ch.mid); ch.mid.connect(ch.hm); ch.hm.connect(ch.high); ch.high.connect(ch.eo); ch.eo.connect(ch.an); s = ch.eo; }
     if (fl) { s.connect(ch.lp); ch.lp.connect(ch.hp); s = ch.hp; }
     if (dly && ch.dl) { s.connect(ch.dl.input); s = ch.dl.output; }
     if (rv) { s.connect(ch.dry); ch.dry.connect(dest); s.connect(ch.conv); ch.conv.connect(ch.wet); ch.wet.connect(dest); }
@@ -367,6 +368,16 @@ export function setDelay(track: string, p: DelayParams | null): void {
 
 // puncak output Delay track ini [kiri, kanan], linear (0 kalau track tidak punya Delay / belum diputar)
 export const delayLevels = (track: string): [number, number] => chains.get(track)?.dl?.levels() ?? [0, 0];
+
+// Spektrum frekuensi (dB per bin FFT) di keluaran EQ track ini, untuk digambar di belakang kurva Equalizer.
+// Mengembalikan false kalau track belum punya jalur EQ / belum pernah diputar. Array `out` dipakai ulang tiap frame supaya tidak membuat sampah memori.
+export function eqSpectrum(track: string, out: Float32Array): { sr: number } | false {
+  const ch = chains.get(track);
+  if (!ch || ch.topo[1] !== 'e' || ch.ctx.state !== 'running' || out.length !== ch.an.frequencyBinCount) return false;
+  ch.an.getFloatFrequencyData(out as Float32Array<ArrayBuffer>);
+  return { sr: ch.ctx.sampleRate };
+}
+export const EQ_FFT_BINS = 2048;   // = fftSize / 2 (ukuran array untuk eqSpectrum)
 
 // null = track tidak punya de-esser
 export function setDeesser(track: string, p: DeesserParams | null): void {

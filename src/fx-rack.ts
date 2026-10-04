@@ -6,7 +6,7 @@
 // Efek / plugin baru cukup ditambah ke EFFECTS (nama, parameter) dan ke applyAudio().
 // DERIZ: plugin sampler dengan canvas audio (spektrogram, zoom) + upload file; nada (tuts + Pitch) dan kecepatan (Speed) terpisah (deriz-synth.ts).
 
-import { setReverb, setEq, setFilter, setDeesser, setDelay, delayLevels, reverbSeconds, eqDb, EQ_BANDS, eqHz, eqFreqV, eqQ, eqQV, EQ_RANGE_DB, filterMode, filterHz, deesserHz, deesserThr, deesserMaxDb, decodeStandalone, trackInput } from './audio-engine';
+import { setReverb, setEq, setFilter, setDeesser, setDelay, delayLevels, reverbSeconds, eqDb, EQ_BANDS, eqHz, eqFreqV, eqQ, eqQV, EQ_RANGE_DB, eqSpectrum, EQ_FFT_BINS, filterMode, filterHz, deesserHz, deesserThr, deesserMaxDb, decodeStandalone, trackInput } from './audio-engine';
 import { DerizSynth } from './deriz-synth';
 import { dbgSched, dbgSent, dbgSpec } from './audio-debug';
 import { openMpcs } from './mpcs';
@@ -15,7 +15,7 @@ import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } f
 import { velGain } from './velocity';
 import { getMasterPitch, onMasterPitch } from './master-pitch';
 import type { DelayParams } from './delay-fx';
-import { EQ_COLORS, bandOf, bandVals, hitNode, hzAt, dbAt, paintEqCanvas, eqReadout } from './eq-ui';
+import { EQ_COLORS, bandOf, bandVals, hitNode, hzAt, dbAt, paintEqCanvas, eqReadout, specActive, type EqSpec } from './eq-ui';
 import { DELAY_PARAMS, delayHtml, paintDk, paintDelayUi, paintMeter, linkedPartner } from './delay-ui';
 
 type FxType = 'reverb' | 'eq' | 'filter' | 'deesser' | 'delay' | 'supersaw' | 'deriz' | 'mpcs';
@@ -350,28 +350,38 @@ const pageOf = (type: FxType): FxPage => (defOf(type).synth ? 'plugin' : 'effect
 function eqCell(d: EffectDef, fx: Fx, p: Param, cap: string): string {
   return `<div class="fxc__cell"><div class="knob fxk"><div class="knob-inner">` +
     `<div role="slider" tabindex="0" class="knob-input" data-k="${p.key}" aria-label="${d.name} ${p.label}" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${fx.v[p.key]}">` +
-    `<div class="knobwheel">${knobSvg}</div></div></div></div><span class="fxc__label">${cap}</span></div>`;
+    `<div class="knobwheel">${knobSvg}</div></div></div></div><span class="fxc__label">${cap}</span><span class="eq__val" data-v="${p.key}"></span></div>`;
 }
 function eqKnobsHtml(d: EffectDef, fx: Fx): string {
   const b = EQ_BANDS[bandOf(fx)], par = (k: string): Param => d.params.find(x => x.key === k)!;
   return eqCell(d, fx, par(b.key + 'F'), 'Freq') + eqCell(d, fx, par(b.key), 'Gain') +
-    (b.q ? eqCell(d, fx, par(b.key + 'Q'), 'Q') : `<div class="fxc__cell eq__noq" aria-hidden="true"><div class="knob fxk"></div><span class="fxc__label">Q</span></div>`) +
+    (b.q ? eqCell(d, fx, par(b.key + 'Q'), 'Q') : `<div class="fxc__cell eq__noq" aria-hidden="true"><div class="knob fxk"></div><span class="fxc__label">Q</span><span class="eq__val">&nbsp;</span></div>`) +
     eqCell(d, fx, par('out'), 'Output');
 }
 function eqHtml(fx: Fx, d: EffectDef): string {
   const sel = bandOf(fx);
-  return `<div class="eq"><div class="eq__graph"><canvas class="eq__cv" role="img" aria-label="Grafik respons Equalizer: seret titik untuk mengatur frekuensi dan gain"></canvas></div>` +
-    `<p class="eq__read" aria-live="off"></p>` +
+  // satu panel (gaya soothe2): grafik di atas, bar band + knob di bawah, semuanya di dalam kartu
+  return `<div class="eq"><div class="eq__graph"><canvas class="eq__cv" role="img" aria-label="Grafik respons Equalizer dengan spektrum audio: seret titik untuk mengatur frekuensi dan gain"></canvas>` +
+    `<div class="eq__bar" style="--c:${EQ_COLORS[sel]}">` +
     `<div class="eq__bands" role="tablist" aria-label="Band Equalizer">${EQ_BANDS.map((b, i) =>
       `<button type="button" role="tab" class="eq__band" data-band="${i}" aria-selected="${i === sel}" style="--c:${EQ_COLORS[i]}"><i aria-hidden="true"></i>${b.short}</button>`).join('')}</div>` +
-    `<div class="fxc__knobs eq__knobs">${eqKnobsHtml(d, fx)}</div></div>`;
+    `<div class="fxc__knobs eq__knobs">${eqKnobsHtml(d, fx)}</div></div></div></div>`;
+}
+// spektrum hidup di belakang kurva: dibaca tiap frame oleh loop di initFxRack (specKick menyalakannya)
+let specNow: EqSpec | null = null;
+let specKick: () => void = () => { /* diisi initFxRack */ };
+function paintEqSpec(card: HTMLElement, fx: Fx): void {   // hanya canvas (dipakai tiap frame)
+  const cv = card.querySelector<HTMLCanvasElement>('.eq__cv'); if (cv) paintEqCanvas(cv, fx.v, fx.on, bandOf(fx), specNow);
 }
 function paintEq(card: HTMLElement, fx: Fx): void {
   const cv = card.querySelector<HTMLCanvasElement>('.eq__cv'); if (!cv) return;
-  const sel = bandOf(fx);
-  paintEqCanvas(cv, fx.v, fx.on, sel);
+  const sel = bandOf(fx), d = defOf('eq');
+  paintEqCanvas(cv, fx.v, fx.on, sel, specNow);
   const rd = card.querySelector('.eq__read'); if (rd) rd.textContent = eqReadout(fx.v, sel);
   card.querySelectorAll<HTMLElement>('.eq__band').forEach(b => b.setAttribute('aria-selected', String(+b.dataset.band! === sel)));
+  card.querySelector<HTMLElement>('.eq__bar')?.style.setProperty('--c', EQ_COLORS[sel]);
+  card.querySelectorAll<HTMLElement>('.eq__val[data-v]').forEach(e => { const p = d.params.find(x => x.key === e.dataset.v); if (p) e.textContent = p.fmt(fx.v[p.key]); });
+  specKick();
 }
 
 function cardHtml(fx: Fx, i: number): string {
@@ -404,7 +414,7 @@ function cardHtml(fx: Fx, i: number): string {
     `<header class="fxc__head"><h3 class="fxc__name"><button type="button" class="fxc__title" aria-expanded="${!fx.min}" title="Klik untuk minimize / maximize">${d.name}</button></h3>${tabBar}` +
     (fx.type === 'deriz' ? `<button type="button" class="fxc__pat" aria-haspopup="menu" aria-expanded="false" aria-label="Pattern: pilih pattern untuk diisi DERIZ" title="Masuk ke pattern">${ICON_PAT}</button>` : '') +
     `<button type="button" class="fxc__pwr" role="switch" aria-checked="${fx.on}" aria-label="${d.name} nyala / mati" title="Nyala / mati"></button>` +
-    (fx.type === 'deriz' ? `<button type="button" class="fxc__pop" aria-label="Buka DERIZ di tengah layar" title="Buka di tengah layar">${ICON_POP}</button><button type="button" class="fxc__close" aria-label="Tutup DERIZ" title="Tutup (Esc)">${ICON_X}</button>` : '') +
+    (fx.type === 'deriz' || fx.type === 'eq' ? `<button type="button" class="fxc__pop" aria-label="Buka ${d.name} di tengah layar" title="Maximize (buka di tengah layar)">${ICON_POP}</button><button type="button" class="fxc__close" aria-label="Tutup ${d.name}" title="Tutup (Esc)">${ICON_X}</button>` : '') +
     (d.synth && fx.type !== 'deriz' ? '' : `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi ${d.name}" title="Opsi">${ICON_MORE}</button>`) + `</header>` +
     `<div class="fxc__collapse"><div class="fxc__body">${body}</div></div></section>`;
 }
@@ -503,19 +513,19 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   const clearOvAnim = (): void => ov.getAnimations({ subtree: true }).forEach(an => an.cancel());
   function openOverlay(card: HTMLElement): void {
     if (ovOpen?.card === card) return;
-    const fx = find(card); if (!fx || (fx.type !== 'deriz' && fx.type !== 'delay')) return;
+    const fx = find(card); if (!fx || (fx.type !== 'deriz' && fx.type !== 'delay' && fx.type !== 'eq')) return;
     if (ovOpen) closeOverlay(true);
     clearOvAnim();   // animasi tutup sebelumnya (fill: forwards) jangan menahan opacity 0 di buka berikutnya
     closePicker(true); closeMenu(true); hideTip();
     const ph = document.createElement('div');
-    ph.className = 'fxc-ph'; ph.dataset.fx = String(fx.id); ph.dataset.kind = 'plugin';
+    ph.className = 'fxc-ph'; ph.dataset.fx = String(fx.id); ph.dataset.kind = fx.type === 'eq' ? 'effect' : 'plugin';
     ph.innerHTML = `<span>${defOf(fx.type).name} terbuka di tengah layar</span><button type="button" class="fxc-ph__btn">Kembalikan</button>`;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     card.replaceWith(ph);
     fx.min = false; card.classList.remove('is-min');   // di overlay selalu terbuka penuh
     card.querySelector('.fxc__title')?.setAttribute('aria-expanded', 'true');
     ovSlot.replaceChildren(card);
-    ovWin.classList.toggle('is-delay', fx.type === 'delay'); ovWin.setAttribute('aria-label', defOf(fx.type).name);
+    ovWin.classList.toggle('is-delay', fx.type === 'delay'); ovWin.classList.toggle('is-eq', fx.type === 'eq'); ovWin.setAttribute('aria-label', defOf(fx.type).name);
     ov.hidden = false;
     ovOpen = { card, ph, opener };
     document.addEventListener('keydown', onOvKey, true);
@@ -525,6 +535,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     }
     ovWin.focus({ preventScroll: true });
     if (fx.type === 'delay') { paintAll(card, fx); if (!meterRaf) meterRaf = requestAnimationFrame(meterTick); return; }
+    if (fx.type === 'eq') { paintAll(card, fx); requestAnimationFrame(() => { if (card.isConnected) paintEq(card, fx); }); return; }   // ukuran canvas baru pasti setelah jendela tampil
     buildKb(card);
     paintDeriz(card, fx);
   }
@@ -550,7 +561,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
       if (!ovOpen) { ov.hidden = true; clearOvAnim(); }   // kalau sudah dibuka lagi selagi animasi tutup jalan, jangan disembunyikan
       if (discard || !o.ph.isConnected) { o.card.querySelectorAll('canvas').forEach(c => ro.unobserve(c)); o.card.remove(); o.ph.remove(); return; }
       o.ph.replaceWith(o.card);
-      const fx = find(o.card); if (fx?.type === 'deriz') paintDeriz(o.card, fx);
+      const fx = find(o.card); if (fx?.type === 'deriz') paintDeriz(o.card, fx); else if (fx?.type === 'eq') paintEq(o.card, fx);
       if (o.opener?.isConnected) o.opener.focus({ preventScroll: true });
     };
     if (instant || reduce) { finish(); return; }
@@ -1248,6 +1259,25 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     const card = bt.closest<HTMLElement>('.fxc'), fx = card && find(card); if (!card || !fx) return;
     eqSelect(card, fx, +bt.dataset.band!); paintEq(card, fx);
   });
+
+  // ---------- Equalizer: spektrum hidup. Satu loop rAF selama ada kartu EQ yang terlihat (di panel atau overlay); berhenti sendiri kalau tidak ada ----------
+  const specBuf = new Float32Array(EQ_FFT_BINS);
+  let specRaf = 0, specLive = true;
+  const specTick = (): void => {
+    specRaf = 0;
+    if (!cur || document.hidden) return;
+    const vis = [...document.querySelectorAll<HTMLElement>('.fxc--eq:not(.is-min)')].filter(c => c.querySelector<HTMLElement>('.eq__cv')?.offsetParent);
+    if (!vis.length) { specNow = null; return; }   // tidak ada yang terlihat: berhenti (paintEq menyalakan lagi lewat specKick)
+    const sp = eqSpectrum(cur, specBuf), live = !!sp && specActive({ db: specBuf, sr: sp.sr });
+    if (live || specLive) {   // senyap & sudah digambar senyap: lewati (hemat baterai)
+      specNow = live && sp ? { db: specBuf, sr: sp.sr } : null;
+      for (const c of vis) { const fx = find(c); if (fx) paintEqSpec(c, fx); }
+    }
+    specLive = live;
+    specRaf = requestAnimationFrame(specTick);
+  };
+  specKick = (): void => { specLive = true; if (!specRaf) specRaf = requestAnimationFrame(specTick); };
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) specKick(); });
 
   // ---------- DERIZ: upload audio ke canvas (tombol, "Ganti", atau drag & drop file) ----------
   async function loadDeriz(card: HTMLElement, file: File): Promise<void> {
