@@ -15,6 +15,8 @@ const ICON = {
   pause: svg('<rect x="6" y="5" width="4.5" height="14" rx="1.2" fill="currentColor" stroke="none"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2" fill="currentColor" stroke="none"/>', 22),
   close: svg('<path d="M6 6l12 12M18 6L6 18"/>', 12),
   drag: svg('<circle cx="9" cy="6" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.7" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.7" fill="currentColor" stroke="none"/>', 14),
+  full: svg('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>', 13),
+  unfull: svg('<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>', 13),
   zin: svg('<path d="M5 12h14M12 5v14"/>', 14),
   zout: svg('<path d="M5 12h14"/>', 14),
   zh: svg('<path d="M4 12h16M8 8l-4 4 4 4M16 8l4 4-4 4"/>', 12),
@@ -111,7 +113,7 @@ function build(): void {
   el.innerHTML =
     '<div class="mpcs__back"></div>' +
     '<div class="mpcs__win is-off" role="dialog" aria-modal="true" aria-label="MPCS" tabindex="-1">' +
-      `<header class="mpcs__head"><i class="mpcs__led" aria-hidden="true"></i><span class="mpcs__title">MPCS</span><div class="mpcs__lcd"><span class="mpcs__stat" role="status" aria-live="polite"></span></div><button type="button" class="mpcs__drag" aria-label="Seret hasil olahan ke plugin DERIZ atau timeline" title="Tahan lalu seret: ke plugin DERIZ = jadi sample DERIZ, ke timeline = jadi track audio clip" disabled>${ICON.drag}</button><button type="button" class="mpcs__close" aria-label="Tutup MPCS">${ICON.close}</button></header>` +
+      `<header class="mpcs__head"><i class="mpcs__led" aria-hidden="true"></i><span class="mpcs__title">MPCS</span><div class="mpcs__lcd"><span class="mpcs__stat" role="status" aria-live="polite"></span></div><button type="button" class="mpcs__full" aria-label="Layar penuh piano roll" aria-pressed="false" title="Piano roll layar penuh (menu tetap di bawah)">${ICON.full}</button><button type="button" class="mpcs__drag" aria-label="Seret hasil olahan ke plugin DERIZ atau timeline" title="Tahan lalu seret: ke plugin DERIZ = jadi sample DERIZ, ke timeline = jadi track audio clip" disabled>${ICON.drag}</button><button type="button" class="mpcs__close" aria-label="Tutup MPCS">${ICON.close}</button></header>` +
       '<div class="mpcs__mid">' +
       '<canvas class="mpcs__ov" aria-label="Peta posisi sample (ketuk / seret untuk pindah)" hidden></canvas>' +
       '<div class="mpcs__stage">' +
@@ -157,6 +159,7 @@ function build(): void {
   const btn = (a: string): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`.mpcs__bar [data-a="${a}"]`)!;
   const ov = el.querySelector<HTMLCanvasElement>('.mpcs__ov')!;
   const dragBtn = el.querySelector<HTMLButtonElement>('.mpcs__drag')!;
+  const fullBtn = el.querySelector<HTMLButtonElement>('.mpcs__full')!;
   const g = cv.getContext('2d')!, gk = keys.getContext('2d')!, go = ov.getContext('2d')!;
 
   // ---------- knob Center / Variation / Transition ----------
@@ -715,10 +718,25 @@ function build(): void {
   });
   el.addEventListener('pointerleave', untilt);
 
+  // ---------- layar penuh: hanya piano roll yang melebar ke seluruh layar, header tetap di atas dan bar menu sebaris di bawah ----------
+  let full = false;
+  function setFull(on: boolean, native = true): void {
+    if (on === full) return;
+    full = on; el.classList.toggle('is-full', on); untilt();
+    fullBtn.setAttribute('aria-pressed', String(on)); fullBtn.innerHTML = on ? ICON.unfull : ICON.full;
+    fullBtn.setAttribute('aria-label', on ? 'Keluar layar penuh' : 'Layar penuh piano roll'); fullBtn.title = on ? 'Keluar layar penuh' : 'Piano roll layar penuh (menu tetap di bawah)';
+    if (native) {   // layar penuh sungguhan bila browser mengizinkan; kalau tidak, mode CSS tetap memenuhi viewport
+      try { if (on) void el.requestFullscreen?.().catch(() => {}); else if (document.fullscreenElement === el) void document.exitFullscreen().catch(() => {}); } catch { /* abaikan */ }
+    }
+    requestAnimationFrame(layout);
+  }
+  fullBtn.addEventListener('click', () => setFull(!full));
+  document.addEventListener('fullscreenchange', () => { if (full && !document.fullscreenElement && !el.hidden) setFull(false, false); });   // keluar lewat Esc bawaan browser
+
   // ---------- buka / tutup ----------
   const onKey = (e: KeyboardEvent): void => {
     e.stopPropagation();   // pintasan DAW (Space, tuts keyboard) tidak ikut jalan selagi MPCS terbuka
-    if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); if (full) setFull(false); else close(); return; }
     const onBtn = (e.target as Element).closest?.('button');
     if (e.key === ' ' && !onBtn && S) { e.preventDefault(); playing ? stopPlay() : void startPlay(); }
     else if (S && !e.ctrlKey && !e.metaKey && (e.key === '+' || e.key === '=')) { e.preventDefault(); zoomBy(ZSTEP, 1); }
@@ -735,6 +753,7 @@ function build(): void {
 
   function close(): void {
     stopPlay(); untilt();
+    setFull(false);
     const done = (): void => { el.hidden = true; };
     if (reduce) { done(); return; }
     el.querySelector('.mpcs__back')!.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, fill: 'forwards' });

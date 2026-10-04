@@ -1411,14 +1411,15 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs__lcd{flex:1;min-width:0;max-width:280px;margin:0 auto;display:flex;align-items:center;justify-content:center;height:26px;padding:0 12px;border-radius:4px;background:linear-gradient(180deg,#050507,#14141a);
   box-shadow:inset 0 2px 5px rgba(0,0,0,.95),inset 0 0 0 1px rgba(255,255,255,.07),0 1px 0 rgba(255,255,255,.35)}
 .mpcs__stat{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f4f4f6;font-size:12px;font-weight:500;font-variant-numeric:tabular-nums;text-shadow:0 0 6px rgba(255,255,255,.25)}
-.mpcs__close,.mpcs__drag{display:grid;place-items:center;flex:none;width:24px;height:24px;margin-left:auto;padding:0;border:0;border-radius:50%;color:#f2d6e2;cursor:pointer;
+.mpcs__close,.mpcs__drag,.mpcs__full{display:grid;place-items:center;flex:none;width:24px;height:24px;margin-left:auto;padding:0;border:0;border-radius:50%;color:#f2d6e2;cursor:pointer;
   background:radial-gradient(circle at 36% 28%,#4a4a52 0%,#26262c 60%,#131317 100%);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 2px rgba(0,0,0,.6),0 0 0 2px #4a0a25,0 0 0 3px rgba(255,255,255,.22);
   transition:color .2s ease,box-shadow .2s ease,transform .15s ease}
-.mpcs__lcd+.mpcs__close,.mpcs__lcd+.mpcs__drag,.mpcs__drag+.mpcs__close{margin-left:0}
-.mpcs__close:hover,.mpcs__drag:hover:not(:disabled){color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.28),inset 0 -1px 2px rgba(0,0,0,.6),0 0 0 2px #4a0a25,0 0 0 3px #fff,0 0 12px rgba(255,255,255,.4)}
-.mpcs__close:active,.mpcs__drag:active:not(:disabled){transform:scale(.9)}
-.mpcs__close:focus-visible,.mpcs__drag:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.mpcs__lcd+.mpcs__close,.mpcs__lcd+.mpcs__drag,.mpcs__lcd+.mpcs__full,.mpcs__full+.mpcs__drag,.mpcs__drag+.mpcs__close,.mpcs__full+.mpcs__close{margin-left:0}
+.mpcs__close:hover,.mpcs__full:hover,.mpcs__drag:hover:not(:disabled){color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.28),inset 0 -1px 2px rgba(0,0,0,.6),0 0 0 2px #4a0a25,0 0 0 3px #fff,0 0 12px rgba(255,255,255,.4)}
+.mpcs__close:active,.mpcs__full:active,.mpcs__drag:active:not(:disabled){transform:scale(.9)}
+.mpcs__close:focus-visible,.mpcs__full:focus-visible,.mpcs__drag:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.mpcs__full{cursor:pointer;-webkit-tap-highlight-color:transparent}
 .mpcs__drag{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
 .mpcs__drag:disabled{cursor:default;opacity:.45}
 /* seret hasil ke DERIZ: kartu MPCS disembunyikan, hanya ikon (gaya tombol X) yang melayang mengikuti jari */
@@ -1518,7 +1519,17 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs__play:focus-visible{outline:2px solid #fff;outline-offset:6px}
 @media (max-height:520px){.mpcs__win{width:min(580px,100%);height:min(300px,100%)}.mpcs__head{min-height:34px;padding-top:4px;padding-bottom:4px}.mpcs__mid{padding:8px 10px;gap:5px}.mpcs__ov{height:22px}.mpcs__bar{padding:6px 12px 9px}}
 @media (max-width:420px){.mpcs__win{height:min(520px,100%)}.mpcs__bar{gap:10px 12px}.mpcs__ups{order:1;flex:1 1 auto;width:auto}.mpcs__play{order:2}.mpcs__knobs{display:flex;order:3;flex:1 0 100%;justify-content:center;gap:20px}.mpcs__lcd{max-width:none}.mpcs__title{letter-spacing:.2em}}   /* HP portrait: upload + play satu baris, tiga knob di baris bawahnya */
-@media (prefers-reduced-motion:reduce){.mpcs__win{transform:none!important;transition:none!important}.mpcs__busy i{animation:none;width:100%}.mpcs__up,.mpcs__play,.mpcs__close,.mpcs__drag,.mpcs__knob,.mpcs__zb,.mpcs__zoom,.mpcs__ph::before{transition:none}}
+/* layar penuh: kartu memenuhi viewport sehingga piano roll (area tengah) ikut melebar; header tetap di atas, bar menu satu baris di bawah (isi kartu tidak berubah) */
+.mpcs.is-full{padding:0}
+.mpcs.is-full .mpcs__back{display:none}
+.mpcs.is-full .mpcs__win{width:100%;height:100%;border-radius:0;border:0;transform:none!important;padding-top:env(safe-area-inset-top,0px);padding-bottom:0}
+.mpcs.is-full .mpcs__bar{flex-wrap:nowrap;justify-content:safe center;gap:8px 18px;overflow-x:auto;scrollbar-width:none;padding-bottom:max(10px,env(safe-area-inset-bottom,0px))}
+.mpcs.is-full .mpcs__bar::-webkit-scrollbar{display:none}
+.mpcs.is-full .mpcs__knobs{display:contents}
+.mpcs.is-full .mpcs__ups{order:0;flex:none;width:180px}
+.mpcs.is-full .mpcs__play{order:0}
+.mpcs.is-full .mpcs__glass{display:none}
+@media (prefers-reduced-motion:reduce){.mpcs__win{transform:none!important;transition:none!important}.mpcs__busy i{animation:none;width:100%}.mpcs__up,.mpcs__play,.mpcs__close,.mpcs__full,.mpcs__drag,.mpcs__knob,.mpcs__zb,.mpcs__zoom,.mpcs__ph::before{transition:none}}
 /* ===== Export audio (panel menu + overlay progres) ===== */
 .mp__expbtn{position:relative;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:14px;border:0;border-radius:14px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;
   -webkit-tap-highlight-color:transparent;touch-action:manipulation;
