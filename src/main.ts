@@ -4,7 +4,7 @@ import { openAudioUploadCard, trackAudioFiles } from './audio-upload-card';
 import { initEffectsPanel } from './effects-panel';
 import { initTrackMeters } from './track-meters';
 import { initTrackReorder } from './track-reorder';
-import { initFxRack } from './fx-rack';
+import { initFxRack, holdSpec } from './fx-rack';
 import { initRecordJelly } from './record-jelly';
 import { initPatternJelly } from './pattern-jelly';
 import { initClipIconMenu } from './clip-icon-menu';
@@ -1524,10 +1524,11 @@ function startPlay() {
   if (playing) return;
   if (posBars >= BARS) posBars = 0;
   startMark = posBars;   // titik start: tombol mundur akan kembali ke sini
-  playing = true; scheduleClips(metro.countIn);
+  playing = true; holdSpec(true); scheduleClips(metro.countIn);
   playRaf = requestAnimationFrame(tick); syncTransportUI();
 }
 function pausePlay() {
+  holdSpec(false);
   if (playing) posBars = Math.min(BARS, startPos + Math.max(0, actx.currentTime - startCtx) / SEC_PER_BAR);   // posisi terakhir dari jam audio (playhead bergerak lewat animasi, bukan lewat tick)
   playing = false; cancelAnimationFrame(playRaf); playRaf = 0; stopClips(actx); stopAllSynth(actx); fxRack.derizStop(); synthQ = []; clearInterval(metroTimer); metroTimer = 0; metroCancel(actx, true); metroUI.beat(-1); syncTransportUI(); phHeld = false; renderStatic();
 }

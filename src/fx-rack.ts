@@ -8,7 +8,7 @@
 
 import { setReverb, setEq, setFilter, setDeesser, reverbSeconds, eqDb, filterMode, filterHz, deesserHz, deesserThr, deesserMaxDb, decodeStandalone, trackInput } from './audio-engine';
 import { DerizSynth } from './deriz-synth';
-import { dbgSched, dbgSent } from './audio-debug';
+import { dbgSched, dbgSent, dbgSpec } from './audio-debug';
 import { openMpcs } from './mpcs';
 import { isAudio, ACCEPT as AUDIO_ACCEPT } from './audio-upload-card';
 import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } from './synth-engine';
@@ -208,6 +208,10 @@ function makeLut(topV: number): Uint32Array {
   return lut;
 }
 
+// Analisis spektrogram hanya tampilan, tapi berat (FFT ribuan frame per sample). Saat Play ditahan (holdSpec dari transport) supaya main thread
+// dan CPU HP dipakai untuk suara; dilanjutkan setelah Stop. Irisan kerja 6 ms (dulu 12 ms) supaya render dan penjadwal tidak tertahan lama.
+let specHold = false;
+export function holdSpec(v: boolean): void { specHold = v; }
 // Analisis di latar (diselingi yield supaya UI tidak macet). alive() false = dibatalkan -> null.
 async function computeSpec(buf: AudioBuffer, onProgress: (pct: number) => void, alive: () => boolean): Promise<Spec | null> {
   const len = buf.length, sr = buf.sampleRate, hop = Math.max(256, Math.ceil(len / 12000)), frames = Math.floor(len / hop) + 1;
@@ -264,8 +268,10 @@ async function computeSpec(buf: AudioBuffer, onProgress: (pct: number) => void, 
       m1[k] = ar * ar + ai * ai; m2[k] = br * br + bi * bi;
     }
     rows(m1, f); if (two) rows(m2, f + 1);
-    if (performance.now() - t0 > 12) {
+    if (performance.now() - t0 > 6) {
       onProgress(Math.min(99, Math.round(100 * f / frames)));
+      dbgSpec(performance.now() - t0, specHold);
+      while (specHold && alive()) await new Promise<void>(r => setTimeout(r, 250));   // sedang Play: tunggu
       await new Promise<void>(r => setTimeout(r, 0));
       if (!alive()) return null;
       t0 = performance.now();

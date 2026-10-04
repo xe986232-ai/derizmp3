@@ -27,10 +27,11 @@ interface Agg {
   sched: number; schedMin: number; schedTight: number; schedLate: number;   // sisi main thread (jadwal nada)
   stall: number; stallMax: number;                                         // timer main thread molor
   loaf: number; loafScript: number; loafRender: number; loafMax: number;   // frame lambat (> 50 ms) dari browser: jumlah, total ms di skrip, total ms render, terlama
+  spec: number; specMs: number;                                            // irisan analisis spektrogram yang jalan sejak Play (ms total)
   cul: Map<string, { n: number; ms: number; max: number }>;                // skrip penyebab frame lambat
 }
 const fresh = (): Agg => ({ n: 0, sum: 0, max: 0, maxAt: 0, late: 0, vmax: 0, iamax: 0, full: 0, light: 0, hit: 0, nOn: 0, nLate: 0, ltSum: 0, ltMax: 0,
-  stealH: 0, stealT: 0, noBuf: 0, penDrop: 0, trN: 0, trSlow: 0, trMax: 0, lateSkip: 0, spK: 0, spO: 0, pcK: 0, pcO: 0, spFrom: 0, spTo: 0, wait: 0, waitMax: 0, clamp: 0, clampMax: 0, tr: -1, bud: 0, sched: 0, schedMin: Infinity, schedTight: 0, schedLate: 0, stall: 0, stallMax: 0, loaf: 0, loafScript: 0, loafRender: 0, loafMax: 0, cul: new Map() });
+  stealH: 0, stealT: 0, noBuf: 0, penDrop: 0, trN: 0, trSlow: 0, trMax: 0, lateSkip: 0, spK: 0, spO: 0, pcK: 0, pcO: 0, spFrom: 0, spTo: 0, wait: 0, waitMax: 0, clamp: 0, clampMax: 0, tr: -1, bud: 0, sched: 0, schedMin: Infinity, schedTight: 0, schedLate: 0, stall: 0, stallMax: 0, loaf: 0, loafScript: 0, loafRender: 0, loafMax: 0, spec: 0, specMs: 0, cul: new Map() });
 
 let on = false, a = fresh(), t0 = 0, ctxRef: BaseAudioContext | null = null, ctxBase: { dur: number; ev: number } | null = null;
 let events: string[] = [];
@@ -82,6 +83,11 @@ export function dbgSent(waitMs: number, lateSec: number): void {   // dipanggil 
   if (!on) return;
   a.wait++; if (waitMs > a.waitMax) a.waitMax = waitMs;
   if (lateSec > 0.005) { a.clamp++; if (lateSec * 1000 > a.clampMax) a.clampMax = lateSec * 1000; }
+}
+export function dbgSpec(sliceMs: number, held: boolean): void {   // dipanggil tiap irisan analisis spektrogram; held = sedang Play (ditahan setelah irisan ini)
+  if (!on) return;
+  a.spec++; a.specMs += sliceMs;
+  void held;
 }
 export function dbgRun(startCtx: number, ctx?: BaseAudioContext): void {   // tiap Play: hitungan mulai dari nol, waktu kejadian relatif terhadap awal lagu
   if (!on) return;
@@ -148,6 +154,7 @@ function lines(): string[] {
     L.push('Frame lambat > 50 ms: ' + a.loaf + 'x' + (a.loaf ? ' (terlama ' + ms(a.loafMax) + ', total skrip ' + ms(a.loafScript) + ', render ' + ms(a.loafRender) + ')' : ''));
     for (const [k, c] of [...a.cul].sort((x, y) => y[1].ms - x[1].ms).slice(0, 3)) L.push('  ' + k.slice(0, 70) + ': ' + c.n + 'x, total ' + ms(c.ms) + ', maks ' + ms(c.max));
   } else L.push('Frame lambat: tidak didukung di browser ini');
+  L.push('Analisis spektrogram sejak Play: ' + a.spec + ' irisan (' + ms(a.specMs) + ')');
   const u = underrun();
   L.push(u ? 'Underrun browser: ' + u.ev + 'x (' + ms(u.dur) + ' senyap)' : 'Underrun browser: tidak didukung di browser ini');
   return L;
