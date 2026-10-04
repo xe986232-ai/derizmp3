@@ -6,6 +6,7 @@
 import { ACCEPT as AUDIO_ACCEPT, isAudio } from './audio-upload-card';
 import { DEFAULT_CONTROLS, shiftCurve, snapTargets, toMono, type Controls, type Note, type PitchTrack } from './mpcs-dsp';
 import { encodeWavFloat } from './wav';
+import { encodeMp3Mono, encodeWav16Mono, saveBlob, type SaveFormat } from './mpcs-save';
 
 const svg = (inner: string, size = 18): string =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
@@ -15,6 +16,7 @@ const ICON = {
   pause: svg('<rect x="6" y="5" width="4.5" height="14" rx="1.2" fill="currentColor" stroke="none"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2" fill="currentColor" stroke="none"/>', 22),
   close: svg('<path d="M6 6l12 12M18 6L6 18"/>', 12),
   drag: svg('<circle cx="9" cy="6" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.7" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.7" fill="currentColor" stroke="none"/>', 14),
+  dl: svg('<path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/>', 13),
   full: svg('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>', 13),
   unfull: svg('<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>', 13),
   zin: svg('<path d="M5 12h14M12 5v14"/>', 14),
@@ -113,7 +115,7 @@ function build(): void {
   el.innerHTML =
     '<div class="mpcs__back"></div>' +
     '<div class="mpcs__win is-off" role="dialog" aria-modal="true" aria-label="MPCS" tabindex="-1">' +
-      `<header class="mpcs__head"><i class="mpcs__led" aria-hidden="true"></i><span class="mpcs__title">MPCS</span><div class="mpcs__lcd"><span class="mpcs__stat" role="status" aria-live="polite"></span></div><button type="button" class="mpcs__full" aria-label="Layar penuh piano roll" aria-pressed="false" title="Piano roll layar penuh (menu tetap di bawah)">${ICON.full}</button><button type="button" class="mpcs__drag" aria-label="Seret hasil olahan ke plugin DERIZ atau timeline" title="Tahan lalu seret: ke plugin DERIZ = jadi sample DERIZ, ke timeline = jadi track audio clip" disabled>${ICON.drag}</button><button type="button" class="mpcs__close" aria-label="Tutup MPCS">${ICON.close}</button></header>` +
+      `<header class="mpcs__head"><i class="mpcs__led" aria-hidden="true"></i><span class="mpcs__title">MPCS</span><div class="mpcs__lcd"><span class="mpcs__stat" role="status" aria-live="polite"></span></div><button type="button" class="mpcs__dl" aria-label="Download hasil olahan" aria-haspopup="menu" aria-expanded="false" title="Download hasil olahan (WAV / MP3)" disabled>${ICON.dl}</button><button type="button" class="mpcs__full" aria-label="Layar penuh piano roll" aria-pressed="false" title="Piano roll layar penuh (menu tetap di bawah)">${ICON.full}</button><button type="button" class="mpcs__drag" aria-label="Seret hasil olahan ke plugin DERIZ atau timeline" title="Tahan lalu seret: ke plugin DERIZ = jadi sample DERIZ, ke timeline = jadi track audio clip" disabled>${ICON.drag}</button><button type="button" class="mpcs__close" aria-label="Tutup MPCS">${ICON.close}</button><div class="mpcs__dlm" role="menu" aria-label="Format download" hidden><button type="button" role="menuitem" data-f="wav"><b>WAV</b><span>16-bit, tanpa kompresi</span></button><button type="button" role="menuitem" data-f="mp3"><b>MP3</b><span>192 kbps</span></button></div></header>` +
       '<div class="mpcs__mid">' +
       '<canvas class="mpcs__ov" aria-label="Peta posisi sample (ketuk / seret untuk pindah)" hidden></canvas>' +
       '<div class="mpcs__stage">' +
@@ -160,6 +162,8 @@ function build(): void {
   const ov = el.querySelector<HTMLCanvasElement>('.mpcs__ov')!;
   const dragBtn = el.querySelector<HTMLButtonElement>('.mpcs__drag')!;
   const fullBtn = el.querySelector<HTMLButtonElement>('.mpcs__full')!;
+  const dlBtn = el.querySelector<HTMLButtonElement>('.mpcs__dl')!;
+  const dlMenu = el.querySelector<HTMLElement>('.mpcs__dlm')!;
   const g = cv.getContext('2d')!, gk = keys.getContext('2d')!, go = ov.getContext('2d')!;
 
   // ---------- knob Center / Variation / Transition ----------
@@ -401,7 +405,7 @@ function build(): void {
     else stat.textContent = S.notes.length ? S.notes.length + ' nada terdeteksi' : 'Tidak ada nada terdeteksi';
   }
   function enable(on: boolean): void {
-    btn('play').disabled = !on; btn('all').disabled = !on; btn('cut').disabled = !on; zoomEl.hidden = !on; dragBtn.disabled = !on; win.classList.toggle('is-off', !on);
+    btn('play').disabled = !on; btn('all').disabled = !on; btn('cut').disabled = !on; zoomEl.hidden = !on; dragBtn.disabled = !on; dlBtn.disabled = !on; if (!on) setDlMenu(false); win.classList.toggle('is-off', !on);
     KNOB_KEYS.forEach(k => { knobEl[k].closest('.mpcs__knob')!.classList.toggle('is-off', !on); });
   }
   function setBusy(on: boolean): void { busy.hidden = !on; }
@@ -718,6 +722,28 @@ function build(): void {
   });
   el.addEventListener('pointerleave', untilt);
 
+  // ---------- download hasil olahan (WAV / MP3): selalu hasil terakhir, termasuk edit & knob yang baru diubah ----------
+  let saving = false;
+  function setDlMenu(on: boolean): void { dlMenu.hidden = !on; dlBtn.setAttribute('aria-expanded', String(on)); }
+  async function saveAs(fmt: SaveFormat): Promise<void> {
+    if (!S || saving) return;
+    saving = true; dlBtn.disabled = true; setBusy(true);
+    const name = (S.name || 'Audio').replace(/[^\w\- ]+/g, '_') + '-MPCS.' + fmt;
+    try {
+      stat.textContent = 'Merender hasil…';
+      const out = await ensureRendered();
+      if (!out) { stat.textContent = 'Gagal merender'; return; }
+      const x = out.getChannelData(0);
+      stat.textContent = fmt === 'mp3' ? 'Mengonversi ke MP3…' : 'Menyusun WAV…';
+      const blob = fmt === 'mp3' ? await encodeMp3Mono(x, out.sampleRate, p => { stat.textContent = 'Mengonversi ke MP3… ' + Math.round(p * 100) + '%'; }) : encodeWav16Mono(x, out.sampleRate);
+      saveBlob(blob, name); stat.textContent = 'Terunduh: ' + fmt.toUpperCase();
+    } catch (err) { console.error(err); stat.textContent = 'Gagal menyimpan ' + fmt.toUpperCase(); }
+    finally { saving = false; setBusy(false); dlBtn.disabled = !S; window.setTimeout(info, 2200); }
+  }
+  dlBtn.addEventListener('click', e => { e.stopPropagation(); setDlMenu(!!dlMenu.hidden); });
+  dlMenu.addEventListener('click', e => { const b = (e.target as Element).closest<HTMLButtonElement>('button[data-f]'); if (!b) return; setDlMenu(false); void saveAs(b.dataset.f as SaveFormat); });
+  el.addEventListener('pointerdown', e => { if (!dlMenu.hidden && !(e.target as Element).closest('.mpcs__dlm, .mpcs__dl')) setDlMenu(false); });   // ketuk di luar menutup menu
+
   // ---------- layar penuh: hanya piano roll yang melebar ke seluruh layar, header tetap di atas dan bar menu sebaris di bawah ----------
   let full = false;
   function setFull(on: boolean, native = true): void {
@@ -736,7 +762,7 @@ function build(): void {
   // ---------- buka / tutup ----------
   const onKey = (e: KeyboardEvent): void => {
     e.stopPropagation();   // pintasan DAW (Space, tuts keyboard) tidak ikut jalan selagi MPCS terbuka
-    if (e.key === 'Escape') { e.preventDefault(); if (full) setFull(false); else close(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); if (!dlMenu.hidden) setDlMenu(false); else if (full) setFull(false); else close(); return; }
     const onBtn = (e.target as Element).closest?.('button');
     if (e.key === ' ' && !onBtn && S) { e.preventDefault(); playing ? stopPlay() : void startPlay(); }
     else if (S && !e.ctrlKey && !e.metaKey && (e.key === '+' || e.key === '=')) { e.preventDefault(); zoomBy(ZSTEP, 1); }
@@ -752,7 +778,7 @@ function build(): void {
   el.querySelector('.mpcs__back')!.addEventListener('pointerdown', () => close());
 
   function close(): void {
-    stopPlay(); untilt();
+    stopPlay(); untilt(); setDlMenu(false);
     setFull(false);
     const done = (): void => { el.hidden = true; };
     if (reduce) { done(); return; }
