@@ -36,7 +36,7 @@ function gClear() {
   G.full = 0; G.light = 0; G.hit = 0;                                                  // frame WSOLA: penuh / ringan / dari cache
   G.nOn = 0; G.nLate = 0; G.ltSum = 0; G.ltMax = 0;                                    // nada terjadwal: total, telat (> 6 ms), jumlah + terlama
   G.stealH = 0; G.stealT = 0; G.noBuf = 0; G.penDrop = 0;                              // nada ditahan yang dipotong, ekor yang dipercepat, nada tanpa sample, jadwal terhapus
-  G.trN = 0; G.trSlow = 0; G.trMax = 0;                                                // pesan nada main thread -> worklet: jumlah, yang tiba > 100 ms setelah dikirim, tertunda terlama (ms)
+  G.trN = 0; G.trSlow = 0; G.trMax = 0; G.lateSkip = 0;                                                // pesan nada main thread -> worklet: jumlah, yang tiba > 100 ms setelah dikirim, tertunda terlama (ms)
 }
 gClear();
 function finBlock(self) {
@@ -51,9 +51,9 @@ function finBlock(self) {
   G.cur = 0; G.act = false; G.vc = 0; G.ia = 0;
   if (gT >= G.nextRep) {
     G.nextRep = gT + 0.5;
-    if (G.n || G.nOn || G.noBuf || G.penDrop || G.stealH || G.stealT || G.trN) {
+    if (G.n || G.nOn || G.noBuf || G.penDrop || G.stealH || G.stealT || G.trN || G.lateSkip) {
       self.port.postMessage({ t: 'st', ct: gT, tr: CLK_RES, bud: 128 / sampleRate * 1000, n: G.n, sum: G.sum, max: G.max, maxAt: G.maxAt, late: G.late, vmax: G.vmax, iamax: G.iamax,
-        full: G.full, light: G.light, hit: G.hit, nOn: G.nOn, nLate: G.nLate, ltSum: G.ltSum, ltMax: G.ltMax, stealH: G.stealH, stealT: G.stealT, noBuf: G.noBuf, penDrop: G.penDrop, trN: G.trN, trSlow: G.trSlow, trMax: G.trMax });
+        full: G.full, light: G.light, hit: G.hit, nOn: G.nOn, nLate: G.nLate, ltSum: G.ltSum, ltMax: G.ltMax, stealH: G.stealH, stealT: G.stealT, noBuf: G.noBuf, penDrop: G.penDrop, trN: G.trN, trSlow: G.trSlow, trMax: G.trMax, lateSkip: G.lateSkip });
       gClear();
     }
   }
@@ -72,6 +72,7 @@ class DerizSampler extends AudioWorkletProcessor {
       this.sinc[i] = u >= 1 ? 0 : sc * (0.42 + 0.5 * Math.cos(Math.PI * u) + 0.08 * Math.cos(2 * Math.PI * u));
     }
     this.voices = [];
+    this.sq = []; this.si = 0; this.lag = new Map();   // jadwal lengkap dari main thread (pesan 'sched'): terurut waktu, dijalankan lewat jam audio; lag: id nada -> telat berapa detik saat mulai
     this.pend = [];   // perintah on / off yang dijadwalkan di waktu AudioContext tertentu (piano roll)
     this.speed = 1; this.pitch = 0; this.vol = 0.9; this.volS = 0.9;
     this.PF = 2;   // jatah frame prefetch per blok audio (di luar frame yang wajib)
@@ -81,15 +82,20 @@ class DerizSampler extends AudioWorkletProcessor {
   }
   msg(m) {
     if (m.t === 'dbg') { G.on = !!m.on; gClear(); G.cur = 0; G.act = false; G.nextRep = 0; }
-    else if (m.t === 'buf') { if (G.on) G.penDrop += this.pend.length; this.pend = []; this.setBuf(m); }
+    else if (m.t === 'buf') { if (G.on) G.penDrop += this.pend.length + (this.sq.length - this.si); this.pend = []; this.sq = []; this.si = 0; this.lag.clear(); this.setBuf(m); }
+    else if (m.t === 'sched') {   // seluruh jadwal nada sekaligus: tidak ada lagi pesan per nada yang bisa nyangkut di jalan
+      const ev = m.ev; for (let i = 0; i < ev.length; i++) if (ev[i].t === 'on') ev[i].ps = this.pStamp;
+      if (G.on && m.sent !== undefined) { const tr = (currentTime - m.sent) * 1000; G.trN++; if (tr > 100) G.trSlow++; if (tr > G.trMax) G.trMax = tr; }
+      this.sq = ev; this.si = 0; this.lag.clear();
+    }
     else if (m.t === 'on' || m.t === 'off' || m.t === 'glide') {
       if (m.t === 'on') m.ps = this.pStamp;   // versi parameter saat nada ini diterima
       if (G.on && m.t === 'on' && m.sent !== undefined) { const tr = (currentTime - m.sent) * 1000; G.trN++; if (tr > 100) G.trSlow++; if (tr > G.trMax) G.trMax = tr; }   // berapa lama pesan ini di jalan dari main thread sampai diproses worklet (jam AudioContext yang sama)
       if (m.at && m.at > currentTime) this.pend.push(m); else this.apply(m);
     }
     else if (m.t === 'p') { this.pStamp++; this.speed = m.speed; this.pitch = m.pitch; this.vol = m.vol; }
-    else if (m.t === 'relall') { this.pend = []; for (const v of this.voices) v.rel = true; }
-    else if (m.t === 'kill') { this.recycleAll(); this.pend = []; }
+    else if (m.t === 'relall') { this.pend = []; this.sq = []; this.si = 0; this.lag.clear(); for (const v of this.voices) v.rel = true; }
+    else if (m.t === 'kill') { this.recycleAll(); this.pend = []; this.sq = []; this.si = 0; this.lag.clear(); }
   }
   apply(m) {
     if (m.t === 'on') {
@@ -103,10 +109,32 @@ class DerizSampler extends AudioWorkletProcessor {
   }
   // jalankan perintah terjadwal yang jatuh tempo di blok audio ini (ketelitian satu blok = 128 sampel, sekitar 2,7 ms)
   flush() {
+    if (this.si < this.sq.length) {
+      const lim = currentTime + 128 / sampleRate, sq = this.sq;
+      while (this.si < sq.length && sq[this.si].at <= lim) this.fire(sq[this.si++]);
+      if (this.si >= sq.length) { this.sq = []; this.si = 0; }
+    }
     if (!this.pend.length) return;
     const lim = currentTime + 128 / sampleRate, due = [], rest = [];
     for (const m of this.pend) (m.at <= lim ? due : rest).push(m);
     if (due.length) { this.pend = rest; for (const m of due) this.apply(m); }
+  }
+  // nada dari jadwal lengkap. Telat (blok terlewat / thread audio tersendat): nada tetap dimainkan tapi lepas-nya ikut bergeser sebesar telatnya,
+  // jadi panjang nada terjaga (tidak 'dimulai dan langsung dilepas' = tidak bunyi, dan tidak menumpuk di satu titik). Telat >= panjang nada: dilewati.
+  fire(m) {
+    const lt = currentTime - m.at;
+    if (m.t === 'on') {
+      if (lt > 0.006) { if (lt >= m.dur) { if (G.on) G.lateSkip++; return; } this.lag.set(m.id, lt); }
+      this.apply(m); return;
+    }
+    const sh = this.lag.get(m.id);
+    if (sh && !m.sh) {
+      if (m.t === 'off') this.lag.delete(m.id);
+      const m2 = Object.assign({}, m, { at: m.at + sh, sh: 1 });
+      if (m2.at > currentTime + 128 / sampleRate) { let i = this.sq.length; while (i > this.si && this.sq[i - 1].at > m2.at) i--; this.sq.splice(i, 0, m2); return; }
+      m = m2;
+    }
+    this.apply(m);
   }
   setBuf(m) {
     // Semua pekerjaan berat (padding, mix mono, deteksi onset) sudah dikerjakan di main thread (DerizSynth.setBuffer): di sini hanya menyimpan,
@@ -432,6 +460,7 @@ export interface DerizStat {
   nOn: number; nLate: number; ltSum: number; ltMax: number;
   stealH: number; stealT: number; noBuf: number; penDrop: number;
   trN: number; trSlow: number; trMax: number;   // pesan nada main thread -> worklet: jumlah, tiba > 100 ms setelah dikirim, tertunda terlama (ms)
+  lateSkip: number;   // nada jadwal yang telat lebih dari panjangnya sehingga dilewati
 }
 export const derizHooks: { on: boolean; stat: ((m: DerizStat, ctx: BaseAudioContext) => void) | null } = { on: false, stat: null };
 const liveSynths = new Set<DerizSynth>();
@@ -489,6 +518,18 @@ export class DerizSynth {
   }
   noteOff(id: number, at = 0): void { this.node.port.postMessage({ t: 'off', id, at }); }
   glide(id: number, semis: number, at: number, dur: number): void { this.node.port.postMessage({ t: 'glide', id, semis, at, dur }); }   // slide: meluncur ke `semis` mulai `at` selama `dur` detik
+  // Seluruh jadwal satu Play dikirim SEKALI (waktu AudioContext absolut): worklet menjalankannya sendiri lewat jam audio.
+  schedule(notes: Array<{ id: number; semis: number; start: number; speed: number; pitch: number; vol: number; at: number; dur: number; vel: number; glides?: Array<{ semis: number; at: number; dur: number }> }>): void {
+    const ev: Array<Record<string, number | string>> = [];
+    for (const n of notes) {
+      ev.push({ t: 'on', id: n.id, semis: n.semis, start: n.start, speed: n.speed, pitch: n.pitch, vol: n.vol, at: n.at, vel: n.vel, dur: n.dur });
+      if (n.glides) for (const g of n.glides) ev.push({ t: 'glide', id: n.id, semis: g.semis, at: g.at, dur: g.dur });
+      ev.push({ t: 'off', id: n.id, at: n.at + n.dur });
+    }
+    const rank: Record<string, number> = { on: 0, glide: 1, off: 2 };
+    ev.sort((a, b) => (a.at as number) - (b.at as number) || rank[a.t as string] - rank[b.t as string]);
+    this.node.port.postMessage({ t: 'sched', ev, sent: this.ctx.currentTime });
+  }
   releaseAll(): void { this.node.port.postMessage({ t: 'relall' }); }   // lepas semua nada (peluruhan halus) dan batalkan yang terjadwal
   params(speed: number, pitch: number, vol: number): void { this.node.port.postMessage({ t: 'p', speed, pitch, vol }); }
 

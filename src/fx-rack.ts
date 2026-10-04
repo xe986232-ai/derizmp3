@@ -381,6 +381,8 @@ export interface FxRack {
   closePicker(instant?: boolean): void;
   hasDeriz(track: string): boolean;   // track punya plugin DERIZ yang menyala dan sudah berisi audio
   derizPlay(track: string, midi: number, when: number, dur: number, glides?: Array<{ when: number; to: number; dur: number }>, fxId?: number, vel?: number): void;   // nada terjadwal dari piano roll (when = waktu AudioContext); fxId kosong = DERIZ pertama yang menyala
+  derizSchedule(list: Array<{ track: string; midi: number; when: number; dur: number; glides?: Array<{ when: number; to: number; dur: number }>; fxId?: number; vel?: number }>): void;   // seluruh nada DERIZ satu Play dikirim sekali ke worklet (jam audio yang menjalankan); garis play dibuat lewat derizHeadPump
+  derizHeadPump(ahead: number): void;   // buat garis play untuk nada yang mulai sebelum waktu AudioContext `ahead` (tidak ada elemen DOM untuk nada yang masih jauh)
   derizOn(track: string, midi: number, fxId?: number): number;   // nada langsung (keyboard di bawah piano roll); mengembalikan id untuk derizOff
   derizOwnsPlain(track: string, fxId: number): boolean;   // DERIZ ini pemilik nada kunci polos di pattern track tsb
   derizIds(track: string): number[];          // semua DERIZ di track ini, urut kartu (yang pertama = bawaan track)
@@ -609,6 +611,37 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
       headBegin(id, fx, ctx, at, at + Math.max(0.01, dur));
     }).catch(err => console.error(err));
   }
+  // Jadwal lengkap: satu pesan per DERIZ per Play. Dulu tiap nada dikirim sendiri tiap 25 ms dan pesannya bisa nyangkut (sampai detik) di jalan ke worklet.
+  let schedGen = 0, headQ: Array<{ id: number; fx: Fx; ctx: AudioContext; at: number; end: number }> = [], headI = 0;
+  function derizSchedule(list: Array<{ track: string; midi: number; when: number; dur: number; glides?: Array<{ when: number; to: number; dur: number }>; fxId?: number; vel?: number }>): void {
+    const gen = ++schedGen, { ctx, dest } = host();
+    const groups = new Map<number, { fx: Fx; track: string; items: typeof list }>();
+    for (const n of list) {
+      const fx = derizOf(n.track, n.fxId); if (!fx) continue;
+      let g = groups.get(fx.id); if (!g) groups.set(fx.id, g = { fx, track: n.track, items: [] });
+      g.items.push(n); dbgSched(n.when - ctx.currentTime);
+    }
+    for (const g of groups.values()) {
+      const tw = performance.now(), fx = g.fx;
+      derizSynth(fx, ctx).then(s => {
+        const z = fx.deriz; if (!z || gen !== schedGen) return;   // Play sudah dihentikan / dijadwal ulang selagi sampler disiapkan
+        s.routeTo(trackInput(ctx, dest, g.track)); s.setBuffer(z.buf);
+        dbgSent(performance.now() - tw, ctx.currentTime - g.items[0].when);
+        const [sp, pi, vo] = derizArgs(fx), st = derizStart(z);
+        const notes = g.items.map(n => {
+          const id = ++kbSeq, dur = Math.max(0.01, n.dur);
+          headQ.push({ id, fx, ctx, at: n.when, end: n.when + dur });
+          return { id, semis: n.midi - KROOT, start: st, speed: sp, pitch: pi, vol: vo, at: n.when, dur, vel: velGain(n.vel),
+            glides: n.glides?.map(x => ({ semis: x.to - KROOT, at: Math.max(x.when, n.when), dur: x.dur })) };
+        });
+        headQ.sort((a, b) => a.at - b.at);
+        s.schedule(notes);
+      }).catch(err => console.error(err));
+    }
+  }
+  function derizHeadPump(ahead: number): void {
+    while (headI < headQ.length && headQ[headI].at <= ahead) { const h = headQ[headI++]; headBegin(h.id, h.fx, h.ctx, h.at, h.end); }
+  }
   function derizOn(track: string, midi: number, fxId?: number): number {
     const fx = derizOf(track, fxId); if (!fx) return 0;
     const { ctx, dest } = host(), id = ++kbSeq;
@@ -631,6 +664,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     if (sent) liveRel.delete(id);
   }
   function derizStop(): void {
+    schedGen++; headQ = []; headI = 0;
     for (const e of synths.values()) e.s?.releaseAll();
     liveRel.clear();
     for (const [id, h] of heads) { if (h.t0 > h.ctx.currentTime) { heads.delete(id); h.el?.remove(); } else h.tEnd = Math.min(h.tEnd, h.ctx.currentTime); }   // yang belum mulai dibatalkan, yang jalan berhenti di tempat
@@ -1421,7 +1455,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     addInstrument,
     closePicker,
     hasDeriz: track => !!derizOf(track),
-    derizPlay, derizOn, derizOff, derizStop, derizWarm,
+    derizPlay, derizSchedule, derizHeadPump, derizOn, derizOff, derizStop, derizWarm,
     derizOwnsPlain: (track, fxId) => plainOwner.get(track) === fxId,
     derizIds: track => (racks.get(track) ?? []).filter(f => f.type === 'deriz').map(f => f.id),
     derizAll: () => [...racks.entries()].flatMap(([track, r]) => r.filter(f => f.type === 'deriz' && f.on && f.deriz).map(f => ({ id: f.id, track }))),

@@ -1436,6 +1436,7 @@ let synthQ = [], synthI = 0;
 // nada yang masih jauh ditunda ke pump berikutnya (25 ms lagi), jadi banyak nada sekaligus tidak menahan satu frame pun.
 const SYNTH_AHEAD = .35;
 function synthPump(ctx, ahead) {
+  fxRack.derizHeadPump(ahead);   // garis play DERIZ: hanya untuk nada yang sebentar lagi mulai (nada DERIZ sendiri sudah di worklet sejak Play)
   const t0 = performance.now();
   while (synthI < synthQ.length && synthQ[synthI].when <= ahead) {
     if (synthQ[synthI].when > ctx.currentTime + .1 && performance.now() - t0 > 3) break;
@@ -1475,6 +1476,9 @@ function buildSynthQueue() {
     if (hasSynth(track)) queueNotes(el, id, track, false, bs);   // Supersaw milik track pattern ini
     for (const d of derizAll) queueNotes(el, patKey(id, d.id, track), d.track, true, bs, d.id);   // semua DERIZ (di track mana pun) yang mengisi pattern ini
   });
+  // DERIZ: seluruh nada dikirim sekali ke worklet (dijalankan lewat jam audio, tidak bergantung pada pump main thread); sisanya (Supersaw) tetap lewat pump
+  const dz = synthQ.filter(n => n.deriz); synthQ = synthQ.filter(n => !n.deriz);
+  if (dz.length) fxRack.derizSchedule(dz.map(n => ({track: n.track, midi: n.p, when: n.when, dur: n.dur, glides: n.glides, fxId: n.fxId, vel: n.vel})));
   synthQ.sort((a, b) => a.when - b.when);
 }
 function metroPump() {
