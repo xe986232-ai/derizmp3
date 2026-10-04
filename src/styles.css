@@ -1527,6 +1527,8 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mp__expbtn:active{transform:translateY(1px) scale(.98);transition-duration:.08s;box-shadow:inset 0 2px 5px rgba(0,0,0,.5),0 1px 0 rgba(0,0,0,.4)}
 .mp__expbtn:focus-visible{outline:2px solid #fff;outline-offset:3px}
 .mp__expbtn + .mp__hint{margin-top:12px}
+.mp__expbtn[hidden],.mp__card[hidden]{display:none}
+.mp__expbtn[hidden] + .mp__hint{margin-top:0}
 .mp__xhint{margin-top:10px}
 .xpo{position:fixed;inset:0;z-index:700;display:grid;place-items:center;padding:16px;background:rgba(8,8,12,.55);cursor:progress;animation:fadeIn .2s ease}
 .xpo__card{width:min(340px,100%);padding:20px;border-radius:20px;background-color:var(--card);color:var(--text);box-shadow:var(--bevel),0 18px 48px rgba(0,0,0,.55);display:flex;flex-direction:column;gap:12px;cursor:default}

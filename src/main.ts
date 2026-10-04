@@ -10,6 +10,7 @@ import { initPatternJelly } from './pattern-jelly';
 import { initClipIconMenu } from './clip-icon-menu';
 import { STRETCH_MIN, STRETCH_MAX } from './time-stretch';
 import { initLandscape } from './landscape';
+import { registerSW } from './pwa';
 import { initMenuPanel, setProjectIO } from './menu-panel';
 import { dbgRun, dbgZoom } from './audio-debug';
 import { mpcsExport, mpcsImport } from './mpcs';
@@ -25,6 +26,7 @@ import { slideSource, glideBeats } from './note-slide';
 import { velAlpha } from './velocity';
 import { openPianoRoll, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getNoteColor, setNoteColor, getPianoRollNotes, setPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, clearPianoRollNotes, PR_BEATS } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
+registerSW();   // PWA: bisa di-install & jalan offline (aktif pada hasil build)
 initLandscape();
 initMenuPanel();
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;

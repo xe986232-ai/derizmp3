@@ -102,3 +102,12 @@ Hitungan direset tiap Play (atau tombol Reset). Kejadian bermasalah dicatat per 
 
 Kode: `src/audio-debug.ts` (agregasi + panel), `src/deriz-synth.ts` (objek `G` + `finBlock` di worklet, `derizHooks`), `src/fx-rack.ts` (`dbgSched` di `derizPlay`), `src/menu-panel.ts` (switch), `src/main.ts` (`dbgRun` tiap Play).
 Tes: `node --experimental-transform-types tools/deriz-debug-test.ts` (suara identik debug mati vs nyala, hitungan blok / nada telat / terpotong / hilang, timer presisi vs kasar, tambahan beban).
+
+## Install ke beranda (PWA)
+Web DAW bisa di-install seperti aplikasi: ikonnya muncul di beranda HP / desktop dan bisa dibuka tanpa internet.
+- **Android / Chrome / Edge**: buka **Menu > Pengaturan > Install ke layar utama**, atau lewat menu browser (titik tiga) > *Install aplikasi*.
+- **iPhone / iPad (Safari)**: ketuk Bagikan > *Tambah ke Layar Utama*.
+- Syarat browser: halaman harus dibuka lewat **HTTPS** (atau `localhost`). Service worker hanya aktif pada hasil build (`npm run build` lalu `npm run preview`), bukan di `npm run dev`.
+
+Berkas: `public/manifest.webmanifest` (nama, warna, ikon), `public/icons/*` (ikon 192 / 512 / maskable / iOS), `public/sw.js` (cache offline), `src/pwa.ts` (pendaftaran service worker + tombol Install). Daftar file cache diisi otomatis saat build oleh plugin `pwaPrecache` di `vite.config.ts`, jadi tidak perlu diedit manual.
+Versi baru aplikasi aktif setelah semua tab Web DAW ditutup lalu dibuka lagi (supaya project yang sedang dikerjakan tidak terganggu).

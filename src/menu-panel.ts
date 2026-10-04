@@ -5,6 +5,7 @@
 import { runExport, FMT_KEY, type ExportFormat } from './export-audio';
 import { setAudioDebug, loadAudioDebug } from './audio-debug';
 import { saveProject, loadProject, deleteProject, listProjects, projectExists, recordToJson, jsonToRecord } from './project-store';
+import { installState, promptInstall, onInstallChange } from './pwa';
 
 // Jembatan ke main.ts (yang memegang data timeline): snapshot dan pemulihan project
 export interface ProjectIO {
@@ -130,9 +131,32 @@ export function initMenuPanel(): MenuPanel {
               '<button type="button" class="mp__switch" role="switch" aria-checked="false" aria-label="Debug Audio" data-adbg><i></i></button>' +
             '</div>' +
           '</div>' +
+          // Install aplikasi (PWA): disembunyikan kalau sudah terpasang
+          '<div class="mp__card mp__item mp__set" style="--i:7" data-install-card hidden>' +
+            '<div class="mp__sub"><span>Install aplikasi</span></div>' +
+            '<button type="button" class="mp__expbtn" data-install-btn>' + IC_DL + '<span>Install ke layar utama</span></button>' +
+            '<p class="mp__hint" data-install-hint></p>' +
+          '</div>' +
         '</section>' +
       '</div>' +
     '</div>';
+
+  // ===== Pengaturan: Install aplikasi (PWA, lihat pwa.ts) =====
+  const instCard = panel.querySelector<HTMLElement>('[data-install-card]') as HTMLElement;
+  const instBtn = panel.querySelector<HTMLButtonElement>('[data-install-btn]') as HTMLButtonElement;
+  const instHint = panel.querySelector<HTMLElement>('[data-install-hint]') as HTMLElement;
+  const renderInstall = (): void => {
+    const st = installState();
+    instCard.hidden = st === 'installed';
+    instBtn.hidden = st !== 'ready';
+    instHint.textContent =
+      st === 'ready' ? 'Pasang Web DAW seperti aplikasi biasa: ikonnya muncul di beranda dan bisa dibuka tanpa internet.' :
+      st === 'ios' ? 'Di iPhone / iPad: ketuk tombol Bagikan (kotak dengan panah ke atas) di Safari, lalu pilih "Tambah ke Layar Utama".' :
+      'Buka menu browser (titik tiga), lalu pilih "Install aplikasi" atau "Tambahkan ke layar utama".';
+  };
+  instBtn.addEventListener('click', () => { void promptInstall().then(renderInstall); });
+  onInstallChange(renderInstall);
+  renderInstall();
 
   // ===== Pengaturan: Theme (atribut data-theme di <html>; gaya tiap theme ada di styles.css) =====
   const THEME_KEY = 'derizmp3.theme';
