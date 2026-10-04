@@ -1,5 +1,5 @@
 // Tahan icon di header pattern -> muncul card putih berisi menu (animasi masuk + keluar).
-// Audio clip (icon microphone): menu "Tempo". Pattern nada (icon piano): menu baru, isinya menyusul (sekarang masih placeholder).
+// Audio clip (icon microphone): menu "Tempo". Pattern nada (icon piano): menu "Sync all sample" (toggle).
 // Tempo: isi BPM asli audio clip (mis. vokal 126), lalu clip di-stretch (pitch tetap) mengikuti BPM project (mis. 130).
 // Icon-nya pseudo-element CSS (.pattern__head::before), jadi tidak bisa diberi listener sendiri:
 // area icon dihitung dari posisi sentuhan relatif ke kiri header (padding 8px + icon 13px + toleransi jari).
@@ -10,7 +10,7 @@ const HOLD_MS = 450;            // lama menahan
 const HOLD_SLOP = 10;           // px maksimum bergeser selama menahan (lebih dari ini = batal)
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const MENU_LABEL = 'Sesuaikan Tempo';   // menyamakan tempo audio clip dengan BPM project
-const PATTERN_MENU_LABEL = 'Menu Pattern';   // placeholder pattern nada: fungsinya ditambahkan nanti
+const PATTERN_MENU_LABEL = 'Sync all sample';   // pattern nada: semua sample DERIZ di pattern ini ikut BPM project
 
 export interface ClipIconMenuHooks {
   onOpen?(pattern: HTMLElement): void;     // card muncul (main.ts menyembunyikan menu bulat)
@@ -18,7 +18,8 @@ export interface ClipIconMenuHooks {
   getProjectBpm(): number;                 // BPM project sekarang
   getClipBpm(pattern: HTMLElement): number | null;   // BPM yang pernah diisi untuk clip ini (null = belum)
   applyTempo(pattern: HTMLElement, bpm: number): Promise<void>;   // stretch clip; lempar Error(pesan) kalau gagal
-  onPatternMenu?(pattern: HTMLElement): void;   // item menu pada pattern nada diketuk (belum ada fungsi)
+  onPatternMenu?(pattern: HTMLElement): void;   // item "Sync all sample" diketuk (nyala / mati)
+  isPatternSynced?(pattern: HTMLElement): boolean;   // Sync all sample sedang nyala di pattern ini (item diberi tanda centang)
 }
 
 export function initClipIconMenu(lanesEl: HTMLElement, hooks: ClipIconMenuHooks): void {
@@ -129,6 +130,8 @@ export function initClipIconMenu(lanesEl: HTMLElement, hooks: ClipIconMenuHooks)
       it.addEventListener('click', showTempo);
     } else {
       it.textContent = PATTERN_MENU_LABEL;
+      it.setAttribute('role', 'menuitemcheckbox');
+      it.setAttribute('aria-checked', String(!!(hooks.isPatternSynced && hooks.isPatternSynced(pattern))));
       it.addEventListener('click', () => { hooks.onPatternMenu && hooks.onPatternMenu(pattern); close(); });
     }
     inner.appendChild(it);

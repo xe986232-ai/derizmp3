@@ -595,9 +595,50 @@ async function applyClipTempo(el, clipBpm) {
   toast('Tempo ' + (Math.round(clipBpm * 100) / 100) + ' → ' + BPM + ' BPM');
 }
 
+// ===== Sync all sample (tahan icon piano pada pattern nada) =====
+// Semua DERIZ yang bernada di pattern ini dikunci ke BPM project: kecepatan (knob Speed) tiap sample dicatat saat Sync dinyalakan
+// (boleh beda-beda), lalu ikut berubah sebanding tiap BPM project diganti. Speed baru = Speed catatan x BPM sekarang / BPM saat sync.
+// Knob Speed DERIZ terbatas 0.5x - 2x: di luar itu berhenti di batas.
+const derizSpeedOf = v => 2 ** ((v - 0.5) * 2), derizSpeedKnob = sp => Math.max(0, Math.min(1, Math.log2(sp) / 2 + 0.5));
+function patDerizList(el) {   // DERIZ yang menyala + berisi audio dan punya nada di pattern ini
+  const prId = el.dataset.prId, lt = el.parentElement.dataset.track; if (!prId) return [];
+  return fxRack.derizAll().filter(d => getPianoRollNotes(patKey(prId, d.id, lt)).length);
+}
+function unsyncPattern(el) { el._sync = null; delete el.dataset.sync; }
+function toggleSyncSamples(el) {
+  if (el._sync) { unsyncPattern(el); return toast('Sync all sample mati'); }
+  const items = new Map();
+  patDerizList(el).forEach(d => { const v = fxRack.getParam(d.track, d.id, 'speed'); if (v !== undefined) items.set(d.id, derizSpeedOf(v)); });
+  if (!items.size) return toast('Belum ada DERIZ bernada di pattern ini');
+  lanesEl.querySelectorAll('.pattern').forEach(o => {   // satu DERIZ hanya ikut satu pattern yang di-sync: yang lama dilepas
+    if (o === el || !o._sync) return;
+    items.forEach((_, id) => o._sync.items.delete(id));
+    if (!o._sync.items.size) unsyncPattern(o);
+  });
+  el._sync = {bpm: BPM, items}; el.dataset.sync = '1';
+  toast('Sync all sample: ' + items.size + ' DERIZ ikut BPM project');
+}
+function applySyncSamples() {
+  let clamped = false;
+  lanesEl.querySelectorAll('.pattern').forEach(el => {
+    const sy = el._sync; if (!sy) return;
+    sy.items.forEach((sp, id) => {
+      const tr = fxRack.derizTrackOf(id);
+      if (tr === undefined) { sy.items.delete(id); return; }   // DERIZ sudah dihapus
+      const want = sp * BPM / sy.bpm, v = derizSpeedKnob(want);
+      if (Math.abs(derizSpeedOf(v) - want) > 1e-4) clamped = true;
+      fxRack.setParam(tr, id, 'speed', v);
+    });
+    if (!sy.items.size) unsyncPattern(el);
+  });
+  if (clamped) toast('Speed sample sudah di batas 0.5× - 2×');
+}
+
 // Tahan icon microphone pada audio clip -> card putih "Tempo"; menu bulat (copy, delete, dst) hilang selama card terbuka
 let barHidByCard = false, barHideAnim = null;
 initClipIconMenu(lanesEl, {
+  onPatternMenu: el => toggleSyncSamples(el),
+  isPatternSynced: el => !!el._sync,
   getProjectBpm: () => BPM,
   getClipBpm: el => el.dataset.bpm ? +el.dataset.bpm : null,
   applyTempo: (el, bpm) => applyClipTempo(el, bpm),
@@ -1535,6 +1576,7 @@ function setBpm(v) {
   if (v === BPM) return;
   const ratio = SEC_PER_BAR / (240 / v);   // panjang bar lama / panjang bar baru
   BPM = v; SEC_PER_BAR = 240 / v;
+  applySyncSamples();   // pattern dengan Sync all sample: Speed DERIZ ikut BPM baru
   const clips = [...lanesEl.querySelectorAll('.pattern[data-clip]')];
   if (clips.length) {
     const need = Math.max(...clips.map(p => (pl(p) + pw(p) * ratio) / BAR_W));
@@ -1830,6 +1872,10 @@ function projectSnapshot() {
         }).filter(Boolean);
         if (extra.length) o.x = extra;
       }
+      if (p._sync) {   // Sync all sample: BPM saat sync + Speed catatan tiap DERIZ (id efek tidak tetap antar sesi: disimpan sebagai track + urutan)
+        const d = [...p._sync.items].map(([fx, sp]) => { const tr = fxRack.derizTrackOf(fx); return tr === undefined ? null : {tr, i: fxRack.derizIds(tr).indexOf(fx), s: Math.round(sp * 1e4) / 1e4}; }).filter(Boolean);
+        if (d.length) o.sy = {b: p._sync.bpm, d};
+      }
       if (p.dataset.auId) {   // Automation Clip: titik kurva + knob target (id efek tidak tetap antar sesi, jadi disimpan sebagai jenis + urutan)
         const c = getClip(p.dataset.auId), ref = c && c.target ? fxRack.fxRef(c.target.track, c.target.fxId) : null;
         o.a = exportClip(p.dataset.auId);
@@ -1912,6 +1958,11 @@ async function projectRestore(rec) {
       if (fx !== undefined) setPianoRollNotes(pid + '@' + fx, x.n);
     }
     renderPatNotes(el);
+    if (p.sy && p.sy.d) {   // Sync all sample: pasang lagi catatan Speed ke DERIZ yang sudah dipulihkan
+      const items = new Map();
+      for (const x of p.sy.d) { const tr = trMap[x.tr], fx = tr && fxRack.derizIds(tr)[x.i]; if (fx !== undefined && x.s > 0) items.set(fx, x.s); }
+      if (items.size && p.sy.b > 0) { el._sync = {bpm: p.sy.b, items}; el.dataset.sync = '1'; }
+    }
   }
   for (const {el, a} of pendingAuto) {   // Automation Clip: knob target dicari lagi lewat track + jenis efek + urutannya
     const tr = a.t && trMap[a.t.tr], fx = tr !== undefined ? fxRack.fxFind(tr, a.t.ft, a.t.fi) : undefined;
