@@ -73,7 +73,7 @@ let undoStack: string[] = [];
 let redoStack: string[] = [];
 let lastLen = 1;     // panjang nada baru = panjang nada terakhir yang dibuat / di-resize / DIKLIK
 let lastSlide = false;   // nada baru ikut berstatus slide kalau nada terakhir yang dibuat / diklik / di-toggle adalah slide
-let lastVel = 1;     // velocity terakhir yang diatur di panel Velocity: dipakai nada yang dipasang berikutnya
+let lastVel = 1;     // velocity nada baru = velocity terakhir yang diatur di panel Velocity atau milik nada yang DIKLIK
 let velOpen = false; // panel Velocity (di bawah grid) terbuka / tertutup; tetap sama selama aplikasi hidup
 let velPanel!: HTMLElement, velBtn!: HTMLButtonElement, vc!: HTMLCanvasElement;
 let hoverP = -1;
@@ -897,7 +897,7 @@ function onDown(e: PointerEvent) {
       updateUI(); schedule(); return;
     }
     if (!selected.has(h.n.id)) { if (!e.shiftKey) selected.clear(); selected.add(h.n.id); }
-    rememberNote(h.n);   // klik nada: nada berikutnya meniru panjang (dan slide) nada ini
+    rememberNote(h.n);   // klik nada: nada berikutnya meniru panjang, slide, dan velocity nada ini
     g = {...base, kind: 'move', anchor: {...h.n}, orig: st.notes.filter(n => selected.has(n.id)).map(n => ({...n}))};
     updateUI(); schedule(); return;
   }
@@ -927,9 +927,10 @@ function holdMarquee() {
   updateUI(); schedule();
 }
 
-function rememberNote(n: Note) {   // contoh: klik nada 2 blok + slide -> nada baru yang dipasang juga 2 blok + slide
+function rememberNote(n: Note) {   // contoh: klik nada 2 blok + slide + velocity 50% -> nada baru yang dipasang juga 2 blok + slide + velocity 50%
   if (n.l >= unit()) lastLen = n.l;
   lastSlide = !!n.sl;
+  lastVel = velOf(n.v);
 }
 
 function addNoteAt(x: number, y: number): Note | null {
