@@ -75,19 +75,20 @@ Cara kerja: level band di atas Freq dibaca detektor (attack 0,4 ms, release 30 m
 Kode: `src/deesser.ts` (worklet), `src/audio-engine.ts` (`setDeesser`, jalur efek), `src/fx-rack.ts` (kartu + knob). Tes: `node tools/deesser-test.ts`.
 
 ## Stem Splitter (vokal / instrumen)
-Memisahkan lagu jadi dua stem: **vokal** dan **instrumen**. Vokal + instrumen selalu persis sama dengan aslinya (instrumen = asli - vokal), jadi tidak ada bagian yang hilang.
+Memisahkan lagu jadi dua stem: **vokal** dan **instrumen**, memakai model jaringan saraf **MDX-Net `Kim_Vocal_2`** (paket [`web-audio-separation`](https://github.com/incidentist/web-audio-separation), MIT, di atas `onnxruntime-web`) yang jalan langsung di browser. Instrumen = mix - vokal·compensate (cara UVR), jadi vokal + instrumen hampir sama dengan aslinya.
 
 **Cara pakai di aplikasi:** tahan icon microphone di header audio clip (card yang sama dengan Tempo), pilih **Pisahkan Vokal & Instrumen**. Card menampilkan progres lalu menutup sendiri; hasilnya dua track audio baru tepat di bawah track asal, "<judul> (Vokal)" dan "<judul> (Instrumen)", dengan posisi / lebar / offset sama dengan clip asal. Clip asli tidak diubah. Yang dipisah audio aslinya (sebelum di-stretch); kalau clip sedang di-Tempo, kedua stem di-stretch dengan faktor yang sama sehingga tetap sejajar dengan project. Hanya mono / stereo.
 
-Kode UI: `src/clip-icon-menu.ts` (item menu + tampilan progres), blok "Stem Splitter" di `src/main.ts` (worker, cache, pembuatan track), gaya `.clip-card__stem` / `__bar` di `src/styles.css`.
+Kode UI: `src/clip-icon-menu.ts` (item menu + tampilan progres), blok "Stem Splitter" di `src/main.ts` (cache, pembuatan track, pemilihan model / cadangan), gaya `.clip-card__stem` / `__bar` di `src/styles.css`.
 
-Pemakaian: `separate(chs, sr, opts?, onProgress?)` dari `src/stem-split.ts`, masukan 1 (mono) atau 2 (stereo) kanal `Float32Array`, hasil `{ vocal, instrumental }` (jumlah kanal dan panjang sama dengan masukan). Opsi: `strength` (0..1, kontras mask, bawaan 0.5), `bassCutoff` (Hz, bawaan 120: di bawahnya kick + bass tetap di instrumen), `chunkSec` (bawaan 12).
+**Model (jalur utama):** `separateMdx(chs, sr, onProgress?)` dari `src/stem-mdx.ts`, masukan 1 (mono) atau 2 (stereo) kanal `Float32Array`, hasil `{ vocal, instrumental }` (jumlah kanal, panjang, dan sample rate sama dengan masukan).
+- Model ONNX `Kim_Vocal_2` (~67 MB) diunduh browser dari Hugging Face **sekali**, lalu disimpan di CacheStorage; pemisahan berikutnya tidak mengunduh lagi. Pemisahan pertama karenanya lebih lama dan butuh internet. Alternatif ukuran sama: `UVR-MDX-NET-Voc_FT` (ganti konstanta `MDX_MODEL`).
+- Inferensi pakai WebGPU kalau ada, kalau tidak WASM (CPU; file WASM ONNX Runtime diambil dari CDN jsDelivr saat dipakai). WASM berthread (jauh lebih cepat) butuh halaman dengan header `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: require-corp`; tanpa header itu tetap jalan, hanya satu thread.
+- Model dilatih di 44,1 kHz: audio di-resample ke sana lalu dikembalikan ke sample rate asal.
+- Berjalan di thread utama (paket ini men-decode lewat `OfflineAudioContext`, tidak ada di Worker) dan diantre satu per satu. Paket + `onnxruntime-web` dimuat lewat `import()` dinamis, jadi baru diunduh saat fitur ini dipakai pertama kali.
+- `vite.config.ts` membuang file WASM ONNX Runtime (~28 MB) dari `dist` karena tidak terpakai (WASM-nya dari CDN).
 
-Cara kerja: STFT 4096 / hop 1024, satu mask lunak per bin dari tiga petunjuk: (1) pusat stereo (vokal biasanya di tengah), (2) HPSS, median ke arah waktu vs frekuensi untuk membuang drum yang ikut di tengah, (3) pita vokal (bass dan di atas ~16 kHz dimatikan). Diproses per potongan ~12 dtk dengan margin konteks, jadi memori kecil dan aman untuk HP.
-
-Batas: ini pemisahan klasik berbasis mask, **bukan** jaringan saraf. Terbaik untuk rekaman stereo dengan vokal di tengah. Instrumen harmonik yang juga di tengah (piano / pad mono) bisa bocor ke vokal, backing vocal ber-pan lebar bisa ikut ke instrumen, dan pada audio mono kualitas turun (hanya HPSS + pita yang bekerja). Kalau nanti butuh kualitas setara aplikasi komersial, `separate()` bisa diganti backend model ONNX / WASM dengan antarmuka yang sama.
-
-Kode: `src/stem-split.ts` (DSP murni), `src/stem-worker.ts` (Worker: pesan `split` -> `progress` / `done` / `error`). Tes: `node tools/stem-test.ts` (lagu sintetis dengan stem asli: SDR vokal -0,5 -> 11,5 dB, instrumen 0,5 -> 12,1 dB; lagu nyata hasilnya akan lebih rendah dari angka sintetis ini).
+**Cadangan (DSP klasik):** kalau model tidak bisa dimuat (offline pada pemisahan pertama, memori habis, dst), `main.ts` menampilkan toast lalu jatuh ke pemisahan klasik berbasis mask: `separate(chs, sr, opts?, onProgress?)` dari `src/stem-split.ts` di Worker `src/stem-worker.ts` (pesan `split` -> `progress` / `done` / `error`). STFT 4096 / hop 1024, satu mask lunak per bin dari pusat stereo + HPSS + pita vokal; vokal + instrumen persis sama dengan aslinya (instrumen = asli - vokal). Kualitasnya jauh di bawah model: terbaik hanya untuk stereo dengan vokal di tengah, piano / pad mono bisa bocor ke vokal, dan pada audio mono turun banyak. Opsi: `strength` (0..1, bawaan 0.5), `bassCutoff` (Hz, bawaan 120), `chunkSec` (bawaan 12). Tes: `node tools/stem-test.ts` (lagu sintetis dengan stem asli: SDR vokal -0,5 -> 11,5 dB, instrumen 0,5 -> 12,1 dB; lagu nyata hasilnya akan lebih rendah).
 
 ## Piano roll: optimasi gambar (tampilan tidak berubah)
 Drag nada, geser, dan zoom dibuat lebih ringan tanpa mengubah hasil gambar (grid, nada, tuts, penggaris tetap sama).

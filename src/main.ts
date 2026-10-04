@@ -8,6 +8,7 @@ import { initFxRack } from './fx-rack';
 import { initRecordJelly } from './record-jelly';
 import { initPatternJelly } from './pattern-jelly';
 import { initClipIconMenu } from './clip-icon-menu';
+import { separateMdx } from './stem-mdx';
 import { STRETCH_MIN, STRETCH_MAX } from './time-stretch';
 import { initLandscape } from './landscape';
 import { initMenuPanel, setProjectIO } from './menu-panel';
@@ -596,7 +597,8 @@ async function applyClipTempo(el, clipBpm) {
 }
 
 // ===== Stem Splitter (vokal / instrumen): menu yang sama dengan Tempo (tahan icon microphone), item "Pisahkan Vokal & Instrumen" =====
-// Yang dipisah audio ASLI clip (dataset.src, sebelum di-stretch) di Worker (stem-worker.ts -> stem-split.ts). Hasilnya dua track audio baru
+// Yang dipisah audio ASLI clip (dataset.src, sebelum di-stretch) dengan model MDX-Net Kim_Vocal_2 (stem-mdx.ts; model ~67 MB diunduh sekali lalu
+// di-cache browser). Kalau model tidak bisa dimuat (offline pertama kali, memori habis, dst) jatuh ke DSP klasik di Worker (stem-worker.ts -> stem-split.ts). Hasilnya dua track audio baru
 // tepat di bawah track asal: "<judul> (Vokal)" lalu "<judul> (Instrumen)", dengan posisi / lebar / offset yang sama dengan clip asal.
 // Kalau clip sedang di-stretch (menu Tempo), kedua stem di-stretch dengan faktor yang sama, jadi tetap sejajar dengan project dan tempo-nya bisa disetel lagi.
 // Clip asli tidak diubah. Pemisahan buffer yang sama (mis. track hasil duplikat) dipakai ulang, tidak dihitung dua kali.
@@ -614,14 +616,21 @@ function stemWorkerGet() {
   stemWorker.onerror = () => { stemJobs.forEach(j => j.err(new Error('Pemrosesan audio gagal'))); stemJobs.clear(); stemWorker = null; };
   return stemWorker;
 }
+function splitClassic(chs, sr, prog) {   // DSP klasik di Worker (cadangan); chs dipindahkan ke Worker (buffer-nya tidak bisa dipakai lagi)
+  return new Promise((ok, err) => {
+    const id = ++stemSeq; stemJobs.set(id, {ok, err, prog});
+    stemWorkerGet().postMessage({type: 'split', id, chs, sr}, chs.map(c => c.buffer));
+  });
+}
 function splitBuffer(srcId, onProgress) {   // -> Promise<{v, i}> id buffer vokal / instrumen (panjang dan sample rate sama dengan sumber)
   let e = stemCache.get(srcId);
   if (!e) {
-    const buf = getBuffer(srcId), subs = new Set();
+    const buf = getBuffer(srcId), subs = new Set(), prog = x => subs.forEach(f => f(x));
     const chs = Array.from({length: buf.numberOfChannels}, (_, c) => buf.getChannelData(c).slice());
-    const p = new Promise((ok, err) => {
-      const id = ++stemSeq; stemJobs.set(id, {ok, err, prog: x => subs.forEach(f => f(x))});
-      stemWorkerGet().postMessage({type: 'split', id, chs, sr: buf.sampleRate}, chs.map(c => c.buffer));
+    const p = separateMdx(chs, buf.sampleRate, prog).catch(err => {
+      console.warn('Model MDX-Net gagal, memakai pemisahan klasik', err);
+      toast('Model AI tidak bisa dimuat, memakai metode klasik…', 0);
+      return splitClassic(chs, buf.sampleRate, prog);
     }).then(r => {
       const mk = y => { const out = audio().createBuffer(y.length, y[0].length, buf.sampleRate); y.forEach((c, i) => out.copyToChannel(c, i)); return addBuffer(out); };
       return {v: mk(r.vocal), i: mk(r.instrumental)};
