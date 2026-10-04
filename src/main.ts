@@ -61,7 +61,9 @@ function paintRuler(force) {
   const x0 = Math.max(0, Math.floor(a0 - cw)), x1 = Math.min(W, Math.ceil(a1 + cw));
   rp = {x0, x1, bar: BAR_W};
   const d = Math.min(dpr, 16000 / Math.max(1, x1 - x0));
-  canvas.width = Math.max(1, Math.round((x1 - x0) * d)); canvas.height = Math.round(H * d);
+  const nw = Math.max(1, Math.round((x1 - x0) * d)), nh = Math.round(H * d);
+  if (canvas.width !== nw || canvas.height !== nh) { canvas.width = nw; canvas.height = nh; }   // ukuran sama (kasus umum saat zoom): cukup hapus, tanpa alokasi ulang backing store
+  else { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, nw, nh); }
   canvas.style.left = x0 + 'px'; canvas.style.width = (x1 - x0) + 'px';
   g.setTransform(d, 0, 0, d, -x0 * d, 0);
   const every = BAR_W < 28 ? 4 : BAR_W < 50 ? 2 : 1;
@@ -1742,6 +1744,8 @@ const LOGR = Math.log(BAR_MAX / BAR_MIN);
 let paintRaf = 0;
 wsEl.addEventListener('scroll', () => { if (!paintRaf) paintRaf = requestAnimationFrame(() => { paintRaf = 0; paintRuler(); }); }, {passive: true});
 window.addEventListener('resize', () => paintRuler(true));
+const zoomVarCache = {};
+function setZoomVar(k, v) { if (zoomVarCache[k] !== v) { zoomVarCache[k] = v; document.documentElement.style.setProperty(k, v); } }   // hanya tulis kalau berubah (ambang zoom jarang terlewati)
 function setZoom(next, clientX) {
   next = Math.max(BAR_MIN, Math.min(BAR_MAX, next));
   if (Math.abs(next - BAR_W) < 0.01) return;
@@ -1753,11 +1757,12 @@ function setZoom(next, clientX) {
   const x = clientX - tlEl.getBoundingClientRect().left;   // titik di timeline yang dijaga tetap diam
   dismissAdd(true);
   BAR_W = next;
-  document.documentElement.style.setProperty('--bar', BAR_W + 'px');
-  document.documentElement.style.setProperty('--beat-a', BAR_W >= 56 ? .08 : 0);
-  document.documentElement.style.setProperty('--sub-a', BAR_W >= 160 ? .045 : 0);
-  document.documentElement.style.setProperty('--mid-a', BAR_W >= 640 ? .035 : 0);
-  document.documentElement.style.setProperty('--fine-a', BAR_W >= 1280 ? .03 : 0);
+  const rs = document.documentElement.style;
+  rs.setProperty('--bar', BAR_W + 'px');
+  setZoomVar('--beat-a', BAR_W >= 56 ? .08 : 0);
+  setZoomVar('--sub-a', BAR_W >= 160 ? .045 : 0);
+  setZoomVar('--mid-a', BAR_W >= 640 ? .035 : 0);
+  setZoomVar('--fine-a', BAR_W >= 1280 ? .03 : 0);
   document.querySelectorAll('.pattern').forEach(p => {
     p.style.left = pl(p) * ratio + 'px';
     p.style.width = pw(p) * ratio + 'px';
@@ -1807,9 +1812,20 @@ wsEl.addEventListener('touchmove', e => {
   if (!pinch || e.touches.length !== 2) return;
   if (document.documentElement.classList.contains('is-pat-jelly')) return;
   if (e.cancelable) e.preventDefault();
-  zoomNow(pinch.bar * tdist(e.touches) / pinch.d, (e.touches[0].clientX + e.touches[1].clientX) / 2);
+  zoomPinchRaf(pinch.bar * tdist(e.touches) / pinch.d, (e.touches[0].clientX + e.touches[1].clientX) / 2);
 }, {passive: false});
-const endPinch = e => { if (pinch && e.touches.length < 2) { pinch = null; wsEl.style.overflow = ''; } };
+// Maksimal satu setZoom per frame saat cubit; sisa gerakan jari di antara frame digabung (nilai terakhir yang dipakai)
+let zoomPend = null, zoomPendRaf = 0;
+function zoomPinchRaf(next, clientX) {
+  zoomPend = {next, clientX};
+  if (!zoomPendRaf) zoomPendRaf = requestAnimationFrame(zoomPinchFlush);
+}
+function zoomPinchFlush() {
+  if (zoomPendRaf) { cancelAnimationFrame(zoomPendRaf); zoomPendRaf = 0; }
+  const p = zoomPend; zoomPend = null;
+  if (p) zoomNow(p.next, p.clientX);
+}
+const endPinch = e => { if (pinch && e.touches.length < 2) { zoomPinchFlush(); pinch = null; wsEl.style.overflow = ''; } };
 wsEl.addEventListener('touchend', endPinch);
 wsEl.addEventListener('touchcancel', endPinch);
 // ===== Undo / Redo: riwayat pattern (buat, geser, panjangkan, salin, bagi, hapus, ubah nama) =====
