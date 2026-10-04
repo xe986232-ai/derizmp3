@@ -11,6 +11,7 @@ import { initClipIconMenu } from './clip-icon-menu';
 import { STRETCH_MIN, STRETCH_MAX } from './time-stretch';
 import { initLandscape } from './landscape';
 import { initMenuPanel, setProjectIO } from './menu-panel';
+import { mpcsExport, mpcsImport } from './mpcs';
 import { setExportIO } from './export-audio';
 import { hasSynth, startVoice, releaseVoice, playNote, stopAllSynth } from './synth-engine';
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
@@ -1861,7 +1862,8 @@ initTrackMeters();   // meter level stereo di card track
 
 // ===== Simpan / buka file project (menu kanan atas) =====
 // Disimpan: BPM, panjang timeline, track (jenis, nama, warna, volume, on/off), pattern (posisi, lebar, judul), nada piano roll
-// (termasuk nada tiap DERIZ), audio clip di timeline, dan isi tiap plugin DERIZ (audio sample, garis start, zoom, knob, nyala/mati).
+// (termasuk nada tiap DERIZ), audio clip di timeline, isi tiap plugin DERIZ (audio sample, garis start, zoom, knob, nyala/mati),
+// dan sesi plugin MPCS (audio upload, hasil edit nada, knob).
 // Juga disimpan: setelan efek tiap track (Reverb, EQ, Filter, Supersaw) dan Automation Clip (kurva + knob yang diotomasi).
 const r3p = v => Math.round(v * 1e3) / 1e3;
 function projectSnapshot() {
@@ -1913,7 +1915,9 @@ function projectSnapshot() {
       ...(fxs.length ? {fx: fxs} : {}),
     });
   });
-  return {data: {v: 1, bpm: BPM, bars: BARS, ...(getMasterPitch() ? {mp: getMasterPitch()} : {}), ...(getNoteColor() ? {nc: getNoteColor()} : {}), tracks}, clips};
+  const mp = mpcsExport();   // sesi plugin MPCS (audio upload + hasil edit nada + knob): satu per project
+  if (mp) clips.mpcs = encodeWav(mp.buf);
+  return {data: {v: 1, bpm: BPM, bars: BARS, ...(mp ? {mpcs: mp.data} : {}), ...(getMasterPitch() ? {mp: getMasterPitch()} : {}), ...(getNoteColor() ? {nc: getNoteColor()} : {}), tracks}, clips};
 }
 function clearProject() {
   if (playing) pausePlay();
@@ -1928,12 +1932,15 @@ function clearProject() {
 async function projectRestore(rec) {
   const d = rec.data; if (!d || d.v !== 1) throw new Error('format project tidak dikenal');
   const ctx = audio(), clipMap = {}, dBufs = {};
+  let mpcsBuf = null;
   for (const [k, blob] of Object.entries(rec.clips || {})) {
     const buf = await ctx.decodeAudioData(await blob.arrayBuffer());
-    if (k[0] === 'd') dBufs[k] = buf;   // audio sample DERIZ (bukan clip timeline)
+    if (k === 'mpcs') mpcsBuf = buf;   // audio sesi MPCS
+    else if (k[0] === 'd') dBufs[k] = buf;   // audio sample DERIZ (bukan clip timeline)
     else clipMap[k] = addBuffer(buf);
   }
   clearProject();
+  mpcsImport(mpcsBuf && d.mpcs ? mpcsBuf : null, d.mpcs).catch(console.error);   // analisis jalan di latar; tidak menahan pembukaan project
   setBpm(d.bpm || 120);
   setMasterPitch(+d.mp || 0);   // Pitch Project ikut tersimpan di file project
   setNoteColor(typeof d.nc === 'string' ? d.nc : null);   // warna nada piano roll (pilihan Color) ikut tersimpan di file project

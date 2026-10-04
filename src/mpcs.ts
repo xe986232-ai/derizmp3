@@ -87,6 +87,17 @@ function fillColumns(c: CanvasRenderingContext2D, x0: number, step: number, tops
 
 let root: HTMLElement | null = null, openFn: (() => void) | null = null;
 
+// Sesi MPCS ikut tersimpan di file project: audio asli (dikirim main.ts sebagai WAV) + hasil edit nada, posisi knob, dan rentang tampilan.
+// Analisis pitch (pt) tidak disimpan: dihitung ulang dari audio yang sama saat project dibuka, lalu nada hasil edit dipasang menimpa hasil analisis.
+export interface MpcsSaved { name: string; notes: Note[]; kv: Controls; lo: number; hi: number }
+let exportFn: (() => { data: MpcsSaved; buf: AudioBuffer } | null) | null = null;
+let importFn: ((buf: AudioBuffer | null, saved?: MpcsSaved) => Promise<void>) | null = null;
+export const mpcsExport = (): { data: MpcsSaved; buf: AudioBuffer } | null => (exportFn ? exportFn() : null);
+export async function mpcsImport(buf: AudioBuffer | null, saved?: MpcsSaved): Promise<void> {   // buf null = kosongkan sesi (project tanpa MPCS)
+  if (!root) { if (!buf) return; build(); }
+  await importFn?.(buf, saved);
+}
+
 // Dibuka dari tombol + di halaman Plugin pada panel efek (fx-rack.ts): pilih "MPCS" di card pilihan.
 export function openMpcs(): void {
   if (!root) build();
@@ -393,34 +404,49 @@ function build(): void {
   function setBusy(on: boolean): void { busy.hidden = !on; }
 
   // ---------- muat & analisis ----------
-  async function load(f: File): Promise<void> {
-    if (!isAudio(f)) { stat.textContent = 'File bukan audio'; return; }
+  let loadTok = 0;   // muatan yang lebih baru membatalkan yang lama (upload baru / project dibuka saat analisis masih jalan)
+  async function loadWith(get: () => Promise<{ buf: AudioBuffer; name: string }>, saved?: MpcsSaved): Promise<void> {
+    const my = ++loadTok;
     stopPlay(); enable(false); setBusy(true); empty.hidden = true; stat.textContent = 'Membaca audio';
     try {
       ac ??= new AudioContext();
-      const buf = await ac.decodeAudioData(await f.arrayBuffer());
+      const { buf, name } = await get();
+      if (my !== loadTok) return;
       const mono = toMono(Array.from({ length: buf.numberOfChannels }, (_, c) => buf.getChannelData(c).slice()));
       stat.textContent = 'Menganalisis 0%';
       const r = await job({ type: 'analyze', x: mono, sr: buf.sampleRate }, [mono.buffer]);
-      const notes: Note[] = r.notes, pt: PitchTrack = r.pt;
-      snapTargets(notes); resetKnobs();   // target = semiton terdekat (hysteresis); Center 0% jadi audio belum berubah sampai knob diputar
+      if (my !== loadTok) return;
+      let notes: Note[] = r.notes; const pt: PitchTrack = r.pt;
+      if (saved) { notes = saved.notes.map(n => ({ ...n })); kv = { ...DEFAULT_CONTROLS, ...saved.kv }; paintKnobs(); }   // project dibuka: pakai nada & knob hasil edit, bukan hasil analisis mentah
+      else { snapTargets(notes); resetKnobs(); }   // target = semiton terdekat (hysteresis); Center 0% jadi audio belum berubah sampai knob diputar
       let lo = 48, hi = 72;
-      if (notes.length) {
+      if (saved && Number.isFinite(saved.lo) && Number.isFinite(saved.hi)) { lo = saved.lo; hi = saved.hi; }
+      else if (notes.length) {
         lo = Math.floor(Math.min(...notes.map(n => Math.min(n.midi, n.target)))) - 3; hi = Math.ceil(Math.max(...notes.map(n => Math.max(n.midi, n.target)))) + 3;
         while (hi - lo < 23) { lo--; hi++; }
         if (hi - lo > 84) { const c = (hi + lo) >> 1; lo = c - 42; hi = c + 42; }
       }
       const sorted = Array.from(pt.rms).sort((a, b) => a - b);
-      S = { name: f.name.replace(/\.[^.]+$/, ''), sr: buf.sampleRate, dur: buf.duration, pt, notes, orig: buf, out: null, lo, hi, ref: sorted[Math.floor(sorted.length * .95)] || 0.1, pk: buildPeaks(buf) };
+      S = { name, sr: buf.sampleRate, dur: buf.duration, pt, notes, orig: buf, out: null, lo, hi, ref: sorted[Math.floor(sorted.length * .95)] || 0.1, pk: buildPeaks(buf) };
       sel = -1; all = false; paintAll(); dirty = true; playPos = 0; ph.style.transform = 'translateX(0)';
       pps = Math.max(40, Math.min(400, scroll.clientWidth / Math.max(1, buf.duration)));
       scroll.scrollLeft = 0; zy = 1; layout(); basePps = pps; info(); enable(true);
       if (notes.length) { const mt = notes.reduce((a, n) => a + n.target, 0) / notes.length; scroll.scrollTop = Math.max(0, yOf(mt) - viewH / 2); drawKeys(); drawOv(); } else scroll.scrollTop = 0;
     } catch (err) {
+      if (my !== loadTok) return;
       S = null; empty.hidden = false; draw(); stat.textContent = 'Gagal memuat audio';
       console.error(err);
-    } finally { setBusy(false); }
+    } finally { if (my === loadTok) setBusy(false); }
   }
+  async function load(f: File): Promise<void> {
+    if (!isAudio(f)) { stat.textContent = 'File bukan audio'; return; }
+    await loadWith(async () => ({ buf: await ac!.decodeAudioData(await f.arrayBuffer()), name: f.name.replace(/\.[^.]+$/, '') }));
+  }
+  exportFn = () => S ? { data: { name: S.name, notes: S.notes.map(n => ({ ...n })), kv: { ...kv }, lo: S.lo, hi: S.hi }, buf: S.orig } : null;
+  importFn = async (buf, saved) => {
+    if (buf && saved) { await loadWith(async () => ({ buf, name: saved.name || 'Audio' }), saved); return; }
+    loadTok++; stopPlay(); S = null; sel = -1; all = false; resetKnobs(); enable(false); setBusy(false); empty.hidden = false; draw(); info();   // project tanpa MPCS: sesi lama dikosongkan
+  };
 
   // ---------- render hasil (di Worker), lalu putar ----------
   async function ensureRendered(): Promise<AudioBuffer | null> {
