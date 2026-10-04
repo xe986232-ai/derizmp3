@@ -49,8 +49,8 @@ const EFFECTS: EffectDef[] = [
   {
     type: 'reverb', name: 'Reverb',
     params: [
-      { key: 'mix', label: 'Mix', def: 0.3, fmt: v => Math.round(v * 100) + '%' },
-      { key: 'size', label: 'Size', def: 0.4, fmt: v => reverbSeconds(v).toFixed(1) + ' s' }
+      { key: 'mix', label: 'Mix', hint: 'Mix (campuran reverb)', def: 0.3, fmt: v => Math.round(v * 100) + '%' },
+      { key: 'size', label: 'Size', hint: 'Size (lama gema)', def: 0.4, fmt: v => reverbSeconds(v).toFixed(1) + ' s' }
     ]
   },
   {
@@ -384,6 +384,33 @@ function paintEq(card: HTMLElement, fx: Fx): void {
   specKick();
 }
 
+// ---------- Reverb: unit ala "tape" (panel hitam dengan dua reel + kurva gema di atas, panel putih dengan knob Mix besar di bawah) ----------
+const RV_REEL = (cx: number): string => `<g class="rv__reel"><circle cx="${cx}" cy="32" r="22"/><circle cx="${cx}" cy="32" r="5"/>` +
+  [0, 120, 240].map(a => { const r = a * Math.PI / 180, x1 = cx + Math.sin(r) * 7, y1 = 32 - Math.cos(r) * 7, x2 = cx + Math.sin(r) * 19, y2 = 32 - Math.cos(r) * 19; return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`; }).join('') + `</g>`;
+function rvKnob(d: EffectDef, fx: Fx, key: string, cap: string, cls: string): string {
+  const p = d.params.find(x => x.key === key)!;
+  return `<div class="fxc__cell rv__cell ${cls}"><div class="knob fxk"><div class="knob-inner">` +
+    `<div role="slider" tabindex="0" class="knob-input" data-k="${p.key}" aria-label="${d.name} ${p.label}" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${fx.v[p.key]}">` +
+    `<div class="knobwheel">${knobSvg}</div></div></div></div><span class="fxc__label">${cap}</span></div>`;
+}
+function reverbHtml(fx: Fx, d: EffectDef): string {
+  return `<div class="rv"><div class="rv__unit"><div class="rv__top"><svg viewBox="0 0 240 64" aria-hidden="true">` +
+    `<path class="rv__tape" d="M60 54 Q60 61 67 61 H173 Q180 61 180 54"/>${RV_REEL(60)}${RV_REEL(180)}<path class="rv__dec" d=""/></svg></div>` +
+    `<div class="rv__main"><span class="rv__wm" aria-hidden="true">REVERB</span>` +
+    rvKnob(d, fx, 'size', 'Size', 'rv__small') + rvKnob(d, fx, 'mix', 'Mix', 'rv__big') +
+    `<div class="rv__lcd" aria-hidden="true"><span class="rv__k">DECAY</span><b data-v="size"></b><span class="rv__k">MIX</span><b data-v="mix"></b></div></div></div></div>`;
+}
+function paintRv(card: HTMLElement, fx: Fx): void {
+  const d = defOf('reverb');
+  card.querySelectorAll<HTMLElement>('.rv__lcd [data-v]').forEach(e => { const p = d.params.find(x => x.key === e.dataset.v); if (p) e.textContent = p.fmt(fx.v[p.key]); });
+  const path = card.querySelector<SVGPathElement>('.rv__dec'); if (!path) return;
+  // kurva gema: amplitudo meluruh eksponensial selama RT60 (jendela 5 detik), digambar simetris di antara dua reel
+  const rt = reverbSeconds(fx.v.size), N = 32, x0 = 90, W = 60, top: string[] = [], bot: string[] = [];
+  for (let i = 0; i <= N; i++) { const t = i / N, a = Math.exp(-6.9 * (t * 5) / rt), x = (x0 + t * W).toFixed(1); top.push(`${x} ${(32 - 17 * a).toFixed(1)}`); bot.unshift(`${x} ${(32 + 17 * a).toFixed(1)}`); }
+  path.setAttribute('d', 'M' + top.join(' L') + ' L' + bot.join(' L') + ' Z');
+  path.style.opacity = String(0.4 + 0.6 * Math.max(0, Math.min(1, fx.v.mix)));
+}
+
 function cardHtml(fx: Fx, i: number): string {
   if (fx.type === 'mpcs') {   // MPCS: kartu ringkas (judul + buka + titik tiga); isinya ada di jendela MPCS
     return `<section class="fxc fxc--mpcs" data-fx="${fx.id}" data-kind="plugin" style="--i:${i}" aria-label="MPCS">` +
@@ -407,14 +434,14 @@ function cardHtml(fx: Fx, i: number): string {
     ? `<div class="fxc__tabs" role="tablist" aria-label="Kategori ${d.name}">` +
       tabs.map((t, k) => `<button type="button" role="tab" class="fxc__tab" data-tab="${k}" aria-selected="${k === cur}">${t}</button>`).join('') + `</div>`
     : '';
-  const body = fx.type === 'deriz' ? derizHtml(fx) : fx.type === 'eq' ? eqHtml(fx, d) : tabs.length
+  const body = fx.type === 'deriz' ? derizHtml(fx) : fx.type === 'eq' ? eqHtml(fx, d) : fx.type === 'reverb' ? reverbHtml(fx, d) : tabs.length
     ? tabs.map((t, k) => `<div class="fxc__knobs fxc__panel" role="tabpanel" data-tab="${k}"${k === cur ? '' : ' hidden'}>${d.params.filter(p => p.tab === t).map(p => cellHtml(d, fx, p)).join('')}</div>`).join('')
     : `<div class="fxc__knobs">${d.params.map(p => cellHtml(d, fx, p)).join('')}</div>`;
-  return `<section class="fxc${fx.on ? '' : ' is-off'}${fx.min ? ' is-min' : ''}${tabs.length ? ' has-tabs' : ''}${fx.type === 'deriz' ? ' fxc--deriz' : ''}${fx.type === 'eq' ? ' fxc--eq' : ''}" data-fx="${fx.id}" data-kind="${pageOf(fx.type)}" style="--i:${i}" aria-label="${d.name}">` +
+  return `<section class="fxc${fx.on ? '' : ' is-off'}${fx.min ? ' is-min' : ''}${tabs.length ? ' has-tabs' : ''}${fx.type === 'deriz' ? ' fxc--deriz' : ''}${fx.type === 'eq' ? ' fxc--eq' : ''}${fx.type === 'reverb' ? ' fxc--rv' : ''}" data-fx="${fx.id}" data-kind="${pageOf(fx.type)}" style="--i:${i}" aria-label="${d.name}">` +
     `<header class="fxc__head"><h3 class="fxc__name"><button type="button" class="fxc__title" aria-expanded="${!fx.min}" title="Klik untuk minimize / maximize">${d.name}</button></h3>${tabBar}` +
     (fx.type === 'deriz' ? `<button type="button" class="fxc__pat" aria-haspopup="menu" aria-expanded="false" aria-label="Pattern: pilih pattern untuk diisi DERIZ" title="Masuk ke pattern">${ICON_PAT}</button>` : '') +
     `<button type="button" class="fxc__pwr" role="switch" aria-checked="${fx.on}" aria-label="${d.name} nyala / mati" title="Nyala / mati"></button>` +
-    (fx.type === 'deriz' || fx.type === 'eq' ? `<button type="button" class="fxc__pop" aria-label="Buka ${d.name} di tengah layar" title="Maximize (buka di tengah layar)">${ICON_POP}</button><button type="button" class="fxc__close" aria-label="Tutup ${d.name}" title="Tutup (Esc)">${ICON_X}</button>` : '') +
+    (fx.type === 'deriz' || fx.type === 'eq' || fx.type === 'reverb' ? `<button type="button" class="fxc__pop" aria-label="Buka ${d.name} di tengah layar" title="Maximize (buka di tengah layar)">${ICON_POP}</button><button type="button" class="fxc__close" aria-label="Tutup ${d.name}" title="Tutup (Esc)">${ICON_X}</button>` : '') +
     (d.synth && fx.type !== 'deriz' ? '' : `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi ${d.name}" title="Opsi">${ICON_MORE}</button>`) + `</header>` +
     `<div class="fxc__collapse"><div class="fxc__body">${body}</div></div></section>`;
 }
@@ -513,19 +540,19 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   const clearOvAnim = (): void => ov.getAnimations({ subtree: true }).forEach(an => an.cancel());
   function openOverlay(card: HTMLElement): void {
     if (ovOpen?.card === card) return;
-    const fx = find(card); if (!fx || (fx.type !== 'deriz' && fx.type !== 'delay' && fx.type !== 'eq')) return;
+    const fx = find(card); if (!fx || (fx.type !== 'deriz' && fx.type !== 'delay' && fx.type !== 'eq' && fx.type !== 'reverb')) return;
     if (ovOpen) closeOverlay(true);
     clearOvAnim();   // animasi tutup sebelumnya (fill: forwards) jangan menahan opacity 0 di buka berikutnya
     closePicker(true); closeMenu(true); hideTip();
     const ph = document.createElement('div');
-    ph.className = 'fxc-ph'; ph.dataset.fx = String(fx.id); ph.dataset.kind = fx.type === 'eq' ? 'effect' : 'plugin';
+    ph.className = 'fxc-ph'; ph.dataset.fx = String(fx.id); ph.dataset.kind = fx.type === 'eq' || fx.type === 'reverb' ? 'effect' : 'plugin';
     ph.innerHTML = `<span>${defOf(fx.type).name} terbuka di tengah layar</span><button type="button" class="fxc-ph__btn">Kembalikan</button>`;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     card.replaceWith(ph);
     fx.min = false; card.classList.remove('is-min');   // di overlay selalu terbuka penuh
     card.querySelector('.fxc__title')?.setAttribute('aria-expanded', 'true');
     ovSlot.replaceChildren(card);
-    ovWin.classList.toggle('is-delay', fx.type === 'delay'); ovWin.classList.toggle('is-eq', fx.type === 'eq'); ovWin.setAttribute('aria-label', defOf(fx.type).name);
+    ovWin.classList.toggle('is-delay', fx.type === 'delay'); ovWin.classList.toggle('is-eq', fx.type === 'eq'); ovWin.classList.toggle('is-rv', fx.type === 'reverb'); ovWin.setAttribute('aria-label', defOf(fx.type).name);
     ov.hidden = false;
     ovOpen = { card, ph, opener };
     document.addEventListener('keydown', onOvKey, true);
@@ -535,6 +562,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     }
     ovWin.focus({ preventScroll: true });
     if (fx.type === 'delay') { paintAll(card, fx); if (!meterRaf) meterRaf = requestAnimationFrame(meterTick); return; }
+    if (fx.type === 'reverb') { paintAll(card, fx); return; }
     if (fx.type === 'eq') { paintAll(card, fx); requestAnimationFrame(() => { if (card.isConnected) paintEq(card, fx); }); return; }   // ukuran canvas baru pasti setelah jendela tampil
     buildKb(card);
     paintDeriz(card, fx);
@@ -1031,6 +1059,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
       paintCtl(k, fx.v[p.key], p, d.name, fx.v);
     });
     if (fx.type === 'eq') paintEq(card, fx);
+    if (fx.type === 'reverb') paintRv(card, fx);
   };
 
   function addEffect(type: FxType): void {
@@ -1158,6 +1187,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     paintCtl(el, v, p, defOf(fx.type).name, fx.v);
     if (fx.type === 'delay') delaySync(fx, p, before, v);
     if (fx.type === 'eq') { const c = el.closest<HTMLElement>('.fxc'); if (c) paintEq(c, fx); }
+    if (fx.type === 'reverb') { const c = el.closest<HTMLElement>('.fxc'); if (c) paintRv(c, fx); }
     if (cur) applyAudio(cur);
     if (fx.type === 'deriz') kbParams(fx);
     if (!tip.hidden) showTip(el, fmtOf(fx, p, v));
@@ -1575,6 +1605,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     if (el) paintCtl(el, v, p, defOf(fx.type).name, fx.v);
     if (fx.type === 'delay') delaySync(fx, p, before, v);
     if (fx.type === 'eq') { const c = cardById(fx.id); if (c) paintEq(c, fx); }
+    if (fx.type === 'reverb') { const c = cardById(fx.id); if (c) paintRv(c, fx); }
     applyAudio(track);
     if (fx.type === 'deriz') kbParams(fx);
   }
