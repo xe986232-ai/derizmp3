@@ -1801,31 +1801,39 @@ wsEl.addEventListener('wheel', e => {
   dy = Math.max(-24, Math.min(24, dy));
   zoomTo(zoomTarget * Math.exp(-dy * 0.008), e.clientX);
 }, {passive: false});
-// Pinch dua jari di layar sentuh
+// Pinch dua jari di layar sentuh.
+// Selama jari bergerak, timeline HANYA diskalakan lewat CSS transform (tanpa hitung ulang layout / ruler / grid).
+// BAR_W, left/width pattern, ruler, dan scroll diterapkan SEKALI saat jari dilepas (zoomNow), lalu transform dibuang di tugas yang sama (tidak ada frame antara).
 let pinch = null;
 const tdist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+const tmid = t => (t[0].clientX + t[1].clientX) / 2;
 wsEl.addEventListener('touchstart', e => {
   if (document.documentElement.classList.contains('is-pat-jelly')) return;   // pattern terangkat (Record Mode): cubit dua jari = zoom pattern, bukan timeline
-  if (e.touches.length === 2) { pinch = {d: tdist(e.touches), bar: BAR_W}; wsEl.style.overflow = 'hidden'; dismissAdd(true); }
+  if (e.touches.length === 2) {
+    const cx0 = tmid(e.touches), tl0 = tlEl.getBoundingClientRect().left;
+    pinch = {d: tdist(e.touches), bar: BAR_W, cx0, cx: cx0, tl0, u0: cx0 - tl0, s: 1, on: false};   // u0 = titik timeline di bawah jari saat mulai
+    wsEl.style.overflow = 'hidden'; dismissAdd(true);
+  }
 }, {passive: true});
 wsEl.addEventListener('touchmove', e => {
   if (!pinch || e.touches.length !== 2) return;
   if (document.documentElement.classList.contains('is-pat-jelly')) return;
   if (e.cancelable) e.preventDefault();
-  zoomPinchRaf(pinch.bar * tdist(e.touches) / pinch.d, (e.touches[0].clientX + e.touches[1].clientX) / 2);
+  const next = clampBar(pinch.bar * tdist(e.touches) / pinch.d);
+  pinch.s = next / pinch.bar; pinch.cx = tmid(e.touches);
+  if (!pinch.on) { pinch.on = true; tlEl.style.transformOrigin = '0 0'; tlEl.style.willChange = 'transform'; }
+  tlEl.style.transform = 'translateX(' + (pinch.cx - pinch.tl0 - pinch.s * pinch.u0) + 'px) scaleX(' + pinch.s + ')';   // titik u0 tetap di bawah jari (ikut geser)
 }, {passive: false});
-// Maksimal satu setZoom per frame saat cubit; sisa gerakan jari di antara frame digabung (nilai terakhir yang dipakai)
-let zoomPend = null, zoomPendRaf = 0;
-function zoomPinchRaf(next, clientX) {
-  zoomPend = {next, clientX};
-  if (!zoomPendRaf) zoomPendRaf = requestAnimationFrame(zoomPinchFlush);
+function pinchCommit() {
+  const p = pinch; if (!p) return; pinch = null;
+  if (p.on) {
+    tlEl.style.transform = ''; tlEl.style.transformOrigin = ''; tlEl.style.willChange = '';   // harus dibuang dulu: setZoom membaca getBoundingClientRect
+    zoomNow(p.bar * p.s, p.cx0);
+    if (p.cx !== p.cx0) wsEl.scrollBy({left: p.cx0 - p.cx, behavior: 'instant'});   // ikut geseran jari selama cubit
+  }
+  wsEl.style.overflow = '';
 }
-function zoomPinchFlush() {
-  if (zoomPendRaf) { cancelAnimationFrame(zoomPendRaf); zoomPendRaf = 0; }
-  const p = zoomPend; zoomPend = null;
-  if (p) zoomNow(p.next, p.clientX);
-}
-const endPinch = e => { if (pinch && e.touches.length < 2) { zoomPinchFlush(); pinch = null; wsEl.style.overflow = ''; } };
+const endPinch = e => { if (pinch && e.touches.length < 2) pinchCommit(); };
 wsEl.addEventListener('touchend', endPinch);
 wsEl.addEventListener('touchcancel', endPinch);
 // ===== Undo / Redo: riwayat pattern (buat, geser, panjangkan, salin, bagi, hapus, ubah nama) =====
