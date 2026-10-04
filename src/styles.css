@@ -1702,3 +1702,28 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .derizov .fxc--eq .eq__bar{padding:12px 16px 14px}
 .derizov .fxc--eq .eq__knobs{padding:4px 8px 0}
 @media (prefers-reduced-motion:reduce){.eq__band{transition:none}}
+
+/* ---------- HP landscape (tinggi layar pendek): Equalizer & Delay diperkecil supaya muat utuh tanpa terpotong ---------- */
+@media (max-height:520px){
+  .derizov{padding:max(6px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
+  /* Delay: lebar jendela mengikuti tinggi layar (panel 630:340), jadi tinggi totalnya selalu muat */
+  .derizov .derizov__win.is-delay{width:min(680px,100%,calc((100dvh - 74px) * 1.853 + 20px))}
+  .derizov .fxc--delay{padding:5px 8px 7px}
+  .derizov .fxc--delay .fxc__head{min-height:22px}
+  .derizov .fxc--delay .dly{margin-top:3px}
+  /* Equalizer: bar band + knob jadi satu baris pendek di bawah grafik */
+  .derizov .derizov__win.is-eq{width:min(620px,100%)}
+  .fxc--eq .eq{padding:4px 0 2px}
+  .fxc--eq .eq__cv,.derizov .fxc--eq .eq__cv{height:clamp(104px,calc(100dvh - 158px),250px)}
+  .fxc--eq .eq__bar,.derizov .fxc--eq .eq__bar{flex-direction:row;align-items:center;gap:10px;padding:6px 10px}
+  .fxc--eq .eq__bands{flex:0 0 auto;width:min(230px,46%)}
+  .fxc--eq .eq__band{height:22px;font-size:9px;gap:3px}
+  .fxc--eq .eq__band i{width:6px;height:6px;box-shadow:0 0 0 1.5px rgba(255,255,255,.7)}
+  .fxc--eq .eq__knobs,.derizov .fxc--eq .eq__knobs{flex:1;min-width:0;padding:0}
+  .fxc--eq .fxk,.derizov .fxc--eq .fxk{width:34px;height:34px}
+  .fxc--eq .fxc__cell{gap:3px}
+  .fxc--eq .eq__bar .fxc__label{font-size:8.5px}
+  .fxc--eq .eq__val{display:none}
+  .derizov .fxc--eq{padding:5px 8px 8px}
+  .derizov .fxc--eq .fxc__head{min-height:22px}
+}
