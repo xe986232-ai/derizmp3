@@ -15,7 +15,7 @@ export const MDX_MODEL = 'Kim_Vocal_2' as const;   // alternatif dengan ukuran s
 const MODEL_SR = 44100;
 export interface MdxResult { vocal: Float32Array[]; instrumental: Float32Array[] }
 
-// Porsi progres: muat model 0-8%, demix 8-90%, tulis stem 90-95%, decode + resample balik 95-100%.
+// Porsi progres (di luar unduhan model, lihat DL_SHARE): muat model 0-8%, demix 8-90%, tulis stem 90-95%, decode + resample balik 95-100%.
 function stageProgress(p: SeparationProgress): number {
   const f = Math.max(0, Math.min(1, p.fraction));
   switch (String(p.stage)) {
@@ -29,7 +29,7 @@ function stageProgress(p: SeparationProgress): number {
 // Paket hanya melaporkan "muat model" 0 -> 1 tanpa progres unduhan, jadi 67 MB pertama terlihat macet di 0%. Model diunduh sendiri di sini (dengan
 // progres) ke CacheStorage yang sama dengan yang dibaca loadModel() (nama cache + kunci URL mengikuti paket), jadi loadModel() langsung kena cache.
 // Kalau cache tidak ada / gagal ditulis, loadModel() mengunduh sendiri seperti biasa (tanpa progres).
-const MODEL_CACHE = 'web-demix2-models', MODEL_BYTES = 67_000_000;
+const MODEL_CACHE = 'web-demix2-models', MODEL_BYTES = 67_000_000, DL_SHARE = 0.35;
 async function prefetchModel(url: string, onFrac: (f: number) => void): Promise<void> {
   if (typeof caches === 'undefined') return;
   let cache: Cache;
@@ -71,13 +71,14 @@ async function run(chs: Float32Array[], sr: number, onProgress?: (p: number) => 
   const lib = await import('web-audio-separation');
   // Separator baru per pekerjaan: instance-nya menyimpan hasil terakhir (primarySource / secondarySource tidak di-reset), jadi dipakai ulang
   // untuk file lain akan mengembalikan stem file pertama. Model tetap tidak diunduh ulang (CacheStorage).
+  let dl = 0;   // porsi bar untuk unduhan model: 0 kalau model sudah di-cache, DL_SHARE begitu unduhan dimulai (sisa bar dibagi untuk tahap lain)
   let stage = '';
   const status = (msg: string): void => { if (msg !== stage) { stage = msg; onStatus?.(msg); } };
   const sep = lib.createSeparator(MDX_MODEL, {
     common: {
       sampleRate: MODEL_SR, logLevel: 'error',
       onProgress: p => {
-        report(stageProgress(p));
+        report(dl + (1 - dl) * stageProgress(p));
         if (String(p.stage) === 'demixing') status('Memisahkan vokal & instrumen…');
       },
     },
@@ -88,7 +89,7 @@ async function run(chs: Float32Array[], sr: number, onProgress?: (p: number) => 
     urls.push(inUrl);
     status('Mengunduh model AI… 0%');
     await prefetchModel(lib.MODEL_REGISTRY[MDX_MODEL].downloadUrl, f => {
-      report(0.08 * f); status('Mengunduh model AI… ' + Math.floor(f * 100) + '%');
+      dl = DL_SHARE; report(dl * f); status('Mengunduh model AI… ' + Math.floor(f * 100) + '%');
     });
     status('Memuat model AI…');
     await sep.loadModel();
