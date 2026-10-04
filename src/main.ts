@@ -7,6 +7,7 @@ import { initTrackReorder } from './track-reorder';
 import { initFxRack } from './fx-rack';
 import { initRecordJelly } from './record-jelly';
 import { initPatternJelly } from './pattern-jelly';
+import { initClipIconMenu } from './clip-icon-menu';
 import { initLandscape } from './landscape';
 import { initMenuPanel, setProjectIO } from './menu-panel';
 import { hasSynth, startVoice, releaseVoice, playNote, stopAllSynth } from './synth-engine';
@@ -315,6 +316,7 @@ window.addEventListener('scroll', closeMenu, true);
 
 // Klik area kosong di timeline -> kartu "Add" -> pattern kosong
 const lanesEl = document.getElementById('lanes');
+initClipIconMenu(lanesEl);   // tap 3x icon microphone pada audio clip -> card putih "Tempo"
 let addCard = null, ghost = null;
 function dismissAdd(instant) {
   const els = [addCard, ghost]; addCard = ghost = null;
