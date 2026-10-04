@@ -5,6 +5,7 @@ import { initEffectsPanel } from './effects-panel';
 import { initTrackMeters } from './track-meters';
 import { initTrackReorder } from './track-reorder';
 import { initFxRack, holdSpec } from './fx-rack';
+import { setHostBpm } from './delay-fx';
 import { initRecordJelly } from './record-jelly';
 import { initPatternJelly } from './pattern-jelly';
 import { initClipIconMenu } from './clip-icon-menu';
@@ -1607,6 +1608,7 @@ function setBpm(v) {
   if (v === BPM) return;
   const ratio = SEC_PER_BAR / (240 / v);   // panjang bar lama / panjang bar baru
   BPM = v; SEC_PER_BAR = 240 / v;
+  setHostBpm(v);   // Delay mode HOST ikut BPM project
   applySyncSamples();   // pattern dengan Sync all sample: Speed DERIZ ikut BPM baru
   const clips = [...lanesEl.querySelectorAll('.pattern[data-clip]')];
   if (clips.length) {

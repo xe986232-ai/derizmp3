@@ -6,7 +6,7 @@
 // Efek / plugin baru cukup ditambah ke EFFECTS (nama, parameter) dan ke applyAudio().
 // DERIZ: plugin sampler dengan canvas audio (spektrogram, zoom) + upload file; nada (tuts + Pitch) dan kecepatan (Speed) terpisah (deriz-synth.ts).
 
-import { setReverb, setEq, setFilter, setDeesser, reverbSeconds, eqDb, filterMode, filterHz, deesserHz, deesserThr, deesserMaxDb, decodeStandalone, trackInput } from './audio-engine';
+import { setReverb, setEq, setFilter, setDeesser, setDelay, delayLevels, reverbSeconds, eqDb, filterMode, filterHz, deesserHz, deesserThr, deesserMaxDb, decodeStandalone, trackInput } from './audio-engine';
 import { DerizSynth } from './deriz-synth';
 import { dbgSched, dbgSent, dbgSpec } from './audio-debug';
 import { openMpcs } from './mpcs';
@@ -14,14 +14,16 @@ import { isAudio, ACCEPT as AUDIO_ACCEPT } from './audio-upload-card';
 import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } from './synth-engine';
 import { velGain } from './velocity';
 import { getMasterPitch, onMasterPitch } from './master-pitch';
+import type { DelayParams } from './delay-fx';
+import { DELAY_PARAMS, delayHtml, paintDk, paintDelayUi, paintMeter, linkedPartner } from './delay-ui';
 
-type FxType = 'reverb' | 'eq' | 'filter' | 'deesser' | 'supersaw' | 'deriz' | 'mpcs';
+type FxType = 'reverb' | 'eq' | 'filter' | 'deesser' | 'delay' | 'supersaw' | 'deriz' | 'mpcs';
 // DERIZ: audio yang di-upload ke canvas plugin (buffer disimpan untuk tahap berikutnya; peaks + max khusus untuk menggambar waveform)
 interface DerizData { name: string; dur: number; buf: AudioBuffer; start: number; zoom: number; view: number; spec: Spec | null; busy?: number; }   // start: posisi garis start, 0..1 dari durasi; zoom >= 1: jendela terlihat = [view, view + 1/zoom] dari durasi; spec: spektrogram (null selagi dianalisis, busy = persen)
 // Spektrogram: frames x ROWS nilai dB (0..255 = -100..0 dBFS), baris 0 = frekuensi terendah (skala log); lut = palet warna yang disesuaikan dengan level puncak
 interface Spec { frames: number; hop: number; fmin: number; fmax: number; d: Uint8Array; lut: Uint32Array }   // cols: cache min/max per kolom pixel device (dihitung ulang hanya kalau lebar canvas berubah)   // start: posisi garis start, 0..1 dari durasi
 interface Fx { id: number; type: FxType; on: boolean; min: boolean; tab?: number; v: Record<string, number>; deriz?: DerizData; tok?: number; }
-interface Param { key: string; label: string; hint?: string; def: number; fmt: (v: number) => string; bipolar?: boolean; slider?: boolean; tab?: string; }   // tab: nama kategori (plugin dengan tab)   // bipolar: arc dari tengah (seperti knob pan); slider: slider vertikal, bukan knob
+interface Param { key: string; label: string; hint?: string; def: number; fmt: (v: number) => string; bipolar?: boolean; slider?: boolean; tab?: string; fmtFx?: (v: number, all: Record<string, number>) => string; steps?: number | ((all: Record<string, number>) => number); dk?: boolean; }   // fmtFx: format yang bergantung parameter lain; steps: posisi diskrit (0 = kontinu); dk: knob gaya Delay   // tab: nama kategori (plugin dengan tab)   // bipolar: arc dari tengah (seperti knob pan); slider: slider vertikal, bukan knob
 interface EffectDef { type: FxType; name: string; params: Param[]; synth?: boolean; }   // synth: plugin instrumen (otomatis ada di track synth)
 
 const svg = (inner: string, size = 20) =>
@@ -73,6 +75,7 @@ const EFFECTS: EffectDef[] = [
       { key: 'amount', label: 'Amount', hint: 'Amount (peredaman maksimum)', def: 0.5, fmt: v => v < 0.005 ? 'Off' : '\u2212' + Math.round(deesserMaxDb(v)) + ' dB' }
     ]
   },
+  { type: 'delay', name: 'Delay', params: DELAY_PARAMS },   // Delay stereo (delay-fx.ts) dengan panel sendiri (delay-ui.ts), dibuka di tengah layar seperti DERIZ
   { type: 'deriz', name: 'DERIZ', params: [
     { key: 'speed', label: 'Speed', hint: 'Speed (kecepatan putar)', def: 0.5, bipolar: true, fmt: v => derizSpeed(v).toFixed(2) + '×' },
     { key: 'pitch', label: 'Pitch', hint: 'Pitch (nada, semitone)', def: 0.5, bipolar: true, fmt: v => { const n = derizPitch(v); return (n > 0 ? '+' : '') + n + ' st'; } },
@@ -103,11 +106,12 @@ let cur: string | null = null, seq = 0;
 
 function applyAudio(track: string): void {
   const rack = racks.get(track) ?? [];
-  const r = rack.find(f => f.type === 'reverb'), e = rack.find(f => f.type === 'eq'), fl = rack.find(f => f.type === 'filter'), ds = rack.find(f => f.type === 'deesser'), s = rack.find(f => f.type === 'supersaw');
+  const r = rack.find(f => f.type === 'reverb'), e = rack.find(f => f.type === 'eq'), fl = rack.find(f => f.type === 'filter'), ds = rack.find(f => f.type === 'deesser'), dl = rack.find(f => f.type === 'delay'), s = rack.find(f => f.type === 'supersaw');
   setReverb(track, r ? { on: r.on, mix: r.v.mix, size: r.v.size } : null);
   setEq(track, e ? { on: e.on, low: e.v.low, mid: e.v.mid, high: e.v.high } : null);
   setFilter(track, fl ? { on: fl.on, cutoff: fl.v.cutoff, reso: fl.v.reso } : null);
   setDeesser(track, ds ? { on: ds.on, freq: ds.v.freq, thresh: ds.v.thresh, amount: ds.v.amount } : null);
+  setDelay(track, dl ? { on: dl.on, ...(dl.v as Omit<DelayParams, 'on'>) } : null);
   setSupersaw(track, s ? { on: s.on, detune: s.v.detune, mix: s.v.mix, level: s.v.level, cutoff: s.v.cutoff, reso: s.v.reso, attack: s.v.attack, decay: s.v.decay, sustain: s.v.sustain, release: s.v.release } : null);
 }
 
@@ -137,8 +141,10 @@ function paintSlider(el: HTMLElement, v: number, p: Param, name: string): void {
   el.setAttribute('aria-valuenow', v.toFixed(3));
   el.setAttribute('aria-valuetext', `${name} ${p.label} ${p.fmt(v)}`);
 }
-const paintCtl = (el: HTMLElement, v: number, p: Param, name: string): void => (p.slider ? paintSlider : paintKnob)(el, v, p, name);
-const CTL = '.knob-input, .vsl';   // knob atau slider vertikal
+const paintCtl = (el: HTMLElement, v: number, p: Param, name: string, all?: Record<string, number>): void => (p.dk ? paintDk(el, v, p, all ?? {}) : (p.slider ? paintSlider : paintKnob)(el, v, p, name));
+const CTL = '.knob-input, .vsl, .dk';   // knob, slider vertikal, atau knob Delay
+const fmtOf = (fx: Fx, p: Param, v: number): string => (p.fmtFx ? p.fmtFx(v, fx.v) : p.fmt(v));
+const snapVal = (fx: Fx, p: Param, n: number): number => { const k = typeof p.steps === 'function' ? p.steps(fx.v) : p.steps ?? 0; return k > 1 ? Math.round(n * (k - 1)) / (k - 1) : n; };   // posisi diskrit (Analog, mode)
 
 const cellHtml = (d: EffectDef, fx: Fx, p: Param): string => p.slider
   ? `<div class="fxc__cell"><div role="slider" tabindex="0" class="vsl" data-k="${p.key}" aria-orientation="vertical" aria-label="${d.name} ${p.label}" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${fx.v[p.key]}">` +
@@ -343,6 +349,15 @@ function cardHtml(fx: Fx, i: number): string {
       `<button type="button" class="fxc__open fxc__mp" aria-label="Buka MPCS" title="Buka MPCS">${ICON_OPEN}</button>` +
       `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi MPCS" title="Opsi">${ICON_MORE}</button></header></section>`;
   }
+  if (fx.type === 'delay') {   // kartu ringkas di panel; panel penuh (.dly) baru tampil saat kartu dibuka di overlay
+    return `<section class="fxc fxc--delay${fx.on ? '' : ' is-off'}${fx.min ? ' is-min' : ''}" data-fx="${fx.id}" data-kind="effect" style="--i:${i}" aria-label="Delay">` +
+      `<header class="fxc__head"><h3 class="fxc__name"><button type="button" class="fxc__title" aria-expanded="${!fx.min}" title="Klik untuk minimize / maximize">Delay</button></h3>` +
+      `<button type="button" class="fxc__pwr" role="switch" aria-checked="${fx.on}" aria-label="Delay nyala / mati" title="Nyala / mati"></button>` +
+      `<button type="button" class="fxc__pop" aria-label="Buka Delay di tengah layar" title="Buka di tengah layar">${ICON_POP}</button>` +
+      `<button type="button" class="fxc__close" aria-label="Tutup Delay" title="Tutup (Esc)">${ICON_X}</button>` +
+      `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi Delay" title="Opsi">${ICON_MORE}</button></header>` +
+      `<div class="fxc__collapse"><div class="fxc__body">${delayHtml()}</div></div></section>`;
+  }
   const d = { ...defOf(fx.type) }; if (fx.type === 'deriz') { const no = derizNo(fx.id); if (no > 1) d.name += ' ' + no; }
   const tabs = tabNames(d), cur = Math.min(fx.tab ?? 0, Math.max(0, tabs.length - 1));
   // plugin dengan kategori: tab di baris judul (tinggi card tetap sama dengan Reverb / EQ), tiap tab punya panel kontrolnya sendiri
@@ -456,18 +471,19 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   const clearOvAnim = (): void => ov.getAnimations({ subtree: true }).forEach(an => an.cancel());
   function openOverlay(card: HTMLElement): void {
     if (ovOpen?.card === card) return;
-    const fx = find(card); if (!fx || fx.type !== 'deriz') return;
+    const fx = find(card); if (!fx || (fx.type !== 'deriz' && fx.type !== 'delay')) return;
     if (ovOpen) closeOverlay(true);
     clearOvAnim();   // animasi tutup sebelumnya (fill: forwards) jangan menahan opacity 0 di buka berikutnya
     closePicker(true); closeMenu(true); hideTip();
     const ph = document.createElement('div');
     ph.className = 'fxc-ph'; ph.dataset.fx = String(fx.id); ph.dataset.kind = 'plugin';
-    ph.innerHTML = '<span>DERIZ terbuka di tengah layar</span><button type="button" class="fxc-ph__btn">Kembalikan</button>';
+    ph.innerHTML = `<span>${defOf(fx.type).name} terbuka di tengah layar</span><button type="button" class="fxc-ph__btn">Kembalikan</button>`;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     card.replaceWith(ph);
     fx.min = false; card.classList.remove('is-min');   // di overlay selalu terbuka penuh
     card.querySelector('.fxc__title')?.setAttribute('aria-expanded', 'true');
     ovSlot.replaceChildren(card);
+    ovWin.classList.toggle('is-delay', fx.type === 'delay'); ovWin.setAttribute('aria-label', defOf(fx.type).name);
     ov.hidden = false;
     ovOpen = { card, ph, opener };
     document.addEventListener('keydown', onOvKey, true);
@@ -476,13 +492,23 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
       ovWin.animate([{ opacity: 0, transform: 'translateY(14px) scale(.94)' }, { opacity: 1, transform: 'none' }], { duration: 380, easing: 'cubic-bezier(.34,1.3,.64,1)' });
     }
     ovWin.focus({ preventScroll: true });
+    if (fx.type === 'delay') { paintAll(card, fx); if (!meterRaf) meterRaf = requestAnimationFrame(meterTick); return; }
     buildKb(card);
     paintDeriz(card, fx);
   }
+  // meter output Delay: dibaca tiap frame selama jendela Delay terbuka
+  let meterRaf = 0;
+  const meterTick = (t: number): void => {
+    meterRaf = 0;
+    const o = ovOpen, fx = o && find(o.card); if (!o || !fx || fx.type !== 'delay' || !cur) return;
+    paintMeter(o.card, delayLevels(cur), t);
+    meterRaf = requestAnimationFrame(meterTick);
+  };
   // discard = daftar efek sedang diganti / track dihapus: kartu tidak perlu dikembalikan ke panel
   function closeOverlay(instant = false, discard = false): void {
     const o = ovOpen; if (!o) return;
     kbReleaseAll();
+    cancelAnimationFrame(meterRaf); meterRaf = 0;
     const fid = find(o.card)?.id;
     if (fid !== undefined) window.setTimeout(() => { const e = synths.get(fid); if (e && !ovOpen) { synths.delete(fid); void e.p.then(x => x.dispose(), () => { /* gagal dibuat */ }); } }, 800);   // lepas worklet setelah ekor suara habis
     ovOpen = null;
@@ -492,7 +518,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
       if (!ovOpen) { ov.hidden = true; clearOvAnim(); }   // kalau sudah dibuka lagi selagi animasi tutup jalan, jangan disembunyikan
       if (discard || !o.ph.isConnected) { o.card.querySelectorAll('canvas').forEach(c => ro.unobserve(c)); o.card.remove(); o.ph.remove(); return; }
       o.ph.replaceWith(o.card);
-      const fx = find(o.card); if (fx) paintDeriz(o.card, fx);
+      const fx = find(o.card); if (fx?.type === 'deriz') paintDeriz(o.card, fx);
       if (o.opener?.isConnected) o.opener.focus({ preventScroll: true });
     };
     if (instant || reduce) { finish(); return; }
@@ -956,9 +982,10 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   // ---------- kartu efek ----------
   const paintAll = (card: HTMLElement, fx: Fx) => {
     const d = defOf(fx.type);
+    if (fx.type === 'delay') paintDelayUi(card, fx.v);   // dulu: LCD menentukan knob mana yang dipegang angkanya
     card.querySelectorAll<HTMLElement>(CTL).forEach(k => {
       const p = d.params.find(x => x.key === k.dataset.k)!;
-      paintCtl(k, fx.v[p.key], p, d.name);
+      paintCtl(k, fx.v[p.key], p, d.name, fx.v);
     });
   };
 
@@ -968,6 +995,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     d.params.forEach(p => { v[p.key] = p.def; });
     const fx: Fx = { id: ++seq, type, on: true, min: false, v };
     if (type === 'deriz') { if (!plainOwner.has(cur)) plainOwner.set(cur, fx.id); autoOpen = { track: cur, id: fx.id }; }   // langsung terbuka di tengah layar seperti DERIZ bawaan
+    if (type === 'delay') autoOpen = { track: cur, id: fx.id };   // Delay juga: panelnya terlalu besar untuk kolom efek
     racks.set(cur, [...fxs(), fx]);
     applyAudio(cur);
     list.insertAdjacentHTML('beforeend', cardHtml(fx, 0));
@@ -1067,14 +1095,27 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   };
   let touched: AutoTarget | null = null, touchCb: ((t: AutoTarget) => void) | null = null;
   const nameOf = (fx: Fx): string => { const n = defOf(fx.type).name; if (fx.type !== 'deriz') return n; const no = derizNo(fx.id); return no > 1 ? n + ' ' + no : n; };
+  // Delay: Link menggeser pasangan filter, LCD / label ikut diperbarui
+  function delaySync(fx: Fx, p: Param, before: number, v: number): void {
+    const card = cardById(fx.id); if (!card) return;
+    const lk = linkedPartner(fx.v, p.key, before, v);
+    if (lk) {
+      fx.v[lk.key] = lk.val;
+      const q = defOf('delay').params.find(x => x.key === lk.key)!, e = card.querySelector<HTMLElement>(`[data-k="${lk.key}"]`);
+      if (e) paintCtl(e, lk.val, q, 'Delay', fx.v);
+    }
+    paintDelayUi(card, fx.v);
+  }
   const setVal = (el: HTMLElement, fx: Fx, p: Param, n: number) => {
-    const v = Math.max(0, Math.min(1, n));
+    const before = fx.v[p.key];
+    const v = snapVal(fx, p, Math.max(0, Math.min(1, n)));
     fx.v[p.key] = v;
     if (cur) { touched = { track: cur, fxId: fx.id, key: p.key, fxName: nameOf(fx), label: p.label }; touchCb?.(touched); }   // knob ini jadi calon Automation Clip
-    paintCtl(el, v, p, defOf(fx.type).name);
+    paintCtl(el, v, p, defOf(fx.type).name, fx.v);
+    if (fx.type === 'delay') delaySync(fx, p, before, v);
     if (cur) applyAudio(cur);
     if (fx.type === 'deriz') kbParams(fx);
-    if (!tip.hidden) showTip(el, p.fmt(v));
+    if (!tip.hidden) showTip(el, fmtOf(fx, p, v));
   };
 
   // tooltip hover (mouse): nama knob + nilai sekarang, untuk knob yang punya hint
@@ -1082,7 +1123,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     if (e.pointerType !== 'mouse' || drag) return;
     const el = (e.target as Element).closest<HTMLElement>(CTL); if (!el || el.contains(e.relatedTarget as Node | null)) return;
     const c = ctx(el); if (!c?.p.hint) return;
-    showTip(el, c.p.hint + ': ' + c.p.fmt(c.fx.v[c.p.key]));
+    showTip(el, c.p.hint + ': ' + fmtOf(c.fx, c.p, c.fx.v[c.p.key]));
   });
   onRoots('pointerout', e => {
     if (drag) return;
@@ -1096,7 +1137,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     el.classList.add('is-dragging'); el.setPointerCapture(e.pointerId); e.preventDefault();
     el.focus({ preventScroll: true });
     if (drag.box) setVal(el, c.fx, c.p, sliderVal(drag.box, e.clientY));   // slider: pegangan langsung lompat ke titik yang disentuh
-    showTip(el, c.p.fmt(c.fx.v[c.p.key]));
+    showTip(el, fmtOf(c.fx, c.p, c.fx.v[c.p.key]));
   });
   onRoots('pointermove', e => {
     if (!drag) return;
@@ -1110,7 +1151,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   onRoots('dblclick', e => {
     const el = (e.target as Element).closest<HTMLElement>(CTL); if (!el) return;
     const c = ctx(el); if (!c) return;
-    showTip(el, c.p.fmt(c.p.def), 900); setVal(el, c.fx, c.p, c.p.def);
+    showTip(el, fmtOf(c.fx, c.p, c.p.def), 900); setVal(el, c.fx, c.p, c.p.def);
   });
   onRoots('keydown', e => {
     const el = (e.target as Element).closest<HTMLElement>(CTL); if (!el) return;
@@ -1118,8 +1159,9 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     if (!up && !down) return;
     const c = ctx(el); if (!c) return;
     e.preventDefault(); e.stopPropagation();   // panah tidak ikut memicu mundur / maju milik DAW
-    setVal(el, c.fx, c.p, Math.round((c.fx.v[c.p.key] + (up ? 0.02 : -0.02)) * 100) / 100);
-    showTip(el, c.p.fmt(c.fx.v[c.p.key]), 900);
+    const k = typeof c.p.steps === 'function' ? c.p.steps(c.fx.v) : c.p.steps ?? 0, d = k > 1 ? 1 / (k - 1) : 0.02;   // posisi diskrit: satu langkah
+    setVal(el, c.fx, c.p, Math.round((c.fx.v[c.p.key] + (up ? d : -d)) * 1000) / 1000);
+    showTip(el, fmtOf(c.fx, c.p, c.fx.v[c.p.key]), 900);
   });
   onRoots('blur', e => { if ((e.target as Element).matches?.(CTL) && !drag) hideTip(); }, true);
 
@@ -1292,6 +1334,21 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   const endNav = (): void => { nd?.nav.classList.remove('is-dragging'); nd = null; };
   onRoots('pointerup', endNav); onRoots('pointercancel', endNav);
 
+  function setOpt(card: HTMLElement, ob: HTMLButtonElement): void {
+    const fx = find(card); if (!fx || fx.type !== 'delay' || !cur) return;
+    const key = ob.dataset.opt!, p = defOf('delay').params.find(x => x.key === key)!;
+    const val = ob.dataset.toggle ? ((fx.v[key] ?? 0) >= 0.5 ? 0 : 1) : +ob.dataset.val!;
+    fx.v[key] = val;
+    touched = { track: cur, fxId: fx.id, key, fxName: nameOf(fx), label: p.label }; touchCb?.(touched);
+    if (key === 'sync') {   // pindah antara note dan ms: waktu menyesuaikan ke posisi note terdekat
+      const tp = defOf('delay').params.find(x => x.key === 'time')!, tv = snapVal(fx, tp, fx.v.time);
+      fx.v.time = tv;
+      const e = card.querySelector<HTMLElement>('[data-k="time"]'); if (e) paintCtl(e, tv, tp, 'Delay', fx.v);
+    }
+    paintAll(card, fx);
+    applyAudio(cur);
+  }
+
   // ---------- DERIZ: card miring 3D mengikuti kursor + kilau mengikuti arah cahaya (mouse saja; mati saat reduced-motion / drag garis start) ----------
   const untilt = (c: HTMLElement): void => { c.classList.remove('is-tilting'); c.style.setProperty('--rx', '0deg'); c.style.setProperty('--ry', '0deg'); c.style.setProperty('--mx', '50%'); c.style.setProperty('--my', '0%'); };
   onRoots('pointermove', e => {
@@ -1309,6 +1366,8 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   onRoots('click', e => {
     const t = e.target as Element, card = t.closest<HTMLElement>('.fxc');
     if (!card || t.matches('.deriz__file')) return;
+    const ob = t.closest<HTMLButtonElement>('.dly__opt'); if (ob) { setOpt(card, ob); return; }   // tombol mode Delay (Ø, Ping Pong, Dual, sumber tempo, Link)
+    if (t.closest('.dly__sum')) { openOverlay(card); return; }
     if (t.closest('.fxc__mp')) { openMpcs(); return; }
     if (t.closest('.fxc__pop')) { if (ovOpen?.card === card) closeOverlay(); else openOverlay(card); return; }
     if (t.closest('.deriz__up, .deriz__swap')) { card.querySelector<HTMLInputElement>('.deriz__file')!.click(); return; }
@@ -1388,16 +1447,18 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   const paramOf = (fx: Fx, key: string): Param | undefined => defOf(fx.type).params.find(x => x.key === key);
   function paramInfo(track: string, fxId: number, key: string): AutoParamInfo | null {
     const fx = fxOf(track, fxId), p = fx && paramOf(fx, key); if (!fx || !p) return null;
-    return { fxName: nameOf(fx), label: p.label, def: p.def, bipolar: !!p.bipolar, fmt: p.fmt };
+    return { fxName: nameOf(fx), label: p.label, def: p.def, bipolar: !!p.bipolar, fmt: v => fmtOf(fx, p, v) };
   }
   function setParam(track: string, fxId: number, key: string, n: number): void {
     const fx = fxOf(track, fxId), p = fx && paramOf(fx, key); if (!fx || !p) return;
     if (drag && drag.fx === fx && drag.p === p) return;   // pengguna sedang memegang knob ini: jangan direbut
-    const v = Math.max(0, Math.min(1, n));
+    const v = snapVal(fx, p, Math.max(0, Math.min(1, n)));
     if (Math.abs((fx.v[key] ?? 0) - v) < 1e-4) return;
+    const before = fx.v[key];
     fx.v[key] = v;
     const el = cardById(fx.id)?.querySelector<HTMLElement>(`[data-k="${key}"]`);
-    if (el) paintCtl(el, v, p, defOf(fx.type).name);
+    if (el) paintCtl(el, v, p, defOf(fx.type).name, fx.v);
+    if (fx.type === 'delay') delaySync(fx, p, before, v);
     applyAudio(track);
     if (fx.type === 'deriz') kbParams(fx);
   }
