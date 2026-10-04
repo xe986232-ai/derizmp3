@@ -11,7 +11,7 @@ import { initClipIconMenu } from './clip-icon-menu';
 import { STRETCH_MIN, STRETCH_MAX } from './time-stretch';
 import { initLandscape } from './landscape';
 import { initMenuPanel, setProjectIO } from './menu-panel';
-import { dbgRun } from './audio-debug';
+import { dbgRun, dbgZoom } from './audio-debug';
 import { mpcsExport, mpcsImport } from './mpcs';
 import { setExportIO } from './export-audio';
 import { hasSynth, startVoice, releaseVoice, playNote, stopAllSynth } from './synth-engine';
@@ -1749,12 +1749,14 @@ function setZoomVar(k, v) { if (zoomVarCache[k] !== v) { zoomVarCache[k] = v; do
 function setZoom(next, clientX) {
   next = Math.max(BAR_MIN, Math.min(BAR_MAX, next));
   if (Math.abs(next - BAR_W) < 0.01) return;
+  const T0 = performance.now(); let T = T0; const lap = n => { const t = performance.now(); dbgZoom(n, t - T); T = t; };   // Debug Audio: waktu per tahap
   const ratio = next / BAR_W;
   if (clientX == null) {
     const r = wsEl.getBoundingClientRect(), tl = document.querySelector('.tracklist').offsetWidth;
     clientX = r.left + tl + (r.width - tl) / 2;
   }
   const x = clientX - tlEl.getBoundingClientRect().left;   // titik di timeline yang dijaga tetap diam
+  lap('1 baca ukuran (bisa paksa layout)');
   dismissAdd(true);
   BAR_W = next;
   const rs = document.documentElement.style;
@@ -1763,15 +1765,20 @@ function setZoom(next, clientX) {
   setZoomVar('--sub-a', BAR_W >= 160 ? .045 : 0);
   setZoomVar('--mid-a', BAR_W >= 640 ? .035 : 0);
   setZoomVar('--fine-a', BAR_W >= 1280 ? .03 : 0);
+  lap('2 variabel CSS');
   document.querySelectorAll('.pattern').forEach(p => {
     p.style.left = pl(p) * ratio + 'px';
     p.style.width = pw(p) * ratio + 'px';
   });
-  sizeRuler();
+  lap('3 left/width semua pattern');
+  sizeRuler(); lap('4 sizeRuler');
   wsEl.scrollTo({left: wsEl.scrollLeft + x * (ratio - 1), behavior: 'instant'});
-  paintRuler(true);
+  lap('5 scrollTo (paksa layout)');
+  paintRuler(true); lap('6 paintRuler');
   if (selPat) handleSide(selPat);
-  renderPlayhead();
+  lap('7 handleSide');
+  renderPlayhead(); lap('8 playhead');
+  dbgZoom('0 setZoom total', performance.now() - T0);
 }
 // Zoom halus: target diperbarui, lalu BAR_W "mengejar" target tiap frame (interpolasi eksponensial)
 const clampBar = v => Math.max(BAR_MIN, Math.min(BAR_MAX, v));
@@ -1827,9 +1834,13 @@ wsEl.addEventListener('touchmove', e => {
 function pinchCommit() {
   const p = pinch; if (!p) return; pinch = null;
   if (p.on) {
+    const tc = performance.now();
     tlEl.style.transform = ''; tlEl.style.transformOrigin = ''; tlEl.style.willChange = '';   // harus dibuang dulu: setZoom membaca getBoundingClientRect
     zoomNow(p.bar * p.s, p.cx0);
     if (p.cx !== p.cx0) wsEl.scrollBy({left: p.cx0 - p.cx, behavior: 'instant'});   // ikut geseran jari selama cubit
+    const te = performance.now(); dbgZoom('9 lepas jari: skrip commit', te - tc);
+    queueMicrotask(() => dbgZoom('A observer (microtask) setelah commit', performance.now() - te));   // MutationObserver pattern jalan sebelum ini
+    requestAnimationFrame(() => requestAnimationFrame(() => dbgZoom('B jeda total sampai 2 frame setelah lepas jari', performance.now() - tc)));
   }
   wsEl.style.overflow = '';
 }

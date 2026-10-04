@@ -28,10 +28,12 @@ interface Agg {
   stall: number; stallMax: number;                                         // timer main thread molor
   loaf: number; loafScript: number; loafRender: number; loafMax: number;   // frame lambat (> 50 ms) dari browser: jumlah, total ms di skrip, total ms render, terlama
   spec: number; specMs: number;                                            // irisan analisis spektrogram yang jalan sejak Play (ms total)
+  zm: Map<string, { n: number; ms: number; max: number }>;                 // tahap-tahap zoom (setZoom / lepas jari)
+  loafForced: number;                                                      // total ms layout/gaya yang DIPAKSA oleh skrip (bagian dari 'skrip' di frame lambat)
   cul: Map<string, { n: number; ms: number; max: number }>;                // skrip penyebab frame lambat
 }
 const fresh = (): Agg => ({ n: 0, sum: 0, max: 0, maxAt: 0, late: 0, vmax: 0, iamax: 0, full: 0, light: 0, hit: 0, nOn: 0, nLate: 0, ltSum: 0, ltMax: 0,
-  stealH: 0, stealT: 0, noBuf: 0, penDrop: 0, trN: 0, trSlow: 0, trMax: 0, lateSkip: 0, spK: 0, spO: 0, pcK: 0, pcO: 0, spFrom: 0, spTo: 0, wait: 0, waitMax: 0, clamp: 0, clampMax: 0, tr: -1, bud: 0, sched: 0, schedMin: Infinity, schedTight: 0, schedLate: 0, stall: 0, stallMax: 0, loaf: 0, loafScript: 0, loafRender: 0, loafMax: 0, spec: 0, specMs: 0, cul: new Map() });
+  stealH: 0, stealT: 0, noBuf: 0, penDrop: 0, trN: 0, trSlow: 0, trMax: 0, lateSkip: 0, spK: 0, spO: 0, pcK: 0, pcO: 0, spFrom: 0, spTo: 0, wait: 0, waitMax: 0, clamp: 0, clampMax: 0, tr: -1, bud: 0, sched: 0, schedMin: Infinity, schedTight: 0, schedLate: 0, stall: 0, stallMax: 0, loaf: 0, loafScript: 0, loafRender: 0, loafMax: 0, spec: 0, specMs: 0, zm: new Map(), loafForced: 0, cul: new Map() });
 
 let on = false, a = fresh(), t0 = 0, ctxRef: BaseAudioContext | null = null, ctxBase: { dur: number; ev: number } | null = null;
 let events: string[] = [];
@@ -84,6 +86,11 @@ export function dbgSent(waitMs: number, lateSec: number): void {   // dipanggil 
   a.wait++; if (waitMs > a.waitMax) a.waitMax = waitMs;
   if (lateSec > 0.005) { a.clamp++; if (lateSec * 1000 > a.clampMax) a.clampMax = lateSec * 1000; }
 }
+export function dbgZoom(stage: string, ms: number): void {   // dipanggil dari zoom timeline: waktu tiap tahap (tidak berefek kalau debug mati)
+  if (!on) return;
+  const c = a.zm.get(stage) ?? { n: 0, ms: 0, max: 0 };
+  c.n++; c.ms += ms; if (ms > c.max) c.max = ms; a.zm.set(stage, c);
+}
 export function dbgSpec(sliceMs: number, held: boolean): void {   // dipanggil tiap irisan analisis spektrogram; held = sedang Play (ditahan setelah irisan ini)
   if (!on) return;
   a.spec++; a.specMs += sliceMs;
@@ -97,7 +104,7 @@ export function dbgRun(startCtx: number, ctx?: BaseAudioContext): void {   // ti
   render();
 }
 // Frame lambat (Long Animation Frames, Chrome 123+): browser sendiri menyebut skrip mana yang menahan main thread, jadi macet 700 ms bisa dicari asalnya.
-interface LoafScript { duration: number; invoker?: string; sourceFunctionName?: string; sourceURL?: string; sourceCharPosition?: number; type?: string }
+interface LoafScript { duration: number; forcedStyleAndLayoutDuration?: number; invoker?: string; sourceFunctionName?: string; sourceURL?: string; sourceCharPosition?: number; type?: string }
 interface Loaf extends PerformanceEntry { renderStart: number; scripts: LoafScript[]; blockingDuration?: number }
 let loafObs: PerformanceObserver | null = null;
 function onLoaf(list: PerformanceObserverEntryList): void {
@@ -105,6 +112,7 @@ function onLoaf(list: PerformanceObserverEntryList): void {
   for (const e of list.getEntries() as Loaf[]) {
     if (e.duration < 50) continue;
     const sc = e.scripts ?? [], sum = sc.reduce((x, y) => x + y.duration, 0), render = e.renderStart ? Math.max(0, e.startTime + e.duration - e.renderStart) : 0;
+    a.loafForced += sc.reduce((x, y) => x + (y.forcedStyleAndLayoutDuration || 0), 0);
     a.loaf++; a.loafScript += sum; a.loafRender += render; if (e.duration > a.loafMax) a.loafMax = e.duration;
     const top = [...sc].sort((x, y) => y.duration - x.duration)[0];
     const name = top ? ((top.invoker || top.sourceFunctionName || top.type || '?') + ' @' + (top.sourceURL ?? '').split('/').pop()?.slice(0, 24) + ':' + (top.sourceCharPosition ?? '')) : 'tanpa skrip (layout / render)';
@@ -154,6 +162,11 @@ function lines(): string[] {
     L.push('Frame lambat > 50 ms: ' + a.loaf + 'x' + (a.loaf ? ' (terlama ' + ms(a.loafMax) + ', total skrip ' + ms(a.loafScript) + ', render ' + ms(a.loafRender) + ')' : ''));
     for (const [k, c] of [...a.cul].sort((x, y) => y[1].ms - x[1].ms).slice(0, 3)) L.push('  ' + k.slice(0, 70) + ': ' + c.n + 'x, total ' + ms(c.ms) + ', maks ' + ms(c.max));
   } else L.push('Frame lambat: tidak didukung di browser ini');
+  if (a.loafForced) L.push('  dari skrip frame lambat, layout/gaya yang dipaksa: ' + ms(a.loafForced));
+  if (a.zm.size) {
+    L.push('Zoom, tahap (jumlah, total, maks):');
+    for (const [k, c] of [...a.zm].sort((x, y) => (x[0] < y[0] ? -1 : 1))) L.push('  ' + k + ': ' + c.n + 'x, ' + ms(c.ms) + ', maks ' + ms(c.max));
+  }
   L.push('Analisis spektrogram sejak Play: ' + a.spec + ' irisan (' + ms(a.specMs) + ')');
   const u = underrun();
   L.push(u ? 'Underrun browser: ' + u.ev + 'x (' + ms(u.dur) + ' senyap)' : 'Underrun browser: tidak didukung di browser ini');
