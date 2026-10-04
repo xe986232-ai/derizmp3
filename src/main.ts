@@ -935,13 +935,20 @@ let kbdCont = null, kbdOct = 3, kbdN = 0;
 const baseMidi = () => 12 + 12 * kbdOct;   // C3 = 48 (C4 = 60 = middle C)
 
 // --- suara (WebAudio, polifonik) ---
-let actx = null, master = null, guardOut = null; const voices = new Map();
+let actx = null, master = null, guardOut = null, loudDry = null, loudWet = null; const voices = new Map();
+function applyLoud(now) {   // Pengaturan > Master Loudness: nyala = lewat compressor + limiter, mati = jalur kering
+  if (!loudDry) return;
+  const on = document.documentElement.dataset.loud !== 'off', t = actx.currentTime;
+  if (now) { loudWet.gain.value = on ? 1 : 0; loudDry.gain.value = on ? 0 : 1; return; }
+  loudWet.gain.setTargetAtTime(on ? 1 : 0, t, 0.01); loudDry.gain.setTargetAtTime(on ? 0 : 1, t, 0.01);
+}
+document.addEventListener('loudchange', () => applyLoud(false));
 function audio() {
   if (!actx) {
     // latencyHint 'playback': buffer keluaran lebih besar, jadi lonjakan beban sesaat (banyak VST / reverb) tidak langsung jadi gresek.
     // Kualitas suara tidak berubah; harganya jeda (latency) sedikit lebih besar. Browser yang tidak mendukung mengabaikan opsi ini.
     actx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'playback' });
-    master = actx.createGain(); master.gain.value = 1;   // unity gain: suara asli, tanpa kompresor
+    master = actx.createGain(); master.gain.value = 1;   // gain master tetap 1.0; pemadatan suara ada di rantai Master Loudness di bawah
     // Pengaman clipping: lurus sempurna sampai 0.9 (suara asli tidak tersentuh), di atasnya melengkung halus menuju 1.0 (sama dengan limiter lembut
     // tiap plugin DERIZ). Banyak track dijumlah bisa melewati 1.0 dan jadi kresek karena terpotong keras di output; ini menggantinya dengan lengkung halus.
     // Pra-gain 1/4 supaya lengkung menjangkau sampai +-4.0 sebelum terpotong. Tanpa oversampling dan tanpa latency.
@@ -949,7 +956,19 @@ function audio() {
     guardPre.gain.value = 1 / GR;
     for (let i = 0; i < GN; i++) { const x = (i / (GN - 1) * 2 - 1) * GR, ax = Math.abs(x); curve[i] = Math.sign(x) * (ax <= 0.9 ? ax : 0.9 + 0.1 * Math.tanh((ax - 0.9) / 0.1)); }
     guard.curve = curve; guard.oversample = 'none';
-    master.connect(guardPre); guardPre.connect(guard); guard.connect(actx.destination); guardOut = guard;   // guardOut: titik rekam export audio (sama dengan yang sampai ke speaker)
+    // Master Loudness (Pengaturan, bawaan NYALA): supaya output tidak "mentah" / pelan seperti DAW pada umumnya. Dua tahap:
+    //  1) glue compressor (threshold -24 dB, rasio 3:1, knee lebar, attack 15 ms, release 220 ms). DynamicsCompressorNode sudah menambah makeup gain otomatis,
+    //     jadi bagian pelan ikut terangkat dan keseluruhan suara terdengar lebih padat dan keras;
+    //  2) limiter (threshold -2 dB, rasio 20:1, attack cepat) menahan puncak supaya tidak pecah. Pengaman clipping di bawah tetap jadi penjaga terakhir.
+    // Dimatikan = jalur kering (master langsung ke pengaman). Export merekam dari guardOut, jadi hasil export ikut sama dengan yang terdengar.
+    const glue = actx.createDynamicsCompressor(), lim = actx.createDynamicsCompressor();
+    glue.threshold.value = -24; glue.knee.value = 20; glue.ratio.value = 3; glue.attack.value = 0.015; glue.release.value = 0.22;
+    lim.threshold.value = -2; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.1;
+    loudDry = actx.createGain(); loudWet = actx.createGain();
+    master.connect(loudDry); loudDry.connect(guardPre);
+    master.connect(glue); glue.connect(lim); lim.connect(loudWet); loudWet.connect(guardPre);
+    applyLoud(true);
+    guardPre.connect(guard); guard.connect(actx.destination); guardOut = guard;   // guardOut: titik rekam export audio (sama dengan yang sampai ke speaker)
   }
   if (actx.state === 'suspended') actx.resume();
   return actx;

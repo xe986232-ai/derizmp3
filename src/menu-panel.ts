@@ -117,6 +117,12 @@ export function initMenuPanel(): MenuPanel {
               '<button type="button" class="mp__switch" role="switch" aria-checked="false" aria-label="Record Mode" data-rec><i></i></button>' +
             '</div>' +
           '</div>' +
+          '<div class="mp__card mp__item mp__set" style="--i:5">' +
+            '<div class="mp__row">' +
+              '<span class="mp__row__t"><b>Master Loudness</b><small>Output lebih keras &amp; padat (compressor + limiter)</small></span>' +
+              '<button type="button" class="mp__switch" role="switch" aria-checked="true" aria-label="Master Loudness" data-loud><i></i></button>' +
+            '</div>' +
+          '</div>' +
         '</section>' +
       '</div>' +
     '</div>';
@@ -178,6 +184,21 @@ export function initMenuPanel(): MenuPanel {
   let recSaved = false;
   try { recSaved = localStorage.getItem(REC_KEY) === '1'; } catch { /* abaikan */ }
   setRec(recSaved, false);
+
+  // ===== Pengaturan: Master Loudness (atribut data-loud di <html>; main.ts mendengarkan event 'loudchange'). Bawaan NYALA =====
+  const LOUD_KEY = 'derizmp3.masterLoud';
+  const loudBtn = panel.querySelector('[data-loud]') as HTMLButtonElement;
+  const setLoud = (on: boolean, save: boolean): void => {
+    document.documentElement.dataset.loud = on ? 'on' : 'off';
+    loudBtn.classList.toggle('is-on', on);
+    loudBtn.setAttribute('aria-checked', String(on));
+    if (save) { try { localStorage.setItem(LOUD_KEY, on ? '1' : '0'); } catch { /* penyimpanan diblokir: tetap berlaku sampai halaman ditutup */ } }
+    document.dispatchEvent(new CustomEvent('loudchange'));
+  };
+  loudBtn.addEventListener('click', () => setLoud(loudBtn.getAttribute('aria-checked') !== 'true', true));
+  let loudSaved = true;
+  try { loudSaved = localStorage.getItem(LOUD_KEY) !== '0'; } catch { /* abaikan */ }
+  setLoud(loudSaved, false);
 
   // ===== Export: pilihan format (disimpan di browser) + tombol Export Audio =====
   const xfBtns = [...panel.querySelectorAll<HTMLButtonElement>('[data-xfmt]')];
