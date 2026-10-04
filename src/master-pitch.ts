@@ -1,5 +1,5 @@
 // Pitch Project: satu knob di card transport (paling kiri) yang menggeser nada SEMUA isi project yang berplugin (DERIZ + Supersaw).
-// Audio clip di timeline TIDAK ikut (audio-engine.play() tidak membaca nilai ini). Satuan semitone bulat, -12..+12, 0 = normal.
+// Audio clip di timeline TIDAK ikut (audio-engine.play() tidak membaca nilai ini). Satuan semitone dengan ketelitian 0,01 (100 cents), -12..+12, 0 = normal; langkah tombol / roda / panah 0,1, Shift = 1 semitone.
 // Mesin suara berlangganan lewat onMasterPitch: DERIZ menambahkannya ke knob Pitch-nya, Supersaw ke detune osilatornya (nada yang sedang bunyi ikut bergeser).
 
 export const PITCH_MIN = -12, PITCH_MAX = 12;
@@ -10,7 +10,7 @@ const clamp = (v: number, a: number, b: number): number => Math.max(a, Math.min(
 
 export const getMasterPitch = (): number => st;
 export function setMasterPitch(v: number): void {
-  const n = clamp(Math.round(v), PITCH_MIN, PITCH_MAX);
+  const n = Math.round(clamp(v, PITCH_MIN, PITCH_MAX) * 100) / 100;   // ketelitian 0,01 semitone
   if (n === st) return;
   st = n;
   subs.forEach(f => f(n));
@@ -27,7 +27,8 @@ const angleOf = (v: number): number => START + (v - PITCH_MIN) / (PITCH_MAX - PI
 const f2 = (n: number): string => n.toFixed(2);
 const [tx0, ty0] = polar(START), [tx1, ty1] = polar(START + SWEEP);
 const TRACK = `M${f2(tx0)} ${f2(ty0)}A${R} ${R} 0 1 1 ${f2(tx1)} ${f2(ty1)}`;
-const label = (v: number): string => (v > 0 ? '+' : v < 0 ? '\u2212' : '') + Math.abs(v);
+const num = (v: number): string => Math.abs(v).toFixed(2).replace('.', ',');   // 0,10 / 3,00 (format Indonesia)
+const label = (v: number): string => (v > 0 ? '+' : v < 0 ? '\u2212' : '') + num(v);
 
 const ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7.6"/><path d="M12 12L15.4 7.6"/><path d="M12 2.4v1.8M4.4 5.2l1.3 1.2M19.6 5.2l-1.3 1.2"/></svg>';
 
@@ -49,7 +50,7 @@ export function initPitchPanel(btn: HTMLButtonElement): { sync(): void } {
     ui.fill.setAttribute('d', v === 0 ? '' : `M${f2(sx)} ${f2(sy)}A${R} ${R} 0 0 ${v > 0 ? 1 : 0} ${f2(kx)} ${f2(ky)}`);
     ui.dot.setAttribute('cx', f2(kx)); ui.dot.setAttribute('cy', f2(ky));
     ui.ptr.setAttribute('x2', f2(px)); ui.ptr.setAttribute('y2', f2(py));
-    ui.ring.setAttribute('aria-valuenow', String(v)); ui.ring.setAttribute('aria-valuetext', label(v) + ' semitone');
+    ui.ring.setAttribute('aria-valuenow', String(v)); ui.ring.setAttribute('aria-valuestep', '0.1'); ui.ring.setAttribute('aria-valuetext', label(v) + ' semitone');
     ui.val.textContent = label(v);
     ui.reset.disabled = v === 0;
   }
@@ -88,10 +89,12 @@ export function initPitchPanel(btn: HTMLButtonElement): { sync(): void } {
         `<path class="pitch-track" d="${TRACK}"/><path class="pitch-fill"/>` +
         `<circle class="pitch-body" cx="${C}" cy="${C}" r="34"/><line class="pitch-ptr" x1="${C}" y1="${C}" x2="${C}" y2="${C - 27}"/>` +
         `<circle class="pitch-dot" r="6.5"/></svg>` +
-      `<div class="pitch-val" aria-hidden="true">0</div><div class="pitch-unit">SEMITONE</div>` +
-      `<div class="pitch-row"><button type="button" class="pitch-step" data-d="-1" aria-label="Turun satu semitone">&minus;</button>` +
+      `<div class="pitch-val" aria-hidden="true">0,00</div><div class="pitch-unit">SEMITONE</div>` +
+      `<div class="pitch-row"><button type="button" class="pitch-step" data-d="-0.1" aria-label="Turun 0,1 semitone">&minus;</button>` +
         `<button type="button" class="pitch-reset" aria-label="Reset pitch project">Reset</button>` +
-        `<button type="button" class="pitch-step" data-d="1" aria-label="Naik satu semitone">+</button></div>` +
+        `<button type="button" class="pitch-step" data-d="0.1" aria-label="Naik 0,1 semitone">+</button></div>` +
+      `<div class="pitch-row pitch-row2"><button type="button" class="pitch-step pitch-step1" data-d="-1" aria-label="Turun satu semitone">&minus;1</button>` +
+        `<button type="button" class="pitch-step pitch-step1" data-d="1" aria-label="Naik satu semitone">+1</button></div>` +
       `<div class="pitch-note">Semua plugin (DERIZ, Supersaw) ikut. Audio clip tidak.</div>`;
     document.body.appendChild(p);
     panel = p;
@@ -102,20 +105,20 @@ export function initPitchPanel(btn: HTMLButtonElement): { sync(): void } {
     };
     const { ring, reset } = ui;
 
-    // knob: tarik ke atas / kanan = naik, ke bawah / kiri = turun (6 px per semitone); roda mouse dan panah keyboard juga bisa
+    // knob: tarik ke atas / kanan = naik, ke bawah / kiri = turun (2 px per 0,1 semitone); roda mouse dan panah keyboard juga bisa (Shift = 1 semitone)
     let drag: { x: number; y: number; v: number } | null = null;
     ring.addEventListener('pointerdown', e => {
       if (e.button > 0) return;
       drag = { x: e.clientX, y: e.clientY, v: st }; ring.setPointerCapture(e.pointerId); ring.focus({ preventScroll: true }); e.preventDefault();
     });
-    ring.addEventListener('pointermove', e => { if (drag) setMasterPitch(drag.v + ((drag.y - e.clientY) + (e.clientX - drag.x)) / 6); });
+    ring.addEventListener('pointermove', e => { if (drag) setMasterPitch(Math.round((drag.v + ((drag.y - e.clientY) + (e.clientX - drag.x)) / 20) * 10) / 10); });
     const end = (): void => { drag = null; };
     ring.addEventListener('pointerup', end); ring.addEventListener('pointercancel', end);
     ring.addEventListener('dblclick', () => setMasterPitch(0));
-    ring.addEventListener('wheel', e => { e.preventDefault(); setMasterPitch(st + (e.deltaY < 0 ? 1 : -1)); }, { passive: false });
+    ring.addEventListener('wheel', e => { e.preventDefault(); const dy = e.deltaY || e.deltaX; setMasterPitch(st + (dy < 0 ? 1 : -1) * (e.shiftKey ? 1 : 0.1)); }, { passive: false });
     ring.addEventListener('keydown', e => {
       const m: Record<string, number> = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1, PageUp: 12, PageDown: -12 };
-      if (e.key in m) { e.preventDefault(); setMasterPitch(st + m[e.key]); }
+      if (e.key in m) { e.preventDefault(); const big = e.key.startsWith('Page') || e.shiftKey; setMasterPitch(st + m[e.key] * (big ? 1 : 0.1)); }
       else if (e.key === 'Home') { e.preventDefault(); setMasterPitch(PITCH_MIN); }
       else if (e.key === 'End') { e.preventDefault(); setMasterPitch(PITCH_MAX); }
       else if (e.key === '0' || e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); setMasterPitch(0); }

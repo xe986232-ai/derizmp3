@@ -539,6 +539,8 @@ html.is-dock-dragging,html.is-dock-dragging *{cursor:ns-resize !important;user-s
 .pitch-step,.pitch-reset{border:1px solid rgba(255,255,255,.2);background:#2d2d38;color:#e3e3ec;display:grid;place-items:center;padding:0;touch-action:manipulation;
   transition:transform .25s var(--ease-spring),background-color .2s ease,border-color .2s ease,opacity .2s ease}
 .pitch-step{width:34px;height:34px;border-radius:50%;font-size:20px;font-weight:500;line-height:1}
+.pitch-step1{width:auto;height:26px;min-width:44px;padding:0 10px;border-radius:99px;font-size:12px;font-weight:600}
+.pitch-row2{margin-top:8px}
 .pitch-reset{height:28px;min-width:60px;padding:0 12px;border-radius:99px;font-size:12px;font-weight:600}
 .pitch-step:hover,.pitch-reset:hover:not(:disabled){background:#383846;border-color:rgba(255,255,255,.34)}
 .pitch-step:active,.pitch-reset:active:not(:disabled){transform:scale(.9);transition-duration:.08s}
