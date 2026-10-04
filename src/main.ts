@@ -595,12 +595,93 @@ async function applyClipTempo(el, clipBpm) {
   toast('Tempo ' + (Math.round(clipBpm * 100) / 100) + ' → ' + BPM + ' BPM');
 }
 
-// Tahan icon microphone pada audio clip -> card putih "Tempo"; menu bulat (copy, delete, dst) hilang selama card terbuka
+// ===== Stem Splitter (vokal / instrumen): menu yang sama dengan Tempo (tahan icon microphone), item "Pisahkan Vokal & Instrumen" =====
+// Yang dipisah audio ASLI clip (dataset.src, sebelum di-stretch) di Worker (stem-worker.ts -> stem-split.ts). Hasilnya dua track audio baru
+// tepat di bawah track asal: "<judul> (Vokal)" lalu "<judul> (Instrumen)", dengan posisi / lebar / offset yang sama dengan clip asal.
+// Kalau clip sedang di-stretch (menu Tempo), kedua stem di-stretch dengan faktor yang sama, jadi tetap sejajar dengan project dan tempo-nya bisa disetel lagi.
+// Clip asli tidak diubah. Pemisahan buffer yang sama (mis. track hasil duplikat) dipakai ulang, tidak dihitung dua kali.
+let stemWorker = null, stemSeq = 0;
+const stemJobs = new Map(), stemCache = new Map(), stemBusy = new WeakSet();
+function stemWorkerGet() {
+  if (stemWorker) return stemWorker;
+  stemWorker = new Worker(new URL('./stem-worker.ts', import.meta.url), {type: 'module'});
+  stemWorker.onmessage = e => {
+    const m = e.data, j = stemJobs.get(m.id); if (!j) return;
+    if (m.type === 'progress') j.prog(m.p);
+    else if (m.type === 'done') { stemJobs.delete(m.id); j.ok(m); }
+    else if (m.type === 'error') { stemJobs.delete(m.id); j.err(new Error(m.msg)); }
+  };
+  stemWorker.onerror = () => { stemJobs.forEach(j => j.err(new Error('Pemrosesan audio gagal'))); stemJobs.clear(); stemWorker = null; };
+  return stemWorker;
+}
+function splitBuffer(srcId, onProgress) {   // -> Promise<{v, i}> id buffer vokal / instrumen (panjang dan sample rate sama dengan sumber)
+  let e = stemCache.get(srcId);
+  if (!e) {
+    const buf = getBuffer(srcId), subs = new Set();
+    const chs = Array.from({length: buf.numberOfChannels}, (_, c) => buf.getChannelData(c).slice());
+    const p = new Promise((ok, err) => {
+      const id = ++stemSeq; stemJobs.set(id, {ok, err, prog: x => subs.forEach(f => f(x))});
+      stemWorkerGet().postMessage({type: 'split', id, chs, sr: buf.sampleRate}, chs.map(c => c.buffer));
+    }).then(r => {
+      const mk = y => { const out = audio().createBuffer(y.length, y[0].length, buf.sampleRate); y.forEach((c, i) => out.copyToChannel(c, i)); return addBuffer(out); };
+      return {v: mk(r.vocal), i: mk(r.instrumental)};
+    });
+    e = {p, subs}; stemCache.set(srcId, e); p.catch(() => stemCache.delete(srcId));
+  }
+  e.subs.add(onProgress);
+  return e.p.finally(() => e.subs.delete(onProgress));
+}
+async function splitClipStems(el, onProgress) {
+  if (!el.isConnected || !el.dataset.clip) throw new Error('Clip tidak ditemukan');
+  if (stemBusy.has(el)) throw new Error('Pemisahan clip ini masih berjalan');
+  const curId = +el.dataset.clip, srcId = +(el.dataset.src || curId), cur = getBuffer(curId), src = getBuffer(srcId);
+  if (!cur || !src) throw new Error('Audio clip tidak ditemukan');
+  if (src.numberOfChannels > 2) throw new Error('Hanya audio mono / stereo yang bisa dipisah');
+  stemBusy.add(el);
+  try {
+    const k = cur.duration / src.duration, stretched = Math.abs(k - 1) >= 5e-4, sc = stretched ? 0.8 : 1;   // sisa 20% progres untuk stretch
+    toast('Memisahkan vokal & instrumen…', 0);
+    let st, vId, iId;
+    try { st = await splitBuffer(srcId, p => onProgress(p * sc)); }
+    catch (err) { console.error(err); throw new Error('Gagal memisahkan audio'); }
+    vId = st.v; iId = st.i;
+    if (stretched) {
+      try { [vId, iId] = await Promise.all([stretchClipBuffer(st.v, k), stretchClipBuffer(st.i, k)]); }
+      catch (err) { console.error(err); throw new Error('Gagal menyesuaikan tempo hasil pemisahan'); }
+    }
+    onProgress(1);
+    if (!el.isConnected) { toast('Clip sudah dihapus, hasil pemisahan dibuang'); return; }
+    const lane0 = el.parentElement, cont0 = document.querySelector('.trackheader-container[data-track="' + lane0.dataset.track + '"]');
+    const color = (cont0 && cont0.style.getPropertyValue('--track-color')) || COLORS[0];
+    const title = el.querySelector('.pattern__title').textContent, base = title.slice(0, 28).trim() || 'Audio';
+    const mk =(clip, stemSrc, label, after) => {
+      addTrack({n: 'Audio clip', c: color});   // dibuat di paling bawah, lalu dipindah tepat di bawah track asal (sama seperti duplikat track)
+      const tid = String(trackSeq), cont = document.querySelector('.trackheader-container[data-track="' + tid + '"]'), lane = lanesEl.querySelector('.lane[data-track="' + tid + '"]');
+      if (after.cont) { after.cont.after(cont); after.lane.after(lane); }
+      const name = base + ' (' + label + ')';
+      document.getElementById('track-name-' + tid).textContent = name;
+      cont.querySelector('.trackheader__track-name-button').title = name;
+      cont.querySelector('input[type=range]').setAttribute('aria-label', 'Volume, ' + name);
+      const p = createPattern(lane, {start: pl(el), width: pw(el)}, {clip, off: el.dataset.off || 0, src: stemSrc, bpm: el.dataset.bpm});
+      p.querySelector('.pattern__title').textContent = name;
+      return {cont, lane};
+    };
+    const vt = mk(vId, st.v, 'Vokal', {cont: cont0, lane: lane0});
+    mk(iId, st.i, 'Instrumen', vt);
+    toast('Vokal & instrumen dipisah ke 2 track baru');
+  } catch (err) {
+    toast(err.message || 'Gagal memisahkan audio');   // kartu menu juga menampilkan pesan ini; toast untuk kasus kartu sudah ditutup
+    throw err;
+  } finally { stemBusy.delete(el); }
+}
+
+// Tahan icon microphone pada audio clip -> card putih: "Sesuaikan Tempo" + "Pisahkan Vokal & Instrumen"; menu bulat (copy, delete, dst) hilang selama card terbuka
 let barHidByCard = false, barHideAnim = null;
 initClipIconMenu(lanesEl, {
   getProjectBpm: () => BPM,
   getClipBpm: el => el.dataset.bpm ? +el.dataset.bpm : null,
   applyTempo: (el, bpm) => applyClipTempo(el, bpm),
+  splitStems: (el, onProgress) => splitClipStems(el, onProgress),
   onOpen() {
     closePatMenu();
     if (patBar.hidden) return;

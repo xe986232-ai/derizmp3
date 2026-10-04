@@ -74,8 +74,12 @@ Cara kerja: level band di atas Freq dibaca detektor (attack 0,4 ms, release 30 m
 
 Kode: `src/deesser.ts` (worklet), `src/audio-engine.ts` (`setDeesser`, jalur efek), `src/fx-rack.ts` (kartu + knob). Tes: `node tools/deesser-test.ts`.
 
-## Stem Splitter (vokal / instrumen) — baru modul DSP, belum dipasang di UI
+## Stem Splitter (vokal / instrumen)
 Memisahkan lagu jadi dua stem: **vokal** dan **instrumen**. Vokal + instrumen selalu persis sama dengan aslinya (instrumen = asli - vokal), jadi tidak ada bagian yang hilang.
+
+**Cara pakai di aplikasi:** tahan icon microphone di header audio clip (card yang sama dengan Tempo), pilih **Pisahkan Vokal & Instrumen**. Card menampilkan progres lalu menutup sendiri; hasilnya dua track audio baru tepat di bawah track asal, "<judul> (Vokal)" dan "<judul> (Instrumen)", dengan posisi / lebar / offset sama dengan clip asal. Clip asli tidak diubah. Yang dipisah audio aslinya (sebelum di-stretch); kalau clip sedang di-Tempo, kedua stem di-stretch dengan faktor yang sama sehingga tetap sejajar dengan project. Hanya mono / stereo.
+
+Kode UI: `src/clip-icon-menu.ts` (item menu + tampilan progres), blok "Stem Splitter" di `src/main.ts` (worker, cache, pembuatan track), gaya `.clip-card__stem` / `__bar` di `src/styles.css`.
 
 Pemakaian: `separate(chs, sr, opts?, onProgress?)` dari `src/stem-split.ts`, masukan 1 (mono) atau 2 (stereo) kanal `Float32Array`, hasil `{ vocal, instrumental }` (jumlah kanal dan panjang sama dengan masukan). Opsi: `strength` (0..1, kontras mask, bawaan 0.5), `bassCutoff` (Hz, bawaan 120: di bawahnya kick + bass tetap di instrumen), `chunkSec` (bawaan 12).
 

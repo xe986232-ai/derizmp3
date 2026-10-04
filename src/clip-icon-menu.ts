@@ -1,5 +1,6 @@
-// Tahan icon microphone di header pattern audio clip -> muncul card putih berisi menu "Tempo" (animasi masuk + keluar).
-// Tempo: isi BPM asli audio clip (mis. vokal 126), lalu clip di-stretch (pitch tetap) mengikuti BPM project (mis. 130).
+// Tahan icon microphone di header pattern audio clip -> muncul card putih berisi menu (animasi masuk + keluar):
+//   "Sesuaikan Tempo"           : isi BPM asli audio clip (mis. vokal 126), lalu clip di-stretch (pitch tetap) mengikuti BPM project (mis. 130).
+//   "Pisahkan Vokal & Instrumen": stem splitter; hasilnya dua track audio baru di bawah track ini (card menampilkan progres, lalu menutup sendiri).
 // Icon-nya pseudo-element CSS (.pattern__head::before), jadi tidak bisa diberi listener sendiri:
 // area icon dihitung dari posisi sentuhan relatif ke kiri header (padding 8px + icon 13px + toleransi jari).
 // Tutup card: ketuk di luar, Esc, scroll, atau selesai stretch.
@@ -9,6 +10,7 @@ const HOLD_MS = 450;            // lama menahan
 const HOLD_SLOP = 10;           // px maksimum bergeser selama menahan (lebih dari ini = batal)
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const MENU_LABEL = 'Sesuaikan Tempo';   // menyamakan tempo audio clip dengan BPM project
+const STEM_LABEL = 'Pisahkan Vokal & Instrumen';   // stem splitter
 
 export interface ClipIconMenuHooks {
   onOpen?(pattern: HTMLElement): void;     // card muncul (main.ts menyembunyikan menu bulat)
@@ -16,6 +18,7 @@ export interface ClipIconMenuHooks {
   getProjectBpm(): number;                 // BPM project sekarang
   getClipBpm(pattern: HTMLElement): number | null;   // BPM yang pernah diisi untuk clip ini (null = belum)
   applyTempo(pattern: HTMLElement, bpm: number): Promise<void>;   // stretch clip; lempar Error(pesan) kalau gagal
+  splitStems(pattern: HTMLElement, onProgress: (p: number) => void): Promise<void>;   // pisah vokal / instrumen jadi track baru; p = 0..1; lempar Error(pesan) kalau gagal
 }
 
 export function initClipIconMenu(lanesEl: HTMLElement, hooks: ClipIconMenuHooks): void {
@@ -104,9 +107,9 @@ export function initClipIconMenu(lanesEl: HTMLElement, hooks: ClipIconMenuHooks)
 
     const inner = document.createElement('div'); inner.className = 'clip-card__in';
     c.appendChild(inner);
-    const showTempo = (): void => {
+    // ganti isi card dengan animasi ukuran + fade (dipakai tampilan Tempo, Stem, dan kembali ke menu)
+    const swapTo = (v: HTMLElement): void => {
       const w0 = c.offsetWidth, h0 = c.offsetHeight;
-      const v = tempoView();
       inner.replaceChildren(v);
       place();
       const w1 = c.offsetWidth, h1 = c.offsetHeight;
@@ -114,16 +117,53 @@ export function initClipIconMenu(lanesEl: HTMLElement, hooks: ClipIconMenuHooks)
         c.animate([{width: w0 + 'px', height: h0 + 'px'}, {width: w1 + 'px', height: h1 + 'px'}], {duration: 200, easing: 'cubic-bezier(.2,.9,.3,1)'});
         v.animate([{opacity: 0}, {opacity: 1}], {duration: 160, delay: 50, easing: 'ease-out', fill: 'backwards'});
       }
+    };
+    const showTempo = (): void => {
+      const v = tempoView();
+      swapTo(v);
       const inp = v.querySelector('input') as HTMLInputElement;
       inp.focus({preventScroll: true}); inp.select();
     };
 
+    // --- tampilan 3: progres stem splitter (mulai langsung saat item diketuk; card menutup sendiri kalau selesai) ---
+    const stemView = (): HTMLElement => {
+      const v = document.createElement('div'); v.className = 'clip-card__stem';
+      const title = document.createElement('div'); title.className = 'clip-card__title'; title.textContent = 'Memisahkan vokal & instrumen…';
+      const bar = document.createElement('div'); bar.className = 'clip-card__bar'; bar.setAttribute('role', 'progressbar');
+      bar.setAttribute('aria-label', 'Kemajuan pemisahan'); bar.setAttribute('aria-valuemin', '0'); bar.setAttribute('aria-valuemax', '100'); bar.setAttribute('aria-valuenow', '0');
+      const fill = document.createElement('div'); fill.className = 'clip-card__bar-fill'; bar.appendChild(fill);
+      const pct = document.createElement('div'); pct.className = 'clip-card__pct'; pct.textContent = '0%';
+      const err = document.createElement('div'); err.className = 'clip-card__err'; err.setAttribute('role', 'alert'); err.hidden = true;
+      v.append(title, bar, pct, err);
+      const onProgress = (p: number): void => {
+        const n = Math.max(0, Math.min(100, Math.round(p * 100)));
+        fill.style.width = n + '%'; pct.textContent = n + '%'; bar.setAttribute('aria-valuenow', String(n));
+      };
+      hooks.splitStems(pattern, onProgress).then(
+        () => { if (card === c) close(); },
+        (e: unknown) => {
+          if (card !== c) return;   // card sudah ditutup: main.ts yang memberi tahu lewat toast
+          title.textContent = 'Gagal memisahkan'; bar.hidden = pct.hidden = true;
+          err.textContent = (e as Error).message || 'Gagal memproses audio'; err.hidden = false;
+          const back = document.createElement('button'); back.type = 'button'; back.className = 'clip-card__go'; back.textContent = 'Kembali';
+          back.addEventListener('click', showMenu);
+          v.appendChild(back); place(); back.focus({preventScroll: true});
+        }
+      );
+      return v;
+    };
+    const showStems = (): void => { swapTo(stemView()); };
+
     // --- tampilan 1: menu ---
-    const it = document.createElement('button');
-    it.type = 'button'; it.className = 'clip-card__item'; it.setAttribute('role', 'menuitem');
-    it.textContent = MENU_LABEL;
-    it.addEventListener('click', showTempo);
-    inner.appendChild(it);
+    const menuItem = (label: string, fn: () => void): HTMLButtonElement => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'clip-card__item'; b.setAttribute('role', 'menuitem');
+      b.textContent = label; b.addEventListener('click', fn);
+      return b;
+    };
+    const menuEl = (): HTMLElement => { const m = document.createElement('div'); m.append(menuItem(MENU_LABEL, showTempo), menuItem(STEM_LABEL, showStems)); return m; };
+    const showMenu = (): void => { const m = menuEl(); swapTo(m); (m.firstElementChild as HTMLElement).focus({preventScroll: true}); };
+    inner.appendChild(menuEl());
     document.body.appendChild(c);
     place();
     card = c;
