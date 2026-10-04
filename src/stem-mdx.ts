@@ -26,6 +26,26 @@ function stageProgress(p: SeparationProgress): number {
   }
 }
 
+// Paket hanya melaporkan "muat model" 0 -> 1 tanpa progres unduhan, jadi 67 MB pertama terlihat macet di 0%. Model diunduh sendiri di sini (dengan
+// progres) ke CacheStorage yang sama dengan yang dibaca loadModel() (nama cache + kunci URL mengikuti paket), jadi loadModel() langsung kena cache.
+// Kalau cache tidak ada / gagal ditulis, loadModel() mengunduh sendiri seperti biasa (tanpa progres).
+const MODEL_CACHE = 'web-demix2-models', MODEL_BYTES = 67_000_000;
+async function prefetchModel(url: string, onFrac: (f: number) => void): Promise<void> {
+  if (typeof caches === 'undefined') return;
+  let cache: Cache;
+  try { cache = await caches.open(MODEL_CACHE); if (await cache.match(url)) return; } catch { return; }
+  const res = await fetch(url);
+  if (!res.ok || !res.body) throw new Error('Gagal mengunduh model (HTTP ' + res.status + ')');
+  const total = Number(res.headers.get('content-length')) || MODEL_BYTES, reader = res.body.getReader(), parts: Uint8Array<ArrayBuffer>[] = [];
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value as Uint8Array<ArrayBuffer>); got += value.length; onFrac(Math.min(1, got / total));
+  }
+  try { await cache.put(url, new Response(new Blob(parts), { headers: { 'content-type': 'application/octet-stream' } })); } catch { /* loadModel() unduh ulang */ }
+}
+
 // Decode WAV stem hasil model; decodeAudioData otomatis me-resample ke sample rate konteks (44,1 kHz -> sr asal). Panjang dipaskan ke n.
 async function decodeStem(url: string, sr: number, n: number, ch: number): Promise<Float32Array[]> {
   const bytes = await (await fetch(url)).arrayBuffer();
@@ -42,7 +62,7 @@ async function releaseSession(sep: MDXSeparator): Promise<void> {
   try { await (sep as unknown as { model?: { release?: () => Promise<void> } }).model?.release?.(); } catch { /* abaikan */ }
 }
 
-async function run(chs: Float32Array[], sr: number, onProgress?: (p: number) => void): Promise<MdxResult> {
+async function run(chs: Float32Array[], sr: number, onProgress?: (p: number) => void, onStatus?: (msg: string) => void): Promise<MdxResult> {
   if (chs.length < 1 || chs.length > 2) throw new Error('Stem splitter mendukung 1 (mono) atau 2 (stereo) kanal, bukan ' + chs.length);
   const n = chs[0].length;
   for (const c of chs) if (c.length !== n) throw new Error('Panjang kanal tidak sama');
@@ -51,12 +71,28 @@ async function run(chs: Float32Array[], sr: number, onProgress?: (p: number) => 
   const lib = await import('web-audio-separation');
   // Separator baru per pekerjaan: instance-nya menyimpan hasil terakhir (primarySource / secondarySource tidak di-reset), jadi dipakai ulang
   // untuk file lain akan mengembalikan stem file pertama. Model tetap tidak diunduh ulang (CacheStorage).
-  const sep = lib.createSeparator(MDX_MODEL, { common: { sampleRate: MODEL_SR, logLevel: 'error', onProgress: p => report(stageProgress(p)) } });
+  let stage = '';
+  const status = (msg: string): void => { if (msg !== stage) { stage = msg; onStatus?.(msg); } };
+  const sep = lib.createSeparator(MDX_MODEL, {
+    common: {
+      sampleRate: MODEL_SR, logLevel: 'error',
+      onProgress: p => {
+        report(stageProgress(p));
+        if (String(p.stage) === 'demixing') status('Memisahkan vokal & instrumen…');
+      },
+    },
+  });
   const urls: string[] = [];
   try {
     const inUrl = URL.createObjectURL(await lib.AudioUtils.saveAudioFile(chs, sr, 'mix.wav'));
     urls.push(inUrl);
+    status('Mengunduh model AI… 0%');
+    await prefetchModel(lib.MODEL_REGISTRY[MDX_MODEL].downloadUrl, f => {
+      report(0.08 * f); status('Mengunduh model AI… ' + Math.floor(f * 100) + '%');
+    });
+    status('Memuat model AI…');
     await sep.loadModel();
+    status('Memisahkan vokal & instrumen…');
     const out = await sep.separate(inUrl);
     urls.push(...out);
     if (out.length !== 2) throw new Error('Model tidak menghasilkan dua stem');
@@ -74,8 +110,8 @@ async function run(chs: Float32Array[], sr: number, onProgress?: (p: number) => 
 
 // Pekerjaan diantre satu per satu: dua pemisahan paralel akan berebut memori dan sesi ONNX.
 let queue: Promise<unknown> = Promise.resolve();
-export function separateMdx(chs: Float32Array[], sr: number, onProgress?: (p: number) => void): Promise<MdxResult> {
-  const job = queue.then(() => run(chs, sr, onProgress));
+export function separateMdx(chs: Float32Array[], sr: number, onProgress?: (p: number) => void, onStatus?: (msg: string) => void): Promise<MdxResult> {
+  const job = queue.then(() => run(chs, sr, onProgress, onStatus));
   queue = job.catch(() => undefined);
   return job;
 }

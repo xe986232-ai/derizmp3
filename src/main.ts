@@ -627,7 +627,7 @@ function splitBuffer(srcId, onProgress) {   // -> Promise<{v, i}> id buffer voka
   if (!e) {
     const buf = getBuffer(srcId), subs = new Set(), prog = x => subs.forEach(f => f(x));
     const chs = Array.from({length: buf.numberOfChannels}, (_, c) => buf.getChannelData(c).slice());
-    const p = separateMdx(chs, buf.sampleRate, prog).catch(err => {
+    const p = separateMdx(chs, buf.sampleRate, prog, msg => toast(msg, 0)).catch(err => {
       console.warn('Model MDX-Net gagal, memakai pemisahan klasik', err);
       toast('Model AI tidak bisa dimuat, memakai metode klasik…', 0);
       return splitClassic(chs, buf.sampleRate, prog);
