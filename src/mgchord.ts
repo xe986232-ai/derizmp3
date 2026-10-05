@@ -141,29 +141,31 @@ function build(): void {
   let notes: OutNote[] = [], playing = false, phBeat = -1, raf = 0, prevFocus: Element | null = null;
   let audioOn = true, linked = false, hist: string[] = [], hi = -1;
 
-  // ---------- waveform real-time: algoritma min/max per kolom piksel (poligon terisi, seperti preview DAW), menggulung dari kanan ke kiri ----------
+  // ---------- waveform real-time (zoom): min/max per kolom piksel, poligon terisi; yang digambar hanya ZOOM sample terakhir, jadi getarannya terlihat ----------
   const spec = $<HTMLCanvasElement>('.mgc__spec'), sg = spec.getContext('2d')!;
-  let tbuf = new Float32Array(0), specRaf = 0;
-  const smin: number[] = [], smax: number[] = [];   // riwayat min / max tiap frame (satu kolom per frame)
-  const SPEC_GAIN = 2.4;                            // sinyal preview kecil, diperbesar supaya bentuknya terlihat
+  let tbuf = new Float32Array(0), specRaf = 0, agc = 0;
+  const ZOOM = 320;   // jumlah sample yang ditampilkan (~7 ms). Makin kecil = makin zoom
   const drawSpec = (): void => {
     const r = spec.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
     if (r.width < 20 || r.height < 10) return;
     if (spec.width !== Math.floor(r.width * dpr) || spec.height !== Math.floor(r.height * dpr)) { spec.width = Math.floor(r.width * dpr); spec.height = Math.floor(r.height * dpr); }
     const w = spec.width, h = spec.height, mid = h / 2, barW = Math.max(1, Math.round(dpr)), cols = Math.ceil(w / barW);
     sg.setTransform(1, 0, 0, 1, 0, 0); sg.imageSmoothingEnabled = false; sg.clearRect(0, 0, w, h);
-    let mn = 0, mx = 0;
+    let start = 0, peak = 0;
     if (an) {
       if (tbuf.length !== an.fftSize) tbuf = new Float32Array(an.fftSize);
       an.getFloatTimeDomainData(tbuf);
-      for (let i = 0; i < tbuf.length; i++) { const v = tbuf[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
+      for (let i = 1; i < tbuf.length - ZOOM; i++) if (tbuf[i - 1] <= 0 && tbuf[i] > 0) { start = i; break; }   // pemicu zero-crossing naik: gelombang diam di tempat seperti osiloskop
+      for (let i = 0; i < ZOOM; i++) peak = Math.max(peak, Math.abs(tbuf[start + i]));
     }
-    smin.push(mn); smax.push(mx);
-    if (smin.length > cols) { smin.splice(0, smin.length - cols); smax.splice(0, smax.length - cols); }
-    const pad = cols - smin.length, tops: number[] = [], bots: number[] = [];
+    agc = Math.max(agc * 0.992, peak);   // auto-gain: tinggi gelombang selalu memenuhi panel
+    const gain = agc > 0.003 ? Math.min(14, 0.95 / agc) : 1, spp = ZOOM / cols;
+    const tops: number[] = [], bots: number[] = [];
     for (let c = 0; c < cols; c++) {
-      const k = c - pad, lo = k >= 0 ? smin[k] : 0, hi = k >= 0 ? smax[k] : 0;
-      let yT = mid - clamp(hi * SPEC_GAIN, -1, 1) * mid * 0.92, yB = mid - clamp(lo * SPEC_GAIN, -1, 1) * mid * 0.92;
+      const i0 = Math.floor(c * spp), i1 = Math.max(i0 + 1, Math.ceil((c + 1) * spp));
+      let mn = 0, mx = 0;
+      if (tbuf.length) { mn = 1; mx = -1; for (let i = i0; i <= i1 && i < ZOOM; i++) { const v = tbuf[start + i]; if (v < mn) mn = v; if (v > mx) mx = v; } if (mx < mn) { mn = 0; mx = 0; } }
+      let yT = mid - clamp(mx * gain, -1, 1) * mid * 0.92, yB = mid - clamp(mn * gain, -1, 1) * mid * 0.92;
       if (Math.abs(yB - yT) < 2) { yT = mid - 1; yB = mid + 1; }   // minimal 2 px supaya garis tetap terlihat saat senyap
       tops.push(yT); bots.push(yB);
     }
