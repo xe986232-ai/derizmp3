@@ -128,7 +128,9 @@ Plugin pembuat chord progression, tampilan panel biru: header abu (nama progress
 
 Voicing (5 suara, invert, velocity), gaya main (Block / Strum / Arp), Octave, dan Chord Type masih ada di data / mesin (`mgchord-theory.ts`) dengan nilai bawaan, tapi kontrolnya tidak ditampilkan di UI.
 
-Tombol Play hanya preview (suara sederhana milik plugin sendiri, tempo ikut project); Spasi = play / stop, Esc = tutup. Setelan MGCHORD ikut tersimpan di file project (`mgchord`).
+Tombol Play hanya preview (suara piano milik plugin sendiri, tempo ikut project); Spasi = play / stop, Esc = tutup. Setelan MGCHORD ikut tersimpan di file project (`mgchord`).
 
-Kode: `src/mgchord-theory.ts` (teori murni: skala, chord, voicing, progression, MIDI), `src/mgchord.ts` (jendela + preview), blok "MGCHORD" di `src/styles.css`, kartu di `src/fx-rack.ts`, jembatan ke pattern + simpan project di `src/main.ts` (`setMgchordBridge`).
-Tes: `node tools/mgchord-test.ts` (nama chord vs referensi, voicing, invert, strum / arp, panjang progression, header MIDI).
+Suara preview = piano (`pianoTone`): 2-3 senar sedikit sumbang, spektrum piano (palu memukul di 1/8 senar), ketukan palu, filter yang menutup seiring waktu, decay dua tahap, damper saat dilepas, posisi stereo menurut tinggi nada. Sudah di-mixing di plugin (`createMaster`): low-cut 38 Hz -> EQ (kurangi gumam 300 Hz, presence 3,2 kHz, udara 9 kHz) -> compressor perekat -> limiter -> soft-clip pengaman (tidak pernah pecah), plus reverb ruang kecil paralel. Level progression sekitar -21 dBFS RMS; akor 7 nada velocity penuh tetap di bawah pecah.
+
+Kode: `src/mgchord-theory.ts` (teori murni: skala, chord, voicing, progression, MIDI), `src/mgchord-audio.ts` (suara piano + mixing, murni Web Audio), `src/mgchord.ts` (jendela + preview), blok "MGCHORD" di `src/styles.css`, kartu di `src/fx-rack.ts`, jembatan ke pattern + simpan project di `src/main.ts` (`setMgchordBridge`).
+Tes: `node tools/mgchord-test.ts` (nama chord vs referensi, voicing, invert, strum / arp, panjang progression, header MIDI). Tes suara + mixing: `npm i --no-save node-web-audio-api && node tools/mgchord-audio-test.ts [hasil.wav]` (render offline, ukur peak / RMS, kasus terburuk, ekor; opsional simpan WAV untuk didengar).

@@ -4,8 +4,9 @@
 // SAVE mengirim nada ke pattern yang sedang dipilih di timeline; Drag & Drop MIDI / tombol unduh menghasilkan file .mid.
 // Inti teori ada di mgchord-theory.ts (murni, dites lewat tools/mgchord-test.ts).
 
+import { createMaster, pianoTone } from './mgchord-audio';
 import {
-  NOTE_NAMES, PRESETS, SCALES, VOICES,
+  NOTE_NAMES, PRESETS, SCALES,
   buildNotes, chordAt, defaultVoicing, slotChord, triadAt, midiName, randomProgression, slotsOf, toMidi, totalBeats, voice,
   type OutNote, type Rhythm, type Settings, type Slot, type Voicing,
 } from './mgchord-theory';
@@ -66,32 +67,19 @@ const KB_WHITES = [72, 74, 76, 77, 79, 81, 83, 84], KB_BLACKS = [73, 75, 78, 80,
 const KW = 64, PEG = 34;                   // lebar kolom tuts (sama dengan --kw di CSS) dan tinggi strip pasak oranye
 
 
-// ---------- suara preview (sederhana: saw + triangle -> lowpass), AudioContext sendiri ----------
+// ---------- suara preview: piano + mixing (mgchord-audio.ts), AudioContext sendiri ----------
 let actx: AudioContext | null = null, out: GainNode | null = null, an: AnalyserNode | null = null;
 function ac(): AudioContext {
   if (!actx) {
     const A = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     actx = new A({ latencyHint: 'interactive' });
-    out = actx.createGain(); out.gain.value = 0.42;
-    const comp = actx.createDynamicsCompressor(); out.connect(comp); comp.connect(actx.destination);
-    an = actx.createAnalyser(); an.fftSize = 2048; an.smoothingTimeConstant = 0; comp.connect(an);   // tap untuk waveform real-time
+    const master = createMaster(actx); out = master.input;   // low-cut -> EQ -> compressor -> limiter -> soft-clip (+ reverb ruang kecil)
+    an = actx.createAnalyser(); an.fftSize = 2048; an.smoothingTimeConstant = 0; master.tap.connect(an);   // tap untuk waveform real-time
   }
   if (actx.state === 'suspended') void actx.resume();
   return actx;
 }
-function tone(c: BaseAudioContext, dest: AudioNode, midi: number, when: number, dur: number, vel: number): void {
-  const f = 440 * 2 ** ((midi - 69) / 12), g = c.createGain(), lp = c.createBiquadFilter();
-  lp.type = 'lowpass'; lp.frequency.value = 900 + vel * 3200; lp.Q.value = 0.7;
-  const o1 = c.createOscillator(), o2 = c.createOscillator();
-  o1.type = 'sawtooth'; o2.type = 'triangle'; o1.frequency.value = f; o2.frequency.value = f; o1.detune.value = -4; o2.detune.value = 5;
-  const peak = 0.16 * (0.25 + 0.75 * vel * vel) / Math.sqrt(VOICES), end = when + Math.max(0.06, dur);
-  g.gain.setValueAtTime(0.0001, when); g.gain.linearRampToValueAtTime(peak, when + 0.012);
-  g.gain.setTargetAtTime(peak * 0.62, when + 0.02, 0.35);
-  g.gain.setTargetAtTime(0.0001, end, 0.09);
-  o1.connect(lp); o2.connect(lp); lp.connect(g); g.connect(dest);
-  o1.start(when); o2.start(when); o1.stop(end + 0.6); o2.stop(end + 0.6);
-  o2.onended = () => { g.disconnect(); lp.disconnect(); };
-}
+const tone = pianoTone;
 
 function build(): void {
   const el = document.createElement('div');
