@@ -114,7 +114,7 @@ function build(): void {
             '<div class="mgc__cd" data-dd="scale"><button type="button" class="mgc__cdb" aria-haspopup="listbox" aria-expanded="false" aria-label="Chord mayor atau minor"><span></span></button></div>' +
           '</div></div>' +
           '<div class="mgc__r"><span>Length</span><div class="mgc__sg"><button type="button" data-a="len" data-s="4">4 bars</button><button type="button" data-a="len" data-s="8">8 bars</button></div></div>' +
-          '<div class="mgc__r"><span>Sound</span><div class="mgc__sg">' + VOICES.map(v => `<button type="button" data-a="snd" data-s="${v.id}">${v.label}</button>`).join('') + '</div></div>' +
+          '<div class="mgc__r"><span>Sound</span><div class="mgc__cd" data-dd="sound"><button type="button" class="mgc__cdb" aria-haspopup="listbox" aria-expanded="false" aria-label="Pilih suara preview"><span></span></button></div></div>' +
         '</div>' +
         '<div class="mgc__gen">' +
           `<button type="button" class="mgc__big" data-a="dice" aria-label="Acak progression" title="Acak progression"><i>${ICON.dice}</i></button>` +
@@ -225,17 +225,18 @@ function build(): void {
     renderKeys();
   }
   // ---------- dropdown custom (bukan select bawaan browser): daftar pilihan muncul sebagai panel biru, bisa dioperasikan dengan panah / Enter / Esc ----------
-  type DdKey = 'style' | 'scale';
+  type DdKey = 'style' | 'scale' | 'sound';
   const DD: Record<DdKey, { v: string; t: string; d?: string }[]> = {
     style: STYLES.map(v => ({ v, t: STYLE_INFO[v].label, d: STYLE_INFO[v].desc })),   // 10 style susunan nada (tabelnya ada di mgchord-theory.ts)
     scale: [{ v: 'Major', t: 'Major' }, { v: 'Minor', t: 'Minor' }],   // hanya dua pilihan: mayor dan minor
+    sound: VOICES.map(v => ({ v: v.id, t: v.label })),   // suara preview: Piano / Pad / Pluck (mgchord-audio.ts)
   };
-  const ddValue = (k: DdKey): string => (k === 'style' ? S.rh.style : S.st.scale);
+  const ddValue = (k: DdKey): string => (k === 'style' ? S.rh.style : k === 'sound' ? sound : S.st.scale);
   const ddLabels = (): void => {
     (Object.keys(DD) as DdKey[]).forEach(k => {
       const o = DD[k].find(x => x.v === ddValue(k)), sp = el.querySelector<HTMLElement>(`[data-dd="${k}"] .mgc__cdb span`);
       if (sp) sp.textContent = o?.t ?? ddValue(k);
-      const bt = sp?.parentElement; if (bt) bt.title = k === 'style' ? (o?.d ?? 'Style susunan nada') : 'Chord mayor atau minor';
+      const bt = sp?.parentElement; if (bt) bt.title = k === 'style' ? (o?.d ?? 'Style susunan nada') : k === 'sound' ? 'Suara preview' : 'Chord mayor atau minor';
     });
   };
   const pop = document.createElement('div'); pop.className = 'mgc__pop'; pop.setAttribute('role', 'listbox'); pop.hidden = true; el.appendChild(pop);
@@ -263,6 +264,7 @@ function build(): void {
   const pickPop = (o: HTMLElement): void => {
     const k = popFor; if (!k) return; const v = o.dataset.v!;
     closePop(true);
+    if (k === 'sound') { sound = v as Voice; renderControls(); playChord(S.sel); return; }   // suara preview saja: tidak mengubah progression, jadi tidak perlu commit
     if (k === 'style') S.rh.style = v as PlayStyle; else S.st.scale = v;
     changed(); playChord(S.sel);   // contoh bunyi (satu bar, sesuai style): chord terpilih, atau C kalau masih kosong
   };
@@ -292,7 +294,6 @@ function build(): void {
     const ps = el.querySelector<HTMLSelectElement>('select[data-k="preset"]'); if (ps) ps.value = String(S.preset);
     $('.mgc__pname').textContent = S.preset >= 0 && PRESETS[S.preset] ? PRESETS[S.preset].name : 'New progression';
     el.querySelectorAll<HTMLElement>('[data-a="len"]').forEach(b => b.classList.toggle('is-on', +b.dataset.s! === S.bars));
-    el.querySelectorAll<HTMLElement>('[data-a="snd"]').forEach(b => b.classList.toggle('is-on', b.dataset.s === sound));
     $('.mgc__link').textContent = linked ? 'Linked' : 'Unlinked';
   }
 
@@ -410,7 +411,6 @@ function build(): void {
     len: b => { fitBars(+b.dataset.s!); changed(); },
     clear: () => { if (!S.slots.length) return; stopPlay(); S.slots = []; S.sel = -1; S.preset = -1; changed(); },
     del: () => { if (S.sel < 0 || !S.slots[S.sel]) return; S.slots.splice(S.sel, 1); S.sel = S.slots.length ? Math.min(S.sel, S.slots.length - 1) : -1; changed(); },
-    snd: b => { const v = b.dataset.s as Voice; if (v === sound) return; sound = v; renderControls(); if (!playing) playChord(Math.max(S.sel, 0)); },   // ganti suara: langsung dengarkan chord terpilih dengan suara baru
     dice: () => { S.slots = randomProgression(clamp(S.bars * 4, 8, MAX_BEATS)).map(sl => { const sc = SCALES[quality()], r = sc[sl.deg], m3 = mod(sc[(sl.deg + 2) % 7] - r, 12); return { deg: sl.deg, beats: sl.beats, root: mod(r, 12), q: m3 === 4 ? 'Major' as const : 'Minor' as const }; }); S.sel = 0; S.preset = -1; changed(); playChord(0); },
     undo: () => { if (hi > 0) { hi--; restore(); } },
     redo: () => { if (hi < hist.length - 1) { hi++; restore(); } },
