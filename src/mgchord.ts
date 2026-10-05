@@ -60,6 +60,7 @@ const mod = (n: number, m: number): number => ((n % m) + m) % m;
 const clamp = (v: number, a: number, b: number): number => Math.min(b, Math.max(a, v));
 const MAX_BEATS = 64;                      // 16 bar
 const BLACK_PC = new Set([1, 3, 6, 8, 10]);
+const KB_WHITES = [72, 74, 76, 77, 79, 81, 83, 84], KB_BLACKS = [73, 75, 78, 80, 82], KB_LO = 72, KB_HI = 84;   // keyboard C5..C6
 const KW = 64, PEG = 34;                   // lebar kolom tuts (sama dengan --kw di CSS) dan tinggi strip pasak oranye
 
 
@@ -94,9 +95,13 @@ function build(): void {
   const el = document.createElement('div');
   el.className = 'mgc'; el.hidden = true;
   const keyOpts = NOTE_NAMES.map((n, r) => SCALE_NAMES.map(sc => `<option value="${r}|${sc}">${n} ${sc}</option>`).join('')).join('');
+  const wp = 100 / KB_WHITES.length;   // keyboard card: gaya sama dengan keyboard DAW (tuts putih gradasi, tuts hitam 61% tinggi, tengahnya di batas tuts putih)
+  const kbKeys = KB_WHITES.map((p, i) => `<button type="button" class="mgc__wk" data-p="${p}" aria-label="${midiName(p)}" style="left:${i * wp}%"><span>${p % 12 === 0 ? midiName(p) : ''}</span></button>`).join('') +
+    KB_BLACKS.map(p => `<button type="button" class="mgc__bk" data-p="${p}" aria-label="${midiName(p)}" style="left:calc(${KB_WHITES.filter(w => w < p).length * wp}% - ${wp * 0.3235}%)"></button>`).join('');
   const presetOpts = '<option value="-1">New progression</option>' + PRESETS.map((p, i) => `<option value="${i}">${p.name}</option>`).join('');
   el.innerHTML =
     '<div class="mgc__back"></div>' +
+    '<div class="mgc__wrap">' +
     '<div class="mgc__win" role="dialog" aria-modal="true" aria-label="MGCHORD" tabindex="-1">' +
       '<header class="mgc__head">' +
         `<span class="mgc__logo">MGCHORD${LAMP}</span>` +
@@ -131,6 +136,8 @@ function build(): void {
         `<div class="mgc__dnd" draggable="true" role="button" tabindex="0" data-a="midi" title="Seret ke DAW atau klik untuk unduh .mid">${ICON.move}<span>Drag &amp; drop MIDI</span></div>` +
         `<button type="button" class="mgc__dl" data-a="midi" aria-label="Download MIDI" title="Download MIDI">${ICON.dl}</button>` +
       '</div>' +
+    '</div>' +
+    `<aside class="mgc__kbd" aria-label="Keyboard"><div class="mgc__kbt">Keyboard · C5–C6</div><div class="mgc__kb" role="group" aria-label="Tuts C5 sampai C6">${kbKeys}</div></aside>` +
     '</div>';
   document.body.appendChild(el);
   root = el;
@@ -186,6 +193,13 @@ function build(): void {
 
   // ---------- render ----------
   const selChord = () => chordAt(S.st, S.slots[S.sel].deg);
+  const keyEls = new Map<number, HTMLElement>();
+  el.querySelectorAll<HTMLElement>('[data-p]').forEach(k => keyEls.set(+k.dataset.p!, k));
+  const fold = (p: number): number => { let q = p; while (q < KB_LO) q += 12; while (q > KB_HI) q -= 12; return q; };
+  function renderKeys(): void {   // tuts yang termasuk chord terpilih menyala
+    const lit = new Set(voice(selChord(), S.vc).map(n => fold(n.p)));
+    keyEls.forEach((k, p) => k.classList.toggle('is-lit', lit.has(p)));
+  }
   function recompute(): void { notes = buildNotes(S.st, S.slots, S.vc, S.rh); }
   function renderLane(): void {
     const tot = totalBeats(S.slots), bars = Math.ceil(tot / 4);
@@ -194,6 +208,7 @@ function build(): void {
       `<span class="mgc__h" data-a="deg-" role="button" tabindex="0" aria-label="Derajat turun" title="Derajat chord turun">${ICON.grip}</span><b>${chordAt(S.st, sl.deg).name}</b>` +
       `<span class="mgc__h" data-a="deg+" role="button" tabindex="0" aria-label="Derajat naik" title="Derajat chord naik">${ICON.grip}</span></div>`).join('');
     marks.innerHTML = Array.from({ length: bars }, (_, b) => `<i style="left:${(b * 4 / tot) * 100}%">${b + 1}</i>`).join('');
+    renderKeys();
   }
   function renderControls(): void {
     $<HTMLSelectElement>('select[data-k="key"]').value = `${S.st.root}|${S.st.scale}`;
@@ -352,6 +367,15 @@ function build(): void {
     const url = URL.createObjectURL(new Blob([toMidi(notes, bridge ? bridge.bpm() : 120) as BlobPart], { type: 'audio/midi' }));
     e.dataTransfer?.setData('DownloadURL', `audio/midi:${midiFile()}:${url}`); setTimeout(() => URL.revokeObjectURL(url), 60000);
   });
+  // keyboard C5..C6: tekan = bunyi (lewat bus preview, jadi ikut tampil di waveform)
+  const kbd = $('.mgc__kb');
+  const playKey = (k: HTMLElement): void => { const c = ac(), bb = c.createGain(); bb.connect(out!); tone(c, bb, +k.dataset.p!, c.currentTime + 0.01, 0.9, 0.8); setTimeout(() => bb.disconnect(), 2200); };
+  const releaseKeys = (): void => keyEls.forEach(k => k.classList.remove('pressed'));
+  kbd.addEventListener('pointerdown', e => { const k = (e.target as HTMLElement).closest<HTMLElement>('[data-p]'); if (!k) return; k.classList.add('pressed'); playKey(k); e.preventDefault(); });
+  kbd.addEventListener('click', e => { const k = (e.target as HTMLElement).closest<HTMLElement>('[data-p]'); if (k && e.detail === 0) { k.classList.add('pressed'); playKey(k); setTimeout(releaseKeys, 150); } });   // aktivasi lewat keyboard fisik (Enter / Spasi)
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => kbd.addEventListener(ev, releaseKeys));
+  $('.mgc__kbd').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape') { close(); e.preventDefault(); } });   // pintasan DAW tidak ikut jalan
+  $('.mgc__kbd').addEventListener('keyup', e => e.stopPropagation());
   // klik di piano roll = pilih chord di posisi itu
   cv.addEventListener('pointerdown', e => {
     const r = cv.getBoundingClientRect(), x = e.clientX - r.left - KW; if (x < 0) return;
