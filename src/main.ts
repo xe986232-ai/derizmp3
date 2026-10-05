@@ -1332,8 +1332,7 @@ setMgchordBridge({
 });
 // ===== Menu "Tambahkan track" =====
 const INSTRUMENTS = [
-  {n:'Drums', c:'#ff9f1c'}, {n:'Audio clip', c:'#14b8a6'}, {n:'Supersaw', c:'#5b3de8'},
-  {n:'Minisynth', c:'#2f7bff'}, {n:'GMS Synth', c:'#ff4d8d'}, {n:'DW Sampler', c:'#3fbf5f'}, {n:'DERIZ', c:'#22c7e8'}
+  {n:'Audio clip', c:'#14b8a6'}, {n:'Supersaw', c:'#5b3de8'}, {n:'DERIZ', c:'#22c7e8'}
 ];
 let addMenu = null, addBtn = null;
 let trackSeq = Math.max(1, ...[...document.querySelectorAll('.trackheader-container')].map(c => +c.dataset.track));
@@ -1428,7 +1427,7 @@ function duplicateTrack(src) {
   const pats = [...sLane.querySelectorAll('.pattern')].sort((a, b) => pl(a) - pl(b));
   const pans = sPan ? Math.round((+sPan.getAttribute('aria-valuenow') - 0.5) / 0.02) : 0;
 
-  addTrack({n: src.dataset.ins || 'Drums', c: color});
+  addTrack({n: src.dataset.ins || 'Audio clip', c: color});
   const id = String(trackSeq);
   const cont = document.querySelector('.trackheader-container[data-track="' + id + '"]'), lane = lanesEl.querySelector('.lane[data-track="' + id + '"]');
   src.after(cont); sLane.after(lane);   // addTrack menaruh di paling bawah: pindahkan ke tepat di bawah track asal (card + lane)
@@ -2057,7 +2056,7 @@ function projectSnapshot() {
     });
     const fxs = fxRack.fxExport(id);
     tracks.push({
-      id, ins: c.dataset.ins || 'Drums', name: document.getElementById('track-name-' + id).textContent,
+      id, ins: c.dataset.ins || 'Audio clip', name: document.getElementById('track-name-' + id).textContent,
       color: c.style.getPropertyValue('--track-color'), vol: sl ? +sl.value : 100,
       off: !!pwr && pwr.getAttribute('aria-checked') === 'false', deriz: fxRack.derizIds(id).length, pats,
       ...(dz.some(x => x.z) ? {dz} : {}),
