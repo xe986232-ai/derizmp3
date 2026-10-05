@@ -108,18 +108,7 @@ export function voice(c: Chord, vc: Voicing): VNote[] {
 // ---------- progression ----------
 export interface Slot { deg: number; beats: number }
 export interface Preset { name: string; scale: 'Major' | 'Minor'; slots: number[] }   // slots: derajat 0..6, tiap slot 1 bar
-export const PRESETS: Preset[] = [
-  { name: 'Basic Progression', scale: 'Minor', slots: [0, 3, 5, 6] },        // i iv VI VII (Cm9 Fm9 G#maj9 A#9)
-  { name: 'Pop I-V-vi-IV', scale: 'Major', slots: [0, 4, 5, 3] },
-  { name: 'Sad vi-IV-I-V', scale: 'Major', slots: [5, 3, 0, 4] },
-  { name: 'Jazz ii-V-I', scale: 'Major', slots: [1, 4, 0, 0] },
-  { name: 'Andalusian', scale: 'Minor', slots: [0, 6, 5, 4] },              // i VII VI v
-  { name: 'Epic i-VI-III-VII', scale: 'Minor', slots: [0, 5, 2, 6] },
-  { name: '50s I-vi-IV-V', scale: 'Major', slots: [0, 5, 3, 4] },
-  { name: 'Canon', scale: 'Major', slots: [0, 4, 5, 2, 3, 0, 3, 4] },
-  { name: 'Dark i-iv-i-v', scale: 'Minor', slots: [0, 3, 0, 4] },
-  { name: 'Lofi ii-V-iii-vi', scale: 'Major', slots: [1, 4, 2, 5] },
-];
+export const PRESETS: Preset[] = [];   // dikosongkan dulu: progression dibuat sendiri lewat keyboard di kanan (contoh lama ada di riwayat git)
 export const slotsOf = (p: Preset): Slot[] => p.slots.map(deg => ({ deg, beats: 4 }));
 
 // Transisi harmoni fungsional sederhana untuk generator acak

@@ -1811,6 +1811,7 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mgc__tri{flex:none;border:5px solid transparent;border-top:7px solid #6d6d6d;border-bottom:0}
 .mgc__pname{flex:1;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .mgc__save{height:26px;padding:0 10px;border-radius:3px;background:#2b2b2b;color:#fff}
+.mgc__pn--none{justify-content:center}
 .mgc__arr{display:grid;place-items:center;width:22px;height:22px;background:transparent;color:#8a8a8a}
 .mgc__arr:hover{color:#444}
 .mgc__pow{font-size:15px;font-weight:900;letter-spacing:.03em;color:#8c8c8c;white-space:nowrap}
@@ -1856,7 +1857,7 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mgc__big{width:124px;height:124px;padding:8px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px rgba(0,0,0,.08),0 8px 16px rgba(20,40,110,.35);transition:transform .1s}
 .mgc__big:active{transform:scale(.96)}
 .mgc__big i{display:grid;place-items:center;width:100%;height:100%;border-radius:50%;color:#fff;background:radial-gradient(circle at 50% 32%,#6c9cf7,#4f82ee 60%,#3f6fd8);box-shadow:inset 0 0 0 6px rgba(255,255,255,.28)}
-.mgc__ur{display:flex;gap:10px}
+.mgc__ur{display:flex;gap:8px}
 .mgc__ur button{display:grid;place-items:center;width:24px;height:22px;border-radius:3px;background:#7ba2f6;color:#fff}
 .mgc__ur button:hover{background:#8db0f8}
 .mgc__ruler{display:flex;align-items:center;height:30px;border-bottom:1px solid #cfcfcf}
@@ -1866,6 +1867,7 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mgc__marks::before{content:"";position:absolute;left:0;bottom:0;border:solid transparent;border-width:0 0 9px 9px;border-bottom-color:var(--blue2)}
 .mgc__marks i{position:absolute;top:0;height:100%;padding:8px 0 0 4px;font-style:normal;border-left:1px solid #bdbdbd}
 .mgc__lane{display:flex;gap:2px;height:28px;margin:4px 0 4px var(--kw)}
+.mgc__empty{flex:1;display:flex;align-items:center;justify-content:center;border:1.5px dashed rgba(255,255,255,.45);border-radius:3px;color:rgba(255,255,255,.75);font-size:11px;font-weight:700;text-transform:none;letter-spacing:.02em}
 .mgc__ch{position:relative;display:flex;align-items:center;justify-content:space-between;min-width:0;padding:0 5px;border-radius:3px;background:var(--blue);color:#fff;font-size:13px;cursor:pointer;overflow:hidden;white-space:nowrap}
 .mgc__ch b{font-weight:800;text-transform:none;overflow:hidden;text-overflow:ellipsis}
 .mgc__ch.is-sel{background:var(--blue3);box-shadow:inset 0 0 0 2px #fff}

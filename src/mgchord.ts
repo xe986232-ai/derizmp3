@@ -5,7 +5,7 @@
 // Inti teori ada di mgchord-theory.ts (murni, dites lewat tools/mgchord-test.ts).
 
 import {
-  NOTE_NAMES, PRESETS, VOICES,
+  NOTE_NAMES, PRESETS, SCALES, VOICES,
   buildNotes, chordAt, defaultVoicing, midiName, randomProgression, slotsOf, toMidi, totalBeats, voice,
   type OutNote, type Rhythm, type Settings, type Slot, type Voicing,
 } from './mgchord-theory';
@@ -15,13 +15,12 @@ export interface MgBridge { bpm(): number; send(notes: { p: number; s: number; l
 let bridge: MgBridge | null = null;
 export const setMgchordBridge = (b: MgBridge): void => { bridge = b; };
 
-interface Saved { st: Settings; vc: Voicing; rh: Rhythm; slots: Slot[]; sel: number; preset: number }
+interface Saved { st: Settings; vc: Voicing; rh: Rhythm; slots: Slot[]; sel: number; preset: number; bars: number }   // bars = panjang timeline (4 / 8); slots = chord yang sudah ditambahkan (awalnya kosong)
 export type MgchordSaved = Saved;
 const initial = (): Saved => {
-  const p = PRESETS[0];
   return {
-    st: { root: 0, scale: p.scale, octave: 0, chordType: 'Diatonic 9th' }, vc: defaultVoicing(),
-    rh: { style: 'Block', rate: 0.5, strum: 0.12 }, slots: slotsOf(p), sel: 0, preset: -1,
+    st: { root: 0, scale: 'Minor', octave: 0, chordType: 'Diatonic 9th' }, vc: defaultVoicing(),
+    rh: { style: 'Block', rate: 0.5, strum: 0.12 }, slots: [], sel: -1, preset: -1, bars: 4,   // piano roll kosong sampai tuts keyboard diklik
   };
 };
 let S: Saved = initial();
@@ -31,9 +30,10 @@ let openFn: (() => void) | null = null, refreshFn: (() => void) | null = null;
 export const mgchordExport = (): MgchordSaved | null => (root ? JSON.parse(JSON.stringify(S)) : null);
 export function mgchordImport(saved?: MgchordSaved | null): void {   // dipanggil saat membuka project (null = kembali ke bawaan)
   const base = initial();
-  if (saved && saved.st && Array.isArray(saved.slots) && saved.slots.length) {
+  if (saved && saved.st && Array.isArray(saved.slots)) {
     S = { ...base, ...saved, st: { ...base.st, ...saved.st }, vc: { ...base.vc, ...saved.vc }, rh: { ...base.rh, ...saved.rh } };
-    S.sel = Math.min(Math.max(0, S.sel | 0), S.slots.length - 1);
+    S.bars = Math.max(4, Math.round(+saved.bars || 0), Math.ceil(totalBeats(S.slots) / 4));   // project lama tanpa 'bars': ikut panjang progression-nya
+    S.sel = S.slots.length ? Math.min(Math.max(0, S.sel | 0), S.slots.length - 1) : -1;
   } else S = base;
   refreshFn?.();
 }
@@ -51,6 +51,7 @@ const ICON = {
   prev: svg('<path d="M15 5l-7 7 7 7" fill="currentColor"/>', 12),
   next: svg('<path d="M9 5l7 7-7 7" fill="currentColor"/>', 12),
   undo: svg('<path d="M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3"/>', 14),
+  trash: svg('<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13M10 11v6M14 11v6"/>', 14),
   redo: svg('<path d="M15 14l5-5-5-5M20 9H10a6 6 0 000 12h3"/>', 14),
   grip: svg('<path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/>', 12),
   move: svg('<path d="M12 3v18M3 12h18M8 7l4-4 4 4M8 17l4 4 4-4M7 8l-4 4 4 4M17 8l4 4-4 4" stroke-width="2"/>', 18),
@@ -105,9 +106,9 @@ function build(): void {
       '<header class="mgc__head">' +
         `<span class="mgc__logo">MGCHORD${LAMP}</span>` +
         '<div class="mgc__prog">' +
-          `<label class="mgc__pn"><i class="mgc__tri"></i><span class="mgc__pname"></span><select data-k="preset" aria-label="Pilih progression">${presetOpts}</select></label>` +
+          (PRESETS.length ? `<label class="mgc__pn"><i class="mgc__tri"></i><span class="mgc__pname"></span><select data-k="preset" aria-label="Pilih progression">${presetOpts}</select></label>` : '<div class="mgc__pn mgc__pn--none"><span class="mgc__pname"></span></div>') +
           '<button type="button" class="mgc__save" data-a="save" title="Kirim nada ke pattern yang dipilih di timeline">Save</button>' +
-          `<button type="button" class="mgc__arr" data-a="pprev" aria-label="Preset sebelumnya">${ICON.prev}</button><button type="button" class="mgc__arr" data-a="pnext" aria-label="Preset berikutnya">${ICON.next}</button>` +
+          (PRESETS.length ? `<button type="button" class="mgc__arr" data-a="pprev" aria-label="Preset sebelumnya">${ICON.prev}</button><button type="button" class="mgc__arr" data-a="pnext" aria-label="Preset berikutnya">${ICON.next}</button>` : '') +
         '</div>' +
         '<span class="mgc__pow">Powered by DERIZ</span>' +
         `<button type="button" class="mgc__x" data-a="close" aria-label="Tutup" title="Tutup (Esc)">${ICON.close}</button>` +
@@ -124,7 +125,7 @@ function build(): void {
         '</div>' +
         '<div class="mgc__gen">' +
           `<button type="button" class="mgc__big" data-a="dice" aria-label="Acak progression" title="Acak progression"><i>${ICON.dice}</i></button>` +
-          `<div class="mgc__ur"><button type="button" data-a="undo" aria-label="Undo">${ICON.undo}</button><button type="button" data-a="redo" aria-label="Redo">${ICON.redo}</button></div>` +
+          `<div class="mgc__ur"><button type="button" data-a="undo" aria-label="Undo">${ICON.undo}</button><button type="button" data-a="redo" aria-label="Redo">${ICON.redo}</button><button type="button" data-a="clear" aria-label="Kosongkan progression" title="Kosongkan semua chord">${ICON.trash}</button></div>` +
         '</div>' +
         '<span class="mgc__link">Unlinked</span>' +
       '</aside>' +
@@ -210,21 +211,23 @@ function build(): void {
   const restore = (): void => { S = JSON.parse(hist[hi]); renderAll(); };
 
   // ---------- render ----------
-  const selChord = () => chordAt(S.st, S.slots[S.sel].deg);
+  const span = (): number => Math.max(4, S.bars * 4, totalBeats(S.slots));   // panjang timeline (ketukan): tetap walau chord belum penuh / kosong
+  const selChord = () => (S.sel >= 0 && S.slots[S.sel] ? chordAt(S.st, S.slots[S.sel].deg) : null);
   const keyEls = new Map<number, HTMLElement>();
   el.querySelectorAll<HTMLElement>('[data-p]').forEach(k => keyEls.set(+k.dataset.p!, k));
   const fold = (p: number): number => { let q = p; while (q < KB_LO) q += 12; while (q > KB_HI) q -= 12; return q; };
   function renderKeys(): void {   // tuts yang termasuk chord terpilih menyala
-    const lit = new Set(voice(selChord(), S.vc).map(n => fold(n.p)));
+    const sc = selChord(), lit = new Set(sc ? voice(sc, S.vc).map(n => fold(n.p)) : []);
     keyEls.forEach((k, p) => k.classList.toggle('is-lit', lit.has(p)));
   }
   function recompute(): void { notes = buildNotes(S.st, S.slots, S.vc, S.rh); }
   function renderLane(): void {
-    const tot = totalBeats(S.slots), bars = Math.ceil(tot / 4);
-    lane.innerHTML = S.slots.map((sl, i) =>
-      `<div role="option" tabindex="0" class="mgc__ch${i === S.sel ? ' is-sel' : ''}" data-i="${i}" aria-selected="${i === S.sel}" style="flex:${sl.beats} 1 0">` +
+    const tot = span(), bars = Math.ceil(tot / 4);
+    lane.innerHTML = S.slots.length ? S.slots.map((sl, i) =>
+      `<div role="option" tabindex="0" class="mgc__ch${i === S.sel ? ' is-sel' : ''}" data-i="${i}" aria-selected="${i === S.sel}" style="flex:0 0 calc(${(sl.beats / tot) * 100}% - 2px)">` +
       `<span class="mgc__h" data-a="deg-" role="button" tabindex="0" aria-label="Derajat turun" title="Derajat chord turun">${ICON.grip}</span><b>${chordAt(S.st, sl.deg).name}</b>` +
-      `<span class="mgc__h" data-a="deg+" role="button" tabindex="0" aria-label="Derajat naik" title="Derajat chord naik">${ICON.grip}</span></div>`).join('');
+      `<span class="mgc__h" data-a="deg+" role="button" tabindex="0" aria-label="Derajat naik" title="Derajat chord naik">${ICON.grip}</span></div>`).join('')
+      : '<div class="mgc__empty">Klik tuts keyboard di kanan untuk menambah chord</div>';
     marks.innerHTML = Array.from({ length: bars }, (_, b) => `<i style="left:${(b * 4 / tot) * 100}%">${b + 1}</i>`).join('');
     renderKeys();
   }
@@ -289,10 +292,9 @@ function build(): void {
 
   function renderControls(): void {
     ddLabels();
-    $<HTMLSelectElement>('select[data-k="preset"]').value = String(S.preset);
-    $('.mgc__pname').textContent = S.preset >= 0 ? PRESETS[S.preset].name : 'New progression';
-    const bars = totalBeats(S.slots) / 4;
-    el.querySelectorAll<HTMLElement>('[data-a="len"]').forEach(b => b.classList.toggle('is-on', +b.dataset.s! === bars));
+    const ps = el.querySelector<HTMLSelectElement>('select[data-k="preset"]'); if (ps) ps.value = String(S.preset);
+    $('.mgc__pname').textContent = S.preset >= 0 && PRESETS[S.preset] ? PRESETS[S.preset].name : 'New progression';
+    el.querySelectorAll<HTMLElement>('[data-a="len"]').forEach(b => b.classList.toggle('is-on', +b.dataset.s! === S.bars));
     el.querySelectorAll<HTMLElement>('[data-a="aud"]').forEach(b => b.classList.toggle('is-on', (+b.dataset.s! === 1) === audioOn));
     $('.mgc__link').textContent = linked ? 'Linked' : 'Unlinked';
   }
@@ -303,7 +305,7 @@ function build(): void {
     if (W < 20 || H < 20) return;
     if (cv.width !== Math.floor(W * dpr) || cv.height !== Math.floor(H * dpr)) { cv.width = Math.floor(W * dpr); cv.height = Math.floor(H * dpr); }
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const peg = Math.min(PEG, Math.round(H * 0.2)), gh = H - peg, tot = totalBeats(S.slots), x0 = KW, pw = W - KW, ppb = pw / tot;
+    const peg = Math.min(PEG, Math.round(H * 0.2)), gh = H - peg, tot = span(), x0 = KW, pw = W - KW, ppb = pw / tot;
     let lo = 127, hi2 = 0; for (const n of notes) { lo = Math.min(lo, n.p); hi2 = Math.max(hi2, n.p); }
     if (hi2 < lo) { lo = 48; hi2 = 72; }
     lo -= 2; hi2 += 2; while (hi2 - lo < (gh < 120 ? 14 : 22)) { lo--; hi2++; }
@@ -339,10 +341,11 @@ function build(): void {
       const gr = g.createLinearGradient(x - 5, 0, x + 5, 0); gr.addColorStop(0, '#f4b64f'); gr.addColorStop(1, '#d6862a');
       g.fillStyle = gr; g.beginPath(); g.roundRect(x - 5, gh + 3, 10, Math.max(6, peg - 8), 3); g.fill(); t += sl.beats;
     }
+    if (!notes.length) { g.fillStyle = 'rgba(255,255,255,.4)'; g.font = '600 12px system-ui,sans-serif'; g.textAlign = 'center'; g.fillText('Piano roll kosong — klik tuts keyboard di kanan', x0 + pw / 2, gh / 2); g.textAlign = 'start'; }
     if (phBeat >= 0) { g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x0 + phBeat * ppb, 0); g.lineTo(x0 + phBeat * ppb, gh); g.stroke(); }
   }
   const renderAll = (): void => { recompute(); renderControls(); renderLane(); drawRoll(); };
-  refreshFn = () => { S.sel = clamp(S.sel, 0, S.slots.length - 1); if (!el.hidden) { renderAll(); } commit(); };
+  refreshFn = () => { S.sel = S.slots.length ? clamp(S.sel, 0, S.slots.length - 1) : -1; if (!el.hidden) { renderAll(); } commit(); };
   const matchesPreset = (): boolean => { const p = PRESETS[S.preset]; return !!p && p.scale === S.st.scale && p.slots.length === S.slots.length && p.slots.every((d, i) => d === S.slots[i].deg && S.slots[i].beats === 4); };
   const changed = (): void => { S.preset = S.preset >= 0 && matchesPreset() ? S.preset : -1; renderAll(); commit(); };
 
@@ -362,7 +365,7 @@ function build(): void {
     const c = ac(); spb = 60 / (bridge ? bridge.bpm() : 120);
     bus = c.createGain(); bus.connect(out!); t0 = c.currentTime + 0.06; sched = 0; playing = true; setPlayUi(true);
     const pump = (): void => {
-      const tot = totalBeats(S.slots), until = (c.currentTime + 0.25 - t0) / spb;
+      const tot = span(), until = (c.currentTime + 0.25 - t0) / spb;
       for (let pass = Math.floor(sched / tot); pass <= Math.floor(until / tot); pass++) {
         for (const n of notes) {
           const s = pass * tot + n.s;
@@ -374,7 +377,7 @@ function build(): void {
     pump(); timer = window.setInterval(pump, 50);
     const frame = (): void => {
       if (!playing) return;
-      phBeat = ((ac().currentTime - t0) / spb) % totalBeats(S.slots); if (phBeat < 0) phBeat = 0;
+      phBeat = ((ac().currentTime - t0) / spb) % span(); if (phBeat < 0) phBeat = 0;
       drawRoll(); raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
@@ -388,34 +391,37 @@ function build(): void {
 
   // ---------- aksi ----------
   const idxOf = (b: HTMLElement): number => +(b.closest<HTMLElement>('.mgc__ch')?.dataset.i ?? S.sel);
-  const fitBars = (bars: number): void => {   // 4 / 8 bar: potong atau ulangi progression yang ada
-    const want = bars * 4, src = S.slots.map(s => ({ ...s })), res: Slot[] = [];
-    for (let i = 0, t = 0; t < want; i++) { const s = src[i % src.length], b = Math.min(s.beats, want - t); res.push({ deg: s.deg, beats: b }); t += b; }
-    S.slots = res; S.sel = Math.min(S.sel, res.length - 1);
+  const fitBars = (bars: number): void => {   // 4 / 8 bar: ubah panjang timeline; chord yang melewati batas baru dipotong
+    S.bars = bars; const want = bars * 4, res: Slot[] = [];
+    for (let t = 0; t < S.slots.length && t < want; ) { const b = Math.min(S.slots[res.length].beats, want - t); res.push({ deg: S.slots[res.length].deg, beats: b }); t += b; }
+    S.slots = res; S.sel = res.length ? Math.min(Math.max(S.sel, 0), res.length - 1) : -1;
   };
   const stepDeg = (b: HTMLElement, d: number): void => { S.sel = idxOf(b); S.slots[S.sel].deg = mod(S.slots[S.sel].deg + d, 7); changed(); playChord(S.sel); };
   const actions: Record<string, (b: HTMLElement) => void> = {
     close: () => close(),
-    play: () => (playing ? stopPlay() : startPlay()),
-    pprev: () => loadPreset(S.preset < 0 ? PRESETS.length - 1 : mod(S.preset - 1, PRESETS.length)),
-    pnext: () => loadPreset(S.preset < 0 ? 0 : mod(S.preset + 1, PRESETS.length)),
+    play: () => { if (playing) stopPlay(); else if (!notes.length) toastMsg('Belum ada chord — klik tuts keyboard di kanan'); else startPlay(); },
+    pprev: () => { if (PRESETS.length) loadPreset(S.preset < 0 ? PRESETS.length - 1 : mod(S.preset - 1, PRESETS.length)); },
+    pnext: () => { if (PRESETS.length) loadPreset(S.preset < 0 ? 0 : mod(S.preset + 1, PRESETS.length)); },
     'deg-': b => stepDeg(b, -1),
     'deg+': b => stepDeg(b, 1),
     len: b => { fitBars(+b.dataset.s!); changed(); },
+    clear: () => { if (!S.slots.length) return; stopPlay(); S.slots = []; S.sel = -1; S.preset = -1; changed(); },
+    del: () => { if (S.sel < 0 || !S.slots[S.sel]) return; S.slots.splice(S.sel, 1); S.sel = S.slots.length ? Math.min(S.sel, S.slots.length - 1) : -1; changed(); },
     aud: b => { audioOn = b.dataset.s === '1'; renderControls(); },
-    dice: () => { S.slots = randomProgression(clamp(Math.round(totalBeats(S.slots) / 4) * 4, 8, MAX_BEATS)); S.sel = 0; S.preset = -1; changed(); playChord(0); },
+    dice: () => { S.slots = randomProgression(clamp(S.bars * 4, 8, MAX_BEATS)); S.sel = 0; S.preset = -1; changed(); playChord(0); },
     undo: () => { if (hi > 0) { hi--; restore(); } },
     redo: () => { if (hi < hist.length - 1) { hi++; restore(); } },
-    midi: () => { const bpm = bridge ? bridge.bpm() : 120; download(toMidi(notes, bpm), midiFile()); toastMsg('MIDI diunduh'); },
+    midi: () => { if (!notes.length) { toastMsg('Belum ada chord untuk diunduh'); return; } const bpm = bridge ? bridge.bpm() : 120; download(toMidi(notes, bpm), midiFile()); toastMsg('MIDI diunduh'); },
     save: () => {
-      const msg = bridge ? bridge.send(notes.map(n => ({ p: n.p, s: n.s, l: n.l, v: n.v })), totalBeats(S.slots)) : 'Plugin belum tersambung ke timeline';
+      if (!notes.length) { toastMsg('Belum ada chord — klik tuts keyboard di kanan'); return; }
+      const msg = bridge ? bridge.send(notes.map(n => ({ p: n.p, s: n.s, l: n.l, v: n.v })), span()) : 'Plugin belum tersambung ke timeline';
       if (!msg) { linked = true; renderControls(); }
       toastMsg(msg ?? 'Nada dikirim ke pattern');
     },
   };
   function loadPreset(i: number): void {
-    const p = PRESETS[i], bars = totalBeats(S.slots) / 4; S.preset = i; S.st.scale = p.scale; S.slots = slotsOf(p); S.sel = 0;
-    if (bars === 8) fitBars(8);
+    const p = PRESETS[i], bars = S.bars; S.preset = i; S.st.scale = p.scale; S.slots = slotsOf(p); S.sel = 0;
+    S.bars = Math.max(4, Math.ceil(totalBeats(S.slots) / 4)); if (bars === 8) fitBars(8);
     renderAll(); commit(); playChord(0);
   }
   const midiFile = (): string => 'mgchord-' + chordAt(S.st, 0).name.replace('#', 's') + '.mid';
@@ -445,7 +451,14 @@ function build(): void {
   });
   // keyboard C5..C6: tekan = bunyi (lewat bus preview, jadi ikut tampil di waveform)
   const kbd = $('.mgc__kb');
-  const playKey = (k: HTMLElement): void => { const c = ac(), bb = c.createGain(); bb.connect(out!); tone(c, bb, +k.dataset.p!, c.currentTime + 0.01, 0.9, 0.8); setTimeout(() => bb.disconnect(), 2200); };
+  const playNote = (p: number): void => { const c = ac(), bb = c.createGain(); bb.connect(out!); tone(c, bb, p, c.currentTime + 0.01, 0.9, 0.8); setTimeout(() => bb.disconnect(), 2200); };
+  const playKey = (k: HTMLElement): void => {   // klik tuts = tambah chord (dibangun di nada itu, sesuai Key) ke ujung progression, lalu bunyikan
+    const p = +k.dataset.p!, deg = SCALES[S.st.scale]?.indexOf(mod(p - S.st.root, 12)) ?? -1;
+    if (deg < 0) { playNote(p); toastMsg(`${midiName(p).replace(/-?\d+$/, '')} di luar skala ${NOTE_NAMES[S.st.root]} ${S.st.scale}`); return; }
+    const left = S.bars * 4 - totalBeats(S.slots);
+    if (left <= 0) { const prev = S.slots.length, tmp = chordAt(S.st, deg); const c = ac(), bb = c.createGain(); bb.connect(out!); voice(tmp, S.vc).forEach(n => tone(c, bb, n.p, c.currentTime + 0.01, 1.1, n.v)); setTimeout(() => bb.disconnect(), 2500); toastMsg(prev ? `Progression penuh (${S.bars} bar) — pilih 8 bars atau hapus chord` : 'Progression penuh'); return; }
+    S.slots.push({ deg, beats: Math.min(4, left) }); S.sel = S.slots.length - 1; S.preset = -1; changed(); playChord(S.sel);
+  };
   const releaseKeys = (): void => keyEls.forEach(k => k.classList.remove('pressed'));
   kbd.addEventListener('pointerdown', e => { const k = (e.target as HTMLElement).closest<HTMLElement>('[data-p]'); if (!k) return; k.classList.add('pressed'); playKey(k); e.preventDefault(); });
   kbd.addEventListener('click', e => { const k = (e.target as HTMLElement).closest<HTMLElement>('[data-p]'); if (k && e.detail === 0) { k.classList.add('pressed'); playKey(k); setTimeout(releaseKeys, 150); } });   // aktivasi lewat keyboard fisik (Enter / Spasi)
@@ -462,6 +475,7 @@ function build(): void {
     e.stopPropagation();   // pintasan DAW (Spasi, panah) tidak ikut jalan selagi jendela terbuka
     const t = e.target as HTMLElement;
     if (e.key === 'Escape') { close(); e.preventDefault(); }
+    else if ((e.key === 'Delete' || e.key === 'Backspace') && t.matches('.mgc__ch')) { S.sel = +t.dataset.i!; actions.del(win); e.preventDefault(); }
     else if ((e.key === 'Enter' || e.key === ' ') && t.matches('.mgc__ch, .mgc__h, .mgc__dnd')) { t.click(); e.preventDefault(); }
     else if (e.key === ' ' && !t.matches('button, select')) { actions.play(win); e.preventDefault(); }
   });
