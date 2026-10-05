@@ -1897,11 +1897,15 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mgc__kbt .mgc__cd{flex:1 1 auto}
 .mgc__kbt .mgc__cdb{height:46px;padding:0 28px 0 8px;font-size:17px;letter-spacing:.03em;text-transform:uppercase}
 .mgc__kb{position:relative;flex:1 1 auto;min-height:320px;margin:18px 20px 20px;touch-action:none;user-select:none;-webkit-user-select:none}
-.mgc__wk,.mgc__bk{position:absolute;left:0;padding:0;border:0;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .12s ease,transform .12s ease,box-shadow .12s ease}
+.mgc__wk,.mgc__bk{position:absolute;left:0;padding:0;border:0;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .35s ease-out,transform .35s ease-out,box-shadow .35s ease-out}
 .mgc__wk{width:100%;height:calc(12.5% - 2px);border-radius:0 12px 12px 0;color:#16161d;background:linear-gradient(90deg,#e4e4ec,#fbfbfd);box-shadow:inset -6px 0 0 rgba(0,0,0,.12)}
 .mgc__bk{width:62%;height:8.09%;z-index:2;border-radius:0 9px 9px 0;background:linear-gradient(90deg,#0e0e13,#2c2c38);box-shadow:inset -5px 0 0 rgba(255,255,255,.08),3px 0 8px rgba(0,0,0,.5)}
 .mgc__wk span,.mgc__bk span{position:absolute;right:16px;top:50%;transform:translateY(-50%);text-align:right;font:800 16px system-ui,sans-serif;color:#7a7a88;pointer-events:none}
 .mgc__bk span{right:12px;font-size:14px;color:#9a9ab0}
+.mgc__wk.pressed,.mgc__bk.pressed{transition-duration:.06s}
+.mgc__chip{position:fixed;left:0;top:0;z-index:230;pointer-events:none;will-change:transform,opacity;padding:6px 14px;border-radius:7px;background:#fff;color:#3f6fd8;font-size:18px;font-weight:900;text-transform:none;white-space:nowrap;box-shadow:0 0 18px rgba(255,255,255,.85),0 6px 14px rgba(20,40,110,.35)}
+@media (max-height:560px) and (orientation:landscape){.mgc__chip{font-size:10px;padding:3px 8px;border-radius:5px}}
+@media (prefers-reduced-motion:reduce){.mgc__wk,.mgc__bk{transition-duration:.01s}}
 .mgc__wk.pressed{background:linear-gradient(90deg,#9db9ff,#e3ecff);transform:translateX(-12px);box-shadow:inset -6px 0 0 rgba(0,0,0,.12),0 0 22px rgba(255,255,255,.9)}
 .mgc__bk.pressed{background:linear-gradient(90deg,#3b5fc4,#7aa0ff);transform:translateX(-12px);box-shadow:inset -5px 0 0 rgba(255,255,255,.08),3px 0 8px rgba(0,0,0,.5),0 0 22px rgba(130,170,255,.95)}
 .mgc__wk:focus-visible,.mgc__bk:focus-visible{outline:2px solid #fff;outline-offset:-3px}

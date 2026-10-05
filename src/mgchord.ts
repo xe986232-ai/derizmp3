@@ -279,7 +279,7 @@ function build(): void {
     if (k === 'range') { S.st.octave = +v; changed(); playChord(S.sel); return; }   // register chord pindah oktaf: keyboard digambar ulang, piano roll ikut, lalu contoh bunyi
     if (k === 'sound') { sound = v as Voice; renderControls(); playChord(S.sel); return; }   // suara preview saja: tidak mengubah progression, jadi tidak perlu commit
     if (k === 'style') S.rh.style = v as PlayStyle; else S.st.scale = v;
-    changed(); playChord(S.sel);   // contoh bunyi (satu bar, sesuai style): chord terpilih, atau C kalau masih kosong
+    changed(); popNotes(0, span(), 0); playChord(S.sel);   // contoh bunyi (satu bar, sesuai style): chord terpilih, atau C kalau masih kosong
   };
   pop.addEventListener('click', e => { const o = (e.target as HTMLElement).closest<HTMLElement>('.mgc__po'); if (o) pickPop(o); });
   pop.addEventListener('keydown', e => {
@@ -311,6 +311,38 @@ function build(): void {
     $('.mgc__bpm').textContent = `${Math.round(bridge ? bridge.bpm() : 120)} BPM • ${NOTE_NAMES[S.st.root]} ${S.st.scale}`;
   }
 
+  // ---------- animasi (dari video promo Remotion): hanya tampilan, tidak mengubah data / bunyi ----------
+  const calm = (): boolean => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  let popFrom = 0, popTo = 0, popAt = 0, popRaf = 0;   // nada piano roll di rentang ketukan [popFrom, popTo) muncul bertahap mulai popAt (ms)
+  const POP_DUR = 260, POP_STEP = 55;
+  const easeOut = (x: number): number => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
+  const popNotes = (from: number, to: number, delay: number): void => {
+    if (calm()) return;
+    popFrom = from; popTo = to; popAt = performance.now() + delay;
+    if (popRaf) return;
+    const tick = (): void => {
+      popRaf = 0; if (el.hidden) return;
+      if (!playing) drawRoll();   // saat play, loop play sudah menggambar ulang
+      if (performance.now() < popAt + POP_DUR + POP_STEP * 8) popRaf = requestAnimationFrame(tick);
+    };
+    popRaf = requestAnimationFrame(tick);
+  };
+  const flyChip = (from: HTMLElement, name: string, idx: number): void => {   // chip chord terbang dari tuts ke blok chord, blok lalu muncul 3D + menyala
+    const blk = lane.querySelector<HTMLElement>(`.mgc__ch[data-i="${idx}"]`);
+    if (!blk || calm() || !blk.animate) return;
+    const a = from.getBoundingClientRect(), b = blk.getBoundingClientRect(), root = el.getBoundingClientRect();
+    const x0 = a.left + a.width / 2 - root.left, y0 = a.top + a.height / 2 - root.top, x1 = b.left + b.width / 2 - root.left, y1 = b.top + b.height / 2 - root.top;
+    const chip = document.createElement('div'); chip.className = 'mgc__chip'; chip.textContent = name; el.appendChild(chip);
+    const FLY = 360, mx = (x0 + x1) / 2, my = Math.min(y0, y1) - 36;
+    const t = (x: number, y: number, sc: number): string => `translate(${x}px,${y}px) translate(-50%,-50%) scale(${sc})`;
+    chip.animate([{ transform: t(x0, y0, .55), opacity: 0 }, { transform: t(mx, my, 1.05), opacity: 1, offset: .5 }, { transform: t(x1, y1, 1), opacity: 1, offset: .9 }, { transform: t(x1, y1, 1), opacity: 0 }],
+      { duration: FLY, easing: 'cubic-bezier(.3,.7,.4,1)' }).onfinish = () => chip.remove();
+    blk.animate([
+      { filter: 'blur(7px)', transform: 'perspective(520px) rotateX(80deg) scale(.85)', opacity: 0, boxShadow: '0 0 0 rgba(255,255,255,0)' },
+      { filter: 'blur(0)', transform: 'perspective(520px) rotateX(0) scale(1)', opacity: 1, boxShadow: '0 0 22px rgba(255,255,255,.9)', offset: .6 },
+      { filter: 'blur(0)', transform: 'none', opacity: 1 }], { duration: 420, delay: FLY - 80, easing: 'ease-out', fill: 'backwards' });
+  };
+
   // Piano roll terang (sama dengan video promo): latar #f6f9ff, baris tuts hitam samar, garis ketukan biru, nada gradasi biru (emas saat dimainkan), pasak oranye menggantung di batas chord
   function drawRoll(): void {
     const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1, W = Math.floor(r.width), H = Math.floor(r.height);
@@ -333,13 +365,18 @@ function build(): void {
       const bar = b % 4 === 0, x = Math.round(x0 + b * ppb);
       g.fillStyle = bar ? 'rgba(63,111,216,.22)' : 'rgba(63,111,216,.08)'; g.fillRect(bar ? x - 1 : x, 0, bar ? 2 : 1, gh);
     }
+    const nowMs = performance.now(); let pi = 0;
     for (const n of notes) {
-      const x = x0 + n.s * ppb + 1, w = Math.max(5, n.l * ppb - 4), y = yOf(n.p) + 1, h = Math.max(2, rh - 2.5);
+      let x = x0 + n.s * ppb + 1, w = Math.max(5, n.l * ppb - 4), y = yOf(n.p) + 1, h = Math.max(2, rh - 2.5), born = 1;
+      if (n.s >= popFrom && n.s < popTo && nowMs < popAt + POP_DUR + POP_STEP * 8) { born = easeOut((nowMs - popAt - Math.min(pi, 8) * POP_STEP) / POP_DUR); pi++; }   // muncul: turun dari atas + melebar + fade
+      if (born < 1) { w *= Math.max(0.02, born); y -= (1 - born) * 18; }
       const act = phBeat >= 0 && phBeat >= n.s && phBeat < n.s + n.l;
+      const glow = act ? Math.exp(-(phBeat - n.s) * 2.2) : 0;   // menyala kuat di awal nada lalu meredup, nada ikut sedikit membesar
+      if (act) { const grow = h * 0.3 * glow; y -= grow / 2; h += grow; }
       const gr = g.createLinearGradient(0, y, 0, y + h);
       if (act) { gr.addColorStop(0, '#ffd77f'); gr.addColorStop(1, '#f2b632'); } else { gr.addColorStop(0, '#6f9cf5'); gr.addColorStop(1, '#3f6fd8'); }
-      g.globalAlpha = 0.7 + 0.3 * n.v; g.fillStyle = gr;
-      g.shadowColor = act ? 'rgba(242,182,50,.9)' : 'rgba(63,111,216,.3)'; g.shadowBlur = act ? 14 : 6; g.shadowOffsetY = act ? 0 : 2;
+      g.globalAlpha = (0.7 + 0.3 * n.v) * (0.55 + 0.45 * born); g.fillStyle = gr;
+      g.shadowColor = act ? 'rgba(242,182,50,.9)' : 'rgba(63,111,216,.3)'; g.shadowBlur = act ? 8 + 14 * glow : 6; g.shadowOffsetY = act ? 0 : 2;
       g.beginPath(); g.roundRect(x, y, w, h, Math.min(3, rh / 2)); g.fill();
     }
     g.globalAlpha = 1; g.shadowBlur = 0; g.shadowOffsetY = 0;
@@ -519,7 +556,9 @@ function build(): void {
     if (left <= 0) {
       toastMsg(`Progression penuh (${S.bars} bar) — pilih 8 bars atau hapus chord`); return;
     }
+    const start = totalBeats(S.slots);
     S.slots.push({ deg: 0, beats: Math.min(4, left), root: pc, q }); S.sel = S.slots.length - 1; S.preset = -1; changed();
+    flyChip(k, slotChord(S.st, S.slots[S.sel]).name, S.sel); popNotes(start, start + Math.min(4, left), 300);
   };
   const releaseKeys = (): void => keyEls.forEach(k => k.classList.remove('pressed'));
   kbd.addEventListener('pointerdown', e => { const k = (e.target as HTMLElement).closest<HTMLElement>('[data-p]'); if (!k) return; k.classList.add('pressed'); playKey(k); e.preventDefault(); });
