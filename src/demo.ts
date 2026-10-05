@@ -8,6 +8,7 @@ export const CONTACT_URL = '';   // contoh: 'https://wa.me/62812xxxxxxx?text=Say
 export const LIMITS = {
   tracks: 4,        // jumlah track dalam project
   deriz: 2,         // jumlah track DERIZ
+  derizPlugins: 5,  // jumlah plugin DERIZ di seluruh project (bawaan track DERIZ + hasil Add dari daftar efek + hasil Duplicate)
   bars: 32,         // panjang timeline (bar)
   audioSec: 30,     // audio yang di-upload (MPCS / audio clip), detik
   exportSec: 30,    // panjang hasil export audio, detik
@@ -16,10 +17,11 @@ export const LIMITS = {
   mgcMidiChords: 2, // jumlah chord yang ikut saat ekspor MIDI MGCHORD
 };
 
-export type LockKind = 'track' | 'deriz' | 'bars' | 'audio' | 'automation' | 'save' | 'export' | 'mgcstyle' | 'mgcsound' | 'mgcrange' | 'mgcbars' | 'mgcmidi';
+export type LockKind = 'track' | 'deriz' | 'derizplug' | 'bars' | 'audio' | 'automation' | 'save' | 'export' | 'mgcstyle' | 'mgcsound' | 'mgcrange' | 'mgcbars' | 'mgcmidi';
 const MSG: Record<LockKind, [string, string]> = {
   track: ['Batas track demo', `Versi demo dibatasi ${LIMITS.tracks} track. Versi penuh tanpa batas track.`],
   deriz: ['Batas DERIZ demo', `Versi demo dibatasi ${LIMITS.deriz} DERIZ per project.`],
+  derizplug: ['Batas plugin DERIZ demo', `Versi demo dibatasi ${LIMITS.derizPlugins} plugin DERIZ per project (termasuk hasil Add / Duplicate). Versi penuh tanpa batas plugin.`],
   bars: ['Batas panjang demo', `Timeline versi demo dibatasi ${LIMITS.bars} bar.`],
   audio: ['Audio dipotong', `Versi demo memakai ${LIMITS.audioSec} detik pertama dari audio. Versi penuh memuat audio utuh.`],
   automation: ['Automation Clip', 'Automation Clip ada di versi penuh.'],
@@ -87,7 +89,7 @@ export function demoMount(): void {
   b.addEventListener('click', () => {
     demoEvent('demo_info');
     dialog('Versi DEMO',
-      `Semua fitur bisa dicoba. Yang dibatasi: ${LIMITS.tracks} track, ${LIMITS.bars} bar, audio ${LIMITS.audioSec} detik, export diberi penanda “DEMO”, tanpa simpan project, tanpa Automation Clip.`,
+      `Semua fitur bisa dicoba. Yang dibatasi: ${LIMITS.tracks} track, ${LIMITS.derizPlugins} plugin DERIZ, ${LIMITS.bars} bar, audio ${LIMITS.audioSec} detik, export diberi penanda “DEMO”, tanpa simpan project, tanpa Automation Clip.`,
       '<h4>Credits</h4><p class="demo__cr">Piano: Salamander Grand Piano V3 oleh Alexander Holm (CC BY 3.0, creativecommons.org/licenses/by/3.0). Font: Syncopate (SIL OFL). Encoder MP3: lamejs (LGPL).</p>');
   });
   document.body.appendChild(b);

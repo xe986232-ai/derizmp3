@@ -11,6 +11,7 @@ import { DerizSynth } from './deriz-synth';
 import { dbgSched, dbgSent, dbgSpec } from './audio-debug';
 import { openMpcs } from './mpcs';
 import { openMgchord } from './mgchord';
+import { DEMO, LIMITS, demoNotice } from './demo';
 import { isAudio, ACCEPT as AUDIO_ACCEPT } from './audio-upload-card';
 import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } from './synth-engine';
 import { velGain } from './velocity';
@@ -107,6 +108,7 @@ const EFFECTS: EffectDef[] = [
   }
 ];
 const defOf = (t: FxType) => EFFECTS.find(e => e.type === t)!;
+const derizCount = (): number => { let n = 0; for (const r of racks.values()) for (const f of r) if (f.type === 'deriz') n++; return n; };   // jumlah plugin DERIZ di semua track (dipakai batas demo)
 const derizNo = (id: number): number => { for (const r of racks.values()) { const k = r.filter(f => f.type === 'deriz').findIndex(f => f.id === id); if (k >= 0) return k + 1; } return 1; };   // urutan DERIZ di track-nya (1 = bawaan)
 
 const racks = new Map<string, Fx[]>();   // id track -> efek miliknya
@@ -486,7 +488,8 @@ export interface FxRack {
   derizHeadPump(ahead: number): void;   // buat garis play untuk nada yang mulai sebelum waktu AudioContext `ahead` (tidak ada elemen DOM untuk nada yang masih jauh)
   derizOn(track: string, midi: number, fxId?: number): number;   // nada langsung (keyboard di bawah piano roll); mengembalikan id untuk derizOff
   derizOwnsPlain(track: string, fxId: number): boolean;   // DERIZ ini pemilik nada kunci polos di pattern track tsb
-  derizIds(track: string): number[];          // semua DERIZ di track ini, urut kartu (yang pertama = bawaan track)
+  derizCount(): number;                       // jumlah plugin DERIZ di semua track (batas demo)
+  derizIds(track: string): number[];        // semua DERIZ di track ini, urut kartu (yang pertama = bawaan track)
   derizAll(): Array<{ id: number; track: string }>;   // semua DERIZ yang menyala dan sudah berisi audio, di semua track
   derizTrackOf(fxId: number): string | undefined;
   addDeriz(track: string): void;   // tambah DERIZ di bawah yang sudah ada di track ini (dipakai saat membuka project; tanpa jendela otomatis)
@@ -1075,6 +1078,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
 
   function addEffect(type: FxType): void {
     if (!cur) return;
+    if (DEMO && type === 'deriz' && derizCount() >= LIMITS.derizPlugins) { demoNotice('derizplug'); return; }   // DEMO: batas jumlah plugin DERIZ
     const d = defOf(type), v: Record<string, number> = {};
     d.params.forEach(p => { v[p.key] = p.def; });
     const fx: Fx = { id: ++seq, type, on: true, min: false, v };
@@ -1131,6 +1135,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   // Duplicate: DERIZ baru tepat di bawah aslinya dengan setelan knob + audio yang sama; nada di pattern tidak ikut disalin
   function duplicateDeriz(card: HTMLElement): void {
     const src = find(card); if (!src || src.type !== 'deriz' || !cur) return;
+    if (DEMO && derizCount() >= LIMITS.derizPlugins) { demoNotice('derizplug'); return; }   // DEMO: batas jumlah plugin DERIZ
     hideTip();
     const fx: Fx = { id: ++seq, type: 'deriz', on: src.on, min: false, v: { ...src.v } };
     if (src.deriz) fx.deriz = { ...src.deriz, busy: undefined };   // buffer & spektrogram dipakai bersama (tidak diubah), posisi start / zoom salinan sendiri
@@ -1684,6 +1689,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     hasDeriz: track => !!derizOf(track),
     derizPlay, derizSchedule, derizHeadPump, derizOn, derizOff, derizStop, derizWarm,
     derizOwnsPlain: (track, fxId) => plainOwner.get(track) === fxId,
+    derizCount,
     derizIds: track => (racks.get(track) ?? []).filter(f => f.type === 'deriz').map(f => f.id),
     derizAll: () => [...racks.entries()].flatMap(([track, r]) => r.filter(f => f.type === 'deriz' && f.on && f.deriz).map(f => ({ id: f.id, track }))),
     derizTrackOf: fxId => { for (const [track, r] of racks) if (r.some(f => f.id === fxId)) return track; return undefined; },

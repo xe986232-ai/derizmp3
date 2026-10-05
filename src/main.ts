@@ -27,7 +27,7 @@ import { decodeFile, addBuffer, getBuffer, encodeWav, renderWave, play as playCl
 import { slideSource, glideBeats } from './note-slide';
 import { velAlpha } from './velocity';
 import { DEMO, LIMITS, demoNotice, demoMount } from './demo';
-const demoTrackFull = (ins) => { if (!DEMO) return false; const cs = [...document.querySelectorAll('.trackheader-container')]; if (cs.length >= LIMITS.tracks) { demoNotice('track'); return true; } if (ins === 'DERIZ' && cs.filter(c => c.dataset.ins === 'DERIZ').length >= LIMITS.deriz) { demoNotice('deriz'); return true; } return false; };   // DEMO: batas jumlah track / DERIZ
+const demoTrackFull = (ins) => { if (!DEMO) return false; const cs = [...document.querySelectorAll('.trackheader-container')]; if (cs.length >= LIMITS.tracks) { demoNotice('track'); return true; } if (ins === 'DERIZ' && cs.filter(c => c.dataset.ins === 'DERIZ').length >= LIMITS.deriz) { demoNotice('deriz'); return true; } if (ins === 'DERIZ' && fxRack.derizCount() >= LIMITS.derizPlugins) { demoNotice('derizplug'); return true; } return false; };   // DEMO: batas jumlah track / DERIZ
 import { openPianoRoll, closePianoRoll, isPianoRollOpen, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getNoteColor, setNoteColor, getPianoRollNotes, setPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, clearPianoRollNotes, PR_BEATS } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 registerSW();   // PWA: bisa di-install & jalan offline (aktif pada hasil build)
@@ -1420,6 +1420,7 @@ function duplicateTrack(src) {
   const name = base + ' ' + n, color = src.style.getPropertyValue('--track-color') || COLORS[0];
   const sPwr = src.querySelector('.trackheader__pwr'), sVol = src.querySelector('input[type=range]'), sPan = src.querySelector('.knob-input');
   const derizSrc = fxRack.derizIds(sid), derizState = fxRack.derizExport(sid), fxs = fxRack.fxExport(sid);
+  if (DEMO && fxRack.derizCount() + derizSrc.length > LIMITS.derizPlugins) { demoNotice('derizplug'); return; }   // DEMO: salinan track tidak boleh melewati batas plugin DERIZ
   const pats = [...sLane.querySelectorAll('.pattern')].sort((a, b) => pl(a) - pl(b));
   const pans = sPan ? Math.round((+sPan.getAttribute('aria-valuenow') - 0.5) / 0.02) : 0;
 
