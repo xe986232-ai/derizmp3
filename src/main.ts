@@ -364,6 +364,7 @@ const patBase = id => id.split('@')[0];
 const copyPatNotes = (from, to, a, b) => { copyPianoRollNotes(from, to, a, b); for (const k of pianoRollExtraKeys(from)) copyPianoRollNotes(k, to + k.slice(from.length), a, b); };
 const trimPatNotes = (id, beat) => { trimPianoRollNotes(id, beat); for (const k of pianoRollExtraKeys(id)) trimPianoRollNotes(k, beat); };
 setPianoRollChangeHandler(id => { const el = lanesEl.querySelector('.pattern[data-pr-id="' + patBase(id) + '"]'); if (el) renderPatNotes(el); });
+document.addEventListener('prbarschange', () => lanesEl.querySelectorAll('.pattern[data-pr-id]').forEach(renderPatNotes));   // Pengaturan > Grid Piano Roll diganti: note mini di semua pattern ikut lebar grid yang baru
 function createPattern(lane, sl, ci) {   // ci = {clip, off}: pattern ini adalah audio clip
   const cont = document.querySelector('.trackheader-container[data-track="' + lane.dataset.track + '"]');
   const col = cont && cont.style.getPropertyValue('--track-color');

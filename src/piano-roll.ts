@@ -21,7 +21,10 @@ type Tool = 'draw' | 'select' | 'erase' | 'pan';
 import { slideSource, glideBeats } from './note-slide';
 import { VEL_MIN, velOf, velAlpha } from './velocity';
 const P_MIN = 24, P_MAX = 108, ROWS = P_MAX - P_MIN + 1;   // C1..C8
-const KEY_W = 64, RULER_H = 32, BEATS_PER_BAR = 4, BARS = 15;   // grid selalu 15 bar (nomor 1..15)
+const KEY_W = 64, RULER_H = 32, BEATS_PER_BAR = 4;
+// Panjang grid (bar) bisa diatur di Pengaturan: 4..50, bawaan 15. Disimpan di browser; tidak pernah lebih pendek dari nada terjauh.
+export const PR_BARS_MIN = 4, PR_BARS_MAX = 50, PR_BARS_DEFAULT = 15, PR_BARS_KEY = 'derizmp3.prBars';
+let BARS = (() => { try { const n = parseInt(localStorage.getItem(PR_BARS_KEY) || '', 10); return Number.isFinite(n) ? Math.min(PR_BARS_MAX, Math.max(PR_BARS_MIN, n)) : PR_BARS_DEFAULT; } catch { return PR_BARS_DEFAULT; } })();
 const PPB_MIN = 8, PPB_MAX = 480, ROW_MIN = 10, ROW_MAX = 40;
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const BLACK = new Set([1, 3, 6, 8, 10]);
@@ -60,7 +63,7 @@ let btnUndo!: HTMLButtonElement, btnRedo!: HTMLButtonElement, selBar!: HTMLEleme
 // state editor
 let st: State = {notes: [], nextId: 1};
 let curKey = '';
-const total = BARS * BEATS_PER_BAR;
+let total = BARS * BEATS_PER_BAR;
 let ppb = 64, rowH = 18;
 let tool: Tool = 'draw';
 let snapOn = true;   // tombol Snap (lampu indikator): nyala = note menempel ke garis grid yang terlihat
@@ -594,7 +597,29 @@ function notifyChange() {
   const sn = curKey + snapshot();
   if (sn !== notified) { notified = sn; onChange(curKey); }
 }
-export const PR_BEATS = total;   // lebar grid piano roll (ketukan)
+export let PR_BEATS = total;   // lebar grid piano roll (ketukan); live binding, ikut berubah kalau panjang grid diganti
+export const getPianoRollBars = (): number => BARS;
+// jumlah bar minimal supaya semua nada (semua pattern) tetap di dalam grid
+export function pianoRollNeededBars(): number {
+  let m = 0;
+  for (const x of states.values()) for (const n of x.notes) m = Math.max(m, n.s + n.l);
+  for (const n of st.notes) m = Math.max(m, n.s + n.l);
+  return Math.max(PR_BARS_MIN, Math.ceil(m / BEATS_PER_BAR - 1e-9));
+}
+function applyBars(v: number): boolean {
+  if (v === BARS) return false;
+  BARS = v; total = BARS * BEATS_PER_BAR; PR_BEATS = total;
+  if (root && !root.hidden) { applySize(); schedule(); }   // piano roll sedang terbuka: ukuran ruang scroll + gambar ikut
+  document.dispatchEvent(new CustomEvent('prbarschange'));  // main.ts menggambar ulang note mini di semua pattern; menu Pengaturan menyamakan tampilannya
+  return true;
+}
+// dari Pengaturan: mengembalikan nilai yang benar-benar dipakai (dijepit ke 4..50 dan ke nada terjauh)
+export function setPianoRollBars(n: number, save = true): number {
+  const v = clamp(Math.round(n) || PR_BARS_DEFAULT, Math.min(PR_BARS_MAX, Math.max(PR_BARS_MIN, pianoRollNeededBars())), PR_BARS_MAX);
+  if (save) { try { localStorage.setItem(PR_BARS_KEY, String(v)); } catch { /* penyimpanan diblokir: tetap berlaku sampai halaman ditutup */ } }
+  applyBars(v);
+  return v;
+}
 // sl / v hanya ikut kalau bukan nilai awal (velocity 1 = tidak disimpan), jadi data project lama tetap sama
 const extras = (n: {sl?: boolean; v?: number}) => ({...(n.sl ? {sl: true} : {}), ...(n.v !== undefined && n.v < 1 ? {v: Math.round(velOf(n.v) * 1000) / 1000} : {})});
 export function getPianoRollNotes(id: string): NoteData[] {
@@ -606,6 +631,7 @@ export function setPianoRollNotes(id: string, notes: NoteData[]) {
   const st: State = {notes: [], nextId: 1};
   for (const n of notes) st.notes.push({id: st.nextId++, p: n.p, s: n.s, l: n.l, ...extras(n)});
   states.set(id, st);
+  const need = pianoRollNeededBars(); if (need > BARS) applyBars(Math.min(PR_BARS_MAX, need));   // project berisi nada lebih jauh dari grid pengaturan ini: grid melebar sementara (pengaturan tersimpan tidak berubah), nada tidak pernah tersembunyi
   onChange && onChange(id);
 }
 // salin nada dari satu pattern ke pattern lain (rentang ketukan [fromBeat, toBeat), digeser supaya mulai dari 0)

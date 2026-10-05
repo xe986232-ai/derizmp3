@@ -2,6 +2,7 @@
 // Panel menimpa layar (tidak mendorong timeline). Tutup: klik tombol lagi, klik di luar panel, atau Esc.
 // Saat piano roll terbuka tombolnya disembunyikan (CSS) supaya tidak menimpa tombol X piano roll, dan panel ikut menutup.
 
+import { PR_BARS_MIN, PR_BARS_MAX, getPianoRollBars, pianoRollNeededBars, setPianoRollBars } from './piano-roll';
 import { runExport, FMT_KEY, type ExportFormat } from './export-audio';
 import { setAudioDebug, loadAudioDebug } from './audio-debug';
 import { saveProject, loadProject, deleteProject, listProjects, projectExists, recordToJson, jsonToRecord } from './project-store';
@@ -131,8 +132,19 @@ export function initMenuPanel(): MenuPanel {
               '<button type="button" class="mp__switch" role="switch" aria-checked="false" aria-label="Debug Audio" data-adbg><i></i></button>' +
             '</div>' +
           '</div>' +
+          '<div class="mp__card mp__item mp__set" style="--i:7">' +
+            '<div class="mp__row">' +
+              '<span class="mp__row__t"><b>Grid Piano Roll</b><small data-prb-hint>Panjang grid piano roll &amp; note mini di pattern</small></span>' +
+              '<span class="mp__val" data-prb-val></span>' +
+            '</div>' +
+            '<div class="mp__step">' +
+              '<button type="button" class="mp__stepbtn" aria-label="Kurangi bar" data-prb-dec>&minus;</button>' +
+              '<input type="range" class="mp__range" min="' + PR_BARS_MIN + '" max="' + PR_BARS_MAX + '" step="1" aria-label="Jumlah bar grid piano roll" data-prb-range>' +
+              '<button type="button" class="mp__stepbtn" aria-label="Tambah bar" data-prb-inc>+</button>' +
+            '</div>' +
+          '</div>' +
           // Install aplikasi (PWA): disembunyikan kalau sudah terpasang
-          '<div class="mp__card mp__item mp__set" style="--i:7" data-install-card hidden>' +
+          '<div class="mp__card mp__item mp__set" style="--i:8" data-install-card hidden>' +
             '<div class="mp__sub"><span>Install aplikasi</span></div>' +
             '<button type="button" class="mp__expbtn" data-install-btn>' + IC_DL + '<span>Install ke layar utama</span></button>' +
             '<p class="mp__hint" data-install-hint></p>' +
@@ -230,6 +242,26 @@ export function initMenuPanel(): MenuPanel {
   let loudSaved = true;
   try { loudSaved = localStorage.getItem(LOUD_KEY) !== '0'; } catch { /* abaikan */ }
   setLoud(loudSaved, false);
+
+  // ===== Pengaturan: Grid Piano Roll (4..50 bar, bawaan 15). piano-roll.ts menyimpan nilainya dan mengabari main.ts lewat event 'prbarschange' =====
+  const prbRange = panel.querySelector('[data-prb-range]') as HTMLInputElement;
+  const prbVal = panel.querySelector('[data-prb-val]') as HTMLElement;
+  const prbHint = panel.querySelector('[data-prb-hint]') as HTMLElement;
+  const prbDec = panel.querySelector('[data-prb-dec]') as HTMLButtonElement, prbInc = panel.querySelector('[data-prb-inc]') as HTMLButtonElement;
+  const PRB_HINT = prbHint.textContent || '';
+  const prbShow = (): void => {
+    const v = getPianoRollBars(), need = pianoRollNeededBars();
+    prbRange.value = String(v); prbVal.textContent = v + ' bar';
+    prbHint.textContent = need > PR_BARS_MIN ? PRB_HINT + ' (minimal ' + need + ' bar: ada nada sampai bar ' + need + ')' : PRB_HINT;
+    prbDec.disabled = v <= Math.max(PR_BARS_MIN, need);
+    prbInc.disabled = v >= PR_BARS_MAX;
+  };
+  const prbSet = (n: number): void => { setPianoRollBars(n, true); prbShow(); };   // nilai dijepit ke nada terjauh; tampilan ikut nilai yang dipakai
+  prbRange.addEventListener('input', () => prbSet(+prbRange.value));
+  prbDec.addEventListener('click', () => prbSet(getPianoRollBars() - 1));
+  prbInc.addEventListener('click', () => prbSet(getPianoRollBars() + 1));
+  document.addEventListener('prbarschange', prbShow);   // grid melebar sendiri saat project berisi nada yang lebih jauh
+  prbShow();
 
   // ===== Pengaturan: Debug Audio (panel statistik mengambang; bawaan MATI, kerja tambahan nol saat mati) =====
   const adbgBtn = panel.querySelector('[data-adbg]') as HTMLButtonElement;
