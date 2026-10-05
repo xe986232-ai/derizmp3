@@ -1817,10 +1817,11 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mgc__pow{font-size:15px;font-weight:900;letter-spacing:.03em;color:#8c8c8c;white-space:nowrap}
 .mgc__x{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:transparent;color:#8a8a8a}
 .mgc__x:hover{background:rgba(0,0,0,.08);color:#333}
-.mgc__kr{display:grid;grid-template-columns:1fr}
+.mgc__kr{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:4px}
 .mgc__cd{position:relative;min-width:0}
 .mgc__cdb{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:30px;padding:0 18px 0 8px;border-radius:3px;background:var(--blue2);color:#fff;font-size:13px;transition:background .12s ease}
 .mgc__cdb:hover,.mgc__cdb[aria-expanded="true"]{background:var(--blue3)}
+.mgc__cdb span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mgc__cdb::after{content:"";position:absolute;right:8px;top:50%;width:5px;height:5px;margin-top:-4px;border:solid #dbe6ff;border-width:0 1.5px 1.5px 0;transform:rotate(45deg);transition:transform .15s ease}
 .mgc__cdb[aria-expanded="true"]::after{margin-top:-1px;transform:rotate(-135deg)}
 .mgc__pop{position:fixed;z-index:10;overflow-y:auto;padding:4px;border-radius:5px;background:#3f6fd8;color:#fff;box-shadow:0 14px 36px -6px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.12);font:800 13px/1.2 'Arial Rounded MT Bold','Nunito','Trebuchet MS',system-ui,sans-serif;letter-spacing:.02em;text-transform:uppercase;animation:mgc-pop .12s ease-out;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.4) transparent}
@@ -1900,6 +1901,7 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
   .mgc__pn{width:110px;height:20px;padding:0 8px;gap:6px}.mgc__save{height:20px;padding:0 8px}.mgc__pow{display:none}.mgc__x{width:20px;height:20px}
   .mgc__spec{height:44px}
   .mgc__main{flex-direction:row;padding:4px 0 0 6px}.mgc__side{width:112px;gap:4px;padding:0 6px 4px 0}
+  .mgc__kr{gap:2px}.mgc__cdb{padding:0 12px 0 4px}.mgc__cdb::after{right:5px}
   .mgc__ctl{gap:3px}.mgc__r{gap:2px;font-size:9px}.mgc__cdb,.mgc__sg{height:18px}.mgc__sg button,.mgc__cdb,.mgc__po{font-size:9px}.mgc__po{min-height:20px}
   .mgc__gen{flex-direction:row;justify-content:center;gap:6px}.mgc__ur{flex-direction:column;gap:4px}.mgc__ur button{width:20px;height:18px}
   .mgc__big{width:56px;height:56px;padding:4px}.mgc__big svg{width:28px;height:28px}.mgc__big i{box-shadow:inset 0 0 0 3px rgba(255,255,255,.28)}

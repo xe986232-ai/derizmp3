@@ -118,6 +118,7 @@ Plugin pembuat chord progression, tampilan panel biru: header abu (nama progress
 | Bagian | Fungsi |
 |---|---|
 | **Key** | Tonika + skala sekaligus (mis. F Minor). Pilihan skala: Major, Minor, Dorian, Phrygian, Lydian, Mixolydian, Locrian, Harmonic / Melodic Minor. |
+| **Style / Chord** | Dua dropdown di baris yang sama: kiri = **Style** (susunan nada), kanan = Major / Minor (mutu chord untuk tuts yang diklik). 10 style: Block, Strum (sapuan pelan), Genjreng (D DU UDU), Arp Up, Arp Down, Arp Ping, Alberti, Oom-Pah, Charleston, Reggae. Style dipakai untuk preview, piano roll, SAVE ke pattern, dan MIDI, serta ikut tersimpan di project. Memilih style / klik chord membunyikan satu bar contoh. |
 | **Length** | 4 atau 8 bar. Progression dipotong atau diulang sesuai panjang. |
 | **Audio** | On = chord berbunyi saat dipilih / diacak. Off = senyap (tombol Play tetap berbunyi). |
 | **Tombol bulat** | Acak progression (aliran harmoni fungsional) sepanjang Length. **Undo / redo** menelusuri riwayat perubahan. |
@@ -126,7 +127,7 @@ Plugin pembuat chord progression, tampilan panel biru: header abu (nama progress
 | **SAVE** | Kirim nada ke pattern yang sedang dipilih di timeline. Pattern dilebarkan otomatis kalau muat dan nada lama di pattern itu diganti. Suara keluar kalau track-nya Supersaw / DERIZ. Label di kanan atas berubah dari Unlinked ke Linked setelah berhasil. |
 | **Drag & drop MIDI / unduh** | Seret ke DAW (Chrome / Edge) atau klik untuk mengunduh .mid (tempo mengikuti project). |
 
-Voicing (5 suara, invert, velocity), gaya main (Block / Strum / Arp), Octave, dan Chord Type masih ada di data / mesin (`mgchord-theory.ts`) dengan nilai bawaan, tapi kontrolnya tidak ditampilkan di UI.
+Voicing (5 suara, invert, velocity), Octave, dan Chord Type masih ada di data / mesin (`mgchord-theory.ts`) dengan nilai bawaan, tapi kontrolnya tidak ditampilkan di UI. Pola style Genjreng / Alberti / Oom-Pah / Charleston / Reggae adalah tabel satu bar (`PATTERNS` di `mgchord-theory.ts`: posisi ketukan, panjang, velocity, jenis bass / chord / nada): ubah angkanya atau tambah entri baru (plus namanya di `STYLES` dan `STYLE_INFO`) untuk membuat style lain.
 
 Tombol Play hanya preview (suara piano sample milik plugin sendiri, tempo ikut project); Spasi = play / stop, Esc = tutup. Setelan MGCHORD ikut tersimpan di file project (`mgchord`).
 

@@ -6,9 +6,9 @@
 
 import { createMaster, loadPiano, pianoTone } from './mgchord-audio';
 import {
-  NOTE_NAMES, PRESETS, SCALES,
+  NOTE_NAMES, PRESETS, SCALES, STYLES, STYLE_INFO,
   buildNotes, chordAt, defaultVoicing, slotChord, triadAt, midiName, randomProgression, slotsOf, toMidi, totalBeats, voice,
-  type OutNote, type Rhythm, type Settings, type Slot, type Voicing,
+  type OutNote, type PlayStyle, type Rhythm, type Settings, type Slot, type Voicing,
 } from './mgchord-theory';
 
 // Jembatan ke main.ts: tempo project + kirim nada ke pattern terpilih (mengembalikan pesan kalau gagal, null kalau berhasil)
@@ -34,6 +34,7 @@ export function mgchordImport(saved?: MgchordSaved | null): void {   // dipanggi
   if (saved && saved.st && Array.isArray(saved.slots)) {
     S = { ...base, ...saved, st: { ...base.st, ...saved.st }, vc: { ...base.vc, ...saved.vc }, rh: { ...base.rh, ...saved.rh } };
     S.vc = base.vc;   // chord selalu 3 batang (root - terts - kuint)
+    if (!STYLES.includes(S.rh.style)) S.rh.style = base.rh.style;   // style tidak dikenal (project lama / diedit) -> Block
     S.bars = Math.max(4, Math.round(+saved.bars || 0), Math.ceil(totalBeats(S.slots) / 4));   // project lama tanpa 'bars': ikut panjang progression-nya
     S.sel = S.slots.length ? Math.min(Math.max(0, S.sel | 0), S.slots.length - 1) : -1;
   } else S = base;
@@ -107,7 +108,8 @@ function build(): void {
       '<canvas class="mgc__spec" aria-hidden="true"></canvas>' +
       '<div class="mgc__main"><aside class="mgc__side">' +
         '<div class="mgc__ctl">' +
-          '<div class="mgc__r"><span>Chord</span><div class="mgc__kr">' +
+          '<div class="mgc__r"><span>Style / Chord</span><div class="mgc__kr">' +
+            '<div class="mgc__cd" data-dd="style"><button type="button" class="mgc__cdb" aria-haspopup="listbox" aria-expanded="false" aria-label="Style susunan nada"><span></span></button></div>' +
             '<div class="mgc__cd" data-dd="scale"><button type="button" class="mgc__cdb" aria-haspopup="listbox" aria-expanded="false" aria-label="Chord mayor atau minor"><span></span></button></div>' +
           '</div></div>' +
           '<div class="mgc__r"><span>Length</span><div class="mgc__sg"><button type="button" data-a="len" data-s="4">4 bars</button><button type="button" data-a="len" data-s="8">8 bars</button></div></div>' +
@@ -222,13 +224,18 @@ function build(): void {
     renderKeys();
   }
   // ---------- dropdown custom (bukan select bawaan browser): daftar pilihan muncul sebagai panel biru, bisa dioperasikan dengan panah / Enter / Esc ----------
-  type DdKey = 'scale';
-  const DD: Record<DdKey, { v: string; t: string }[]> = {
+  type DdKey = 'style' | 'scale';
+  const DD: Record<DdKey, { v: string; t: string; d?: string }[]> = {
+    style: STYLES.map(v => ({ v, t: STYLE_INFO[v].label, d: STYLE_INFO[v].desc })),   // 10 style susunan nada (tabelnya ada di mgchord-theory.ts)
     scale: [{ v: 'Major', t: 'Major' }, { v: 'Minor', t: 'Minor' }],   // hanya dua pilihan: mayor dan minor
   };
-  const ddValue = (_k: DdKey): string => S.st.scale;
+  const ddValue = (k: DdKey): string => (k === 'style' ? S.rh.style : S.st.scale);
   const ddLabels = (): void => {
-    (Object.keys(DD) as DdKey[]).forEach(k => { const sp = el.querySelector<HTMLElement>(`[data-dd="${k}"] .mgc__cdb span`); if (sp) sp.textContent = DD[k].find(o => o.v === ddValue(k))?.t ?? ddValue(k); });
+    (Object.keys(DD) as DdKey[]).forEach(k => {
+      const o = DD[k].find(x => x.v === ddValue(k)), sp = el.querySelector<HTMLElement>(`[data-dd="${k}"] .mgc__cdb span`);
+      if (sp) sp.textContent = o?.t ?? ddValue(k);
+      const bt = sp?.parentElement; if (bt) bt.title = k === 'style' ? (o?.d ?? 'Style susunan nada') : 'Chord mayor atau minor';
+    });
   };
   const pop = document.createElement('div'); pop.className = 'mgc__pop'; pop.setAttribute('role', 'listbox'); pop.hidden = true; el.appendChild(pop);
   let popFor: DdKey | null = null, popBtn: HTMLElement | null = null;
@@ -244,7 +251,7 @@ function build(): void {
     closePop();
     popFor = k; popBtn = btn; btn.setAttribute('aria-expanded', 'true');
     const cur = ddValue(k);
-    pop.innerHTML = DD[k].map(o => `<div role="option" tabindex="-1" class="mgc__po${o.v === cur ? ' is-on' : ''}" data-v="${o.v}" aria-selected="${o.v === cur}">${o.t}</div>`).join('');
+    pop.innerHTML = DD[k].map(o => `<div role="option" tabindex="-1" class="mgc__po${o.v === cur ? ' is-on' : ''}" data-v="${o.v}"${o.d ? ` title="${o.d}"` : ''} aria-selected="${o.v === cur}">${o.t}</div>`).join('');
     pop.hidden = false;
     const r = btn.getBoundingClientRect(), vh = window.innerHeight, below = vh - r.bottom - 8, above = r.top - 8, up = below < 120 && above > below;
     pop.style.minWidth = Math.max(r.width, 64) + 'px'; pop.style.left = Math.max(4, Math.min(r.left, window.innerWidth - r.width - 4)) + 'px';
@@ -255,7 +262,8 @@ function build(): void {
   const pickPop = (o: HTMLElement): void => {
     const k = popFor; if (!k) return; const v = o.dataset.v!;
     closePop(true);
-    S.st.scale = v; changed(); playChord(S.sel);   // contoh bunyi: chord terpilih, atau C kalau masih kosong
+    if (k === 'style') S.rh.style = v as PlayStyle; else S.st.scale = v;
+    changed(); playChord(S.sel);   // contoh bunyi (satu bar, sesuai style): chord terpilih, atau C kalau masih kosong
   };
   pop.addEventListener('click', e => { const o = (e.target as HTMLElement).closest<HTMLElement>('.mgc__po'); if (o) pickPop(o); });
   pop.addEventListener('keydown', e => {
@@ -342,9 +350,11 @@ function build(): void {
   const quality = (): 'Major' | 'Minor' => (S.st.scale === 'Minor' ? 'Minor' : 'Major');   // pilihan dropdown Chord = mutu chord untuk tuts berikutnya
   const playChord = (i: number): void => {
     if (!audioOn) return;
-    const c = ac(), t = c.currentTime + 0.02, vn = voice(S.slots[i] ? slotChord(S.st, S.slots[i]) : triadAt(0, quality()), S.vc);   // belum ada chord: dengarkan contoh C
-    const b = c.createGain(); b.connect(out!); vn.forEach((n, k) => tone(c, b, n.p, t + (S.rh.style === 'Strum' ? k * S.rh.strum * 0.5 : 0), 1.1, n.v));
-    setTimeout(() => b.disconnect(), 2500);
+    const c = ac(), t = c.currentTime + 0.02, spb = 60 / (bridge ? bridge.bpm() : 120);
+    const sl: Slot = S.slots[i] ?? { deg: 0, beats: 4, root: 0, q: quality() };   // belum ada chord: dengarkan contoh C
+    const b = c.createGain(); b.connect(out!);
+    buildNotes(S.st, [sl], S.vc, S.rh).filter(n => n.s < 4).forEach(n => tone(c, b, n.p, t + n.s * spb, Math.min(n.l * spb, 1.8), n.v));   // satu bar pertama dengan pola style terpilih
+    setTimeout(() => b.disconnect(), (4 * spb + 2.5) * 1000);
   };
   const setPlayUi = (on: boolean): void => {
     el.querySelectorAll<HTMLElement>('.mgc__go').forEach(b => { b.innerHTML = on ? ICON.stop : ICON.play; b.classList.toggle('is-on', on); });
