@@ -96,8 +96,8 @@ function build(): void {
   el.className = 'mgc'; el.hidden = true;
   const keyOpts = NOTE_NAMES.map((n, r) => SCALE_NAMES.map(sc => `<option value="${r}|${sc}">${n} ${sc}</option>`).join('')).join('');
   const wp = 100 / KB_WHITES.length;   // keyboard card VERTIKAL: C5 di bawah, naik sampai C6 di atas. Tuts putih menumpuk ke atas, tuts hitam pendek menempel di sisi kiri dan berpusat di batas tuts putih
-  const kbKeys = KB_WHITES.map((p, i) => `<button type="button" class="mgc__wk" data-p="${p}" aria-label="${midiName(p)}" style="top:${(KB_WHITES.length - 1 - i) * wp}%"><span>${p % 12 === 0 ? midiName(p) : ''}</span></button>`).join('') +
-    KB_BLACKS.map(p => `<button type="button" class="mgc__bk" data-p="${p}" aria-label="${midiName(p)}" style="top:calc(${100 - KB_WHITES.filter(w => w < p).length * wp}% - ${wp * 0.3235}%)"></button>`).join('');
+  const kbKeys = KB_WHITES.map((p, i) => `<button type="button" class="mgc__wk" data-p="${p}" aria-label="${midiName(p)}" style="top:${(KB_WHITES.length - 1 - i) * wp}%"><span>${midiName(p)}</span></button>`).join('') +
+    KB_BLACKS.map(p => `<button type="button" class="mgc__bk" data-p="${p}" aria-label="${midiName(p)}" style="top:calc(${100 - KB_WHITES.filter(w => w < p).length * wp}% - ${wp * 0.3235}%)"><span>${midiName(p)}</span></button>`).join('');
   const presetOpts = '<option value="-1">New progression</option>' + PRESETS.map((p, i) => `<option value="${i}">${p.name}</option>`).join('');
   el.innerHTML =
     '<div class="mgc__back"></div>' +
