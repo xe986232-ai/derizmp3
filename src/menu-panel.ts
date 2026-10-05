@@ -5,6 +5,7 @@
 import { PR_BARS_MIN, PR_BARS_MAX, getPianoRollBars, pianoRollNeededBars, setPianoRollBars } from './piano-roll';
 import { runExport, FMT_KEY, type ExportFormat } from './export-audio';
 import { setAudioDebug, loadAudioDebug } from './audio-debug';
+import { DEMO, demoNotice } from './demo';
 import { saveProject, loadProject, deleteProject, listProjects, projectExists, recordToJson, jsonToRecord } from './project-store';
 import { installState, promptInstall, onInstallChange } from './pwa';
 
@@ -272,6 +273,7 @@ export function initMenuPanel(): MenuPanel {
   };
   adbgBtn.addEventListener('click', () => setAdbg(adbgBtn.getAttribute('aria-checked') !== 'true', true));
   setAdbg(loadAudioDebug(), false);
+  if (DEMO) { setAdbg(false, false); adbgBtn.closest<HTMLElement>('.mp__item')?.setAttribute('hidden', ''); }   // DEMO: Debug Audio disembunyikan
 
   // ===== Export: pilihan format (disimpan di browser) + tombol Export Audio =====
   const xfBtns = [...panel.querySelectorAll<HTMLButtonElement>('[data-xfmt]')];
@@ -395,6 +397,7 @@ export function initMenuPanel(): MenuPanel {
 
   const closeOv = (): void => { ov.hidden = true; busy = false; };
   const openOv = async (): Promise<void> => {
+    if (DEMO) { demoNotice('save'); return; }   // DEMO: simpan project hanya di versi penuh
     if (!io) { say('Project belum siap, coba lagi sebentar'); return; }
     if (!curName) {
       let n = 1; const taken = new Set((await listProjects().catch(() => [])).map(p => p.name));
@@ -438,6 +441,7 @@ export function initMenuPanel(): MenuPanel {
   const saveBtn = panel.querySelector('.mp__savebtn') as HTMLButtonElement;
   let holdT = 0, held = false, quickBusy = false;
   const quickSave = async (): Promise<void> => {
+    if (DEMO) { demoNotice('save'); return; }
     if (!io) { say('Project belum siap, coba lagi sebentar'); return; }
     if (!curName || !(await projectExists(curName).catch(() => false))) { void openOv(); return; }
     if (quickBusy) return;
@@ -515,7 +519,7 @@ export function initMenuPanel(): MenuPanel {
     } catch (err) { console.error(err); say('Gagal memproses file project'); }
   });
   const impFile = panel.querySelector('.mp__impfile') as HTMLInputElement;
-  panel.querySelector('.mp__imp')!.addEventListener('click', () => impFile.click());
+  panel.querySelector('.mp__imp')!.addEventListener('click', () => { if (DEMO) { demoNotice('save'); return; } impFile.click(); });
   impFile.addEventListener('change', async () => {
     const f = impFile.files && impFile.files[0]; impFile.value = '';
     if (!f || !io) return;

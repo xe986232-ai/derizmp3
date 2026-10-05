@@ -26,6 +26,8 @@ import { createClip, importClip, exportClip, cloneClip, splitClip, valueAt, getC
 import { decodeFile, addBuffer, getBuffer, encodeWav, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
 import { slideSource, glideBeats } from './note-slide';
 import { velAlpha } from './velocity';
+import { DEMO, LIMITS, demoNotice, demoMount } from './demo';
+const demoTrackFull = (ins) => { if (!DEMO) return false; const cs = [...document.querySelectorAll('.trackheader-container')]; if (cs.length >= LIMITS.tracks) { demoNotice('track'); return true; } if (ins === 'DERIZ' && cs.filter(c => c.dataset.ins === 'DERIZ').length >= LIMITS.deriz) { demoNotice('deriz'); return true; } return false; };   // DEMO: batas jumlah track / DERIZ
 import { openPianoRoll, closePianoRoll, isPianoRollOpen, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getNoteColor, setNoteColor, getPianoRollNotes, setPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, clearPianoRollNotes, PR_BEATS } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 registerSW();   // PWA: bisa di-install & jalan offline (aktif pada hasil build)
@@ -885,6 +887,7 @@ function openAutoEdit(el) {
   });
 }
 function createAutomationClip() {
+  if (DEMO) { demoNotice('automation'); return; }   // DEMO: Automation Clip hanya di versi penuh
   const t = fxRack.lastTouched(); if (!t) return;
   const info = fxRack.paramInfo(t.track, t.fxId, t.key); if (!info) return;
   const value = fxRack.getParam(t.track, t.fxId, t.key) ?? info.def, tag = autoKey(t), title = info.fxName + ' · ' + info.label;
@@ -1353,6 +1356,7 @@ function openAddMenu(btn) {
     const it = e.target.closest('.add-menu__item');
     if (!it) return;
     const ins = INSTRUMENTS[+it.dataset.k];
+    if (demoTrackFull(ins.n)) { closeAddMenu(); return; }
     addTrack(ins);
     closeAddMenu();
     // Audio clip: setelah track dibuat, munculkan card upload audio (menunggu menu selesai menghilang)
@@ -1409,6 +1413,7 @@ function addTrack(t) {
 function duplicateTrack(src) {
   const sid = src.dataset.track, sLane = lanesEl.querySelector('.lane[data-track="' + sid + '"]');
   if (!sLane || src.dataset.ins === 'Automation') return;
+  if (demoTrackFull(src.dataset.ins)) return;
   const sName = document.getElementById('track-name-' + sid).textContent;
   const base = sName.replace(/\s+\d+$/, ''), used = new Set([...document.querySelectorAll('.trackheader__track-name-button span')].map(x => x.textContent));
   let n = 2; while (used.has(base + ' ' + n)) n++;
@@ -1748,6 +1753,7 @@ function toast(msg, ms = 3200) {
   clearTimeout(toastT); if (ms) toastT = setTimeout(() => { toastEl.hidden = true; }, ms);
 }
 function growTimeline(n) {   // timeline memanjang supaya audio panjang (lagu) muat utuh
+  if (DEMO) n = Math.min(n, LIMITS.bars);   // DEMO: timeline tidak melebihi batas
   BARS = n; sizeRuler(); paintRuler(true);
 }
 async function importAudio(trackId, file, dropX = null) {   // dropX = clientX tempat clip dilepas (dari MPCS); null = mulai dari bar 1
@@ -1758,6 +1764,7 @@ async function importAudio(trackId, file, dropX = null) {   // dropX = clientX t
   catch (err) { console.error(err); toast('File audio tidak bisa dibaca / format tidak didukung'); return; }
   const lane = lanesEl.querySelector(laneSel);
   if (!lane) { toast('', 1); return; }   // track sudah dihapus selama decode
+  if (DEMO && buf.duration > LIMITS.audioSec) { const n = Math.round(LIMITS.audioSec * buf.sampleRate), nb = new AudioBuffer({length: n, numberOfChannels: buf.numberOfChannels, sampleRate: buf.sampleRate}); for (let c = 0; c < buf.numberOfChannels; c++) nb.copyToChannel(buf.getChannelData(c).slice(0, n), c); buf = nb; }   // DEMO: audio dipotong
   const durBars = buf.duration / SEC_PER_BAR;
   const startBar = dropX == null ? 0 : Math.max(0, Math.floor((dropX - lanesEl.getBoundingClientRect().left) / BAR_W));   // dilepas di bar mana (dibulatkan ke bar)
   if (startBar + durBars > BARS) growTimeline(Math.min(MAX_BARS, Math.ceil(startBar + durBars) + 1));
@@ -1772,6 +1779,7 @@ async function importAudio(trackId, file, dropX = null) {   // dropX = clientX t
 document.addEventListener('mpcs-audioclip', e => {
   const {file, x} = e.detail || {};
   if (!file) return;
+  if (demoTrackFull('Audio clip')) return;
   addTrack(INSTRUMENTS.find(i => i.n === 'Audio clip'));
   const id = trackSeq;
   trackAudioFiles.set(id, file);
@@ -2157,3 +2165,4 @@ setExportIO({
   },
   toast,
 });
+demoMount();   // DEMO: lencana + jendela info (tidak ada efek di build penuh)

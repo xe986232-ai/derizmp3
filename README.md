@@ -135,3 +135,15 @@ Suara preview = piano ASLI (sample), bukan sintesis: Salamander Grand Piano (Ale
 
 Kode: `src/mgchord-theory.ts` (teori murni: skala, chord, voicing, progression, MIDI), `src/mgchord-audio.ts` (sampler piano + mixing, murni Web Audio), `src/mgchord.ts` (jendela + preview), blok "MGCHORD" di `src/styles.css`, kartu di `src/fx-rack.ts`, jembatan ke pattern + simpan project di `src/main.ts` (`setMgchordBridge`).
 Tes: `node tools/mgchord-test.ts` (nama chord vs referensi, voicing, invert, strum / arp, panjang progression, header MIDI). Tes suara + mixing: `npm i --no-save node-web-audio-api && node tools/mgchord-audio-test.ts [hasil.wav]` (render offline dengan sample asli: 21 sample termuat, pitch tepat, peak / RMS, kasus terburuk, synth cadangan, ekor; opsional simpan WAV untuk didengar).
+
+## Versi DEMO
+Satu kode, dua build. Build demo membuang kode fitur berbayar dari bundelnya (bukan sekadar disembunyikan).
+```
+npm run build        # versi penuh -> dist/
+npm run build:demo   # versi demo  -> dist-demo/ (pasang di alamat terpisah)
+```
+Batas demo ada di satu tempat: `src/demo.ts` (`LIMITS`, `CONTACT_URL`). Ringkas: 4 track (maks 2 DERIZ), timeline 32 bar, audio 30 detik,
+export audio / download MPCS / drag hasil MPCS diberi bunyi penanda "DEMO" (export juga maks 30 detik), tanpa simpan / buka project,
+tanpa Automation Clip, tanpa panel Debug Audio, MGCHORD: 4 bar, 3 style, suara Piano, MIDI 2 chord.
+Isi `CONTACT_URL` (mis. link WhatsApp) supaya tombol "Hubungi untuk versi penuh" muncul. Event analitik (`locked_click`, `demo_open`, dst.)
+dikirim ke Plausible bila skripnya dipasang di `index.html`; kalau tidak, tidak terjadi apa-apa.

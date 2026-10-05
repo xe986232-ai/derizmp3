@@ -4,6 +4,7 @@
 // SAVE mengirim nada ke pattern yang sedang dipilih di timeline; Drag & Drop MIDI / tombol unduh menghasilkan file .mid.
 // Inti teori ada di mgchord-theory.ts (murni, dites lewat tools/mgchord-test.ts).
 
+import { DEMO, LIMITS, demoNotice } from './demo';
 import { createMaster, loadPiano, voiceTone, VOICES, type Voice } from './mgchord-audio';
 import {
   NOTE_NAMES, PRESETS, SCALES, STYLES, STYLE_INFO,
@@ -265,7 +266,7 @@ function build(): void {
     closePop();
     popFor = k; popBtn = btn; btn.setAttribute('aria-expanded', 'true');
     const cur = ddValue(k);
-    pop.innerHTML = DD[k].map(o => `<div role="option" tabindex="-1" class="mgc__po${o.v === cur ? ' is-on' : ''}" data-v="${o.v}"${o.d ? ` title="${o.d}"` : ''} aria-selected="${o.v === cur}">${o.t}</div>`).join('');
+    pop.innerHTML = DD[k].map(o => `<div role="option" tabindex="-1" class="mgc__po${o.v === cur ? ' is-on' : ''}" data-v="${o.v}"${o.d ? ` title="${o.d}"` : ''} aria-selected="${o.v === cur}">${o.t}${lockMark(k, o.v)}</div>`).join('');
     pop.hidden = false;
     const r = btn.getBoundingClientRect(), vh = window.innerHeight, below = vh - r.bottom - 8, above = r.top - 8, up = below < 120 && above > below;
     pop.style.minWidth = Math.max(r.width, 64) + 'px'; pop.style.left = Math.max(4, Math.min(r.left, window.innerWidth - r.width - 4)) + 'px';
@@ -273,9 +274,11 @@ function build(): void {
     if (up) { pop.style.top = ''; pop.style.bottom = (vh - r.top + 4) + 'px'; } else { pop.style.bottom = ''; pop.style.top = (r.bottom + 4) + 'px'; }
     (pop.querySelector<HTMLElement>('.is-on') ?? pop.firstElementChild as HTMLElement | null)?.focus({ preventScroll: false });
   };
+  const lockMark = (k: DdKey, v: string): string => DEMO && ((k === 'style' && !LIMITS.mgcStyles.includes(v)) || (k === 'sound' && v !== 'piano') || (k === 'range' && +v !== 0)) ? ' 🔒' : '';
   const pickPop = (o: HTMLElement): void => {
     const k = popFor; if (!k) return; const v = o.dataset.v!;
     closePop(true);
+    if (DEMO && ((k === 'style' && !LIMITS.mgcStyles.includes(v)) || (k === 'sound' && v !== 'piano') || (k === 'range' && +v !== 0))) { demoNotice(k === 'style' ? 'mgcstyle' : k === 'sound' ? 'mgcsound' : 'mgcrange'); return; }   // DEMO: pilihan terkunci
     if (k === 'range') { S.st.octave = +v; changed(); playChord(S.sel); return; }   // register chord pindah oktaf: keyboard digambar ulang, piano roll ikut, lalu contoh bunyi
     if (k === 'sound') { sound = v as Voice; renderControls(); playChord(S.sel); return; }   // suara preview saja: tidak mengubah progression, jadi tidak perlu commit
     if (k === 'style') S.rh.style = v as PlayStyle; else S.st.scale = v;
@@ -459,14 +462,14 @@ function build(): void {
     pnext: () => { if (PRESETS.length) loadPreset(S.preset < 0 ? 0 : mod(S.preset + 1, PRESETS.length)); },
     'deg-': b => stepDeg(b, -1),
     'deg+': b => stepDeg(b, 1),
-    len: b => { fitBars(+b.dataset.s!); changed(); },
+    len: b => { if (DEMO && +b.dataset.s! > LIMITS.mgcBars) { demoNotice('mgcbars'); return; } fitBars(+b.dataset.s!); changed(); },   // DEMO: hanya 4 bar
     scale: b => { S.st.scale = b.dataset.s!; changed(); playChord(S.sel); },
     clear: () => { if (!S.slots.length) return; stopPlay(); S.slots = []; S.sel = -1; S.preset = -1; changed(); },
     del: () => { if (S.sel < 0 || !S.slots[S.sel]) return; S.slots.splice(S.sel, 1); S.sel = S.slots.length ? Math.min(S.sel, S.slots.length - 1) : -1; changed(); },
     dice: () => { S.slots = randomProgression(clamp(S.bars * 4, 8, MAX_BEATS)).map(sl => { const sc = SCALES[quality()], r = sc[sl.deg], m3 = mod(sc[(sl.deg + 2) % 7] - r, 12); return { deg: sl.deg, beats: sl.beats, root: mod(r, 12), q: m3 === 4 ? 'Major' as const : 'Minor' as const }; }); S.sel = 0; S.preset = -1; changed(); playChord(0); },
     undo: () => { if (hi > 0) { hi--; restore(); } },
     redo: () => { if (hi < hist.length - 1) { hi++; restore(); } },
-    midi: () => { if (!notes.length) { toastMsg('Belum ada chord untuk diunduh'); return; } const bpm = bridge ? bridge.bpm() : 120; download(toMidi(notes, bpm), midiFile()); toastMsg('MIDI diunduh'); },
+    midi: () => { if (!notes.length) { toastMsg('Belum ada chord untuk diunduh'); return; } const bpm = bridge ? bridge.bpm() : 120; if (DEMO) demoNotice('mgcmidi'); download(toMidi(midiNotes(), bpm), midiFile()); toastMsg('MIDI diunduh'); },
     save: () => {
       if (!notes.length) { toastMsg('Belum ada chord — klik tuts keyboard di kanan'); return; }
       const msg = bridge ? bridge.send(notes.map(n => ({ p: n.p, s: n.s, l: n.l, v: n.v })), span()) : 'Plugin belum tersambung ke timeline';
@@ -478,6 +481,7 @@ function build(): void {
     S.bars = Math.max(4, Math.ceil(totalBeats(S.slots) / 4)); if (bars === 8) fitBars(8);
     renderAll(); commit(); playChord(0);
   }
+  const midiNotes = (): OutNote[] => { if (!DEMO) return notes; const cap = totalBeats(S.slots.slice(0, LIMITS.mgcMidiChords)); return notes.filter(n => n.s < cap); };   // DEMO: MIDI hanya memuat chord pertama
   const midiFile = (): string => 'mgchord-' + (S.slots[0] ? slotChord(S.st, S.slots[0]).name : 'chords').replace('#', 's') + '.mid';
   const toastMsg = (m: string): void => {
     const t = document.createElement('div'); t.className = 'mgc__toast'; t.setAttribute('role', 'status'); t.textContent = m; win.appendChild(t);
@@ -500,7 +504,7 @@ function build(): void {
   });
   // seret file .mid langsung ke DAW / folder (Chrome / Edge)
   $('.mgc__dnd').addEventListener('dragstart', e => {
-    const url = URL.createObjectURL(new Blob([toMidi(notes, bridge ? bridge.bpm() : 120) as BlobPart], { type: 'audio/midi' }));
+    const url = URL.createObjectURL(new Blob([toMidi(midiNotes(), bridge ? bridge.bpm() : 120) as BlobPart], { type: 'audio/midi' }));
     e.dataTransfer?.setData('DownloadURL', `audio/midi:${midiFile()}:${url}`); setTimeout(() => URL.revokeObjectURL(url), 60000);
   });
   // ---------- seret hasil ke playlist ----------

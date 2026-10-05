@@ -1947,3 +1947,16 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .fxc--mgchord{padding:12px 14px 12px 16px;background-image:linear-gradient(90deg,rgba(91,143,243,.28),transparent 60%)}
 .fxc--mgchord .fxc__title{font-family:'Syncopate',system-ui,sans-serif;font-size:13px;font-weight:700;letter-spacing:.22em}
 @media (max-width:1100px){.mgc{padding-top:calc(max(10px,env(safe-area-inset-top)) + 42px)}}   /* tombol menu global DAW (z 500) ada di pojok kanan atas: jendela mulai di bawahnya */
+
+/* ---------- versi DEMO (hanya dipakai build demo): lencana + kotak info ---------- */
+.demo__badge{position:fixed;left:10px;bottom:10px;z-index:400;padding:5px 11px;border:0;border-radius:999px;background:#f2b632;color:#2b2b2b;font:800 11px/1 system-ui,sans-serif;letter-spacing:.06em;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.35);opacity:.92}
+.demo__badge:hover{opacity:1}
+.demo__ov{position:fixed;inset:0;z-index:500;display:grid;place-items:center;padding:16px;background:rgba(10,12,24,.55)}
+.demo__card{width:min(380px,100%);max-height:100%;overflow:auto;padding:18px 18px 14px;border-radius:14px;background:#fff;color:#27304a;font:600 14px/1.45 system-ui,sans-serif;box-shadow:0 30px 70px rgba(0,0,0,.5)}
+.demo__card h3{margin:0 0 6px;font:800 17px/1.2 system-ui,sans-serif;color:#3f6fd8}
+.demo__card h4{margin:12px 0 4px;font:800 12px/1 system-ui,sans-serif;letter-spacing:.06em;color:#6d7a99}
+.demo__card p{margin:0 0 8px}.demo__cr{font-size:12px;color:#6d7a99}
+.demo__btns{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+.demo__ok,.demo__go{padding:9px 14px;border:0;border-radius:8px;font:800 13px/1 system-ui,sans-serif;cursor:pointer;text-decoration:none}
+.demo__ok{background:#e6eaf4;color:#3f4b6b}.demo__go{background:#3f6fd8;color:#fff}
+@media (max-height:560px) and (orientation:landscape){.demo__badge{bottom:4px;left:6px;padding:3px 8px;font-size:9px}.demo__card{font-size:12px;padding:12px}.demo__card h3{font-size:14px}}

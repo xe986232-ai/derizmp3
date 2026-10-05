@@ -6,6 +6,7 @@
 import { ACCEPT as AUDIO_ACCEPT, isAudio } from './audio-upload-card';
 import { DEFAULT_CONTROLS, shiftCurve, snapTargets, toMono, type Controls, type Note, type PitchTrack } from './mpcs-dsp';
 import { encodeWavFloat } from './wav';
+import { DEMO, LIMITS, demoTrim, demoMarked } from './demo';
 import { encodeMp3Mono, encodeWav16Mono, saveBlob, type SaveFormat } from './mpcs-save';
 
 const svg = (inner: string, size = 18): string =>
@@ -417,8 +418,9 @@ function build(): void {
     stopPlay(); enable(false); setBusy(true); empty.hidden = true; stat.textContent = 'Membaca audio';
     try {
       ac ??= new AudioContext();
-      const { buf, name } = await get();
+      let { buf, name } = await get();
       if (my !== loadTok) return;
+      if (DEMO && buf.duration > LIMITS.audioSec) { buf = demoTrim(buf, LIMITS.audioSec); stat.textContent = `Demo: dipakai ${LIMITS.audioSec} detik pertama`; }   // DEMO: audio dipotong
       const mono = toMono(Array.from({ length: buf.numberOfChannels }, (_, c) => buf.getChannelData(c).slice()));
       stat.textContent = 'Menganalisis 0%';
       const r = await job({ type: 'analyze', x: mono, sr: buf.sampleRate }, [mono.buffer]);
@@ -688,7 +690,7 @@ function build(): void {
     const out = await d.res;
     d.ghost.remove(); el.classList.remove('is-dragout');
     if (!out || !target.isConnected) { stat.textContent = out ? 'Plugin DERIZ sudah tidak ada' : 'Gagal merender'; window.setTimeout(info, 1800); return; }
-    const f = new File([encodeWavFloat(out.getChannelData(0), out.sampleRate)], d.name + '-MPCS.wav', { type: 'audio/wav' });
+    const f = new File([encodeWavFloat(DEMO ? demoMarked(out.getChannelData(0), out.sampleRate) : out.getChannelData(0), out.sampleRate)], d.name + '-MPCS.wav', { type: 'audio/wav' });
     if (target.classList.contains('workspace')) document.dispatchEvent(new CustomEvent('mpcs-audioclip', { detail: { file: f, x: p.x } }));   // timeline: main.ts bikin track Audio clip baru, clip diletakkan di bar tempat dilepas
     else target.dispatchEvent(new CustomEvent('mpcs-sample', { bubbles: true, detail: { file: f } }));
     stopPlay(); untilt(); el.hidden = true;   // hasil sudah terpasang (DERIZ / timeline): MPCS ditutup supaya terlihat
@@ -733,7 +735,8 @@ function build(): void {
       stat.textContent = 'Merender hasil…';
       const out = await ensureRendered();
       if (!out) { stat.textContent = 'Gagal merender'; return; }
-      const x = out.getChannelData(0);
+      let x = out.getChannelData(0);
+      if (DEMO) x = demoMarked(x, out.sampleRate);   // DEMO: hasil diberi bunyi penanda
       stat.textContent = fmt === 'mp3' ? 'Mengonversi ke MP3…' : 'Menyusun WAV…';
       const blob = fmt === 'mp3' ? await encodeMp3Mono(x, out.sampleRate, p => { stat.textContent = 'Mengonversi ke MP3… ' + Math.round(p * 100) + '%'; }) : encodeWav16Mono(x, out.sampleRate);
       saveBlob(blob, name); stat.textContent = 'Terunduh: ' + fmt.toUpperCase();

@@ -30,11 +30,12 @@ function pwaPrecache(): Plugin {
   };
 }
 
-export default defineConfig({
-  define: { __BUILD__: JSON.stringify(stamp) },
+export default defineConfig(({ mode }) => ({
+  define: { __BUILD__: JSON.stringify(stamp), __DEMO__: JSON.stringify(mode === 'demo') },   // mode demo: vite build --mode demo -> dist-demo/
   plugins: [pwaPrecache()],
   build: {
+    outDir: mode === 'demo' ? 'dist-demo' : 'dist',
     // CSS dibiarkan apa adanya (tidak di-minify) supaya tampilan identik dengan versi HTML
     cssMinify: false,
   },
-});
+}));
