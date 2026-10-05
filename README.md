@@ -136,6 +136,12 @@ Suara preview = piano ASLI (sample), bukan sintesis: Salamander Grand Piano (Ale
 Kode: `src/mgchord-theory.ts` (teori murni: skala, chord, voicing, progression, MIDI), `src/mgchord-audio.ts` (sampler piano + mixing, murni Web Audio), `src/mgchord.ts` (jendela + preview), blok "MGCHORD" di `src/styles.css`, kartu di `src/fx-rack.ts`, jembatan ke pattern + simpan project di `src/main.ts` (`setMgchordBridge`).
 Tes: `node tools/mgchord-test.ts` (nama chord vs referensi, voicing, invert, strum / arp, panjang progression, header MIDI). Tes suara + mixing: `npm i --no-save node-web-audio-api && node tools/mgchord-audio-test.ts [hasil.wav]` (render offline dengan sample asli: 21 sample termuat, pitch tepat, peak / RMS, kasus terburuk, synth cadangan, ekor; opsional simpan WAV untuk didengar).
 
+## Tutorial (dialog gelembung chat)
+Tombol gelembung chat di pojok kanan atas (kiri tombol layar penuh) membuka tutorial langkah demi langkah: gelembung putih bertulisan hitam menempel ke tiap menu (track, lane, penggaris, transport, keyboard, panel Effects, menu Project / Export / Pengaturan) dan menjelaskan fungsinya. Pertama kali aplikasi dibuka, tutorial menawarkan diri sekali (`localStorage` `derizmp3.tutorialSeen`).
+- Kode: `src/tutorial.ts`. Menambah / mengubah penjelasan: edit array `STEPS` (`targets` = selector yang disorot, kosong = gelembung di tengah layar; `scene` menyiapkan layar, mis. membuka menu atau panel Effects). Langkah yang targetnya tidak tampil (mis. Debug Audio di demo) dilewati otomatis.
+- Font: Plus Jakarta Sans (dibundel lewat `@fontsource`, jalan offline / PWA). Gaya: `.tut*` di akhir `src/styles.css`. Teks yang beda antara demo dan versi penuh memakai `DEMO` / `LIMITS` dari `src/demo.ts`.
+- Tombol keyboard saat tutorial terbuka: Esc menutup, panah kiri / kanan pindah langkah.
+
 ## Versi DEMO
 Satu kode, dua build. Fitur versi penuh benar-benar tidak ada di bundel demo (bukan sekadar disembunyikan), dan itu diperiksa lewat isi `dist-demo/`.
 ```

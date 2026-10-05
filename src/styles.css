@@ -1960,3 +1960,31 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .demo__ok,.demo__go{padding:9px 14px;border:0;border-radius:8px;font:800 13px/1 system-ui,sans-serif;cursor:pointer;text-decoration:none}
 .demo__ok{background:#e6eaf4;color:#3f4b6b}.demo__go{background:#3f6fd8;color:#fff}
 @media (max-height:560px) and (orientation:landscape){.demo__badge{bottom:4px;left:6px;padding:3px 8px;font-size:9px}.demo__card{font-size:12px;padding:12px}.demo__card h3{font-size:14px}}
+
+/* ===== Tutorial: gelembung chat putih, teks hitam (flat: tanpa bayangan / glow) ===== */
+.tut-btn{position:fixed;z-index:450;top:calc(env(safe-area-inset-top,0px) + 6px);right:calc(env(safe-area-inset-right,0px) + 96px);width:34px;height:34px;padding:0;border:0;border-radius:50%;background:#fff;color:#000;display:grid;place-items:center;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .15s var(--ease-spring),opacity .2s ease}
+.tut-btn svg{width:19px;height:19px}
+.tut-btn:active{transform:scale(.94)}
+.tut-btn:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+body:has(.pr.is-open) .tut-btn,body.tut-on .tut-btn{opacity:0;pointer-events:none}
+.tut{position:fixed;inset:0;z-index:950;pointer-events:none;font-family:'Plus Jakarta Sans',system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.tut[hidden],.tut__ring[hidden],.tut__btn[hidden]{display:none}
+.tut__ring{position:fixed;box-sizing:border-box;border:2px solid #fff;border-radius:12px;pointer-events:none;transition:left .28s var(--ease-spring),top .28s var(--ease-spring),width .28s var(--ease-spring),height .28s var(--ease-spring)}
+.tut__bubble{position:fixed;left:0;top:0;box-sizing:border-box;width:320px;max-width:calc(100vw - 20px);background:#fff;color:#000;border-radius:20px;pointer-events:auto;transform-origin:var(--ox,50%) var(--oy,50%)}
+.tut__bubble.is-pop{animation:tutPop .26s var(--ease-spring)}
+@keyframes tutPop{from{opacity:0;transform:scale(.86)}to{opacity:1;transform:none}}
+.tut__tail{position:absolute;width:14px;height:14px;background:#fff;border-radius:3px;transform:rotate(45deg);pointer-events:none}
+.tut__body{position:relative;box-sizing:border-box;max-height:calc(100vh - 20px);overflow:auto;padding:14px 16px;border-radius:20px;background:#fff}
+.tut__meta{display:flex;align-items:center;justify-content:space-between;margin:0 0 6px;font-size:11.5px;font-weight:600;letter-spacing:.02em;color:#6b6b76}
+.tut__x{width:26px;height:26px;margin:-4px -6px -4px 0;padding:0;border:0;border-radius:50%;background:none;color:#6b6b76;display:grid;place-items:center;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.tut__x:hover{background:#efeff2;color:#000}
+.tut__title{margin:0 0 4px;font-size:16px;line-height:1.3;font-weight:700;color:#000}
+.tut__text{margin:0;font-size:14px;line-height:1.55;font-weight:400;color:#111}
+.tut__nav{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+.tut__btn{height:34px;padding:0 16px;border:1px solid #cfcfd6;border-radius:999px;background:#fff;color:#000;font-family:inherit;font-size:13px;font-weight:600;line-height:1;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.tut__btn:hover{background:#f3f3f6}
+.tut__btn--go{border-color:#000;background:#000;color:#fff}
+.tut__btn--go:hover{background:#26262c}
+.tut__btn:focus-visible,.tut__x:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (max-height:560px) and (orientation:landscape){.tut__bubble{width:280px}.tut__body{padding:10px 12px}.tut__title{font-size:14px}.tut__text{font-size:12.5px;line-height:1.45}.tut__nav{margin-top:8px}.tut__btn{height:30px;padding:0 13px}}
+@media (prefers-reduced-motion:reduce){.tut__bubble.is-pop{animation:none}.tut__ring{transition:none}}

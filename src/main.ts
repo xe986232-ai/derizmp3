@@ -1,5 +1,8 @@
 // @ts-nocheck
 import '@fontsource/syncopate/700.css';   // font judul plugin DERIZ (dibundel, tidak butuh internet)
+import '@fontsource/plus-jakarta-sans/latin-400.css';   // font gelembung tutorial (dibundel, tidak butuh internet)
+import '@fontsource/plus-jakarta-sans/latin-600.css';
+import '@fontsource/plus-jakarta-sans/latin-700.css';
 import { openAudioUploadCard, trackAudioFiles } from './audio-upload-card';
 import { initEffectsPanel } from './effects-panel';
 import { initTrackMeters } from './track-meters';
@@ -27,6 +30,7 @@ import { decodeFile, addBuffer, getBuffer, encodeWav, renderWave, play as playCl
 import { slideSource, glideBeats } from './note-slide';
 import { velAlpha } from './velocity';
 import { DEMO, LIMITS, demoNotice, demoMount } from './demo';
+import { initTutorial } from './tutorial';
 const demoTrackFull = (ins) => { if (!DEMO) return false; const cs = [...document.querySelectorAll('.trackheader-container')]; if (cs.length >= LIMITS.tracks) { demoNotice('track'); return true; } if (ins === 'DERIZ' && cs.filter(c => c.dataset.ins === 'DERIZ').length >= LIMITS.deriz) { demoNotice('deriz'); return true; } if (ins === 'DERIZ' && fxRack.derizCount() >= LIMITS.derizPlugins) { demoNotice('derizplug'); return true; } return false; };   // DEMO: batas jumlah track / DERIZ
 import { openPianoRoll, closePianoRoll, isPianoRollOpen, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getNoteColor, setNoteColor, getPianoRollNotes, setPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, clearPianoRollNotes, PR_BEATS } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
@@ -2166,4 +2170,5 @@ setExportIO({
   },
   toast,
 });
+initTutorial();   // tombol gelembung chat + tutorial langkah demi langkah (semua menu)
 demoMount();   // DEMO: lencana + jendela info (tidak ada efek di build penuh)
