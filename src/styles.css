@@ -1817,7 +1817,7 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mgc__pow{font-size:15px;font-weight:900;letter-spacing:.03em;color:#8c8c8c;white-space:nowrap}
 .mgc__x{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:transparent;color:#8a8a8a}
 .mgc__x:hover{background:rgba(0,0,0,.08);color:#333}
-.mgc__kr{display:grid;grid-template-columns:1fr 1.5fr;gap:4px}
+.mgc__kr{display:grid;grid-template-columns:1fr}
 .mgc__cd{position:relative;min-width:0}
 .mgc__cdb{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:30px;padding:0 18px 0 8px;border-radius:3px;background:var(--blue2);color:#fff;font-size:13px;transition:background .12s ease}
 .mgc__cdb:hover,.mgc__cdb[aria-expanded="true"]{background:var(--blue3)}

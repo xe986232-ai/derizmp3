@@ -88,7 +88,8 @@ export interface Voicing {
   vel: number[];             // 5 voice: velocity 0..1
 }
 export const VOICES = 5;
-export const defaultVoicing = (): Voicing => ({ invert: 0, on: [true, true, true, true, true], shift: [0, 0, 0, 0, 0], vel: [0.52, 0.72, 0.18, 0.66, 0.74] });
+// 3 batang saja: root - terts - kuint
+export const defaultVoicing = (): Voicing => ({ invert: 0, on: [true, true, true, false, false], shift: [0, 0, 0, 0, 0], vel: [0.52, 0.72, 0.18, 0.66, 0.74] });
 
 export interface VNote { p: number; v: number }   // nada hasil voicing (MIDI + velocity 0..1), urut dari voice 1
 
@@ -106,7 +107,7 @@ export function voice(c: Chord, vc: Voicing): VNote[] {
 }
 
 // ---------- progression ----------
-export interface Slot { deg: number; beats: number }
+export interface Slot { deg: number; beats: number; root?: number; q?: 'Major' | 'Minor' }   // root + q (kalau ada) = triad langsung dari tuts keyboard; kalau tidak, chord diatonik derajat deg
 export interface Preset { name: string; scale: 'Major' | 'Minor'; slots: number[] }   // slots: derajat 0..6, tiap slot 1 bar
 export const PRESETS: Preset[] = [];   // dikosongkan dulu: progression dibuat sendiri lewat keyboard di kanan (contoh lama ada di riwayat git)
 export const slotsOf = (p: Preset): Slot[] => p.slots.map(deg => ({ deg, beats: 4 }));
@@ -138,7 +139,7 @@ export function buildNotes(st: Settings, slots: Slot[], vc: Voicing, rh: Rhythm)
   const out: OutNote[] = [];
   let t = 0;
   slots.forEach((sl, si) => {
-    const vn = voice(chordAt(st, sl.deg), vc);
+    const vn = voice(slotChord(st, sl), vc);
     if (vn.length) {
       if (rh.style === 'Block') {
         for (const n of vn) out.push({ p: n.p, s: t, l: sl.beats, v: n.v, slot: si });
@@ -155,6 +156,13 @@ export function buildNotes(st: Settings, slots: Slot[], vc: Voicing, rh: Rhythm)
   });
   return out;
 }
+
+/** Triad mayor / minor di nada `rootPc` (0..11): C mayor = C E G, C minor = C D# G. Root di oktaf C3. */
+export const triadAt = (rootPc: number, q: 'Major' | 'Minor'): Chord => {
+  const pc = mod(rootPc, 12);
+  return { root: BASE_MIDI + pc, iv: q === 'Minor' ? [0, 3, 7] : [0, 4, 7], name: NOTE_NAMES[pc] + (q === 'Minor' ? 'm' : '') };
+};
+export const slotChord = (st: Settings, sl: Slot): Chord => (sl.root !== undefined ? triadAt(sl.root, sl.q ?? 'Major') : chordAt(st, sl.deg));
 
 export const totalBeats = (slots: Slot[]): number => slots.reduce((a, s) => a + s.beats, 0);
 

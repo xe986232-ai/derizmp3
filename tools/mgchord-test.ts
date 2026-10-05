@@ -1,5 +1,5 @@
 // Tes inti teori MGCHORD: node tools/mgchord-test.ts
-import { chordAt, voice, defaultVoicing, buildNotes, PRESETS, slotsOf, randomProgression, toMidi, totalBeats, VOICES, type Settings } from '../src/mgchord-theory.ts';
+import { chordAt, triadAt, voice, defaultVoicing, buildNotes, PRESETS, slotsOf, randomProgression, toMidi, totalBeats, VOICES, type Settings } from '../src/mgchord-theory.ts';
 let fail = 0;
 const eq = (name: string, a: unknown, b: unknown) => { const ok = JSON.stringify(a) === JSON.stringify(b); if (!ok) fail++; console.log((ok ? 'ok   ' : 'FAIL ') + name + (ok ? '' : ' -> ' + JSON.stringify(a) + ' != ' + JSON.stringify(b))); };
 const S = (o: Partial<Settings> = {}): Settings => ({ root: 0, scale: 'Major', octave: 0, chordType: 'Diatonic', ...o });
@@ -18,7 +18,7 @@ eq('A minor root midi in C3..B3', chordAt(S({ root: 9, scale: 'Minor' }), 0).roo
 eq('octave +1', chordAt(S({ octave: 1 }), 0).root, 60);
 eq('C iv in A minor stays low', chordAt(S({ root: 9, scale: 'Minor' }), 3).root, 50);
 
-const c = chordAt(S(), 0), vc = defaultVoicing();
+const c = chordAt(S(), 0), vc = { ...defaultVoicing(), on: [true, true, true, true, true] };   // tes voicing lama: 5 voice penuh (bawaan baru = 3 batang)
 eq('5 voices triad doubles up', voice(c, vc).map(n => n.p), [48, 52, 55, 60, 64]);
 eq('voice off', voice(c, { ...vc, on: [true, false, true, false, true] }).map(n => n.p), [48, 55, 64]);
 eq('shift -12', voice(c, { ...vc, shift: [-12, 0, 0, 0, 0] })[0].p, 36);
@@ -36,4 +36,7 @@ const str = buildNotes(S(), [{ deg: 0, beats: 4 }], vc, { style: 'Strum', rate: 
 eq('strum offsets', str.map(n => +n.s.toFixed(2)), [0, 0.2, 0.4, 0.6, 0.8]);
 const mid = toMidi(buildNotes(S(), [{ deg: 0, beats: 4 }], vc, { style: 'Block', rate: 0.5, strum: 0 }), 120);
 eq('midi header', String.fromCharCode(...mid.slice(0, 4)) + String.fromCharCode(...mid.slice(14, 18)), 'MThdMTrk');
+eq('default voicing = 3 batang', voice(triadAt(0, 'Major'), defaultVoicing()).map(n => n.p), [48, 52, 55]);
+eq('C minor = C D# G', voice(triadAt(0, 'Minor'), defaultVoicing()).map(n => n.p), [48, 51, 55]);
+eq('triad names', [triadAt(0, 'Major').name, triadAt(1, 'Minor').name], ['C', 'C#m']);
 console.log(fail ? fail + ' GAGAL' : 'semua lolos'); process.exit(fail ? 1 : 0);

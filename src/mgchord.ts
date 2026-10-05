@@ -6,7 +6,7 @@
 
 import {
   NOTE_NAMES, PRESETS, SCALES, VOICES,
-  buildNotes, chordAt, defaultVoicing, midiName, randomProgression, slotsOf, toMidi, totalBeats, voice,
+  buildNotes, chordAt, defaultVoicing, slotChord, triadAt, midiName, randomProgression, slotsOf, toMidi, totalBeats, voice,
   type OutNote, type Rhythm, type Settings, type Slot, type Voicing,
 } from './mgchord-theory';
 
@@ -32,6 +32,7 @@ export function mgchordImport(saved?: MgchordSaved | null): void {   // dipanggi
   const base = initial();
   if (saved && saved.st && Array.isArray(saved.slots)) {
     S = { ...base, ...saved, st: { ...base.st, ...saved.st }, vc: { ...base.vc, ...saved.vc }, rh: { ...base.rh, ...saved.rh } };
+    S.vc = base.vc;   // chord selalu 3 batang (root - terts - kuint)
     S.bars = Math.max(4, Math.round(+saved.bars || 0), Math.ceil(totalBeats(S.slots) / 4));   // project lama tanpa 'bars': ikut panjang progression-nya
     S.sel = S.slots.length ? Math.min(Math.max(0, S.sel | 0), S.slots.length - 1) : -1;
   } else S = base;
@@ -116,9 +117,8 @@ function build(): void {
       '<canvas class="mgc__spec" aria-hidden="true"></canvas>' +
       '<div class="mgc__main"><aside class="mgc__side">' +
         '<div class="mgc__ctl">' +
-          '<div class="mgc__r"><span>Key</span><div class="mgc__kr">' +
-            '<div class="mgc__cd" data-dd="root"><button type="button" class="mgc__cdb" aria-haspopup="listbox" aria-expanded="false" aria-label="Nada dasar (key)"><span></span></button></div>' +
-            '<div class="mgc__cd" data-dd="scale"><button type="button" class="mgc__cdb" aria-haspopup="listbox" aria-expanded="false" aria-label="Mayor atau minor"><span></span></button></div>' +
+          '<div class="mgc__r"><span>Chord</span><div class="mgc__kr">' +
+            '<div class="mgc__cd" data-dd="scale"><button type="button" class="mgc__cdb" aria-haspopup="listbox" aria-expanded="false" aria-label="Chord mayor atau minor"><span></span></button></div>' +
           '</div></div>' +
           '<div class="mgc__r"><span>Length</span><div class="mgc__sg"><button type="button" data-a="len" data-s="4">4 bars</button><button type="button" data-a="len" data-s="8">8 bars</button></div></div>' +
           '<div class="mgc__r"><span>Audio</span><div class="mgc__sg"><button type="button" data-a="aud" data-s="0">Off</button><button type="button" data-a="aud" data-s="1">On</button></div></div>' +
@@ -212,7 +212,7 @@ function build(): void {
 
   // ---------- render ----------
   const span = (): number => Math.max(4, S.bars * 4, totalBeats(S.slots));   // panjang timeline (ketukan): tetap walau chord belum penuh / kosong
-  const selChord = () => (S.sel >= 0 && S.slots[S.sel] ? chordAt(S.st, S.slots[S.sel].deg) : null);
+  const selChord = () => (S.sel >= 0 && S.slots[S.sel] ? slotChord(S.st, S.slots[S.sel]) : null);
   const keyEls = new Map<number, HTMLElement>();
   el.querySelectorAll<HTMLElement>('[data-p]').forEach(k => keyEls.set(+k.dataset.p!, k));
   const fold = (p: number): number => { let q = p; while (q < KB_LO) q += 12; while (q > KB_HI) q -= 12; return q; };
@@ -225,19 +225,18 @@ function build(): void {
     const tot = span(), bars = Math.ceil(tot / 4);
     lane.innerHTML = S.slots.length ? S.slots.map((sl, i) =>
       `<div role="option" tabindex="0" class="mgc__ch${i === S.sel ? ' is-sel' : ''}" data-i="${i}" aria-selected="${i === S.sel}" style="flex:0 0 calc(${(sl.beats / tot) * 100}% - 2px)">` +
-      `<span class="mgc__h" data-a="deg-" role="button" tabindex="0" aria-label="Derajat turun" title="Derajat chord turun">${ICON.grip}</span><b>${chordAt(S.st, sl.deg).name}</b>` +
-      `<span class="mgc__h" data-a="deg+" role="button" tabindex="0" aria-label="Derajat naik" title="Derajat chord naik">${ICON.grip}</span></div>`).join('')
+      `<span class="mgc__h" data-a="deg-" role="button" tabindex="0" aria-label="Chord turun setengah nada" title="Chord turun setengah nada">${ICON.grip}</span><b>${slotChord(S.st, sl).name}</b>` +
+      `<span class="mgc__h" data-a="deg+" role="button" tabindex="0" aria-label="Chord naik setengah nada" title="Chord naik setengah nada">${ICON.grip}</span></div>`).join('')
       : '<div class="mgc__empty">Klik tuts keyboard di kanan untuk menambah chord</div>';
     marks.innerHTML = Array.from({ length: bars }, (_, b) => `<i style="left:${(b * 4 / tot) * 100}%">${b + 1}</i>`).join('');
     renderKeys();
   }
   // ---------- dropdown custom (bukan select bawaan browser): daftar pilihan muncul sebagai panel biru, bisa dioperasikan dengan panah / Enter / Esc ----------
-  type DdKey = 'root' | 'scale';
+  type DdKey = 'scale';
   const DD: Record<DdKey, { v: string; t: string }[]> = {
-    root: NOTE_NAMES.map((n, i) => ({ v: String(i), t: n })),
     scale: [{ v: 'Major', t: 'Major' }, { v: 'Minor', t: 'Minor' }],   // hanya dua pilihan: mayor dan minor
   };
-  const ddValue = (k: DdKey): string => (k === 'root' ? String(S.st.root) : S.st.scale);
+  const ddValue = (_k: DdKey): string => S.st.scale;
   const ddLabels = (): void => {
     (Object.keys(DD) as DdKey[]).forEach(k => { const sp = el.querySelector<HTMLElement>(`[data-dd="${k}"] .mgc__cdb span`); if (sp) sp.textContent = DD[k].find(o => o.v === ddValue(k))?.t ?? ddValue(k); });
   };
@@ -266,8 +265,7 @@ function build(): void {
   const pickPop = (o: HTMLElement): void => {
     const k = popFor; if (!k) return; const v = o.dataset.v!;
     closePop(true);
-    if (k === 'root') S.st.root = Math.max(0, +v); else S.st.scale = v;
-    changed(); playChord(S.sel);
+    S.st.scale = v; changed(); playChord(S.sel);   // contoh bunyi: chord terpilih, atau C kalau masih kosong
   };
   pop.addEventListener('click', e => { const o = (e.target as HTMLElement).closest<HTMLElement>('.mgc__po'); if (o) pickPop(o); });
   pop.addEventListener('keydown', e => {
@@ -351,9 +349,10 @@ function build(): void {
 
   // ---------- preview ----------
   let bus: GainNode | null = null, t0 = 0, spb = 0.5, sched = 0, timer = 0;
+  const quality = (): 'Major' | 'Minor' => (S.st.scale === 'Minor' ? 'Minor' : 'Major');   // pilihan dropdown Chord = mutu chord untuk tuts berikutnya
   const playChord = (i: number): void => {
     if (!audioOn) return;
-    const c = ac(), t = c.currentTime + 0.02, vn = voice(chordAt(S.st, S.slots[i].deg), S.vc);
+    const c = ac(), t = c.currentTime + 0.02, vn = voice(S.slots[i] ? slotChord(S.st, S.slots[i]) : triadAt(0, quality()), S.vc);   // belum ada chord: dengarkan contoh C
     const b = c.createGain(); b.connect(out!); vn.forEach((n, k) => tone(c, b, n.p, t + (S.rh.style === 'Strum' ? k * S.rh.strum * 0.5 : 0), 1.1, n.v));
     setTimeout(() => b.disconnect(), 2500);
   };
@@ -396,7 +395,11 @@ function build(): void {
     for (let t = 0; t < S.slots.length && t < want; ) { const b = Math.min(S.slots[res.length].beats, want - t); res.push({ deg: S.slots[res.length].deg, beats: b }); t += b; }
     S.slots = res; S.sel = res.length ? Math.min(Math.max(S.sel, 0), res.length - 1) : -1;
   };
-  const stepDeg = (b: HTMLElement, d: number): void => { S.sel = idxOf(b); S.slots[S.sel].deg = mod(S.slots[S.sel].deg + d, 7); changed(); playChord(S.sel); };
+  const stepDeg = (b: HTMLElement, d: number): void => {   // chord naik / turun setengah nada (triad); chord diatonik lama: ganti derajat
+    S.sel = idxOf(b); const sl = S.slots[S.sel];
+    if (sl.root !== undefined) sl.root = mod(sl.root + d, 12); else sl.deg = mod(sl.deg + d, 7);
+    changed(); playChord(S.sel);
+  };
   const actions: Record<string, (b: HTMLElement) => void> = {
     close: () => close(),
     play: () => { if (playing) stopPlay(); else if (!notes.length) toastMsg('Belum ada chord — klik tuts keyboard di kanan'); else startPlay(); },
@@ -408,7 +411,7 @@ function build(): void {
     clear: () => { if (!S.slots.length) return; stopPlay(); S.slots = []; S.sel = -1; S.preset = -1; changed(); },
     del: () => { if (S.sel < 0 || !S.slots[S.sel]) return; S.slots.splice(S.sel, 1); S.sel = S.slots.length ? Math.min(S.sel, S.slots.length - 1) : -1; changed(); },
     aud: b => { audioOn = b.dataset.s === '1'; renderControls(); },
-    dice: () => { S.slots = randomProgression(clamp(S.bars * 4, 8, MAX_BEATS)); S.sel = 0; S.preset = -1; changed(); playChord(0); },
+    dice: () => { S.slots = randomProgression(clamp(S.bars * 4, 8, MAX_BEATS)).map(sl => { const sc = SCALES[quality()], r = sc[sl.deg], m3 = mod(sc[(sl.deg + 2) % 7] - r, 12); return { deg: sl.deg, beats: sl.beats, root: mod(r, 12), q: m3 === 4 ? 'Major' as const : 'Minor' as const }; }); S.sel = 0; S.preset = -1; changed(); playChord(0); },
     undo: () => { if (hi > 0) { hi--; restore(); } },
     redo: () => { if (hi < hist.length - 1) { hi++; restore(); } },
     midi: () => { if (!notes.length) { toastMsg('Belum ada chord untuk diunduh'); return; } const bpm = bridge ? bridge.bpm() : 120; download(toMidi(notes, bpm), midiFile()); toastMsg('MIDI diunduh'); },
@@ -424,7 +427,7 @@ function build(): void {
     S.bars = Math.max(4, Math.ceil(totalBeats(S.slots) / 4)); if (bars === 8) fitBars(8);
     renderAll(); commit(); playChord(0);
   }
-  const midiFile = (): string => 'mgchord-' + chordAt(S.st, 0).name.replace('#', 's') + '.mid';
+  const midiFile = (): string => 'mgchord-' + (S.slots[0] ? slotChord(S.st, S.slots[0]).name : 'chords').replace('#', 's') + '.mid';
   const toastMsg = (m: string): void => {
     const t = document.createElement('div'); t.className = 'mgc__toast'; t.setAttribute('role', 'status'); t.textContent = m; win.appendChild(t);
     setTimeout(() => t.remove(), 2200);
@@ -452,12 +455,13 @@ function build(): void {
   // keyboard C5..C6: tekan = bunyi (lewat bus preview, jadi ikut tampil di waveform)
   const kbd = $('.mgc__kb');
   const playNote = (p: number): void => { const c = ac(), bb = c.createGain(); bb.connect(out!); tone(c, bb, p, c.currentTime + 0.01, 0.9, 0.8); setTimeout(() => bb.disconnect(), 2200); };
-  const playKey = (k: HTMLElement): void => {   // klik tuts = tambah chord (dibangun di nada itu, sesuai Key) ke ujung progression, lalu bunyikan
-    const p = +k.dataset.p!, deg = SCALES[S.st.scale]?.indexOf(mod(p - S.st.root, 12)) ?? -1;
-    if (deg < 0) { playNote(p); toastMsg(`${midiName(p).replace(/-?\d+$/, '')} di luar skala ${NOTE_NAMES[S.st.root]} ${S.st.scale}`); return; }
-    const left = S.bars * 4 - totalBeats(S.slots);
-    if (left <= 0) { const prev = S.slots.length, tmp = chordAt(S.st, deg); const c = ac(), bb = c.createGain(); bb.connect(out!); voice(tmp, S.vc).forEach(n => tone(c, bb, n.p, c.currentTime + 0.01, 1.1, n.v)); setTimeout(() => bb.disconnect(), 2500); toastMsg(prev ? `Progression penuh (${S.bars} bar) — pilih 8 bars atau hapus chord` : 'Progression penuh'); return; }
-    S.slots.push({ deg, beats: Math.min(4, left) }); S.sel = S.slots.length - 1; S.preset = -1; changed(); playChord(S.sel);
+  const playKey = (k: HTMLElement): void => {   // klik tuts = tambah chord 3 batang (mayor / minor sesuai dropdown Chord) di nada itu, ke ujung progression, lalu bunyikan
+    const pc = mod(+k.dataset.p!, 12), q = quality(), left = S.bars * 4 - totalBeats(S.slots);
+    if (left <= 0) {
+      const c = ac(), bb = c.createGain(); bb.connect(out!); voice(triadAt(pc, q), S.vc).forEach(n => tone(c, bb, n.p, c.currentTime + 0.01, 1.1, n.v)); setTimeout(() => bb.disconnect(), 2500);
+      toastMsg(`Progression penuh (${S.bars} bar) — pilih 8 bars atau hapus chord`); return;
+    }
+    S.slots.push({ deg: 0, beats: Math.min(4, left), root: pc, q }); S.sel = S.slots.length - 1; S.preset = -1; changed(); playChord(S.sel);
   };
   const releaseKeys = (): void => keyEls.forEach(k => k.classList.remove('pressed'));
   kbd.addEventListener('pointerdown', e => { const k = (e.target as HTMLElement).closest<HTMLElement>('[data-p]'); if (!k) return; k.classList.add('pressed'); playKey(k); e.preventDefault(); });
