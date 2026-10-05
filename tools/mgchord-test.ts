@@ -34,6 +34,7 @@ const mid = toMidi(buildNotes(S(), [{ deg: 0, beats: 4 }], vc, { style: 'Block',
 eq('midi header', String.fromCharCode(...mid.slice(0, 4)) + String.fromCharCode(...mid.slice(14, 18)), 'MThdMTrk');
 eq('default voicing = 3 batang', voice(triadAt(0, 'Major'), defaultVoicing()).map(n => n.p), [48, 52, 55]);
 eq('C minor = C D# G', voice(triadAt(0, 'Minor'), defaultVoicing()).map(n => n.p), [48, 51, 55]);
+eq('triad ikut oktaf: octave 1 = C4, octave 3 = C6', [voice(triadAt(0, 'Major', 1), defaultVoicing()).map(n => n.p), voice(triadAt(2, 'Minor', 3), defaultVoicing()).map(n => n.p)], [[60, 64, 67], [86, 89, 93]]);
 eq('triad names', [triadAt(0, 'Major').name, triadAt(1, 'Minor').name], ['C', 'C#m']);
 
 // ---- style susunan nada (pola dari contoh MIDI Indian Beat) ----

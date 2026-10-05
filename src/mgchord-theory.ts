@@ -54,7 +54,7 @@ export interface Chord { root: number; iv: number[]; name: string }   // root: M
 export interface Settings {
   root: number;          // 0..11 (C = 0)
   scale: string;         // kunci SCALES
-  octave: number;        // -2..2
+  octave: number;        // 0..3: 0 = chord mulai di C3 (bawaan), tiap +1 naik satu oktaf; dipilih lewat dropdown rentang keyboard (C3-C4 .. C6-C7)
   chordType: string;     // nama di CHORD_TYPES
 }
 
@@ -207,12 +207,12 @@ export function buildNotes(st: Settings, slots: Slot[], vc: Voicing, rh: Rhythm)
   return out;
 }
 
-/** Triad mayor / minor di nada `rootPc` (0..11): C mayor = C E G, C minor = C D# G. Root di oktaf C3. */
-export const triadAt = (rootPc: number, q: 'Major' | 'Minor'): Chord => {
+/** Triad mayor / minor di nada `rootPc` (0..11): C mayor = C E G, C minor = C D# G. Root di oktaf C3 + `octave` * 12 (octave 0 = C3, sama dengan rentang keyboard plugin). */
+export const triadAt = (rootPc: number, q: 'Major' | 'Minor', octave = 0): Chord => {
   const pc = mod(rootPc, 12);
-  return { root: BASE_MIDI + pc, iv: q === 'Minor' ? [0, 3, 7] : [0, 4, 7], name: NOTE_NAMES[pc] + (q === 'Minor' ? 'm' : '') };
+  return { root: BASE_MIDI + octave * 12 + pc, iv: q === 'Minor' ? [0, 3, 7] : [0, 4, 7], name: NOTE_NAMES[pc] + (q === 'Minor' ? 'm' : '') };
 };
-export const slotChord = (st: Settings, sl: Slot): Chord => (sl.root !== undefined ? triadAt(sl.root, sl.q ?? 'Major') : chordAt(st, sl.deg));
+export const slotChord = (st: Settings, sl: Slot): Chord => (sl.root !== undefined ? triadAt(sl.root, sl.q ?? 'Major', st.octave) : chordAt(st, sl.deg));
 
 export const totalBeats = (slots: Slot[]): number => slots.reduce((a, s) => a + s.beats, 0);
 

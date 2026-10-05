@@ -7,7 +7,7 @@
 import { createMaster, loadPiano, voiceTone, VOICES, type Voice } from './mgchord-audio';
 import {
   NOTE_NAMES, PRESETS, SCALES, STYLES, STYLE_INFO,
-  buildNotes, chordAt, defaultVoicing, slotChord, midiName, randomProgression, slotsOf, toMidi, totalBeats, voice,
+  BASE_MIDI, buildNotes, chordAt, defaultVoicing, slotChord, midiName, randomProgression, slotsOf, toMidi, totalBeats, voice,
   type OutNote, type PlayStyle, type Rhythm, type Settings, type Slot, type Voicing,
 } from './mgchord-theory';
 
@@ -70,7 +70,15 @@ const mod = (n: number, m: number): number => ((n % m) + m) % m;
 const clamp = (v: number, a: number, b: number): number => Math.min(b, Math.max(a, v));
 const MAX_BEATS = 64;                      // 16 bar
 const BLACK_PC = new Set([1, 3, 6, 8, 10]);
-const KB_WHITES = [72, 74, 76, 77, 79, 81, 83, 84], KB_BLACKS = [73, 75, 78, 80, 82], KB_LO = 72, KB_HI = 84;   // keyboard C5..C6
+const KB_WHITES = [0, 2, 4, 5, 7, 9, 11, 12], KB_BLACKS = [1, 3, 6, 8, 10];   // tuts keyboard sebagai jarak dari nada C paling bawah (satu oktaf + C di atasnya)
+const RANGES = [0, 1, 2, 3];   // pilihan rentang keyboard = Settings.octave: 0 = C3-C4 (chord mulai di C3), 1 = C4-C5, 2 = C5-C6, 3 = C6-C7
+const kbLo = (): number => BASE_MIDI + clamp(S.st.octave, 0, 3) * 12;   // nada MIDI C paling bawah keyboard yang sedang dipilih
+const rangeLabel = (oct: number): string => `C${3 + clamp(oct, 0, 3)}–C${4 + clamp(oct, 0, 3)}`;
+const kbMarkup = (lo: number): string => {   // keyboard card VERTIKAL: C paling bawah di bawah, naik satu oktaf ke atas. Tuts putih menumpuk ke atas, tuts hitam pendek menempel di sisi kiri dan berpusat di batas tuts putih
+  const wp = 100 / KB_WHITES.length;
+  return KB_WHITES.map((o, i) => `<button type="button" class="mgc__wk" data-p="${lo + o}" aria-label="${midiName(lo + o)}" style="top:${(KB_WHITES.length - 1 - i) * wp}%"><span>${midiName(lo + o)}</span></button>`).join('') +
+    KB_BLACKS.map(o => `<button type="button" class="mgc__bk" data-p="${lo + o}" aria-label="${midiName(lo + o)}" style="top:calc(${100 - KB_WHITES.filter(w => w < o).length * wp}% - ${wp * 0.3235}%)"><span>${midiName(lo + o)}</span></button>`).join('');
+};
 const KW = 64, PEG = 34;                   // lebar kolom tuts (sama dengan --kw di CSS) dan tinggi strip pasak oranye
 
 
@@ -94,9 +102,6 @@ const tone = (c: BaseAudioContext, dest: AudioNode, midi: number, when: number, 
 function build(): void {
   const el = document.createElement('div');
   el.className = 'mgc'; el.hidden = true;
-  const wp = 100 / KB_WHITES.length;   // keyboard card VERTIKAL: C5 di bawah, naik sampai C6 di atas. Tuts putih menumpuk ke atas, tuts hitam pendek menempel di sisi kiri dan berpusat di batas tuts putih
-  const kbKeys = KB_WHITES.map((p, i) => `<button type="button" class="mgc__wk" data-p="${p}" aria-label="${midiName(p)}" style="top:${(KB_WHITES.length - 1 - i) * wp}%"><span>${midiName(p)}</span></button>`).join('') +
-    KB_BLACKS.map(p => `<button type="button" class="mgc__bk" data-p="${p}" aria-label="${midiName(p)}" style="top:calc(${100 - KB_WHITES.filter(w => w < p).length * wp}% - ${wp * 0.3235}%)"><span>${midiName(p)}</span></button>`).join('');
   const presetOpts = '<option value="-1">New progression</option>' + PRESETS.map((p, i) => `<option value="${i}">${p.name}</option>`).join('');
   el.innerHTML =
     '<div class="mgc__back"></div>' +
@@ -140,7 +145,7 @@ function build(): void {
         `<button type="button" class="mgc__dl" data-a="midi" aria-label="Download MIDI" title="Download MIDI">${ICON.dl}</button>` +
       '</div>' +
     '</div>' +
-    `<aside class="mgc__kbd" aria-label="Keyboard"><div class="mgc__kbt">C5 – C6</div><div class="mgc__kb" role="group" aria-label="Tuts C5 sampai C6">${kbKeys}</div></aside>` +
+    `<aside class="mgc__kbd" aria-label="Keyboard"><div class="mgc__kbt"><div class="mgc__cd" data-dd="range"><button type="button" class="mgc__cdb" aria-haspopup="listbox" aria-expanded="false" aria-label="Pilih rentang keyboard"><span></span></button></div></div><div class="mgc__kb" role="group">${kbMarkup(kbLo())}</div></aside>` +
     '</div>';
   document.body.appendChild(el);
   root = el;
@@ -215,7 +220,13 @@ function build(): void {
   const selChord = () => (S.sel >= 0 && S.slots[S.sel] ? slotChord(S.st, S.slots[S.sel]) : null);
   const keyEls = new Map<number, HTMLElement>();
   el.querySelectorAll<HTMLElement>('[data-p]').forEach(k => keyEls.set(+k.dataset.p!, k));
-  const fold = (p: number): number => { let q = p; while (q < KB_LO) q += 12; while (q > KB_HI) q -= 12; return q; };
+  const fold = (p: number): number => { const lo = kbLo(); let q = p; while (q < lo) q += 12; while (q > lo + 12) q -= 12; return q; };
+  let kbBase = kbLo();   // C paling bawah keyboard yang sedang digambar; berubah kalau rentang diganti (dropdown, undo / redo, atau buka project)
+  function syncKb(): void {
+    const lo = kbLo(), kb = $('.mgc__kb'); kb.setAttribute('aria-label', `Tuts ${rangeLabel(S.st.octave).replace('–', ' sampai ')}`);
+    if (lo === kbBase && keyEls.size) return;
+    kbBase = lo; kb.innerHTML = kbMarkup(lo); keyEls.clear(); kb.querySelectorAll<HTMLElement>('[data-p]').forEach(k => keyEls.set(+k.dataset.p!, k));
+  }
   function renderKeys(): void {   // tuts yang termasuk chord terpilih menyala
     const sc = selChord(), lit = new Set(sc ? voice(sc, S.vc).map(n => fold(n.p)) : []);
     keyEls.forEach((k, p) => k.classList.toggle('is-lit', lit.has(p)));
@@ -232,18 +243,19 @@ function build(): void {
     renderKeys();
   }
   // ---------- dropdown custom (bukan select bawaan browser): daftar pilihan muncul sebagai panel biru, bisa dioperasikan dengan panah / Enter / Esc ----------
-  type DdKey = 'style' | 'scale' | 'sound';
+  type DdKey = 'style' | 'scale' | 'sound' | 'range';
   const DD: Record<DdKey, { v: string; t: string; d?: string }[]> = {
     style: STYLES.map(v => ({ v, t: STYLE_INFO[v].label, d: STYLE_INFO[v].desc })),   // 10 style susunan nada (tabelnya ada di mgchord-theory.ts)
     scale: [{ v: 'Major', t: 'Major' }, { v: 'Minor', t: 'Minor' }],   // hanya dua pilihan: mayor dan minor
-    sound: VOICES.map(v => ({ v: v.id, t: v.label })),   // suara preview: Piano / Pad / Pluck (mgchord-audio.ts)
+    sound: VOICES.map(v => ({ v: v.id, t: v.label })),
+    range: RANGES.map(o => ({ v: String(o), t: rangeLabel(o), d: `Keyboard ${rangeLabel(o)}: chord dan piano roll ikut pindah ke oktaf ini` })),   // rentang keyboard: menggeser register chord (dan piano roll) per oktaf   // suara preview: Piano / Pad / Pluck (mgchord-audio.ts)
   };
-  const ddValue = (k: DdKey): string => (k === 'style' ? S.rh.style : k === 'sound' ? sound : S.st.scale);
+  const ddValue = (k: DdKey): string => (k === 'style' ? S.rh.style : k === 'sound' ? sound : k === 'range' ? String(clamp(S.st.octave, 0, 3)) : S.st.scale);
   const ddLabels = (): void => {
     (Object.keys(DD) as DdKey[]).forEach(k => {
       const o = DD[k].find(x => x.v === ddValue(k)), sp = el.querySelector<HTMLElement>(`[data-dd="${k}"] .mgc__cdb span`);
       if (sp) sp.textContent = o?.t ?? ddValue(k);
-      const bt = sp?.parentElement; if (bt) bt.title = k === 'style' ? (o?.d ?? 'Style susunan nada') : k === 'sound' ? 'Suara preview' : 'Chord mayor atau minor';
+      const bt = sp?.parentElement; if (bt) bt.title = k === 'style' ? (o?.d ?? 'Style susunan nada') : k === 'sound' ? 'Suara preview' : k === 'range' ? 'Rentang keyboard (oktaf chord)' : 'Chord mayor atau minor';
     });
   };
   const pop = document.createElement('div'); pop.className = 'mgc__pop'; pop.setAttribute('role', 'listbox'); pop.hidden = true; el.appendChild(pop);
@@ -271,6 +283,7 @@ function build(): void {
   const pickPop = (o: HTMLElement): void => {
     const k = popFor; if (!k) return; const v = o.dataset.v!;
     closePop(true);
+    if (k === 'range') { S.st.octave = +v; changed(); playChord(S.sel); return; }   // register chord pindah oktaf: keyboard digambar ulang, piano roll ikut, lalu contoh bunyi
     if (k === 'sound') { sound = v as Voice; renderControls(); playChord(S.sel); return; }   // suara preview saja: tidak mengubah progression, jadi tidak perlu commit
     if (k === 'style') S.rh.style = v as PlayStyle; else S.st.scale = v;
     changed(); playChord(S.sel);   // contoh bunyi (satu bar, sesuai style): chord terpilih, atau C kalau masih kosong
@@ -297,7 +310,7 @@ function build(): void {
   });
 
   function renderControls(): void {
-    ddLabels();
+    syncKb(); ddLabels();
     const ps = el.querySelector<HTMLSelectElement>('select[data-k="preset"]'); if (ps) ps.value = String(S.preset);
     $('.mgc__pname').textContent = S.preset >= 0 && PRESETS[S.preset] ? PRESETS[S.preset].name : 'New progression';
     el.querySelectorAll<HTMLElement>('[data-a="len"]').forEach(b => b.classList.toggle('is-on', +b.dataset.s! === S.bars));
@@ -312,7 +325,7 @@ function build(): void {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     const peg = Math.min(PEG, Math.round(H * 0.2)), gh = H - peg, tot = span(), x0 = KW, pw = W - KW, ppb = pw / tot;
     let lo = 127, hi2 = 0; for (const n of notes) { lo = Math.min(lo, n.p); hi2 = Math.max(hi2, n.p); }
-    if (hi2 < lo) { lo = 48; hi2 = 72; }
+    if (hi2 < lo) { lo = kbLo(); hi2 = lo + 24; }   // belum ada nada: tampilkan rentang keyboard yang dipilih
     lo -= 2; hi2 += 2; while (hi2 - lo < (gh < 120 ? 14 : 22)) { lo--; hi2++; }
     const rows = hi2 - lo + 1, rh = gh / rows, yOf = (p: number): number => (hi2 - p) * rh;
     g.fillStyle = '#2e2e2e'; g.fillRect(0, 0, W, H);
