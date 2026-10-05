@@ -8,9 +8,10 @@ export const CONTACT_URL = '';   // contoh: 'https://wa.me/62812xxxxxxx?text=Say
 export const LIMITS = {
   tracks: 4,        // jumlah track dalam project
   deriz: 2,         // jumlah track DERIZ
-  derizPlugins: 5,  // jumlah plugin DERIZ di seluruh project (bawaan track DERIZ + hasil Add dari daftar efek + hasil Duplicate)
+  derizPlugins: 4,  // jumlah plugin DERIZ di seluruh project (bawaan track DERIZ + hasil Add dari daftar efek + hasil Duplicate)
   bars: 32,         // panjang timeline (bar)
-  audioSec: 30,     // audio yang di-upload (MPCS / audio clip), detik
+  audioSec: 30,     // audio yang di-upload ke track Audio clip, detik
+  mpcsSec: 15,      // audio yang dimuat ke MPCS, detik (lebih pendek dari audio clip)
   mgcBars: 4,       // panjang progression MGCHORD
   mgcStyles: ['Block', 'Stab', 'Pluck'],   // style MGCHORD yang terbuka
   mgcMidiChords: 2, // jumlah chord yang ikut saat ekspor MIDI MGCHORD
@@ -88,7 +89,7 @@ export function demoMount(): void {
   b.addEventListener('click', () => {
     demoEvent('demo_info');
     dialog('Versi DEMO',
-      `Semua fitur bisa dicoba. Yang dibatasi: ${LIMITS.tracks} track, ${LIMITS.derizPlugins} plugin DERIZ, ${LIMITS.bars} bar, audio ${LIMITS.audioSec} detik, tanpa export audio, tanpa simpan project, tanpa Automation Clip.`,
+      `Semua fitur bisa dicoba. Yang dibatasi: ${LIMITS.tracks} track, ${LIMITS.derizPlugins} plugin DERIZ, ${LIMITS.bars} bar, audio clip ${LIMITS.audioSec} detik, MPCS ${LIMITS.mpcsSec} detik, tanpa export audio, tanpa simpan project, tanpa Automation Clip.`,
       '<h4>Credits</h4><p class="demo__cr">Piano: Salamander Grand Piano V3 oleh Alexander Holm (CC BY 3.0, creativecommons.org/licenses/by/3.0). Font: Syncopate (SIL OFL). Encoder MP3: lamejs (LGPL).</p>');
   });
   document.body.appendChild(b);

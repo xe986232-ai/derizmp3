@@ -420,7 +420,7 @@ function build(): void {
       ac ??= new AudioContext();
       let { buf, name } = await get();
       if (my !== loadTok) return;
-      if (DEMO && buf.duration > LIMITS.audioSec) { buf = demoTrim(buf, LIMITS.audioSec); stat.textContent = `Demo: dipakai ${LIMITS.audioSec} detik pertama`; }   // DEMO: audio dipotong
+      if (DEMO && buf.duration > LIMITS.mpcsSec) { buf = demoTrim(buf, LIMITS.mpcsSec); stat.textContent = `Demo: dipakai ${LIMITS.mpcsSec} detik pertama`; }   // DEMO: audio dipotong
       const mono = toMono(Array.from({ length: buf.numberOfChannels }, (_, c) => buf.getChannelData(c).slice()));
       stat.textContent = 'Menganalisis 0%';
       const r = await job({ type: 'analyze', x: mono, sr: buf.sampleRate }, [mono.buffer]);

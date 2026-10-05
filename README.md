@@ -148,8 +148,8 @@ Satu kode, dua build. Fitur versi penuh benar-benar tidak ada di bundel demo (bu
 npm run build        # versi penuh -> dist/
 npm run build:demo   # versi demo  -> dist-demo/ (pasang di alamat terpisah)
 ```
-Batas demo ada di satu tempat: `src/demo.ts` (`LIMITS`, `CONTACT_URL`). Ringkas: 4 track (maks 2 track DERIZ, maks 5 plugin DERIZ per project termasuk hasil Add / Duplicate), timeline 32 bar, audio 30 detik,
-export audio / download MPCS / drag hasil MPCS diberi bunyi penanda "DEMO" (export juga maks 30 detik), tanpa simpan / buka project,
+Batas demo ada di satu tempat: `src/demo.ts` (`LIMITS`, `CONTACT_URL`). Ringkas: 4 track (maks 2 track DERIZ, maks 4 plugin DERIZ per project termasuk hasil Add / Duplicate), timeline 32 bar, audio clip 30 detik, audio MPCS 15 detik,
+tanpa export audio dan tanpa download MPCS (drag hasil MPCS ke DERIZ / timeline tetap bisa, diberi bunyi penanda "DEMO"), tanpa simpan / buka project,
 tanpa Automation Clip, tanpa panel Debug Audio, MGCHORD: 4 bar, 3 style, suara Piano, MIDI 2 chord.
 Judul tab, nama PWA, dan nama di layar utama iOS bertanda "Demo" (`demoBranding` di `vite.config.ts`).
 Isi `CONTACT_URL` (mis. link WhatsApp) supaya tombol "Hubungi untuk versi penuh" muncul. Event analitik (`locked_click`, `demo_open`, dst.)
