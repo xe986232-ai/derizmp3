@@ -963,17 +963,37 @@ function audio() {
     guardPre.gain.value = 1 / GR;
     for (let i = 0; i < GN; i++) { const x = (i / (GN - 1) * 2 - 1) * GR, ax = Math.abs(x); curve[i] = Math.sign(x) * (ax <= 0.9 ? ax : 0.9 + 0.1 * Math.tanh((ax - 0.9) / 0.1)); }
     guard.curve = curve; guard.oversample = 'none';
-    // Master Loudness (Pengaturan, bawaan NYALA): supaya output tidak "mentah" / pelan seperti DAW pada umumnya. Dua tahap:
-    //  1) glue compressor (threshold -24 dB, rasio 3:1, knee lebar, attack 15 ms, release 220 ms). DynamicsCompressorNode sudah menambah makeup gain otomatis,
-    //     jadi bagian pelan ikut terangkat dan keseluruhan suara terdengar lebih padat dan keras;
-    //  2) limiter (threshold -2 dB, rasio 20:1, attack cepat) menahan puncak supaya tidak pecah. Pengaman clipping di bawah tetap jadi penjaga terakhir.
+    // Master Loudness (Pengaturan, bawaan NYALA): rantai "finishing" supaya output tidak mentah / datar. Urutan:
+    //  1) high-pass 28 Hz: buang rumble/DC yang cuma memakan headroom
+    //  2) tone EQ halus: low shelf +1.5 dB @ 90 Hz (bobot), peaking -1.5 dB @ 320 Hz (kurangi boxy), +1.2 dB @ 3.2 kHz (presence), high shelf +2 dB @ 10 kHz (air)
+    //  3) exciter saturasi paralel: hanya komponen harmonik (residu tanh) di atas 180 Hz dicampur 35%. Fundamental tidak berubah, bagian keras mendapat harmonik,
+    //     bagian pelan nyaris bersih, jadi suara terasa "hidup" dan hangat tanpa jadi kotor
+    //  4) glue compressor (threshold -22 dB, rasio 2.5:1, knee 14, attack 30 ms supaya transient tetap lewat, release 200 ms). Makeup gain otomatis bawaan node
+    //  5) stereo width M/S: side +15%, side di bawah 140 Hz dibuang (bass tetap mono dan fokus)
+    //  6) limiter (threshold -1.5 dB, rasio 20:1). Pengaman clipping di bawah tetap jadi penjaga terakhir.
     // Dimatikan = jalur kering (master langsung ke pengaman). Export merekam dari guardOut, jadi hasil export ikut sama dengan yang terdengar.
+    const bq = (type, f, g, q) => { const b = actx.createBiquadFilter(); b.type = type; b.frequency.value = f; if (g !== undefined) b.gain.value = g; if (q !== undefined) b.Q.value = q; return b; };
+    const hp = bq('highpass', 28, undefined, 0.707);
+    const eLow = bq('lowshelf', 90, 1.5), eBox = bq('peaking', 320, -1.5, 0.9), ePres = bq('peaking', 3200, 1.2, 0.8), eAir = bq('highshelf', 10000, 2);
+    const sum = actx.createGain(), satHp = bq('highpass', 180, undefined, 0.707), sat = actx.createWaveShaper(), satG = actx.createGain();
+    const SN = 2049, SD = 3, sc = new Float32Array(SN);
+    for (let i = 0; i < SN; i++) { const x = i / (SN - 1) * 2 - 1; sc[i] = Math.tanh(x * SD) / SD - x; }   // hanya residu nonlinear (harmonik); tanpa fundamental
+    sat.curve = sc; sat.oversample = '2x'; satG.gain.value = 0.35;
     const glue = actx.createDynamicsCompressor(), lim = actx.createDynamicsCompressor();
-    glue.threshold.value = -24; glue.knee.value = 20; glue.ratio.value = 3; glue.attack.value = 0.015; glue.release.value = 0.22;
-    lim.threshold.value = -2; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.1;
+    glue.threshold.value = -22; glue.knee.value = 14; glue.ratio.value = 2.5; glue.attack.value = 0.03; glue.release.value = 0.2;
+    lim.threshold.value = -1.5; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.1;
+    const sp = actx.createChannelSplitter(2), mg = actx.createChannelMerger(2);
+    const mid = actx.createGain(), sideA = actx.createGain(), sideB = actx.createGain(), sideHp = bq('highpass', 140, undefined, 0.707), sideW = actx.createGain(), sideN = actx.createGain();
+    mid.gain.value = 0.5; sideA.gain.value = 0.5; sideB.gain.value = -0.5; sideW.gain.value = 1.15; sideN.gain.value = -1;
     loudDry = actx.createGain(); loudWet = actx.createGain();
     master.connect(loudDry); loudDry.connect(guardPre);
-    master.connect(glue); glue.connect(lim); lim.connect(loudWet); loudWet.connect(guardPre);
+    master.connect(hp); hp.connect(eLow); eLow.connect(eBox); eBox.connect(ePres); ePres.connect(eAir);
+    eAir.connect(sum); eAir.connect(satHp); satHp.connect(sat); sat.connect(satG); satG.connect(sum);
+    sum.connect(glue); glue.connect(sp);
+    sp.connect(mid, 0); sp.connect(mid, 1); sp.connect(sideA, 0); sp.connect(sideB, 1);
+    sideA.connect(sideHp); sideB.connect(sideHp); sideHp.connect(sideW); sideW.connect(sideN);
+    mid.connect(mg, 0, 0); sideW.connect(mg, 0, 0); mid.connect(mg, 0, 1); sideN.connect(mg, 0, 1);
+    mg.connect(lim); lim.connect(loudWet); loudWet.connect(guardPre);
     applyLoud(true);
     guardPre.connect(guard); guard.connect(actx.destination); guardOut = guard;   // guardOut: titik rekam export audio (sama dengan yang sampai ke speaker)
   }
