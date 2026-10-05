@@ -6,7 +6,7 @@
 import { ACCEPT as AUDIO_ACCEPT, isAudio } from './audio-upload-card';
 import { DEFAULT_CONTROLS, shiftCurve, snapTargets, toMono, type Controls, type Note, type PitchTrack } from './mpcs-dsp';
 import { encodeWavFloat } from './wav';
-import { DEMO, LIMITS, demoTrim, demoMarked } from './demo';
+import { DEMO, LIMITS, demoTrim, demoMarked, demoNotice } from './demo';
 import { encodeMp3Mono, encodeWav16Mono, saveBlob, type SaveFormat } from './mpcs-save';
 
 const svg = (inner: string, size = 18): string =>
@@ -728,6 +728,7 @@ function build(): void {
   let saving = false;
   function setDlMenu(on: boolean): void { dlMenu.hidden = !on; dlBtn.setAttribute('aria-expanded', String(on)); }
   async function saveAs(fmt: SaveFormat): Promise<void> {
+    if (DEMO) { demoNotice('export'); return; }   // DEMO: download audio hanya di versi penuh
     if (!S || saving) return;
     saving = true; dlBtn.disabled = true; setBusy(true);
     const name = (S.name || 'Audio').replace(/[^\w\- ]+/g, '_') + '-MPCS.' + fmt;
@@ -735,8 +736,7 @@ function build(): void {
       stat.textContent = 'Merender hasil…';
       const out = await ensureRendered();
       if (!out) { stat.textContent = 'Gagal merender'; return; }
-      let x = out.getChannelData(0);
-      if (DEMO) x = demoMarked(x, out.sampleRate);   // DEMO: hasil diberi bunyi penanda
+      const x = out.getChannelData(0);
       stat.textContent = fmt === 'mp3' ? 'Mengonversi ke MP3…' : 'Menyusun WAV…';
       const blob = fmt === 'mp3' ? await encodeMp3Mono(x, out.sampleRate, p => { stat.textContent = 'Mengonversi ke MP3… ' + Math.round(p * 100) + '%'; }) : encodeWav16Mono(x, out.sampleRate);
       saveBlob(blob, name); stat.textContent = 'Terunduh: ' + fmt.toUpperCase();

@@ -11,7 +11,6 @@ export const LIMITS = {
   derizPlugins: 5,  // jumlah plugin DERIZ di seluruh project (bawaan track DERIZ + hasil Add dari daftar efek + hasil Duplicate)
   bars: 32,         // panjang timeline (bar)
   audioSec: 30,     // audio yang di-upload (MPCS / audio clip), detik
-  exportSec: 30,    // panjang hasil export audio, detik
   mgcBars: 4,       // panjang progression MGCHORD
   mgcStyles: ['Block', 'Stab', 'Pluck'],   // style MGCHORD yang terbuka
   mgcMidiChords: 2, // jumlah chord yang ikut saat ekspor MIDI MGCHORD
@@ -26,7 +25,7 @@ const MSG: Record<LockKind, [string, string]> = {
   audio: ['Audio dipotong', `Versi demo memakai ${LIMITS.audioSec} detik pertama dari audio. Versi penuh memuat audio utuh.`],
   automation: ['Automation Clip', 'Automation Clip ada di versi penuh.'],
   save: ['Simpan project', 'Menyimpan dan membuka file project ada di versi penuh. Di demo, project hilang saat halaman ditutup.'],
-  export: ['Export audio demo', `Hasil export demo dibatasi ${LIMITS.exportSec} detik dan diberi bunyi penanda “DEMO”. Versi penuh: utuh dan bersih.`],
+  export: ['Export audio', 'Export audio (MP3 / WAV) hanya ada di versi penuh. Di demo, kamu bisa membuat dan mendengarkan lagu, tapi tidak bisa mengunduhnya.'],
   mgcstyle: ['Style MGCHORD', 'Style ini ada di versi penuh.'],
   mgcsound: ['Suara MGCHORD', 'Suara ini ada di versi penuh.'],
   mgcrange: ['Rentang keyboard', 'Rentang keyboard lain ada di versi penuh.'],
@@ -89,7 +88,7 @@ export function demoMount(): void {
   b.addEventListener('click', () => {
     demoEvent('demo_info');
     dialog('Versi DEMO',
-      `Semua fitur bisa dicoba. Yang dibatasi: ${LIMITS.tracks} track, ${LIMITS.derizPlugins} plugin DERIZ, ${LIMITS.bars} bar, audio ${LIMITS.audioSec} detik, export diberi penanda “DEMO”, tanpa simpan project, tanpa Automation Clip.`,
+      `Semua fitur bisa dicoba. Yang dibatasi: ${LIMITS.tracks} track, ${LIMITS.derizPlugins} plugin DERIZ, ${LIMITS.bars} bar, audio ${LIMITS.audioSec} detik, tanpa export audio, tanpa simpan project, tanpa Automation Clip.`,
       '<h4>Credits</h4><p class="demo__cr">Piano: Salamander Grand Piano V3 oleh Alexander Holm (CC BY 3.0, creativecommons.org/licenses/by/3.0). Font: Syncopate (SIL OFL). Encoder MP3: lamejs (LGPL).</p>');
   });
   document.body.appendChild(b);

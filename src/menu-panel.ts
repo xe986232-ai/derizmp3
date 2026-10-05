@@ -291,6 +291,7 @@ export function initMenuPanel(): MenuPanel {
   try { xfSaved = localStorage.getItem(FMT_KEY) || 'mp3'; } catch { /* abaikan */ }
   setXfmt(xfSaved, false);
   panel.querySelector('.mp__expbtn')!.addEventListener('click', () => {
+    if (DEMO) { demoNotice('export'); return; }   // DEMO: export audio hanya di versi penuh
     apply(false, true);   // panel menutup supaya overlay progres terlihat
     setTimeout(() => { void runExport(xfmt, curName); }, 260);
   });

@@ -70,7 +70,7 @@ const STEPS: Step[] = [
     text: DEMO ? 'Menyimpan dan membuka file project ada di versi penuh. Di demo, project hilang saat halaman ditutup.'
       : 'Simpan project dengan tombol SAVE (ketuk: simpan sebagai project baru, tahan: simpan perubahan ke project yang sedang dibuka), atau buka file lewat Buka .json.' },
   { title: 'Export', scene: 'menu', page: 'home', targets: ['.mp__cat[data-go="export"]'], prefer: ['left', 'bottom'],
-    text: 'Pilih format MP3 atau WAV, lalu tekan Export Audio. Project diputar dari bar 1 sampai akhir isi timeline sambil direkam, jadi lama export sama dengan durasi lagu. Jangan tutup atau pindah tab.' + (DEMO ? ` Di demo, hasil dibatasi ${LIMITS.exportSec} detik dan diberi bunyi penanda “DEMO”.` : '') },
+    text: 'Pilih format MP3 atau WAV, lalu tekan Export Audio. Project diputar dari bar 1 sampai akhir isi timeline sambil direkam, jadi lama export sama dengan durasi lagu. Jangan tutup atau pindah tab.' + (DEMO ? ' Export audio hanya ada di versi penuh; di demo tombol ini menampilkan info saja.' : '') },
   { title: 'Pengaturan: tampilan', scene: 'menu', page: 'settings', targets: [SET('data-theme'), SET('data-wf'), SET('data-wfm')], prefer: ['left', 'bottom'],
     text: 'Theme mengganti warna aplikasi. Waveform & bar color mengatur warna waveform dan bar. Waveform audio clip memilih bentuknya: 1 batang atau 2 batang.' },
   { title: 'Record Mode', scene: 'menu', page: 'settings', targets: [SET('data-rec')], prefer: ['left', 'bottom'],

@@ -16,7 +16,7 @@ export interface ExportIO {
   end(): void;                 // hentikan putar dan kembalikan posisi playhead + metronome seperti semula
   toast(msg: string, ms?: number): void;
 }
-import { DEMO, LIMITS, demoMark } from './demo';
+import { DEMO, demoNotice } from './demo';
 let io: ExportIO | null = null;
 export function setExportIO(v: ExportIO): void { io = v; }
 
@@ -136,6 +136,7 @@ function download(blob: Blob, name: string): void {
 
 // ---------- alur export ----------
 export async function runExport(fmt: ExportFormat, baseName: string): Promise<void> {
+  if (DEMO) { demoNotice('export'); return; }   // DEMO: export audio hanya di versi penuh
   if (busy) return;
   if (!io) { alert('Export belum siap, coba lagi sebentar.'); return; }
   const dur = io.contentSec();
@@ -212,7 +213,6 @@ export async function runExport(fmt: ExportFormat, baseName: string): Promise<vo
     const fade = Math.min(end, Math.round(0.01 * sr));                 // fade-out 10 ms: tidak ada "klik" di titik potong
     for (let i = 0; i < fade; i++) { const g = i / fade; L[end - 1 - i] *= g; R[end - 1 - i] *= g; }
 
-    if (DEMO) { const cap = Math.round(LIMITS.exportSec * sr); if (L.length > cap) { L = L.subarray(0, cap); R = R.subarray(0, cap); const fd = Math.round(0.05 * sr); for (let i = 0; i < fd; i++) { const g = i / fd; L[cap - 1 - i] *= g; R[cap - 1 - i] *= g; } } L = L.slice(); R = R.slice(); demoMark([L, R], sr); }   // DEMO: maksimal 30 detik + bunyi penanda
     ui.lock(); ui.phase(fmt === 'mp3' ? 'Mengonversi ke MP3…' : 'Menyusun file WAV…'); ui.set(0, '');
     await yieldUI();
     const blob = fmt === 'mp3' ? await encodeMp3(L, R, sr, p => ui.set(p, Math.round(p * 100) + '%')) : encodeWav16(L, R, sr);
