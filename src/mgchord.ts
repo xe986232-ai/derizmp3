@@ -65,19 +65,18 @@ const KW = 64, PEG = 34;                   // lebar kolom tuts (sama dengan --kw
 
 
 // ---------- suara preview (sederhana: saw + triangle -> lowpass), AudioContext sendiri ----------
-let actx: AudioContext | null = null, out: GainNode | null = null, an: AnalyserNode | null = null;
+let actx: AudioContext | null = null, out: GainNode | null = null;
 function ac(): AudioContext {
   if (!actx) {
     const A = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     actx = new A({ latencyHint: 'interactive' });
     out = actx.createGain(); out.gain.value = 0.42;
     const comp = actx.createDynamicsCompressor(); out.connect(comp); comp.connect(actx.destination);
-    an = actx.createAnalyser(); an.fftSize = 1024; an.smoothingTimeConstant = 0.8; comp.connect(an);   // tap untuk spektrum / waveform
   }
   if (actx.state === 'suspended') void actx.resume();
   return actx;
 }
-function tone(c: AudioContext, dest: AudioNode, midi: number, when: number, dur: number, vel: number): void {
+function tone(c: BaseAudioContext, dest: AudioNode, midi: number, when: number, dur: number, vel: number): void {
   const f = 440 * 2 ** ((midi - 69) / 12), g = c.createGain(), lp = c.createBiquadFilter();
   lp.type = 'lowpass'; lp.frequency.value = 900 + vel * 3200; lp.Q.value = 0.7;
   const o1 = c.createOscillator(), o2 = c.createOscillator();
@@ -148,46 +147,62 @@ function build(): void {
   let notes: OutNote[] = [], playing = false, phBeat = -1, raf = 0, prevFocus: Element | null = null;
   let audioOn = true, linked = false, hist: string[] = [], hi = -1;
 
-  // ---------- waveform real-time (zoom): min/max per kolom piksel, poligon terisi; yang digambar hanya ZOOM sample terakhir, jadi getarannya terlihat ----------
+  // ---------- waveform seluruh progression: algoritma min/max per kolom piksel (sama dengan kick-waveform-demo) ----------
+  // progression dirender dulu offline (suara preview yang sama), lalu tiap kolom piksel mengambil sample min & max-nya,
+  // digambar sebagai SATU poligon terisi menyambung, rata, tanpa garis tengah dan tanpa anti-alias lengkung (pixel-snapped).
   const spec = $<HTMLCanvasElement>('.mgc__spec'), sg = spec.getContext('2d')!;
-  let tbuf = new Float32Array(0), specRaf = 0, agc = 0;
-  const ZOOM = 320;   // jumlah sample yang ditampilkan (~7 ms). Makin kecil = makin zoom
+  let wbuf: Float32Array | null = null, wDur = 1, wTimer = 0, wGen = 0, wPeak = 0;
+  let wCache: HTMLCanvasElement | null = null, wKey = '';
   const drawSpec = (): void => {
     const r = spec.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
     if (r.width < 20 || r.height < 10) return;
-    if (spec.width !== Math.floor(r.width * dpr) || spec.height !== Math.floor(r.height * dpr)) { spec.width = Math.floor(r.width * dpr); spec.height = Math.floor(r.height * dpr); }
-    const w = spec.width, h = spec.height, mid = h / 2, barW = Math.max(1, Math.round(dpr)), cols = Math.ceil(w / barW);
+    const w = Math.floor(r.width * dpr), h = Math.floor(r.height * dpr);
+    if (spec.width !== w || spec.height !== h) { spec.width = w; spec.height = h; }
     sg.setTransform(1, 0, 0, 1, 0, 0); sg.imageSmoothingEnabled = false; sg.clearRect(0, 0, w, h);
-    let start = 0, peak = 0;
-    if (an) {
-      if (tbuf.length !== an.fftSize) tbuf = new Float32Array(an.fftSize);
-      an.getFloatTimeDomainData(tbuf);
-      for (let i = 1; i < tbuf.length - ZOOM; i++) if (tbuf[i - 1] <= 0 && tbuf[i] > 0) { start = i; break; }   // pemicu zero-crossing naik: gelombang diam di tempat seperti osiloskop
-      for (let i = 0; i < ZOOM; i++) peak = Math.max(peak, Math.abs(tbuf[start + i]));
-    }
-    agc = Math.max(agc * 0.992, peak);   // auto-gain: tinggi gelombang selalu memenuhi panel
-    const gain = agc > 0.003 ? Math.min(14, 0.95 / agc) : 1, spp = ZOOM / cols;
-    const tops: number[] = [], bots: number[] = [], th = Math.max(3, 3.5 * dpr);   // th = setengah tebal pita gelombang (px canvas): gelombang selalu berupa pita tebal, bukan garis tipis
-    const val = (pos: number): number => { const i = Math.floor(pos), f = pos - i, a = tbuf[start + i] ?? 0, b2 = tbuf[start + Math.min(i + 1, ZOOM - 1)] ?? a; return a + (b2 - a) * f; };   // interpolasi linear antar sample: kurva halus, tidak bergerigi seperti noise
-    for (let c = 0; c < cols; c++) {
-      let mn = 0, mx = 0;
-      if (tbuf.length) {
-        if (spp < 1) mn = mx = val(c * spp);
-        else { const i0 = Math.floor(c * spp), i1 = Math.max(i0 + 1, Math.ceil((c + 1) * spp)); mn = 1; mx = -1; for (let i = i0; i <= i1 && i < ZOOM; i++) { const v = tbuf[start + i]; if (v < mn) mn = v; if (v > mx) mx = v; } if (mx < mn) { mn = 0; mx = 0; } }
+    if (!wbuf) return;
+    const key = `${w}x${h}|${wGen}`;
+    if (!wCache || wKey !== key) {   // bentuk gelombang hanya dihitung ulang kalau audio / ukuran berubah
+      wKey = key; wCache = wCache ?? document.createElement('canvas'); wCache.width = w; wCache.height = h;
+      const g2 = wCache.getContext('2d')!, len = wbuf.length, mid = h / 2, barW = Math.max(1, Math.round(dpr)), numCols = Math.ceil(w / barW), spp = len / numCols;
+      const gain = wPeak > 0.001 ? 1 / wPeak : 1;   // normalisasi supaya gelombang memenuhi panel
+      const tops = new Array<number>(numCols), bottoms = new Array<number>(numCols);
+      for (let col = 0; col < numCols; col++) {
+        const st = Math.floor(col * spp), en = Math.floor((col + 1) * spp);
+        let mn = 1, mx = -1;
+        for (let i = st; i < en && i < len; i++) { const v = wbuf[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
+        if (en <= st) { mn = 0; mx = 0; }
+        let yTop = mid - mx * gain * mid * 0.92, yBottom = mid - mn * gain * mid * 0.92;
+        if (Math.abs(yBottom - yTop) < 2) { yTop = mid - 1; yBottom = mid + 1; }   // minimal 2 px supaya garis tetap terlihat saat senyap
+        tops[col] = yTop; bottoms[col] = yBottom;
       }
-      tops.push(mid - clamp(mx * gain, -1, 1) * mid * 0.86); bots.push(mid - clamp(mn * gain, -1, 1) * mid * 0.86);
+      g2.fillStyle = 'rgba(255,255,255,.95)'; g2.beginPath(); g2.moveTo(0, bottoms[0]);
+      for (let col = 0; col < numCols; col++) g2.lineTo(col * barW + barW / 2, bottoms[col]);
+      g2.lineTo(numCols * barW, bottoms[numCols - 1]);
+      for (let col = numCols - 1; col >= 0; col--) g2.lineTo(col * barW + barW / 2, tops[col]);
+      g2.lineTo(0, tops[0]); g2.closePath(); g2.fill();
     }
-    const sm = (a: number[]): number[] => a.map((_, i) => { let t = 0, n = 0; for (let k = -3; k <= 3; k++) { const j = i + k; if (j >= 0 && j < a.length) { t += a[j]; n++; } } return t / n; });   // haluskan sedikit
-    const T = sm(tops).map(y => y - th), Bm = sm(bots).map(y => y + th);
-    sg.fillStyle = '#fff'; sg.strokeStyle = '#fff'; sg.lineJoin = 'round'; sg.lineWidth = Math.max(1, dpr);
-    sg.shadowColor = 'rgba(255,255,255,.55)'; sg.shadowBlur = 8 * dpr;   // glow tipis supaya terasa tebal
-    sg.beginPath(); sg.moveTo(0, Bm[0]);   // satu poligon menyambung
-    for (let c = 0; c < cols; c++) sg.lineTo(c * barW + barW / 2, Bm[c]);
-    sg.lineTo(cols * barW, Bm[cols - 1]);
-    for (let c = cols - 1; c >= 0; c--) sg.lineTo(c * barW + barW / 2, T[c]);
-    sg.lineTo(0, T[0]); sg.closePath(); sg.fill(); sg.stroke(); sg.shadowBlur = 0;
+    sg.drawImage(wCache!, 0, 0);
+    if (playing && phBeat >= 0) { const x = Math.round(clamp(phBeat * spb / wDur, 0, 1) * w); sg.fillStyle = '#f2b632'; sg.fillRect(x, 0, Math.max(2, Math.round(dpr * 1.5)), h); }   // kepala putar
   };
-  const specLoop = (): void => { if (el.hidden) { specRaf = 0; return; } drawSpec(); specRaf = requestAnimationFrame(specLoop); };
+  function renderWave(): void {   // render offline seluruh progression (didebounce), lalu gambar
+    clearTimeout(wTimer);
+    wTimer = window.setTimeout(async () => {
+      const gen = ++wGen;
+      try {
+        const sp = 60 / (bridge ? bridge.bpm() : 120), tot = totalBeats(S.slots), SR = 44100;
+        const len = Math.ceil((tot * sp + 1.2) * SR);
+        const OAC = window.OfflineAudioContext || (window as unknown as { webkitOfflineAudioContext: typeof OfflineAudioContext }).webkitOfflineAudioContext;
+        const oc = new OAC(1, len, SR), o = oc.createGain(), comp = oc.createDynamicsCompressor();
+        o.gain.value = 0.42; o.connect(comp); comp.connect(oc.destination);
+        for (const n of notes) tone(oc, o, n.p, 0.02 + n.s * sp, n.l * sp, n.v);
+        const buf = await oc.startRendering();
+        if (gen !== wGen) return;
+        wbuf = buf.getChannelData(0).slice(); wDur = buf.duration; wPeak = 0;
+        for (let i = 0; i < wbuf.length; i++) { const v = Math.abs(wbuf[i]); if (v > wPeak) wPeak = v; }
+        wCache = null; drawSpec();
+      } catch { /* browser tanpa OfflineAudioContext: panel dibiarkan kosong */ }
+    }, 120);
+  }
 
   // ---------- riwayat undo / redo ----------
   const commit = (): void => {
@@ -269,7 +284,7 @@ function build(): void {
     }
     if (phBeat >= 0) { g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x0 + phBeat * ppb, 0); g.lineTo(x0 + phBeat * ppb, gh); g.stroke(); }
   }
-  const renderAll = (): void => { recompute(); renderControls(); renderLane(); drawRoll(); };
+  const renderAll = (): void => { recompute(); renderControls(); renderLane(); drawRoll(); renderWave(); };
   refreshFn = () => { S.sel = clamp(S.sel, 0, S.slots.length - 1); if (!el.hidden) { renderAll(); } commit(); };
   const matchesPreset = (): boolean => { const p = PRESETS[S.preset]; return !!p && p.scale === S.st.scale && p.slots.length === S.slots.length && p.slots.every((d, i) => d === S.slots[i].deg && S.slots[i].beats === 4); };
   const changed = (): void => { S.preset = S.preset >= 0 && matchesPreset() ? S.preset : -1; renderAll(); commit(); };
@@ -303,7 +318,7 @@ function build(): void {
     const frame = (): void => {
       if (!playing) return;
       phBeat = ((ac().currentTime - t0) / spb) % totalBeats(S.slots); if (phBeat < 0) phBeat = 0;
-      drawRoll(); raf = requestAnimationFrame(frame);
+      drawRoll(); drawSpec(); raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
   };
@@ -311,7 +326,7 @@ function build(): void {
     if (!playing) return;
     playing = false; clearInterval(timer); cancelAnimationFrame(raf); phBeat = -1;
     if (bus && actx) { bus.gain.setTargetAtTime(0, actx.currentTime, 0.03); const b = bus; setTimeout(() => b.disconnect(), 400); }
-    bus = null; setPlayUi(false); drawRoll();
+    bus = null; setPlayUi(false); drawRoll(); drawSpec();
   };
 
   // ---------- aksi ----------
@@ -396,6 +411,7 @@ function build(): void {
   });
   win.addEventListener('keyup', e => e.stopPropagation());
   new ResizeObserver(() => { if (!el.hidden) drawRoll(); }).observe(cv);
+  new ResizeObserver(() => { if (!el.hidden) drawSpec(); }).observe(spec);
 
   function close(): void {
     stopPlay(); el.hidden = true; document.body.classList.remove('mgc-open');
@@ -404,6 +420,5 @@ function build(): void {
   openFn = () => {
     prevFocus = document.activeElement; el.hidden = false; document.body.classList.add('mgc-open');
     renderAll(); commit(); win.focus({ preventScroll: true }); requestAnimationFrame(drawRoll);
-    if (!specRaf) specRaf = requestAnimationFrame(specLoop);
   };
 }
