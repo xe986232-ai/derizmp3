@@ -56,7 +56,6 @@ const ICON = {
   move: svg('<path d="M12 3v18M3 12h18M8 7l4-4 4 4M8 17l4 4 4-4M7 8l-4 4 4 4M17 8l4 4-4 4" stroke-width="2"/>', 18),
 };
 const LAMP = '<svg viewBox="0 0 44 26" width="44" height="26" aria-hidden="true"><path d="M22 12c-4-4 4-6 0-10" fill="none" stroke="#9db9ff" stroke-width="2.4" stroke-linecap="round"/><path d="M38 14c5-1 6-6 3-9" fill="none" stroke="#f2b632" stroke-width="3" stroke-linecap="round"/><path d="M3 21c0-5 8-8 19-8h5c8 0 12 3 12 8z" fill="#f2b632" stroke="#c98a10" stroke-width="1.5"/></svg>';
-const ART = '<svg class="mgc__art" viewBox="0 0 260 190" aria-hidden="true"><ellipse cx="130" cy="176" rx="96" ry="8" fill="#3f6fd8" opacity=".55"/><path d="M118 130c-34-22 26-40-8-70s34-44 14-66" transform="translate(6 10)" fill="none" stroke="#fff" stroke-width="22" stroke-linecap="round" opacity=".95"/><g fill="#fff"><circle cx="86" cy="118" r="26"/><circle cx="124" cy="104" r="34"/><circle cx="166" cy="116" r="28"/><circle cx="110" cy="132" r="26"/><circle cx="148" cy="134" r="24"/></g><path d="M118 168c-4-10 22-14 48-14h16c24 0 38 5 38 14z" transform="translate(-6 0)" fill="#f2b632" stroke="#c98a10" stroke-width="2"/><path d="M212 160c20-2 26-18 18-30" fill="none" stroke="#f2b632" stroke-width="7" stroke-linecap="round"/></svg>';
 const mod = (n: number, m: number): number => ((n % m) + m) % m;
 const clamp = (v: number, a: number, b: number): number => Math.min(b, Math.max(a, v));
 const MAX_BEATS = 64;                      // 16 bar
@@ -65,13 +64,14 @@ const KW = 64, PEG = 34;                   // lebar kolom tuts (sama dengan --kw
 
 
 // ---------- suara preview (sederhana: saw + triangle -> lowpass), AudioContext sendiri ----------
-let actx: AudioContext | null = null, out: GainNode | null = null;
+let actx: AudioContext | null = null, out: GainNode | null = null, an: AnalyserNode | null = null;
 function ac(): AudioContext {
   if (!actx) {
     const A = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     actx = new A({ latencyHint: 'interactive' });
     out = actx.createGain(); out.gain.value = 0.42;
     const comp = actx.createDynamicsCompressor(); out.connect(comp); comp.connect(actx.destination);
+    an = actx.createAnalyser(); an.fftSize = 1024; an.smoothingTimeConstant = 0.8; comp.connect(an);   // tap untuk spektrum / waveform
   }
   if (actx.state === 'suspended') void actx.resume();
   return actx;
@@ -108,7 +108,8 @@ function build(): void {
         '<span class="mgc__pow">Powered by DERIZ</span>' +
         `<button type="button" class="mgc__x" data-a="close" aria-label="Tutup" title="Tutup (Esc)">${ICON.close}</button>` +
       '</header>' +
-      '<div class="mgc__top">' +
+      '<canvas class="mgc__spec" aria-hidden="true"></canvas>' +
+      '<div class="mgc__main"><aside class="mgc__side">' +
         '<div class="mgc__ctl">' +
           `<div class="mgc__r"><span>Key</span><label class="mgc__dd"><select data-k="key" aria-label="Key">${keyOpts}</select></label></div>` +
           '<div class="mgc__r"><span>Length</span><div class="mgc__sg"><button type="button" data-a="len" data-s="4">4 bars</button><button type="button" data-a="len" data-s="8">8 bars</button></div></div>' +
@@ -118,13 +119,13 @@ function build(): void {
           `<button type="button" class="mgc__big" data-a="dice" aria-label="Acak progression" title="Acak progression"><i>${ICON.dice}</i></button>` +
           `<div class="mgc__ur"><button type="button" data-a="undo" aria-label="Undo">${ICON.undo}</button><button type="button" data-a="redo" aria-label="Redo">${ICON.redo}</button></div>` +
         '</div>' +
-        `<div class="mgc__mascot">${ART}<span class="mgc__link">Unlinked</span></div>` +
-      '</div>' +
+        '<span class="mgc__link">Unlinked</span>' +
+      '</aside>' +
       '<section class="mgc__seq">' +
         `<div class="mgc__ruler"><div class="mgc__corner"><button type="button" class="mgc__mini" data-a="play" aria-label="Putar preview">${ICON.playS}</button><span>On</span></div><div class="mgc__marks"></div></div>` +
         '<div class="mgc__lane" role="listbox" aria-label="Chord progression"></div>' +
         '<div class="mgc__roll"><canvas class="mgc__cv" role="img" aria-label="Piano roll hasil chord"></canvas></div>' +
-      '</section>' +
+      '</section></div>' +
       '<div class="mgc__foot">' +
         `<button type="button" class="mgc__go" data-a="play" aria-label="Putar preview" title="Putar / henti preview (Spasi)">${ICON.play}</button>` +
         `<div class="mgc__dnd" draggable="true" role="button" tabindex="0" data-a="midi" title="Seret ke DAW atau klik untuk unduh .mid">${ICON.move}<span>Drag &amp; drop MIDI</span></div>` +
@@ -139,6 +140,35 @@ function build(): void {
   const lane = $('.mgc__lane'), marks = $('.mgc__marks'), cv = $<HTMLCanvasElement>('.mgc__cv'), g = cv.getContext('2d')!;
   let notes: OutNote[] = [], playing = false, phBeat = -1, raf = 0, prevFocus: Element | null = null;
   let audioOn = true, linked = false, hist: string[] = [], hi = -1;
+
+  // ---------- spektrum + waveform real-time (dari bus preview plugin) ----------
+  const spec = $<HTMLCanvasElement>('.mgc__spec'), sg = spec.getContext('2d')!;
+  let fbuf = new Uint8Array(0), tbuf = new Uint8Array(0), specRaf = 0;
+  const drawSpec = (): void => {
+    const r = spec.getBoundingClientRect(), dpr = window.devicePixelRatio || 1, W = Math.floor(r.width), H = Math.floor(r.height);
+    if (W < 20 || H < 10) return;
+    if (spec.width !== Math.floor(W * dpr) || spec.height !== Math.floor(H * dpr)) { spec.width = Math.floor(W * dpr); spec.height = Math.floor(H * dpr); }
+    sg.setTransform(dpr, 0, 0, dpr, 0, 0); sg.clearRect(0, 0, W, H);
+    if (an) {
+      if (fbuf.length !== an.frequencyBinCount) { fbuf = new Uint8Array(an.frequencyBinCount); tbuf = new Uint8Array(an.fftSize); }
+      an.getByteFrequencyData(fbuf); an.getByteTimeDomainData(tbuf);
+    }
+    const N = Math.max(24, Math.floor(W / 8)), bw = W / N, top = Math.floor(fbuf.length * 0.8);
+    sg.fillStyle = 'rgba(255,255,255,.55)';
+    for (let i = 0; i < N; i++) {   // batang spektrum, sumbu frekuensi logaritmis
+      const a = Math.floor(2 * Math.pow(top / 2, i / N)), b = Math.max(a + 1, Math.floor(2 * Math.pow(top / 2, (i + 1) / N)));
+      let m = 0; for (let k = a; k < b && k < fbuf.length; k++) m = Math.max(m, fbuf[k]);
+      const h = Math.max(2, (m / 255) * H * 0.92);
+      sg.beginPath(); sg.roundRect(i * bw + 1, H - h, Math.max(1, bw - 2), h, 2); sg.fill();
+    }
+    sg.strokeStyle = '#fff'; sg.lineWidth = 1.6; sg.beginPath();   // garis waveform di tengah
+    for (let x = 0; x < W; x += 2) {
+      const v = tbuf.length ? (tbuf[Math.floor((x / W) * (tbuf.length - 1))] - 128) / 128 : 0, y = H / 2 + v * H * 0.4;
+      if (x === 0) sg.moveTo(x, y); else sg.lineTo(x, y);
+    }
+    sg.stroke();
+  };
+  const specLoop = (): void => { if (el.hidden) { specRaf = 0; return; } drawSpec(); specRaf = requestAnimationFrame(specLoop); };
 
   // ---------- riwayat undo / redo ----------
   const commit = (): void => {
@@ -338,5 +368,6 @@ function build(): void {
   openFn = () => {
     prevFocus = document.activeElement; el.hidden = false; document.body.classList.add('mgc-open');
     renderAll(); commit(); win.focus({ preventScroll: true }); requestAnimationFrame(drawRoll);
+    if (!specRaf) specRaf = requestAnimationFrame(specLoop);
   };
 }
