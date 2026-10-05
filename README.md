@@ -167,3 +167,32 @@ Demo dan versi penuh sebaiknya dua project hosting terpisah dengan alamat berbed
 - **Vercel:** buat project baru dari repo ini, lalu Build Command `npm run build:demo`, Output Directory `dist-demo`. Atau lewat CLI: `vercel deploy --prod --local-config vercel.demo.json` (berisi pengaturan yang sama + header cache: `sw.js` tidak di-cache, `assets/*` immutable).
 - **Netlify / Cloudflare Pages / lainnya:** Build `npm run build:demo`, publish `dist-demo`. Pastikan `sw.js` tidak di-cache lama, supaya versi baru cepat sampai ke pengguna.
 - Aplikasi dilayani dari akar domain (`/manifest.webmanifest`, `/icons/...`), jadi pasang di domain / subdomain sendiri, bukan di subfolder.
+
+## Versi Full (berlisensi)
+Demo tetap publik (`build:demo`). Versi full hanya dikirim ke pembeli yang login: **satu token = satu akun**, batas perangkat, bisa dicabut.
+
+Alur: pembeli menerima token → buka `/login` → tab *Aktifkan token* → buat email + password → token terkunci ke akun itu. Selanjutnya cukup login email + password.
+
+**Cara kerja pengamannya**
+- `middleware.ts` (jalan di server Vercel SEBELUM file dikirim): tanpa cookie sesi bertanda tangan, kode aplikasi tidak pernah sampai ke browser. Hanya `/login`, manifest, dan ikon yang publik.
+- `api/session.ts` (login + aktivasi token), `api/me.ts` (cek lisensi berkala), `api/logout.ts`. Database: Supabase (`supabase/schema.sql`), token disimpan sebagai hash.
+- `src/license.ts`: aplikasi yang sudah ter-cache (PWA) tetap lapor ke `/api/me` tiap 30 menit. Dicabut = cache dihapus dan keluar; offline maksimal 7 hari.
+- Batas perangkat (bawaan 2) dihitung per akun lewat cookie `mx_d`. Slot tidak dibebaskan saat logout.
+
+**Setup sekali jalan**
+1. Supabase: buat project → SQL Editor → jalankan `supabase/schema.sql`. Tidak perlu mengatur email konfirmasi: akun dibuat server dengan email sudah terverifikasi.
+2. Vercel: project baru untuk versi full, *Settings → General → Vercel Config Path*: `vercel.full.json` (demo tetap memakai `vercel.demo.json`).
+3. Environment Variables Vercel: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY` (rahasia, jangan pernah di kode), `SESSION_SECRET` (acak panjang, mis. `openssl rand -hex 32`).
+4. Deploy sebagai **Preview** dulu, lalu ujilah: buka `/` tanpa login harus terlempar ke `/login`.
+
+**Mengelola token (di komputermu, bukan di server)**
+```
+export SUPABASE_URL=...  SUPABASE_SERVICE_KEY=...
+npm run license -- create 5 --devices 2 --days 365 --note "Order #1201 Budi"
+npm run license -- list
+npm run license -- revoke  budi@mail.com
+npm run license -- reset-devices budi@mail.com     # pembeli ganti HP / laptop
+```
+Kirim ke pembeli: `https://domain-full-kamu/login?token=MLVX-XXXX-...` (token terisi otomatis di tab aktivasi).
+
+**Uji** (tanpa Supabase asli): `npx tsx tools/license-gate-test.ts` dan `npx tsx tools/license-flow-test.ts`. Typecheck server: `npx tsc -p tsconfig.server.json`.

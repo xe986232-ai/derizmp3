@@ -21,7 +21,7 @@ function pwaPrecache(): Plugin {
     configResolved(c) { outDir = c.build.outDir; },
     closeBundle() {
       const swPath = join(outDir, 'sw.js');
-      const files = walk(outDir).filter((f) => f !== 'sw.js' && !f.endsWith('.map')).map((f) => './' + f);
+      const files = walk(outDir).filter((f) => f !== 'sw.js' && f !== 'login.html' && !f.endsWith('.map')).map((f) => './' + f);
       const src = readFileSync(swPath, 'utf8')
         .replace('/*__PRECACHE__*/[]', JSON.stringify(files))
         .replace('__VERSION__', hash + '-' + Date.now().toString(36));
@@ -70,10 +70,12 @@ function demoBranding(): Plugin {
 }
 
 export default defineConfig(({ mode }) => ({
-  define: { __BUILD__: JSON.stringify(stamp), __DEMO__: JSON.stringify(mode === 'demo') },   // mode demo: vite build --mode demo -> dist-demo/
+  define: { __BUILD__: JSON.stringify(stamp), __DEMO__: JSON.stringify(mode === 'demo'), __FULL__: JSON.stringify(mode === 'full') },   // mode demo: vite build --mode demo -> dist-demo/ ; mode full: vite build --mode full -> dist-full/ (berlisensi, lewat gerbang login)
   plugins: [demoStubs(), demoBranding(), pwaPrecache()],
   build: {
-    outDir: mode === 'demo' ? 'dist-demo' : 'dist',
+    outDir: mode === 'demo' ? 'dist-demo' : mode === 'full' ? 'dist-full' : 'dist',
+    // build full memuat 2 halaman: aplikasi (index.html) dan halaman login (login.html)
+    rollupOptions: mode === 'full' ? { input: { main: resolve('index.html'), login: resolve('login.html') } } : undefined,
     // CSS dibiarkan apa adanya (tidak di-minify) supaya tampilan identik dengan versi HTML
     cssMinify: false,
   },

@@ -30,7 +30,7 @@ self.addEventListener('fetch', (e) => {
   if (req.mode === 'navigate') {
     e.respondWith(
       fetch(req)
-        .then((res) => { if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put('./', copy)); } return res; })
+        .then((res) => { if (res.ok && !res.redirected) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put('./', copy)); } return res; })
         .catch(() => caches.match('./', { ignoreSearch: true }).then((r) => r || caches.match('./index.html')))
     );
     return;
