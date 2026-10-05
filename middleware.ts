@@ -8,6 +8,7 @@ const PUBLIC = (p: string): boolean =>
   p === '/login' || p === '/login.html' || p === '/manifest.webmanifest' || p.startsWith('/icons/');   // manifest diambil browser tanpa cookie, jadi harus publik
 
 export default async function middleware(req: Request): Promise<Response> {
+  if (process.env.LICENSE_GATE !== 'on') return next();   // gerbang hanya aktif di project full (isi env LICENSE_GATE=on); project demo lolos begitu saja
   const url = new URL(req.url);
   if (PUBLIC(url.pathname)) return next();
   const s = await verifySession(getCookie(req, COOKIE), process.env.SESSION_SECRET);
