@@ -111,3 +111,22 @@ Web DAW bisa di-install seperti aplikasi: ikonnya muncul di beranda HP / desktop
 
 Berkas: `public/manifest.webmanifest` (nama, warna, ikon), `public/icons/*` (ikon 192 / 512 / maskable / iOS), `public/sw.js` (cache offline), `src/pwa.ts` (pendaftaran service worker + tombol Install). Daftar file cache diisi otomatis saat build oleh plugin `pwaPrecache` di `vite.config.ts`, jadi tidak perlu diedit manual.
 Versi baru aplikasi aktif setelah semua tab Web DAW ditutup lalu dibuka lagi (supaya project yang sedang dikerjakan tidak terganggu).
+
+## MGCHORD (pembuat chord progression)
+Plugin ala ChordJam: bikin progression chord, lihat hasilnya di **Piano Roll View**, lalu kirim ke pattern atau unduh sebagai MIDI. Tambah lewat panel efek: halaman **Plugin** > tombol **+** > **MGCHORD** (satu per track, jendelanya langsung terbuka; klik kartu MGCHORD untuk membukanya lagi).
+
+| Bagian | Fungsi |
+|---|---|
+| **Scale / Scale Type / Octave** | Tonika (C..B), skala (Major, Minor, Dorian, Phrygian, Lydian, Mixolydian, Locrian, Harmonic / Melodic Minor), dan geser oktaf -2..+2. |
+| **Chord Type** | *Diatonic* / *7th* / *9th* = chord mengikuti skala (mis. C Minor 9th: Cm9, Fm9, G#maj9, A#9). Tipe lain (Major9, Sus4, dst.) memaksa kualitas yang sama di semua derajat. |
+| **Voices** | 5 suara: nyala / mati dan geser -12 / 0 / +12 per suara, plus **Invert** 0..3. Chord yang nadanya kurang dari 5 otomatis digandakan naik oktaf. |
+| **Velocity** | Seret tiap bar untuk velocity per suara. |
+| **Style** | Block (serempak), Strum (dipetik, Tight / Mid / Loose), Arp Up / Down (1/4, 1/8, 1/16). |
+| **Progression** | Blok merah = satu chord. Ketuk blok (atau area di piano roll) untuk memilih, lalu **Degree** (ganti derajat) dan **Length** (1, 2, 3, 4, 6, 8, 12, 16 ketukan); **+** tambah chord, **-** hapus. Tombol dadu = progression acak (aliran harmoni fungsional). Panah di header = 10 preset (Basic, Pop I-V-vi-IV, Sad vi-IV-I-V, Jazz ii-V-I, Andalusian, dll.). Maksimal 16 bar. |
+| **Pattern** | Kirim nada ke pattern yang sedang dipilih di timeline. Pattern dilebarkan otomatis kalau muat (tidak menabrak pattern berikutnya) dan nada lama di pattern itu diganti. Suara keluar kalau track-nya Supersaw / DERIZ. |
+| **MIDI** | Unduh progression sebagai file .mid (tempo mengikuti project). |
+
+Tombol Play di header hanya preview (suara sederhana milik plugin sendiri, tempo ikut project); Spasi = play / stop, Esc = tutup. Setelan MGCHORD ikut tersimpan di file project (`mgchord`).
+
+Kode: `src/mgchord-theory.ts` (teori murni: skala, chord, voicing, progression, MIDI), `src/mgchord.ts` (jendela + preview), blok "MGCHORD" di `src/styles.css`, kartu di `src/fx-rack.ts`, jembatan ke pattern + simpan project di `src/main.ts` (`setMgchordBridge`).
+Tes: `node tools/mgchord-test.ts` (nama chord vs referensi, voicing, invert, strum / arp, panjang progression, header MIDI).

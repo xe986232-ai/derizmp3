@@ -15,6 +15,7 @@ import { registerSW } from './pwa';
 import { initMenuPanel, setProjectIO } from './menu-panel';
 import { dbgRun, dbgZoom } from './audio-debug';
 import { mpcsExport, mpcsImport } from './mpcs';
+import { setMgchordBridge, mgchordExport, mgchordImport } from './mgchord';
 import { setExportIO } from './export-audio';
 import { hasSynth, startVoice, releaseVoice, playNote, stopAllSynth } from './synth-engine';
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
@@ -25,7 +26,7 @@ import { createClip, importClip, exportClip, cloneClip, splitClip, valueAt, getC
 import { decodeFile, addBuffer, getBuffer, encodeWav, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
 import { slideSource, glideBeats } from './note-slide';
 import { velAlpha } from './velocity';
-import { openPianoRoll, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getNoteColor, setNoteColor, getPianoRollNotes, setPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, clearPianoRollNotes, PR_BEATS } from './piano-roll';
+import { openPianoRoll, closePianoRoll, isPianoRollOpen, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getNoteColor, setNoteColor, getPianoRollNotes, setPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, clearPianoRollNotes, PR_BEATS } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 registerSW();   // PWA: bisa di-install & jalan offline (aktif pada hasil build)
 initLandscape();
@@ -1275,6 +1276,29 @@ document.querySelectorAll('.trackheader__left-content').forEach(b => b.title = '
 const fxRack = initFxRack(() => ({ ctx: audio(), dest: master }), patternBridge);   // isi panel efek: tombol +, card pilihan efek, dan card tiap efek (per track)
 initEffectsPanel(settled => { paintRuler(settled); patBarPlace(); }, () => { closeMenu(true); closeAddMenu(true); dismissAdd(true); fxRack.closePicker(true); });
 fxRack.show(selTrack ? selTrack.closest('.trackheader-container').dataset.track : null);
+// MGCHORD: kirim nada hasil progression ke pattern yang sedang dipilih di timeline (pattern dilebarkan kalau muat, nada lama diganti)
+setMgchordBridge({
+  bpm: () => BPM,
+  send(notes, beats) {
+    const el = selPat && selPat.isConnected ? selPat : (lastPat && lastPat.isConnected ? lastPat : null);
+    if (!el) return 'Pilih dulu sebuah pattern di timeline';
+    if (el.dataset.clip || el.dataset.auId) return 'Pattern ini bukan pattern nada';
+    const lane = el.parentElement, lt = lane.dataset.track;
+    if (!el.dataset.prId) el.dataset.prId = 'pat' + (++prSeq);
+    const need = beats / 4 * BAR_W, left = pl(el);
+    let room = W - left;   // lebarkan pattern sampai muat, tapi jangan menabrak pattern berikutnya di lane yang sama
+    lane.querySelectorAll('.pattern').forEach(o => { if (o !== el && pl(o) > left + 1 && pl(o) - left < room) room = pl(o) - left; });
+    if (pw(el) < need) el.style.width = Math.min(need, room) + 'px';
+    const fit = pw(el) / BAR_W * 4;
+    if (isPianoRollOpen()) closePianoRoll();   // supaya piano roll tidak menyimpan nada lama
+    const key = editKey(el);
+    setPianoRollNotes(key, notes.filter(n => n.s < fit - 1e-6).map(n => ({p: Math.max(24, Math.min(108, n.p)), s: n.s, l: Math.min(n.l, fit - n.s), ...(n.v < 1 ? {v: Math.round(n.v * 1000) / 1000} : {})})));
+    renderPatNotes(el); patBarPlace();
+    if (fit < beats - 1e-6) return 'Terkirim, tapi pattern kurang panjang (' + Math.floor(fit / 4) + ' bar). Panjangkan pattern untuk sisanya';
+    if (!hasSynth(lt) && !fxRack.derizIds(lt).length) return 'Terkirim ke pattern, tapi track ini belum punya instrumen (pakai track Supersaw)';
+    return null;
+  }
+});
 // ===== Menu "Tambahkan track" =====
 const INSTRUMENTS = [
   {n:'Drums', c:'#ff9f1c'}, {n:'Audio clip', c:'#14b8a6'}, {n:'Supersaw', c:'#5b3de8'},
@@ -2005,7 +2029,8 @@ function projectSnapshot() {
   });
   const mp = mpcsExport();   // sesi plugin MPCS (audio upload + hasil edit nada + knob): satu per project
   if (mp) clips.mpcs = encodeWav(mp.buf);
-  return {data: {v: 1, bpm: BPM, bars: BARS, ...(mp ? {mpcs: mp.data} : {}), ...(getMasterPitch() ? {mp: getMasterPitch()} : {}), ...(getNoteColor() ? {nc: getNoteColor()} : {}), tracks}, clips};
+  const mg = mgchordExport();   // sesi plugin MGCHORD (scale, voicing, progression): satu per project
+  return {data: {v: 1, bpm: BPM, bars: BARS, ...(mp ? {mpcs: mp.data} : {}), ...(mg ? {mgchord: mg} : {}), ...(getMasterPitch() ? {mp: getMasterPitch()} : {}), ...(getNoteColor() ? {nc: getNoteColor()} : {}), tracks}, clips};
 }
 function clearProject() {
   if (playing) pausePlay();
@@ -2028,7 +2053,8 @@ async function projectRestore(rec) {
     else clipMap[k] = addBuffer(buf);
   }
   clearProject();
-  mpcsImport(mpcsBuf && d.mpcs ? mpcsBuf : null, d.mpcs).catch(console.error);   // analisis jalan di latar; tidak menahan pembukaan project
+  mpcsImport(mpcsBuf && d.mpcs ? mpcsBuf : null, d.mpcs).catch(console.error);
+  mgchordImport(d.mgchord);   // null = bawaan (project tanpa MGCHORD)   // analisis jalan di latar; tidak menahan pembukaan project
   setBpm(d.bpm || 120);
   setMasterPitch(+d.mp || 0);   // Pitch Project ikut tersimpan di file project
   setNoteColor(typeof d.nc === 'string' ? d.nc : null);   // warna nada piano roll (pilihan Color) ikut tersimpan di file project
