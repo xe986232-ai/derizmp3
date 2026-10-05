@@ -167,20 +167,25 @@ function build(): void {
     }
     agc = Math.max(agc * 0.992, peak);   // auto-gain: tinggi gelombang selalu memenuhi panel
     const gain = agc > 0.003 ? Math.min(14, 0.95 / agc) : 1, spp = ZOOM / cols;
-    const tops: number[] = [], bots: number[] = [];
+    const tops: number[] = [], bots: number[] = [], th = Math.max(3, 3.5 * dpr);   // th = setengah tebal pita gelombang (px canvas): gelombang selalu berupa pita tebal, bukan garis tipis
+    const val = (pos: number): number => { const i = Math.floor(pos), f = pos - i, a = tbuf[start + i] ?? 0, b2 = tbuf[start + Math.min(i + 1, ZOOM - 1)] ?? a; return a + (b2 - a) * f; };   // interpolasi linear antar sample: kurva halus, tidak bergerigi seperti noise
     for (let c = 0; c < cols; c++) {
-      const i0 = Math.floor(c * spp), i1 = Math.max(i0 + 1, Math.ceil((c + 1) * spp));
       let mn = 0, mx = 0;
-      if (tbuf.length) { mn = 1; mx = -1; for (let i = i0; i <= i1 && i < ZOOM; i++) { const v = tbuf[start + i]; if (v < mn) mn = v; if (v > mx) mx = v; } if (mx < mn) { mn = 0; mx = 0; } }
-      let yT = mid - clamp(mx * gain, -1, 1) * mid * 0.92, yB = mid - clamp(mn * gain, -1, 1) * mid * 0.92;
-      if (Math.abs(yB - yT) < 2) { yT = mid - 1; yB = mid + 1; }   // minimal 2 px supaya garis tetap terlihat saat senyap
-      tops.push(yT); bots.push(yB);
+      if (tbuf.length) {
+        if (spp < 1) mn = mx = val(c * spp);
+        else { const i0 = Math.floor(c * spp), i1 = Math.max(i0 + 1, Math.ceil((c + 1) * spp)); mn = 1; mx = -1; for (let i = i0; i <= i1 && i < ZOOM; i++) { const v = tbuf[start + i]; if (v < mn) mn = v; if (v > mx) mx = v; } if (mx < mn) { mn = 0; mx = 0; } }
+      }
+      tops.push(mid - clamp(mx * gain, -1, 1) * mid * 0.86); bots.push(mid - clamp(mn * gain, -1, 1) * mid * 0.86);
     }
-    sg.fillStyle = 'rgba(255,255,255,.92)'; sg.beginPath(); sg.moveTo(0, bots[0]);   // satu poligon menyambung, bukan batang terpisah
-    for (let c = 0; c < cols; c++) sg.lineTo(c * barW + barW / 2, bots[c]);
-    sg.lineTo(cols * barW, bots[cols - 1]);
-    for (let c = cols - 1; c >= 0; c--) sg.lineTo(c * barW + barW / 2, tops[c]);
-    sg.lineTo(0, tops[0]); sg.closePath(); sg.fill();
+    const sm = (a: number[]): number[] => a.map((_, i) => { let t = 0, n = 0; for (let k = -3; k <= 3; k++) { const j = i + k; if (j >= 0 && j < a.length) { t += a[j]; n++; } } return t / n; });   // haluskan sedikit
+    const T = sm(tops).map(y => y - th), Bm = sm(bots).map(y => y + th);
+    sg.fillStyle = '#fff'; sg.strokeStyle = '#fff'; sg.lineJoin = 'round'; sg.lineWidth = Math.max(1, dpr);
+    sg.shadowColor = 'rgba(255,255,255,.55)'; sg.shadowBlur = 8 * dpr;   // glow tipis supaya terasa tebal
+    sg.beginPath(); sg.moveTo(0, Bm[0]);   // satu poligon menyambung
+    for (let c = 0; c < cols; c++) sg.lineTo(c * barW + barW / 2, Bm[c]);
+    sg.lineTo(cols * barW, Bm[cols - 1]);
+    for (let c = cols - 1; c >= 0; c--) sg.lineTo(c * barW + barW / 2, T[c]);
+    sg.lineTo(0, T[0]); sg.closePath(); sg.fill(); sg.stroke(); sg.shadowBlur = 0;
   };
   const specLoop = (): void => { if (el.hidden) { specRaf = 0; return; } drawSpec(); specRaf = requestAnimationFrame(specLoop); };
 
