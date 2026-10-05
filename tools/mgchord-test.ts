@@ -37,7 +37,8 @@ eq('C minor = C D# G', voice(triadAt(0, 'Minor'), defaultVoicing()).map(n => n.p
 eq('triad names', [triadAt(0, 'Major').name, triadAt(1, 'Minor').name], ['C', 'C#m']);
 
 // ---- style susunan nada (pola dari contoh MIDI Indian Beat) ----
-eq('Block + 10 pola', STYLES.length, 11);
+eq('Block + 11 pola', STYLES.length, 12);
+eq('Stab tepat di bawah Block', STYLES.slice(0, 2), ['Block', 'Stab']);
 const v3 = defaultVoicing(), bar = [{ deg: 0, beats: 4 }], two = [{ deg: 0, beats: 4 }, { deg: 3, beats: 4 }];
 const rh = (style: (typeof STYLES)[number]) => ({ style, rate: 0.5, strum: 0.12 });
 for (const sty of STYLES) {
@@ -72,4 +73,9 @@ eq('Tresillo ketukan 0: tiga nada disapu naik 0.02', buildNotes(S(), bar, v3, rh
 eq('Block disapu halus naik', buildNotes(S(), bar, v3, rh('Block')).map(n => +n.s.toFixed(3)), [0, 0.02, 0.04]);
 eq('Block tetap berakhir di akhir chord', buildNotes(S(), bar, v3, rh('Block')).every(n => Math.abs(n.s + n.l - 4) < 1e-9), true);
 eq('humanize tidak menggeser nada tunggal Pluck', buildNotes(S(), bar, v3, rh('Pluck')).map(n => n.s), [0, 0.5, 1, 1.5, 3]);
+// contoh MIDI New Song 159: C minor, pukulan C4 D#4 G4 di offbeat 0.5 / 1.5 / 2.5 / 3.5, 1/16
+const stab = buildNotes(S({ scale: 'Minor' }), bar, v3, rh('Stab'));
+eq('Stab C minor = C4 D#4 G4 x 4 offbeat', stab.map(n => n.p), [60, 63, 67, 60, 63, 67, 60, 63, 67, 60, 63, 67]);
+eq('Stab di offbeat', [...new Set(stab.map(n => Math.floor(n.s * 2) / 2))], [0.5, 1.5, 2.5, 3.5]);
+eq('Stab pendek (1/16) dan velocity ~0.8', stab.every(n => n.l <= 0.25 && n.l > 0.2 && Math.abs(n.v - 0.8) <= 0.081), true);
 console.log(fail ? fail + ' GAGAL' : 'semua lolos'); process.exit(fail ? 1 : 0);
