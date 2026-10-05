@@ -141,32 +141,37 @@ function build(): void {
   let notes: OutNote[] = [], playing = false, phBeat = -1, raf = 0, prevFocus: Element | null = null;
   let audioOn = true, linked = false, hist: string[] = [], hi = -1;
 
-  // ---------- spektrum + waveform real-time (dari bus preview plugin) ----------
+  // ---------- waveform real-time: algoritma min/max per kolom piksel (poligon terisi, seperti preview DAW), menggulung dari kanan ke kiri ----------
   const spec = $<HTMLCanvasElement>('.mgc__spec'), sg = spec.getContext('2d')!;
-  let fbuf = new Uint8Array(0), tbuf = new Uint8Array(0), specRaf = 0;
+  let tbuf = new Float32Array(0), specRaf = 0;
+  const smin: number[] = [], smax: number[] = [];   // riwayat min / max tiap frame (satu kolom per frame)
+  const SPEC_GAIN = 2.4;                            // sinyal preview kecil, diperbesar supaya bentuknya terlihat
   const drawSpec = (): void => {
-    const r = spec.getBoundingClientRect(), dpr = window.devicePixelRatio || 1, W = Math.floor(r.width), H = Math.floor(r.height);
-    if (W < 20 || H < 10) return;
-    if (spec.width !== Math.floor(W * dpr) || spec.height !== Math.floor(H * dpr)) { spec.width = Math.floor(W * dpr); spec.height = Math.floor(H * dpr); }
-    sg.setTransform(dpr, 0, 0, dpr, 0, 0); sg.clearRect(0, 0, W, H);
+    const r = spec.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    if (r.width < 20 || r.height < 10) return;
+    if (spec.width !== Math.floor(r.width * dpr) || spec.height !== Math.floor(r.height * dpr)) { spec.width = Math.floor(r.width * dpr); spec.height = Math.floor(r.height * dpr); }
+    const w = spec.width, h = spec.height, mid = h / 2, barW = Math.max(1, Math.round(dpr)), cols = Math.ceil(w / barW);
+    sg.setTransform(1, 0, 0, 1, 0, 0); sg.imageSmoothingEnabled = false; sg.clearRect(0, 0, w, h);
+    let mn = 0, mx = 0;
     if (an) {
-      if (fbuf.length !== an.frequencyBinCount) { fbuf = new Uint8Array(an.frequencyBinCount); tbuf = new Uint8Array(an.fftSize); }
-      an.getByteFrequencyData(fbuf); an.getByteTimeDomainData(tbuf);
+      if (tbuf.length !== an.fftSize) tbuf = new Float32Array(an.fftSize);
+      an.getFloatTimeDomainData(tbuf);
+      for (let i = 0; i < tbuf.length; i++) { const v = tbuf[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
     }
-    const N = Math.max(24, Math.floor(W / 8)), bw = W / N, top = Math.floor(fbuf.length * 0.8);
-    sg.fillStyle = 'rgba(255,255,255,.55)';
-    for (let i = 0; i < N; i++) {   // batang spektrum, sumbu frekuensi logaritmis
-      const a = Math.floor(2 * Math.pow(top / 2, i / N)), b = Math.max(a + 1, Math.floor(2 * Math.pow(top / 2, (i + 1) / N)));
-      let m = 0; for (let k = a; k < b && k < fbuf.length; k++) m = Math.max(m, fbuf[k]);
-      const h = Math.max(2, (m / 255) * H * 0.92);
-      sg.beginPath(); sg.roundRect(i * bw + 1, H - h, Math.max(1, bw - 2), h, 2); sg.fill();
+    smin.push(mn); smax.push(mx);
+    if (smin.length > cols) { smin.splice(0, smin.length - cols); smax.splice(0, smax.length - cols); }
+    const pad = cols - smin.length, tops: number[] = [], bots: number[] = [];
+    for (let c = 0; c < cols; c++) {
+      const k = c - pad, lo = k >= 0 ? smin[k] : 0, hi = k >= 0 ? smax[k] : 0;
+      let yT = mid - clamp(hi * SPEC_GAIN, -1, 1) * mid * 0.92, yB = mid - clamp(lo * SPEC_GAIN, -1, 1) * mid * 0.92;
+      if (Math.abs(yB - yT) < 2) { yT = mid - 1; yB = mid + 1; }   // minimal 2 px supaya garis tetap terlihat saat senyap
+      tops.push(yT); bots.push(yB);
     }
-    sg.strokeStyle = '#fff'; sg.lineWidth = 1.6; sg.beginPath();   // garis waveform di tengah
-    for (let x = 0; x < W; x += 2) {
-      const v = tbuf.length ? (tbuf[Math.floor((x / W) * (tbuf.length - 1))] - 128) / 128 : 0, y = H / 2 + v * H * 0.4;
-      if (x === 0) sg.moveTo(x, y); else sg.lineTo(x, y);
-    }
-    sg.stroke();
+    sg.fillStyle = 'rgba(255,255,255,.92)'; sg.beginPath(); sg.moveTo(0, bots[0]);   // satu poligon menyambung, bukan batang terpisah
+    for (let c = 0; c < cols; c++) sg.lineTo(c * barW + barW / 2, bots[c]);
+    sg.lineTo(cols * barW, bots[cols - 1]);
+    for (let c = cols - 1; c >= 0; c--) sg.lineTo(c * barW + barW / 2, tops[c]);
+    sg.lineTo(0, tops[0]); sg.closePath(); sg.fill();
   };
   const specLoop = (): void => { if (el.hidden) { specRaf = 0; return; } drawSpec(); specRaf = requestAnimationFrame(specLoop); };
 
