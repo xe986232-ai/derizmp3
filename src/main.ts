@@ -942,12 +942,13 @@ let kbdCont = null, kbdOct = 3, kbdN = 0;
 const baseMidi = () => 12 + 12 * kbdOct;   // C3 = 48 (C4 = 60 = middle C)
 
 // --- suara (WebAudio, polifonik) ---
-let actx = null, master = null, guardOut = null, loudDry = null, loudWet = null; const voices = new Map();
+let actx = null, master = null, guardOut = null, loudDry = null, loudWet = null, loudTrim = null; const voices = new Map();
+const LOUD_CEIL = 0.87;   // -1.2 dB: ceiling akhir jalur Master Loudness (standar streaming -1 dBTP; sedikit lebih rendah supaya aman buat export MP3)
 function applyLoud(now) {   // Pengaturan > Master Loudness: nyala = lewat compressor + limiter, mati = jalur kering
   if (!loudDry) return;
   const on = document.documentElement.dataset.loud !== 'off', t = actx.currentTime;
-  if (now) { loudWet.gain.value = on ? 1 : 0; loudDry.gain.value = on ? 0 : 1; return; }
-  loudWet.gain.setTargetAtTime(on ? 1 : 0, t, 0.01); loudDry.gain.setTargetAtTime(on ? 0 : 1, t, 0.01);
+  if (now) { loudWet.gain.value = on ? 1 : 0; loudDry.gain.value = on ? 0 : 1; loudTrim.gain.value = on ? LOUD_CEIL : 1; return; }
+  loudWet.gain.setTargetAtTime(on ? 1 : 0, t, 0.01); loudDry.gain.setTargetAtTime(on ? 0 : 1, t, 0.01); loudTrim.gain.setTargetAtTime(on ? LOUD_CEIL : 1, t, 0.01);
 }
 document.addEventListener('loudchange', () => applyLoud(false));
 function audio() {
@@ -970,7 +971,8 @@ function audio() {
     //     bagian pelan nyaris bersih, jadi suara terasa "hidup" dan hangat tanpa jadi kotor
     //  4) glue compressor (threshold -22 dB, rasio 2.5:1, knee 14, attack 30 ms supaya transient tetap lewat, release 200 ms). Makeup gain otomatis bawaan node
     //  5) stereo width M/S: side +15%, side di bawah 140 Hz dibuang (bass tetap mono dan fokus)
-    //  6) limiter (threshold -1.5 dB, rasio 20:1). Pengaman clipping di bawah tetap jadi penjaga terakhir.
+    //  6) drive +3 dB ke limiter (limiter threshold -3 dB, rasio 20:1) untuk menaikkan loudness ke kisaran -13 LUFS tanpa menghancurkan dinamika;
+    //  7) trim akhir -1.2 dB setelah pengaman clipping: DynamicsCompressorNode punya makeup gain otomatis sehingga puncaknya selalu mendekati 0 dBFS, jadi ceiling harus diatur di sini. Pengaman clipping tetap jadi penjaga terakhir.
     // Dimatikan = jalur kering (master langsung ke pengaman). Export merekam dari guardOut, jadi hasil export ikut sama dengan yang terdengar.
     const bq = (type, f, g, q) => { const b = actx.createBiquadFilter(); b.type = type; b.frequency.value = f; if (g !== undefined) b.gain.value = g; if (q !== undefined) b.Q.value = q; return b; };
     const hp = bq('highpass', 28, undefined, 0.707);
@@ -981,11 +983,11 @@ function audio() {
     sat.curve = sc; sat.oversample = '2x'; satG.gain.value = 0.35;
     const glue = actx.createDynamicsCompressor(), lim = actx.createDynamicsCompressor();
     glue.threshold.value = -22; glue.knee.value = 14; glue.ratio.value = 2.5; glue.attack.value = 0.03; glue.release.value = 0.2;
-    lim.threshold.value = -1.5; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.1;
+    lim.threshold.value = -3; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.1;
     const sp = actx.createChannelSplitter(2), mg = actx.createChannelMerger(2);
     const mid = actx.createGain(), sideA = actx.createGain(), sideB = actx.createGain(), sideHp = bq('highpass', 140, undefined, 0.707), sideW = actx.createGain(), sideN = actx.createGain();
     mid.gain.value = 0.5; sideA.gain.value = 0.5; sideB.gain.value = -0.5; sideW.gain.value = 1.15; sideN.gain.value = -1;
-    loudDry = actx.createGain(); loudWet = actx.createGain();
+    loudDry = actx.createGain(); loudWet = actx.createGain(); loudTrim = actx.createGain();
     master.connect(loudDry); loudDry.connect(guardPre);
     master.connect(hp); hp.connect(eLow); eLow.connect(eBox); eBox.connect(ePres); ePres.connect(eAir);
     eAir.connect(sum); eAir.connect(satHp); satHp.connect(sat); sat.connect(satG); satG.connect(sum);
@@ -993,9 +995,9 @@ function audio() {
     sp.connect(mid, 0); sp.connect(mid, 1); sp.connect(sideA, 0); sp.connect(sideB, 1);
     sideA.connect(sideHp); sideB.connect(sideHp); sideHp.connect(sideW); sideW.connect(sideN);
     mid.connect(mg, 0, 0); sideW.connect(mg, 0, 0); mid.connect(mg, 0, 1); sideN.connect(mg, 0, 1);
-    mg.connect(lim); lim.connect(loudWet); loudWet.connect(guardPre);
+    const drive = actx.createGain(); drive.gain.value = 1.4125; mg.connect(drive); drive.connect(lim); lim.connect(loudWet); loudWet.connect(guardPre);
     applyLoud(true);
-    guardPre.connect(guard); guard.connect(actx.destination); guardOut = guard;   // guardOut: titik rekam export audio (sama dengan yang sampai ke speaker)
+    guardPre.connect(guard); guard.connect(loudTrim); loudTrim.connect(actx.destination); guardOut = loudTrim;   // guardOut: titik rekam export audio (sama dengan yang sampai ke speaker)
   }
   if (actx.state === 'suspended') actx.resume();
   return actx;
