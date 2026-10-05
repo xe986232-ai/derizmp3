@@ -1,4 +1,4 @@
-// Service worker Web DAW: membuat aplikasi bisa di-install dan tetap terbuka tanpa internet.
+// Service worker Melvox: membuat aplikasi bisa di-install dan tetap terbuka tanpa internet.
 // Daftar file (PRECACHE) dan VERSION diisi otomatis saat `npm run build` oleh plugin pwaPrecache di vite.config.ts.
 // Saat dev (`npm run dev`) service worker tidak didaftarkan, jadi placeholder di bawah tidak berpengaruh.
 

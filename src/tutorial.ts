@@ -23,7 +23,7 @@ const SET = (attr: string): string => `.mp__page[data-page="settings"] .mp__card
 
 const STEPS: Step[] = [
   { title: 'Halo, selamat datang!', primary: 'Mulai',
-    text: 'Ini tutorial singkat Web DAW. Aku tunjukkan fungsi tiap menu satu per satu. Kamu bisa menutupnya kapan saja, dan membukanya lagi lewat tombol gelembung chat di pojok kanan atas.' },
+    text: 'Ini tutorial singkat Melvox. Aku tunjukkan fungsi tiap menu satu per satu. Kamu bisa menutupnya kapan saja, dan membukanya lagi lewat tombol gelembung chat di pojok kanan atas.' },
 
   { title: 'Tambahkan track', targets: ['.addtrack'], prefer: ['right', 'top', 'bottom'],
     text: 'Mulai dari sini. Ketuk untuk memilih instrumen track: Drums, Audio clip, Supersaw, Minisynth, GMS Synth, DW Sampler, atau DERIZ.' + (DEMO ? ` Di versi demo dibatasi ${LIMITS.tracks} track.` : '') },
@@ -60,7 +60,7 @@ const STEPS: Step[] = [
     text: 'Panah ini membuka dan menutup panel bawah. Di dalamnya ada keyboard virtual: mainkan lewat sentuhan atau keyboard komputer (baris Z–M dan Q–P), dengan tombol oktaf untuk menggeser rentang nada.' },
 
   { title: 'Panel Effects', scene: 'fx', targets: ['.fx__pages'], prefer: ['bottom', 'left'],
-    text: 'Panel di sisi kanan. Tab Plugin berisi instrumen (DERIZ, Supersaw, MPCS, MGCHORD), tab Effect berisi efek seperti Reverb, EQ, Filter, De-esser, dan Delay. Isinya mengikuti track yang sedang dipilih.' },
+    text: 'Panel di sisi kanan. Tab Plugin berisi instrumen (DERIZ, Supersaw, MPCS), tab Effect berisi efek seperti Reverb, EQ, Filter, De-esser, dan Delay. Isinya mengikuti track yang sedang dipilih.' },
   { title: 'Tambah plugin atau efek', scene: 'fx', targets: ['#fxAdd'], prefer: ['bottom', 'left'],
     text: 'Tombol + menambahkan plugin atau efek ke track yang dipilih. DERIZ bisa dipasang beberapa kali, lewat tombol + atau Duplicate di titik tiga kartunya.' + (DEMO ? ` Di versi demo maksimal ${LIMITS.derizPlugins} plugin DERIZ.` : '') },
 
@@ -82,7 +82,7 @@ const STEPS: Step[] = [
   { title: 'Grid Piano Roll', scene: 'menu', page: 'settings', targets: [SET('data-prb-range')], prefer: ['left', 'top'],
     text: 'Mengatur panjang grid piano roll (jumlah bar) sekaligus note mini yang tampil di pattern. Pakai tombol − dan + atau geser slider-nya.' },
   { title: 'Install aplikasi', scene: 'menu', page: 'settings', targets: ['[data-install-card]'], prefer: ['left', 'top'], skipIf: () => $('[data-install-card]')?.hasAttribute('hidden') ?? true,
-    text: 'Pasang Web DAW ke layar utama supaya terbuka seperti aplikasi biasa. Kartu ini hanya muncul kalau aplikasi belum terpasang.' },
+    text: 'Pasang Melvox ke layar utama supaya terbuka seperti aplikasi biasa. Kartu ini hanya muncul kalau aplikasi belum terpasang.' },
 
   { title: 'Piano roll',
     text: 'Buka piano roll lewat tombol Edit di toolbar pattern. Di dalamnya, ketuk atau seret penggaris untuk memindahkan playhead, pakai menu Slide pada note yang dipilih, dan panel Velocity di bawah untuk mengatur kekuatan tiap note.' },

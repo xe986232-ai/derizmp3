@@ -1,4 +1,4 @@
-# Web DAW
+# Melvox
 
 Hasil porting `web-daw.html` ke Vite + TypeScript (tahap 1, tanpa perubahan tampilan/perilaku).
 
@@ -104,13 +104,13 @@ Kode: `src/audio-debug.ts` (agregasi + panel), `src/deriz-synth.ts` (objek `G` +
 Tes: `node --experimental-transform-types tools/deriz-debug-test.ts` (suara identik debug mati vs nyala, hitungan blok / nada telat / terpotong / hilang, timer presisi vs kasar, tambahan beban).
 
 ## Install ke beranda (PWA)
-Web DAW bisa di-install seperti aplikasi: ikonnya muncul di beranda HP / desktop dan bisa dibuka tanpa internet.
+Melvox bisa di-install seperti aplikasi: ikonnya muncul di beranda HP / desktop dan bisa dibuka tanpa internet.
 - **Android / Chrome / Edge**: buka **Menu > Pengaturan > Install ke layar utama**, atau lewat menu browser (titik tiga) > *Install aplikasi*.
 - **iPhone / iPad (Safari)**: ketuk Bagikan > *Tambah ke Layar Utama*.
 - Syarat browser: halaman harus dibuka lewat **HTTPS** (atau `localhost`). Service worker hanya aktif pada hasil build (`npm run build` lalu `npm run preview`), bukan di `npm run dev`.
 
 Berkas: `public/manifest.webmanifest` (nama, warna, ikon), `public/icons/*` (ikon 192 / 512 / maskable / iOS), `public/sw.js` (cache offline), `src/pwa.ts` (pendaftaran service worker + tombol Install). Daftar file cache diisi otomatis saat build oleh plugin `pwaPrecache` di `vite.config.ts`, jadi tidak perlu diedit manual.
-Versi baru aplikasi aktif setelah semua tab Web DAW ditutup lalu dibuka lagi (supaya project yang sedang dikerjakan tidak terganggu).
+Versi baru aplikasi aktif setelah semua tab Melvox ditutup lalu dibuka lagi (supaya project yang sedang dikerjakan tidak terganggu).
 
 ## MGCHORD (pembuat chord progression)
 Plugin pembuat chord progression, tampilan panel biru: header abu (nama progression + **SAVE** + panah preset), blok **Key / Length / Audio** di kiri, tombol bulat besar di tengah (acak progression) dengan undo / redo di bawahnya, lalu penggaris bar, blok chord, piano roll gelap dengan pasak oranye di awal tiap chord, dan bar bawah **Play / Drag & drop MIDI / unduh**. Tambah lewat panel efek: halaman **Plugin** > tombol **+** > **MGCHORD** (satu per track, jendelanya langsung terbuka; klik kartu MGCHORD untuk membukanya lagi).

@@ -114,7 +114,7 @@ function build(): void {
           (PRESETS.length ? `<label class="mgc__pn"><span class="mgc__pname"></span><select data-k="preset" aria-label="Pilih progression">${presetOpts}</select></label>` : '<div class="mgc__pn mgc__pn--none"><span class="mgc__pname"></span></div>') +
           '<button type="button" class="mgc__save" data-a="save" title="Kirim nada ke pattern yang dipilih di timeline">Save</button>' +
         '</div>' +
-        '<span class="mgc__pow">Web DAW</span>' +
+        '<span class="mgc__pow">Melvox</span>' +
         `<button type="button" class="mgc__x" data-a="close" aria-label="Tutup" title="Tutup (Esc)">${ICON.close}</button>` +
       '</header>' +
       '<div class="mgc__body">' +

@@ -163,7 +163,7 @@ export function initMenuPanel(): MenuPanel {
     instCard.hidden = st === 'installed';
     instBtn.hidden = st !== 'ready';
     instHint.textContent =
-      st === 'ready' ? 'Pasang Web DAW seperti aplikasi biasa: ikonnya muncul di beranda dan bisa dibuka tanpa internet.' :
+      st === 'ready' ? 'Pasang Melvox seperti aplikasi biasa: ikonnya muncul di beranda dan bisa dibuka tanpa internet.' :
       st === 'ios' ? 'Di iPhone / iPad: ketuk tombol Bagikan (kotak dengan panah ke atas) di Safari, lalu pilih "Tambah ke Layar Utama".' :
       'Buka menu browser (titik tiga), lalu pilih "Install aplikasi" atau "Tambahkan ke layar utama".';
   };

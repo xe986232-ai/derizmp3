@@ -10,6 +10,8 @@ import { setReverb, setEq, setFilter, setDeesser, setDelay, delayLevels, reverbS
 import { DerizSynth } from './deriz-synth';
 import { dbgSched, dbgSent, dbgSpec } from './audio-debug';
 import { openMpcs } from './mpcs';
+
+// MGCHORD disembunyikan dari daftar plugin (belum siap dipublikasikan). Cara menambahkannya: di tab Plugin, tekan-tahan tombol "+" sekitar 1,5 detik.
 import { openMgchord } from './mgchord';
 import { DEMO, LIMITS, demoNotice } from './demo';
 import { isAudio, ACCEPT as AUDIO_ACCEPT } from './audio-upload-card';
@@ -932,7 +934,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     const have = new Set(fxs().map(f => f.type));
     // halaman Plugin: hanya DERIZ (boleh banyak; Supersaw otomatis ada di track synth). Halaman Effect: Reverb, EQ, Filter, dll.
     // halaman Plugin: DERIZ (boleh banyak) dan MPCS (satu per track; Supersaw otomatis ada di track synth). Halaman Effect: Reverb, EQ, Filter, dll.
-    const choices = EFFECTS.filter(d => page === 'plugin' ? d.type === 'deriz' || d.type === 'mpcs' || d.type === 'mgchord' : !d.synth);
+    const choices = EFFECTS.filter(d => page === 'plugin' ? d.type === 'deriz' || d.type === 'mpcs' : !d.synth);
     const el = document.createElement('div');
     el.className = 'fx-pick';
     el.setAttribute('role', 'menu');
@@ -969,7 +971,22 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     el.querySelector<HTMLButtonElement>('.fx-pick__item:not(:disabled)')?.focus({ preventScroll: true });
   };
 
-  addBtn.addEventListener('click', () => { pick ? closePicker() : openPicker(); });
+  // Rahasia: tekan-tahan "+" di tab Plugin (~1,5 detik) langsung menambahkan MGCHORD (atau membukanya kalau sudah ada); tidak ada petunjuk di layar.
+  let holdT = 0, held = false;
+  const holdStop = () => { clearTimeout(holdT); holdT = 0; };
+  addBtn.addEventListener('pointerdown', () => {
+    held = false; holdStop();
+    if (page !== 'plugin' || !cur || addBtn.disabled) return;
+    holdT = window.setTimeout(() => {
+      held = true; holdT = 0; closePicker();
+      if (fxs().some(f => f.type === 'mgchord')) openMgchord(); else addEffect('mgchord');
+    }, 1500);
+  });
+  addBtn.addEventListener('pointerup', holdStop);
+  addBtn.addEventListener('pointerleave', holdStop);
+  addBtn.addEventListener('pointercancel', holdStop);
+  addBtn.addEventListener('contextmenu', e => { if (held || holdT) e.preventDefault(); });   // cegah menu tahan-lama bawaan browser HP
+  addBtn.addEventListener('click', () => { if (held) { held = false; return; } pick ? closePicker() : openPicker(); });
 
   // ---------- menu titik tiga (Delete) ----------
   let menu: HTMLElement | null = null, menuBtn: HTMLButtonElement | null = null;

@@ -57,13 +57,13 @@ function demoBranding(): Plugin {
     configResolved(c) { outDir = c.build.outDir; },
     transformIndexHtml(html) {
       return html
-        .replace('<title>Web DAW</title>', '<title>Web DAW (Demo)</title>')
-        .replace('<meta name="apple-mobile-web-app-title" content="Web DAW">', '<meta name="apple-mobile-web-app-title" content="DAW Demo">');
+        .replace('<title>Melvox</title>', '<title>Melvox (Demo)</title>')
+        .replace('<meta name="apple-mobile-web-app-title" content="Melvox">', '<meta name="apple-mobile-web-app-title" content="Melvox Demo">');
     },
     closeBundle() {
       const mp = join(outDir, 'manifest.webmanifest');
       const m = JSON.parse(readFileSync(mp, 'utf8'));
-      m.name = 'Web DAW (Demo)'; m.short_name = 'DAW Demo';
+      m.name = 'Melvox (Demo)'; m.short_name = 'Melvox Demo';
       writeFileSync(mp, JSON.stringify(m, null, 2) + '\n');
     },
   };
