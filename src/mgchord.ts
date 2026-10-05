@@ -1,13 +1,13 @@
-// MGCHORD: pembuat chord progression ala ChordJam. Jendela plugin (dibuka dari halaman Plugin di panel efek, seperti MPCS):
-//   Scale / Scale Type / Octave / Chord Type -> Voices (5 suara, geser oktaf, invert) + Velocity + gaya main (Block / Strum / Arp)
-//   -> baris chord (blok merah, klik untuk pilih & ubah derajat / panjang) -> Piano Roll View (hasil nada) -> keyboard.
-// Tombol "Pattern" mengirim nada ke pattern yang sedang dipilih di timeline; tombol MIDI mengunduh file .mid.
+// MGCHORD: pembuat chord progression. Jendela plugin (dibuka dari halaman Plugin di panel efek, seperti MPCS), tampilan panel biru:
+//   header (preset + SAVE) -> Key / Length / Audio + tombol bulat besar (acak progression) + undo / redo
+//   -> penggaris bar + blok chord (Fm, Cm7, ...) -> piano roll gelap dengan pasak oranye di batas chord -> Play / Drag & Drop MIDI / unduh.
+// SAVE mengirim nada ke pattern yang sedang dipilih di timeline; Drag & Drop MIDI / tombol unduh menghasilkan file .mid.
 // Inti teori ada di mgchord-theory.ts (murni, dites lewat tools/mgchord-test.ts).
 
 import {
-  CHORD_TYPE_NAMES, NOTE_NAMES, PRESETS, ROMAN, SCALE_NAMES, STYLES, VOICES,
+  NOTE_NAMES, PRESETS, SCALE_NAMES, VOICES,
   buildNotes, chordAt, defaultVoicing, midiName, randomProgression, slotsOf, toMidi, totalBeats, voice,
-  type OutNote, type PlayStyle, type Rhythm, type Settings, type Slot, type Voicing,
+  type OutNote, type Rhythm, type Settings, type Slot, type Voicing,
 } from './mgchord-theory';
 
 // Jembatan ke main.ts: tempo project + kirim nada ke pattern terpilih (mengembalikan pesan kalau gagal, null kalau berhasil)
@@ -21,7 +21,7 @@ const initial = (): Saved => {
   const p = PRESETS[0];
   return {
     st: { root: 0, scale: p.scale, octave: 0, chordType: 'Diatonic 9th' }, vc: defaultVoicing(),
-    rh: { style: 'Block', rate: 0.5, strum: 0.12 }, slots: slotsOf(p), sel: 0, preset: 0,
+    rh: { style: 'Block', rate: 0.5, strum: 0.12 }, slots: slotsOf(p), sel: 0, preset: -1,
   };
 };
 let S: Saved = initial();
@@ -40,29 +40,29 @@ export function mgchordImport(saved?: MgchordSaved | null): void {   // dipanggi
 export function openMgchord(): void { if (!root) build(); openFn?.(); }
 
 const svg = (inner: string, size = 16): string =>
-  `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+  `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
 const ICON = {
-  play: svg('<path d="M8 5l12 7-12 7z" fill="currentColor" stroke="none"/>', 18),
-  stop: svg('<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>', 18),
-  dice: svg('<rect x="4" y="4" width="16" height="16" rx="3.5"/><circle cx="9" cy="9" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="9" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="15" r="1.2" fill="currentColor" stroke="none"/>', 30),
-  dl: svg('<path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/>', 15),
-  send: svg('<path d="M4 12h13M12 6l6 6-6 6"/>', 15),
+  play: svg('<path d="M7 4l13 8-13 8z" fill="currentColor" stroke="none"/>', 30),
+  playS: svg('<path d="M8 5l12 7-12 7z" fill="currentColor" stroke="none"/>', 11),
+  stop: svg('<rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" stroke="none"/>', 26),
+  dice: svg('<rect x="4" y="4" width="16" height="16" rx="3.5" stroke-width="1.8"/><circle cx="9" cy="9" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="9" r="1.4" fill="currentColor" stroke="none"/><circle cx="9" cy="15" r="1.4" fill="currentColor" stroke="none"/>', 84),
+  dl: svg('<path d="M12 4v12M6.5 11l5.5 5.5 5.5-5.5M5 20h14"/>', 22),
   close: svg('<path d="M6 6l12 12M18 6L6 18"/>', 14),
-  prev: svg('<path d="M15 6l-6 6 6 6"/>', 14),
-  next: svg('<path d="M9 6l6 6-6 6"/>', 14),
-  plus: svg('<path d="M12 5v14M5 12h14"/>', 14),
-  minus: svg('<path d="M5 12h14"/>', 14),
+  prev: svg('<path d="M15 5l-7 7 7 7" fill="currentColor"/>', 12),
+  next: svg('<path d="M9 5l7 7-7 7" fill="currentColor"/>', 12),
+  undo: svg('<path d="M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3"/>', 14),
+  redo: svg('<path d="M15 14l5-5-5-5M20 9H10a6 6 0 000 12h3"/>', 14),
+  grip: svg('<path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/>', 12),
+  move: svg('<path d="M12 3v18M3 12h18M8 7l4-4 4 4M8 17l4 4 4-4M7 8l-4 4 4 4M17 8l4 4-4 4" stroke-width="2"/>', 18),
 };
+const LAMP = '<svg viewBox="0 0 44 26" width="44" height="26" aria-hidden="true"><path d="M22 12c-4-4 4-6 0-10" fill="none" stroke="#9db9ff" stroke-width="2.4" stroke-linecap="round"/><path d="M38 14c5-1 6-6 3-9" fill="none" stroke="#f2b632" stroke-width="3" stroke-linecap="round"/><path d="M3 21c0-5 8-8 19-8h5c8 0 12 3 12 8z" fill="#f2b632" stroke="#c98a10" stroke-width="1.5"/></svg>';
+const ART = '<svg class="mgc__art" viewBox="0 0 260 190" aria-hidden="true"><ellipse cx="130" cy="176" rx="96" ry="8" fill="#3f6fd8" opacity=".55"/><path d="M118 130c-34-22 26-40-8-70s34-44 14-66" transform="translate(6 10)" fill="none" stroke="#fff" stroke-width="22" stroke-linecap="round" opacity=".95"/><g fill="#fff"><circle cx="86" cy="118" r="26"/><circle cx="124" cy="104" r="34"/><circle cx="166" cy="116" r="28"/><circle cx="110" cy="132" r="26"/><circle cx="148" cy="134" r="24"/></g><path d="M118 168c-4-10 22-14 48-14h16c24 0 38 5 38 14z" transform="translate(-6 0)" fill="#f2b632" stroke="#c98a10" stroke-width="2"/><path d="M212 160c20-2 26-18 18-30" fill="none" stroke="#f2b632" stroke-width="7" stroke-linecap="round"/></svg>';
 const mod = (n: number, m: number): number => ((n % m) + m) % m;
 const clamp = (v: number, a: number, b: number): number => Math.min(b, Math.max(a, v));
-const LENS = [1, 2, 3, 4, 6, 8, 12, 16];   // pilihan panjang chord (ketukan)
 const MAX_BEATS = 64;                      // 16 bar
 const BLACK_PC = new Set([1, 3, 6, 8, 10]);
-const KEY_LO = 60, KEY_HI = 86;            // keyboard C4..D6, seperti ChordJam
+const KW = 64, PEG = 34;                   // lebar kolom tuts (sama dengan --kw di CSS) dan tinggi strip pasak oranye
 
-const romanOf = (deg: number, iv: number[]): string => { const r = ROMAN[mod(deg, 7)]; return iv[1] === 3 ? r.toLowerCase() : r; };
-const fmtLen = (b: number): string => (b % 4 === 0 ? b / 4 + ' bar' : b + ' beat');
-const opts = (list: string[], cur: string): string => list.map(x => `<option${x === cur ? ' selected' : ''}>${x}</option>`).join('');
 
 // ---------- suara preview (sederhana: saw + triangle -> lowpass), AudioContext sendiri ----------
 let actx: AudioContext | null = null, out: GainNode | null = null;
@@ -93,52 +93,42 @@ function tone(c: AudioContext, dest: AudioNode, midi: number, when: number, dur:
 function build(): void {
   const el = document.createElement('div');
   el.className = 'mgc'; el.hidden = true;
-  const voiceRows = [5, 4, 3, 2, 1].map(n =>
-    `<div class="mgc__vrow" data-v="${n - 1}"><button type="button" class="mgc__vdot" data-a="von" aria-pressed="true" aria-label="Voice ${n}">${n}</button>` +
-    `<div class="mgc__seg" role="group" aria-label="Oktaf voice ${n}">${[-12, 0, 12].map(s => `<button type="button" data-a="vshift" data-s="${s}">${s > 0 ? '+' + s : s}</button>`).join('')}</div></div>`).join('');
-  const velRows = [5, 4, 3, 2, 1].map(n => `<div class="mgc__vbar" data-v="${n - 1}" role="slider" tabindex="0" aria-label="Velocity voice ${n}" aria-valuemin="0" aria-valuemax="100"><i></i></div>`).join('');
+  const keyOpts = NOTE_NAMES.map((n, r) => SCALE_NAMES.map(sc => `<option value="${r}|${sc}">${n} ${sc}</option>`).join('')).join('');
+  const presetOpts = '<option value="-1">New progression</option>' + PRESETS.map((p, i) => `<option value="${i}">${p.name}</option>`).join('');
   el.innerHTML =
     '<div class="mgc__back"></div>' +
     '<div class="mgc__win" role="dialog" aria-modal="true" aria-label="MGCHORD" tabindex="-1">' +
       '<header class="mgc__head">' +
-        '<span class="mgc__logo"><i aria-hidden="true"></i><b>mgchord</b></span>' +
-        `<button type="button" class="mgc__play" data-a="play" aria-label="Putar preview" title="Putar / henti preview (Spasi)">${ICON.play}</button>` +
-        '<output class="mgc__bpm" title="Tempo project"></output>' +
-        `<div class="mgc__preset"><button type="button" data-a="pprev" aria-label="Preset sebelumnya">${ICON.prev}</button><span class="mgc__pname"></span><button type="button" data-a="pnext" aria-label="Preset berikutnya">${ICON.next}</button></div>` +
-        `<button type="button" class="mgc__hb" data-a="midi" title="Download MIDI" aria-label="Download MIDI">${ICON.dl}<span>MIDI</span></button>` +
-        `<button type="button" class="mgc__hb mgc__hb--go" data-a="send" title="Kirim nada ke pattern yang dipilih di timeline" aria-label="Kirim ke pattern">${ICON.send}<span>Pattern</span></button>` +
-        '<button type="button" class="mgc__hb" data-a="reset" title="Kembalikan semua ke bawaan">Reset</button>' +
+        `<span class="mgc__logo">MGCHORD${LAMP}</span>` +
+        '<div class="mgc__prog">' +
+          `<label class="mgc__pn"><i class="mgc__tri"></i><span class="mgc__pname"></span><select data-k="preset" aria-label="Pilih progression">${presetOpts}</select></label>` +
+          '<button type="button" class="mgc__save" data-a="save" title="Kirim nada ke pattern yang dipilih di timeline">Save</button>' +
+          `<button type="button" class="mgc__arr" data-a="pprev" aria-label="Preset sebelumnya">${ICON.prev}</button><button type="button" class="mgc__arr" data-a="pnext" aria-label="Preset berikutnya">${ICON.next}</button>` +
+        '</div>' +
+        '<span class="mgc__pow">Powered by DERIZ</span>' +
         `<button type="button" class="mgc__x" data-a="close" aria-label="Tutup" title="Tutup (Esc)">${ICON.close}</button>` +
       '</header>' +
-      '<div class="mgc__body">' +
-      '<div class="mgc__row1">' +
-        `<label class="mgc__sel"><span>Scale</span><select data-k="root">${opts(NOTE_NAMES, NOTE_NAMES[S.st.root])}</select></label>` +
-        `<label class="mgc__sel"><span>Scale Type</span><select data-k="scale">${opts(SCALE_NAMES, S.st.scale)}</select></label>` +
-        '<div class="mgc__oct"><span>Octave</span><button type="button" data-a="oct-" aria-label="Oktaf turun">' + ICON.minus + '</button><output></output><button type="button" data-a="oct+" aria-label="Oktaf naik">' + ICON.plus + '</button></div>' +
-        `<button type="button" class="mgc__dice" data-a="dice" aria-label="Acak progression" title="Acak progression">${ICON.dice}</button>` +
-        `<label class="mgc__sel mgc__sel--r"><span>Chord Type</span><select data-k="chordType">${opts(CHORD_TYPE_NAMES, S.st.chordType)}</select></label>` +
-      '</div>' +
-      '<div class="mgc__mid">' +
-        '<section class="mgc__panel"><h4>Voices</h4>' +
-          `<div class="mgc__inv"><span>Invert</span><button type="button" data-a="inv-" aria-label="Invert turun">${ICON.minus}</button><output></output><button type="button" data-a="inv+" aria-label="Invert naik">${ICON.plus}</button></div>` +
-          voiceRows + '</section>' +
-        `<section class="mgc__panel"><h4>Velocity</h4><div class="mgc__vels">${velRows}</div></section>` +
-        '<section class="mgc__panel"><h4>Style</h4>' +
-          `<div class="mgc__seg mgc__seg--wrap" role="group" aria-label="Gaya main">${STYLES.map(s => `<button type="button" data-a="style" data-s="${s}">${s}</button>`).join('')}</div>` +
-          '<div class="mgc__sub mgc__sub--arp"><span>Rate</span><div class="mgc__seg">' + [[1, '1/4'], [0.5, '1/8'], [0.25, '1/16']].map(([r, l]) => `<button type="button" data-a="rate" data-s="${r}">${l}</button>`).join('') + '</div></div>' +
-          '<div class="mgc__sub mgc__sub--strum"><span>Strum</span><div class="mgc__seg">' + [[0.06, 'Tight'], [0.12, 'Mid'], [0.25, 'Loose']].map(([r, l]) => `<button type="button" data-a="strum" data-s="${r}">${l}</button>`).join('') + '</div></div>' +
-          '<p class="mgc__hint">Block = semua nada bersamaan. Strum = nada dipetik berurutan. Arp = nada diulang satu per satu.</p></section>' +
+      '<div class="mgc__top">' +
+        '<div class="mgc__ctl">' +
+          `<div class="mgc__r"><span>Key</span><label class="mgc__dd"><select data-k="key" aria-label="Key">${keyOpts}</select></label></div>` +
+          '<div class="mgc__r"><span>Length</span><div class="mgc__sg"><button type="button" data-a="len" data-s="4">4 bars</button><button type="button" data-a="len" data-s="8">8 bars</button></div></div>' +
+          '<div class="mgc__r"><span>Audio</span><div class="mgc__sg"><button type="button" data-a="aud" data-s="0">Off</button><button type="button" data-a="aud" data-s="1">On</button></div></div>' +
+        '</div>' +
+        '<div class="mgc__gen">' +
+          `<button type="button" class="mgc__big" data-a="dice" aria-label="Acak progression" title="Acak progression"><i>${ICON.dice}</i></button>` +
+          `<div class="mgc__ur"><button type="button" data-a="undo" aria-label="Undo">${ICON.undo}</button><button type="button" data-a="redo" aria-label="Redo">${ICON.redo}</button></div>` +
+        '</div>' +
+        `<div class="mgc__mascot">${ART}<span class="mgc__link">Unlinked</span></div>` +
       '</div>' +
       '<section class="mgc__seq">' +
-        '<div class="mgc__bar"><b>Progression</b><output class="mgc__len"></output><span class="mgc__sp"></span>' +
-          `<span class="mgc__sel-name"></span>` +
-          `<button type="button" data-a="deg-" aria-label="Derajat turun" title="Derajat chord turun">${ICON.prev}</button><span class="mgc__tag">Degree</span><button type="button" data-a="deg+" aria-label="Derajat naik" title="Derajat chord naik">${ICON.next}</button>` +
-          `<button type="button" data-a="len-" aria-label="Pendekkan" title="Pendekkan chord">${ICON.prev}</button><span class="mgc__tag">Length</span><button type="button" data-a="len+" aria-label="Panjangkan" title="Panjangkan chord">${ICON.next}</button>` +
-          `<button type="button" data-a="add" aria-label="Tambah chord" title="Tambah chord di akhir">${ICON.plus}</button><button type="button" data-a="del" aria-label="Hapus chord" title="Hapus chord terpilih">${ICON.minus}</button></div>` +
+        `<div class="mgc__ruler"><div class="mgc__corner"><button type="button" class="mgc__mini" data-a="play" aria-label="Putar preview">${ICON.playS}</button><span>On</span></div><div class="mgc__marks"></div></div>` +
         '<div class="mgc__lane" role="listbox" aria-label="Chord progression"></div>' +
-        '<div class="mgc__roll"><span class="mgc__rt">Piano Roll View</span><canvas class="mgc__cv" role="img" aria-label="Piano roll hasil chord"></canvas></div>' +
+        '<div class="mgc__roll"><canvas class="mgc__cv" role="img" aria-label="Piano roll hasil chord"></canvas></div>' +
       '</section>' +
-      '<div class="mgc__kbrow"><div class="mgc__pill" aria-live="polite"></div><div class="mgc__kb" role="group" aria-label="Keyboard"></div></div>' +
+      '<div class="mgc__foot">' +
+        `<button type="button" class="mgc__go" data-a="play" aria-label="Putar preview" title="Putar / henti preview (Spasi)">${ICON.play}</button>` +
+        `<div class="mgc__dnd" draggable="true" role="button" tabindex="0" data-a="midi" title="Seret ke DAW atau klik untuk unduh .mid">${ICON.move}<span>Drag &amp; drop MIDI</span></div>` +
+        `<button type="button" class="mgc__dl" data-a="midi" aria-label="Download MIDI" title="Download MIDI">${ICON.dl}</button>` +
       '</div>' +
     '</div>';
   document.body.appendChild(el);
@@ -146,119 +136,102 @@ function build(): void {
 
   const win = el.querySelector<HTMLElement>('.mgc__win')!;
   const $ = <T extends HTMLElement>(q: string): T => el.querySelector<T>(q)!;
-  const lane = $('.mgc__lane'), cv = $<HTMLCanvasElement>('.mgc__cv'), kb = $('.mgc__kb'), pill = $('.mgc__pill'), g = cv.getContext('2d')!;
+  const lane = $('.mgc__lane'), marks = $('.mgc__marks'), cv = $<HTMLCanvasElement>('.mgc__cv'), g = cv.getContext('2d')!;
   let notes: OutNote[] = [], playing = false, phBeat = -1, raf = 0, prevFocus: Element | null = null;
+  let audioOn = true, linked = false, hist: string[] = [], hi = -1;
 
-  // ---------- keyboard ----------
-  const whites: number[] = [], blacks: number[] = [];
-  for (let p = KEY_LO; p <= KEY_HI; p++) (BLACK_PC.has(p % 12) ? blacks : whites).push(p);
-  kb.innerHTML = whites.map(p => `<button type="button" class="mgc__k" data-p="${p}" aria-label="${midiName(p)}"><span>${p % 12 === 0 ? midiName(p) : ''}</span></button>`).join('') +
-    blacks.map(p => { const wi = whites.filter(w => w < p).length; return `<button type="button" class="mgc__k mgc__k--b" data-p="${p}" aria-label="${midiName(p)}" style="left:calc(${(wi / whites.length) * 100}% - ${100 / whites.length * 0.3}%);width:${100 / whites.length * 0.6}%"></button>`; }).join('');
-  const keyEls = new Map<number, HTMLElement>();
-  kb.querySelectorAll<HTMLElement>('.mgc__k').forEach(k => keyEls.set(+k.dataset.p!, k));
-  const fold = (p: number): number => { let q = p; while (q < KEY_LO) q += 12; while (q > KEY_HI) q -= 12; return q; };
+  // ---------- riwayat undo / redo ----------
+  const commit = (): void => {
+    const j = JSON.stringify(S); if (hist[hi] === j) return;
+    hist = hist.slice(0, hi + 1); hist.push(j); if (hist.length > 60) hist.shift(); hi = hist.length - 1;
+  };
+  const restore = (): void => { S = JSON.parse(hist[hi]); renderAll(); };
 
   // ---------- render ----------
   const selChord = () => chordAt(S.st, S.slots[S.sel].deg);
   function recompute(): void { notes = buildNotes(S.st, S.slots, S.vc, S.rh); }
   function renderLane(): void {
-    const tot = totalBeats(S.slots);
-    lane.innerHTML = S.slots.map((sl, i) => {
-      const c = chordAt(S.st, sl.deg);
-      return `<button type="button" role="option" class="mgc__ch${i === S.sel ? ' is-sel' : ''}" data-i="${i}" aria-selected="${i === S.sel}" style="flex:${sl.beats} 1 0"><b>${c.name}</b><small>${romanOf(sl.deg, c.iv)}</small></button>`;
-    }).join('');
-    $('.mgc__len').textContent = tot / 4 + (tot === 4 ? ' bar' : ' bars') + ' · ' + S.slots.length + ' chord';
-    const c = selChord(), sl = S.slots[S.sel];
-    $('.mgc__sel-name').textContent = `${c.name} · ${romanOf(sl.deg, c.iv)} · ${fmtLen(sl.beats)}`;
-  }
-  function renderKeys(): void {
-    const lit = new Set(voice(selChord(), S.vc).map(n => fold(n.p)));
-    keyEls.forEach((k, p) => k.classList.toggle('is-lit', lit.has(p)));
-    pill.textContent = selChord().name;
+    const tot = totalBeats(S.slots), bars = Math.ceil(tot / 4);
+    lane.innerHTML = S.slots.map((sl, i) =>
+      `<div role="option" tabindex="0" class="mgc__ch${i === S.sel ? ' is-sel' : ''}" data-i="${i}" aria-selected="${i === S.sel}" style="flex:${sl.beats} 1 0">` +
+      `<span class="mgc__h" data-a="deg-" role="button" tabindex="0" aria-label="Derajat turun" title="Derajat chord turun">${ICON.grip}</span><b>${chordAt(S.st, sl.deg).name}</b>` +
+      `<span class="mgc__h" data-a="deg+" role="button" tabindex="0" aria-label="Derajat naik" title="Derajat chord naik">${ICON.grip}</span></div>`).join('');
+    marks.innerHTML = Array.from({ length: bars }, (_, b) => `<i style="left:${(b * 4 / tot) * 100}%">${b + 1}</i>`).join('');
   }
   function renderControls(): void {
-    el.querySelectorAll<HTMLSelectElement>('select[data-k]').forEach(s => {
-      const k = s.dataset.k!; s.value = k === 'root' ? NOTE_NAMES[S.st.root] : String((S.st as unknown as Record<string, unknown>)[k]);
-    });
-    $('.mgc__oct output').textContent = (S.st.octave > 0 ? '+' : '') + S.st.octave;
-    $('.mgc__inv output').textContent = String(S.vc.invert);
-    el.querySelectorAll<HTMLElement>('.mgc__vrow').forEach(r => {
-      const i = +r.dataset.v!;
-      r.classList.toggle('is-off', !S.vc.on[i]);
-      r.querySelector('.mgc__vdot')!.setAttribute('aria-pressed', String(S.vc.on[i]));
-      r.querySelectorAll<HTMLElement>('[data-s]').forEach(b => b.classList.toggle('is-on', +b.dataset.s! === S.vc.shift[i]));
-    });
-    el.querySelectorAll<HTMLElement>('.mgc__vbar').forEach(b => {
-      const i = +b.dataset.v!, v = S.vc.vel[i];
-      b.classList.toggle('is-off', !S.vc.on[i]);
-      b.querySelector<HTMLElement>('i')!.style.width = Math.round(v * 100) + '%'; b.setAttribute('aria-valuenow', String(Math.round(v * 100)));
-    });
-    el.querySelectorAll<HTMLElement>('[data-a="style"]').forEach(b => b.classList.toggle('is-on', b.dataset.s === S.rh.style));
-    el.querySelectorAll<HTMLElement>('[data-a="rate"]').forEach(b => b.classList.toggle('is-on', +b.dataset.s! === S.rh.rate));
-    el.querySelectorAll<HTMLElement>('[data-a="strum"]').forEach(b => b.classList.toggle('is-on', +b.dataset.s! === S.rh.strum));
-    win.dataset.style = S.rh.style;
-    $('.mgc__pname').textContent = S.preset >= 0 ? PRESETS[S.preset].name : 'Custom';
-    $('.mgc__bpm').textContent = (bridge ? bridge.bpm() : 120).toFixed(2);
+    $<HTMLSelectElement>('select[data-k="key"]').value = `${S.st.root}|${S.st.scale}`;
+    $<HTMLSelectElement>('select[data-k="preset"]').value = String(S.preset);
+    $('.mgc__pname').textContent = S.preset >= 0 ? PRESETS[S.preset].name : 'New progression';
+    const bars = totalBeats(S.slots) / 4;
+    el.querySelectorAll<HTMLElement>('[data-a="len"]').forEach(b => b.classList.toggle('is-on', +b.dataset.s! === bars));
+    el.querySelectorAll<HTMLElement>('[data-a="aud"]').forEach(b => b.classList.toggle('is-on', (+b.dataset.s! === 1) === audioOn));
+    $('.mgc__link').textContent = linked ? 'Linked' : 'Unlinked';
   }
 
-  // Piano Roll View: grid bar / ketukan, blok nada (alpha = velocity), chord terpilih disorot, playhead
+  // Piano roll: grid gelap + kolom tuts, nada putih (alpha = velocity), chord terpilih disorot, pasak oranye di awal tiap chord
   function drawRoll(): void {
     const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1, W = Math.floor(r.width), H = Math.floor(r.height);
     if (W < 20 || H < 20) return;
     if (cv.width !== Math.floor(W * dpr) || cv.height !== Math.floor(H * dpr)) { cv.width = Math.floor(W * dpr); cv.height = Math.floor(H * dpr); }
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const KW = 40, tot = totalBeats(S.slots), x0 = KW, pw = W - KW, ppb = pw / tot;
-    let lo = 127, hi = 0; for (const n of notes) { lo = Math.min(lo, n.p); hi = Math.max(hi, n.p); }
-    if (hi < lo) { lo = 48; hi = 72; }
-    lo -= 2; hi += 2; while (hi - lo < 14) { lo--; hi++; }
-    const rows = hi - lo + 1, rh = H / rows;
-    const yOf = (p: number): number => (hi - p) * rh;
-    g.clearRect(0, 0, W, H);
-    g.fillStyle = '#17152e'; g.fillRect(0, 0, W, H);
-    for (let p = lo; p <= hi; p++) { g.fillStyle = BLACK_PC.has(p % 12) ? 'rgba(0,0,0,.28)' : 'rgba(255,255,255,.025)'; g.fillRect(x0, yOf(p), pw, rh); }
-    let t = 0;   // sorot chord terpilih + garis batas chord
-    S.slots.forEach((sl, i) => {
-      if (i === S.sel) { g.fillStyle = 'rgba(124,92,255,.16)'; g.fillRect(x0 + t * ppb, 0, sl.beats * ppb, H); }
-      t += sl.beats;
-    });
-    for (let b = 0; b <= tot; b++) {
-      g.strokeStyle = b % 4 === 0 ? 'rgba(255,255,255,.22)' : 'rgba(255,255,255,.07)'; g.lineWidth = 1;
-      g.beginPath(); g.moveTo(Math.round(x0 + b * ppb) + .5, 0); g.lineTo(Math.round(x0 + b * ppb) + .5, H); g.stroke();
+    const gh = H - PEG, tot = totalBeats(S.slots), x0 = KW, pw = W - KW, ppb = pw / tot;
+    let lo = 127, hi2 = 0; for (const n of notes) { lo = Math.min(lo, n.p); hi2 = Math.max(hi2, n.p); }
+    if (hi2 < lo) { lo = 48; hi2 = 72; }
+    lo -= 2; hi2 += 2; while (hi2 - lo < 22) { lo--; hi2++; }
+    const rows = hi2 - lo + 1, rh = gh / rows, yOf = (p: number): number => (hi2 - p) * rh;
+    g.fillStyle = '#2e2e2e'; g.fillRect(0, 0, W, H);
+    for (let p = lo; p <= hi2; p++) { g.fillStyle = BLACK_PC.has(p % 12) ? '#272727' : '#3b3b3b'; g.fillRect(x0, yOf(p), pw, rh); }
+    let t = 0;
+    S.slots.forEach((sl, i) => { if (i === S.sel) { g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(x0 + t * ppb, 0, sl.beats * ppb, gh); } t += sl.beats; });
+    for (let h = 0; h <= tot * 2; h++) {
+      const b = h / 2, x = Math.round(x0 + b * ppb) + .5;
+      g.strokeStyle = b % 4 === 0 ? 'rgba(255,255,255,.4)' : Number.isInteger(b) ? 'rgba(255,255,255,.16)' : 'rgba(255,255,255,.06)'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(x, 0); g.lineTo(x, gh); g.stroke();
     }
-    t = 0; g.strokeStyle = 'rgba(255,77,109,.7)'; g.setLineDash([3, 3]);
-    for (const sl of S.slots) { if (t > 0) { g.beginPath(); g.moveTo(Math.round(x0 + t * ppb) + .5, 0); g.lineTo(Math.round(x0 + t * ppb) + .5, H); g.stroke(); } t += sl.beats; }
-    g.setLineDash([]);
     for (const n of notes) {
-      const x = x0 + n.s * ppb, w = Math.max(2, n.l * ppb - 1), y = yOf(n.p) + 1;
-      g.fillStyle = n.slot === S.sel ? '#9d86ff' : '#6a4fe0'; g.globalAlpha = 0.35 + 0.65 * n.v;
+      const x = x0 + n.s * ppb, w = Math.max(2, n.l * ppb - 2), y = yOf(n.p) + 1;
+      g.globalAlpha = 0.55 + 0.45 * n.v; g.fillStyle = '#fff';
       g.beginPath(); g.roundRect(x, y, w, Math.max(2, rh - 2), Math.min(3, rh / 2)); g.fill();
     }
     g.globalAlpha = 1;
-    g.fillStyle = '#100f24'; g.fillRect(0, 0, KW, H);   // kolom tuts di kiri
+    g.fillStyle = '#f4f4f4'; g.fillRect(0, 0, KW, gh);   // kolom tuts
     g.font = '600 9px system-ui,sans-serif'; g.textBaseline = 'middle';
-    for (let p = lo; p <= hi; p++) {
-      const blk = BLACK_PC.has(p % 12);
-      g.fillStyle = blk ? '#2a2850' : '#d9d6f2'; g.fillRect(0, yOf(p) + 0.5, blk ? KW * 0.62 : KW - 1, rh - 1);
-      if (p % 12 === 0 && rh >= 8) { g.fillStyle = '#2a2850'; g.fillText(midiName(p), KW - 24, yOf(p) + rh / 2); }
+    for (let p = lo; p <= hi2; p++) {
+      const y = yOf(p);
+      if (BLACK_PC.has(p % 12)) { g.fillStyle = '#202020'; g.fillRect(0, y, KW * 0.62, rh); }
+      else { g.fillStyle = '#c4c4c4'; g.fillRect(0, y + rh - 0.5, KW, 1); }
+      if (p % 12 === 0 && rh >= 8) { g.fillStyle = '#444'; g.fillText(midiName(p), KW - 22, y + rh / 2); }
     }
-    if (phBeat >= 0) { g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x0 + phBeat * ppb, 0); g.lineTo(x0 + phBeat * ppb, H); g.stroke(); }
+    g.fillStyle = '#383838'; g.fillRect(0, gh, W, PEG);   // strip pasak oranye
+    t = 0;
+    for (const sl of S.slots) {
+      const x = Math.round(x0 + t * ppb);
+      g.strokeStyle = '#8a8a8a'; g.lineWidth = 1; g.beginPath(); g.moveTo(x + .5, gh); g.lineTo(x + .5, H); g.stroke();
+      const gr = g.createLinearGradient(x - 5, 0, x + 5, 0); gr.addColorStop(0, '#f4b64f'); gr.addColorStop(1, '#d6862a');
+      g.fillStyle = gr; g.beginPath(); g.roundRect(x - 5, gh + 4, 10, PEG - 12, 3); g.fill(); t += sl.beats;
+    }
+    if (phBeat >= 0) { g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x0 + phBeat * ppb, 0); g.lineTo(x0 + phBeat * ppb, gh); g.stroke(); }
   }
-  const renderAll = (): void => { recompute(); renderControls(); renderLane(); renderKeys(); drawRoll(); };
-  refreshFn = () => { S.sel = clamp(S.sel, 0, S.slots.length - 1); if (!el.hidden) renderAll(); };
-  const changed = (): void => { S.preset = S.preset >= 0 && matchesPreset() ? S.preset : -1; renderAll(); };
+  const renderAll = (): void => { recompute(); renderControls(); renderLane(); drawRoll(); };
+  refreshFn = () => { S.sel = clamp(S.sel, 0, S.slots.length - 1); if (!el.hidden) { renderAll(); } commit(); };
   const matchesPreset = (): boolean => { const p = PRESETS[S.preset]; return !!p && p.scale === S.st.scale && p.slots.length === S.slots.length && p.slots.every((d, i) => d === S.slots[i].deg && S.slots[i].beats === 4); };
+  const changed = (): void => { S.preset = S.preset >= 0 && matchesPreset() ? S.preset : -1; renderAll(); commit(); };
 
   // ---------- preview ----------
   let bus: GainNode | null = null, t0 = 0, spb = 0.5, sched = 0, timer = 0;
   const playChord = (i: number): void => {
+    if (!audioOn) return;
     const c = ac(), t = c.currentTime + 0.02, vn = voice(chordAt(S.st, S.slots[i].deg), S.vc);
     const b = c.createGain(); b.connect(out!); vn.forEach((n, k) => tone(c, b, n.p, t + (S.rh.style === 'Strum' ? k * S.rh.strum * 0.5 : 0), 1.1, n.v));
     setTimeout(() => b.disconnect(), 2500);
   };
+  const setPlayUi = (on: boolean): void => {
+    el.querySelectorAll<HTMLElement>('.mgc__go').forEach(b => { b.innerHTML = on ? ICON.stop : ICON.play; b.classList.toggle('is-on', on); });
+    el.querySelectorAll<HTMLElement>('.mgc__mini').forEach(b => { b.innerHTML = on ? svg('<rect x="5" y="5" width="14" height="14" fill="currentColor" stroke="none"/>', 11) : ICON.playS; });
+  };
   const startPlay = (): void => {
     const c = ac(); spb = 60 / (bridge ? bridge.bpm() : 120);
-    bus = c.createGain(); bus.connect(out!); t0 = c.currentTime + 0.06; sched = 0; playing = true;
-    el.querySelector('.mgc__play')!.innerHTML = ICON.stop; el.querySelector('.mgc__play')!.classList.add('is-on');
+    bus = c.createGain(); bus.connect(out!); t0 = c.currentTime + 0.06; sched = 0; playing = true; setPlayUi(true);
     const pump = (): void => {
       const tot = totalBeats(S.slots), until = (c.currentTime + 0.25 - t0) / spb;
       for (let pass = Math.floor(sched / tot); pass <= Math.floor(until / tot); pass++) {
@@ -281,53 +254,42 @@ function build(): void {
     if (!playing) return;
     playing = false; clearInterval(timer); cancelAnimationFrame(raf); phBeat = -1;
     if (bus && actx) { bus.gain.setTargetAtTime(0, actx.currentTime, 0.03); const b = bus; setTimeout(() => b.disconnect(), 400); }
-    bus = null;
-    el.querySelector('.mgc__play')!.innerHTML = ICON.play; el.querySelector('.mgc__play')!.classList.remove('is-on');
-    drawRoll();
+    bus = null; setPlayUi(false); drawRoll();
   };
 
   // ---------- aksi ----------
-  const slot = (): Slot => S.slots[S.sel];
-  const newChord = (d: number): void => { const tot = totalBeats(S.slots); if (tot + 4 > MAX_BEATS) return; S.slots.push({ deg: mod(d, 7), beats: 4 }); S.sel = S.slots.length - 1; };
+  const idxOf = (b: HTMLElement): number => +(b.closest<HTMLElement>('.mgc__ch')?.dataset.i ?? S.sel);
+  const fitBars = (bars: number): void => {   // 4 / 8 bar: potong atau ulangi progression yang ada
+    const want = bars * 4, src = S.slots.map(s => ({ ...s })), res: Slot[] = [];
+    for (let i = 0, t = 0; t < want; i++) { const s = src[i % src.length], b = Math.min(s.beats, want - t); res.push({ deg: s.deg, beats: b }); t += b; }
+    S.slots = res; S.sel = Math.min(S.sel, res.length - 1);
+  };
+  const stepDeg = (b: HTMLElement, d: number): void => { S.sel = idxOf(b); S.slots[S.sel].deg = mod(S.slots[S.sel].deg + d, 7); changed(); playChord(S.sel); };
   const actions: Record<string, (b: HTMLElement) => void> = {
     close: () => close(),
     play: () => (playing ? stopPlay() : startPlay()),
-    reset: () => { stopPlay(); S = initial(); changed(); },
-    pprev: () => loadPreset(mod(S.preset - 1, PRESETS.length)),
-    pnext: () => loadPreset(mod(S.preset + 1, PRESETS.length)),
-    'oct-': () => { S.st.octave = clamp(S.st.octave - 1, -2, 2); changed(); },
-    'oct+': () => { S.st.octave = clamp(S.st.octave + 1, -2, 2); changed(); },
-    'inv-': () => { S.vc.invert = clamp(S.vc.invert - 1, 0, 3); changed(); },
-    'inv+': () => { S.vc.invert = clamp(S.vc.invert + 1, 0, 3); changed(); },
-    von: b => { const i = +b.closest<HTMLElement>('.mgc__vrow')!.dataset.v!; S.vc.on[i] = !S.vc.on[i]; changed(); },
-    vshift: b => { const i = +b.closest<HTMLElement>('.mgc__vrow')!.dataset.v!; S.vc.shift[i] = +b.dataset.s!; changed(); },
-    style: b => { S.rh.style = b.dataset.s as PlayStyle; changed(); },
-    rate: b => { S.rh.rate = +b.dataset.s!; changed(); },
-    strum: b => { S.rh.strum = +b.dataset.s!; changed(); },
-    'deg-': () => { slot().deg = mod(slot().deg - 1, 7); changed(); playChord(S.sel); },
-    'deg+': () => { slot().deg = mod(slot().deg + 1, 7); changed(); playChord(S.sel); },
-    'len-': () => setLen(-1),
-    'len+': () => setLen(1),
-    add: () => { newChord(S.slots[S.slots.length - 1].deg + 4); changed(); },
-    del: () => { if (S.slots.length > 1) { S.slots.splice(S.sel, 1); S.sel = Math.min(S.sel, S.slots.length - 1); changed(); } },
-    dice: () => {   // total dibulatkan ke bar penuh
-      S.slots = randomProgression(clamp(Math.round(totalBeats(S.slots) / 4) * 4, 8, MAX_BEATS)); S.sel = 0; S.preset = -1; changed(); playChord(0); },
-    midi: () => { const bpm = bridge ? bridge.bpm() : 120; download(toMidi(notes, bpm), 'mgchord-' + chordAt(S.st, 0).name.replace('#', 's') + '.mid'); toastMsg('MIDI diunduh'); },
-    send: () => {
+    pprev: () => loadPreset(S.preset < 0 ? PRESETS.length - 1 : mod(S.preset - 1, PRESETS.length)),
+    pnext: () => loadPreset(S.preset < 0 ? 0 : mod(S.preset + 1, PRESETS.length)),
+    'deg-': b => stepDeg(b, -1),
+    'deg+': b => stepDeg(b, 1),
+    len: b => { fitBars(+b.dataset.s!); changed(); },
+    aud: b => { audioOn = b.dataset.s === '1'; renderControls(); },
+    dice: () => { S.slots = randomProgression(clamp(Math.round(totalBeats(S.slots) / 4) * 4, 8, MAX_BEATS)); S.sel = 0; S.preset = -1; changed(); playChord(0); },
+    undo: () => { if (hi > 0) { hi--; restore(); } },
+    redo: () => { if (hi < hist.length - 1) { hi++; restore(); } },
+    midi: () => { const bpm = bridge ? bridge.bpm() : 120; download(toMidi(notes, bpm), midiFile()); toastMsg('MIDI diunduh'); },
+    save: () => {
       const msg = bridge ? bridge.send(notes.map(n => ({ p: n.p, s: n.s, l: n.l, v: n.v })), totalBeats(S.slots)) : 'Plugin belum tersambung ke timeline';
+      if (!msg) { linked = true; renderControls(); }
       toastMsg(msg ?? 'Nada dikirim ke pattern');
     },
   };
-  function setLen(dir: number): void {
-    const cur = LENS.indexOf(slot().beats), idx = clamp((cur < 0 ? LENS.findIndex(l => l >= slot().beats) : cur) + dir, 0, LENS.length - 1);
-    const nb = LENS[idx], tot = totalBeats(S.slots) - slot().beats + nb;
-    if (tot > MAX_BEATS) return;
-    slot().beats = nb; changed();
-  }
   function loadPreset(i: number): void {
-    const p = PRESETS[i]; S.preset = i; S.st.scale = p.scale; S.slots = slotsOf(p); S.sel = 0; renderAll();
-    if (playing) { /* nada baru ikut terjadwal otomatis */ }
+    const p = PRESETS[i], bars = totalBeats(S.slots) / 4; S.preset = i; S.st.scale = p.scale; S.slots = slotsOf(p); S.sel = 0;
+    if (bars === 8) fitBars(8);
+    renderAll(); commit(); playChord(0);
   }
+  const midiFile = (): string => 'mgchord-' + chordAt(S.st, 0).name.replace('#', 's') + '.mid';
   const toastMsg = (m: string): void => {
     const t = document.createElement('div'); t.className = 'mgc__toast'; t.setAttribute('role', 'status'); t.textContent = m; win.appendChild(t);
     setTimeout(() => t.remove(), 2200);
@@ -340,38 +302,31 @@ function build(): void {
   el.addEventListener('click', e => {
     const t = e.target as HTMLElement;
     const b = t.closest<HTMLElement>('[data-a]'); if (b && actions[b.dataset.a!]) { actions[b.dataset.a!](b); return; }
-    const ch = t.closest<HTMLElement>('.mgc__ch'); if (ch) { S.sel = +ch.dataset.i!; renderLane(); renderKeys(); drawRoll(); playChord(S.sel); return; }
-    const k = t.closest<HTMLElement>('.mgc__k'); if (k) { const c = ac(), bb = c.createGain(); bb.connect(out!); tone(c, bb, +k.dataset.p!, c.currentTime + 0.01, 0.8, 0.75); setTimeout(() => bb.disconnect(), 2000); return; }
+    const ch = t.closest<HTMLElement>('.mgc__ch'); if (ch) { S.sel = +ch.dataset.i!; renderLane(); drawRoll(); playChord(S.sel); return; }
     if (t.closest('.mgc__back')) close();
   });
   el.addEventListener('change', e => {
     const s = e.target as HTMLSelectElement; if (!s.dataset.k) return;
-    if (s.dataset.k === 'root') S.st.root = Math.max(0, NOTE_NAMES.indexOf(s.value));
-    else if (s.dataset.k === 'scale') S.st.scale = s.value; else S.st.chordType = s.value;
-    changed();
+    if (s.dataset.k === 'key') { const [r, sc] = s.value.split('|'); S.st.root = Math.max(0, +r); S.st.scale = sc; changed(); }
+    else if (s.dataset.k === 'preset') { if (+s.value >= 0) loadPreset(+s.value); else { S.preset = -1; renderAll(); commit(); } }
+  });
+  // seret file .mid langsung ke DAW / folder (Chrome / Edge)
+  $('.mgc__dnd').addEventListener('dragstart', e => {
+    const url = URL.createObjectURL(new Blob([toMidi(notes, bridge ? bridge.bpm() : 120) as BlobPart], { type: 'audio/midi' }));
+    e.dataTransfer?.setData('DownloadURL', `audio/midi:${midiFile()}:${url}`); setTimeout(() => URL.revokeObjectURL(url), 60000);
   });
   // klik di piano roll = pilih chord di posisi itu
   cv.addEventListener('pointerdown', e => {
-    const r = cv.getBoundingClientRect(), x = e.clientX - r.left - 40; if (x < 0) return;
-    const beat = x / ((r.width - 40) / totalBeats(S.slots)); let t = 0;
-    for (let i = 0; i < S.slots.length; i++) { t += S.slots[i].beats; if (beat < t) { S.sel = i; renderLane(); renderKeys(); drawRoll(); playChord(i); return; } }
-  });
-  // bar velocity: seret
-  el.querySelectorAll<HTMLElement>('.mgc__vbar').forEach(b => {
-    const set = (ev: PointerEvent): void => { const r = b.getBoundingClientRect(), i = +b.dataset.v!; S.vc.vel[i] = clamp((ev.clientX - r.left) / r.width, 0.05, 1); changed(); };
-    b.style.touchAction = 'none'; let dr = false;
-    b.addEventListener('pointerdown', ev => { dr = true; b.setPointerCapture(ev.pointerId); set(ev); ev.preventDefault(); });
-    b.addEventListener('pointermove', ev => { if (dr) set(ev); });
-    b.addEventListener('pointerup', () => { dr = false; }); b.addEventListener('pointercancel', () => { dr = false; });
-    b.addEventListener('keydown', ev => {
-      const i = +b.dataset.v!, d = ev.key === 'ArrowRight' || ev.key === 'ArrowUp' ? 0.05 : ev.key === 'ArrowLeft' || ev.key === 'ArrowDown' ? -0.05 : 0;
-      if (d) { S.vc.vel[i] = clamp(S.vc.vel[i] + d, 0.05, 1); changed(); ev.preventDefault(); }
-    });
+    const r = cv.getBoundingClientRect(), x = e.clientX - r.left - KW; if (x < 0) return;
+    const beat = x / ((r.width - KW) / totalBeats(S.slots)); let t = 0;
+    for (let i = 0; i < S.slots.length; i++) { t += S.slots[i].beats; if (beat < t) { S.sel = i; renderLane(); drawRoll(); playChord(i); return; } }
   });
   win.addEventListener('keydown', e => {
     e.stopPropagation();   // pintasan DAW (Spasi, panah) tidak ikut jalan selagi jendela terbuka
+    const t = e.target as HTMLElement;
     if (e.key === 'Escape') { close(); e.preventDefault(); }
-    else if (e.key === ' ' && !(e.target as HTMLElement).matches('button, select, [role="slider"]')) { actions.play(win); e.preventDefault(); }
+    else if ((e.key === 'Enter' || e.key === ' ') && t.matches('.mgc__ch, .mgc__h, .mgc__dnd')) { t.click(); e.preventDefault(); }
+    else if (e.key === ' ' && !t.matches('button, select')) { actions.play(win); e.preventDefault(); }
   });
   win.addEventListener('keyup', e => e.stopPropagation());
   new ResizeObserver(() => { if (!el.hidden) drawRoll(); }).observe(cv);
@@ -382,6 +337,6 @@ function build(): void {
   }
   openFn = () => {
     prevFocus = document.activeElement; el.hidden = false; document.body.classList.add('mgc-open');
-    renderAll(); win.focus({ preventScroll: true }); requestAnimationFrame(drawRoll);
+    renderAll(); commit(); win.focus({ preventScroll: true }); requestAnimationFrame(drawRoll);
   };
 }

@@ -113,20 +113,22 @@ Berkas: `public/manifest.webmanifest` (nama, warna, ikon), `public/icons/*` (iko
 Versi baru aplikasi aktif setelah semua tab Web DAW ditutup lalu dibuka lagi (supaya project yang sedang dikerjakan tidak terganggu).
 
 ## MGCHORD (pembuat chord progression)
-Plugin ala ChordJam: bikin progression chord, lihat hasilnya di **Piano Roll View**, lalu kirim ke pattern atau unduh sebagai MIDI. Tambah lewat panel efek: halaman **Plugin** > tombol **+** > **MGCHORD** (satu per track, jendelanya langsung terbuka; klik kartu MGCHORD untuk membukanya lagi).
+Plugin pembuat chord progression, tampilan panel biru: header abu (nama progression + **SAVE** + panah preset), blok **Key / Length / Audio** di kiri, tombol bulat besar di tengah (acak progression) dengan undo / redo di bawahnya, lalu penggaris bar, blok chord, piano roll gelap dengan pasak oranye di awal tiap chord, dan bar bawah **Play / Drag & drop MIDI / unduh**. Tambah lewat panel efek: halaman **Plugin** > tombol **+** > **MGCHORD** (satu per track, jendelanya langsung terbuka; klik kartu MGCHORD untuk membukanya lagi).
 
 | Bagian | Fungsi |
 |---|---|
-| **Scale / Scale Type / Octave** | Tonika (C..B), skala (Major, Minor, Dorian, Phrygian, Lydian, Mixolydian, Locrian, Harmonic / Melodic Minor), dan geser oktaf -2..+2. |
-| **Chord Type** | *Diatonic* / *7th* / *9th* = chord mengikuti skala (mis. C Minor 9th: Cm9, Fm9, G#maj9, A#9). Tipe lain (Major9, Sus4, dst.) memaksa kualitas yang sama di semua derajat. |
-| **Voices** | 5 suara: nyala / mati dan geser -12 / 0 / +12 per suara, plus **Invert** 0..3. Chord yang nadanya kurang dari 5 otomatis digandakan naik oktaf. |
-| **Velocity** | Seret tiap bar untuk velocity per suara. |
-| **Style** | Block (serempak), Strum (dipetik, Tight / Mid / Loose), Arp Up / Down (1/4, 1/8, 1/16). |
-| **Progression** | Blok merah = satu chord. Ketuk blok (atau area di piano roll) untuk memilih, lalu **Degree** (ganti derajat) dan **Length** (1, 2, 3, 4, 6, 8, 12, 16 ketukan); **+** tambah chord, **-** hapus. Tombol dadu = progression acak (aliran harmoni fungsional). Panah di header = 10 preset (Basic, Pop I-V-vi-IV, Sad vi-IV-I-V, Jazz ii-V-I, Andalusian, dll.). Maksimal 16 bar. |
-| **Pattern** | Kirim nada ke pattern yang sedang dipilih di timeline. Pattern dilebarkan otomatis kalau muat (tidak menabrak pattern berikutnya) dan nada lama di pattern itu diganti. Suara keluar kalau track-nya Supersaw / DERIZ. |
-| **MIDI** | Unduh progression sebagai file .mid (tempo mengikuti project). |
+| **Key** | Tonika + skala sekaligus (mis. F Minor). Pilihan skala: Major, Minor, Dorian, Phrygian, Lydian, Mixolydian, Locrian, Harmonic / Melodic Minor. |
+| **Length** | 4 atau 8 bar. Progression dipotong atau diulang sesuai panjang. |
+| **Audio** | On = chord berbunyi saat dipilih / diacak. Off = senyap (tombol Play tetap berbunyi). |
+| **Tombol bulat** | Acak progression (aliran harmoni fungsional) sepanjang Length. **Undo / redo** menelusuri riwayat perubahan. |
+| **Nama progression** | Ketuk untuk memilih preset (Basic, Pop I-V-vi-IV, Sad vi-IV-I-V, Jazz ii-V-I, Andalusian, dst.); panah kiri / kanan = preset sebelum / berikutnya. |
+| **Blok chord** | Ketuk blok (atau area di piano roll) untuk memilih. Ikon panah di sisi kiri / kanan blok = derajat chord turun / naik. |
+| **SAVE** | Kirim nada ke pattern yang sedang dipilih di timeline. Pattern dilebarkan otomatis kalau muat dan nada lama di pattern itu diganti. Suara keluar kalau track-nya Supersaw / DERIZ. Label di kanan atas berubah dari Unlinked ke Linked setelah berhasil. |
+| **Drag & drop MIDI / unduh** | Seret ke DAW (Chrome / Edge) atau klik untuk mengunduh .mid (tempo mengikuti project). |
 
-Tombol Play di header hanya preview (suara sederhana milik plugin sendiri, tempo ikut project); Spasi = play / stop, Esc = tutup. Setelan MGCHORD ikut tersimpan di file project (`mgchord`).
+Voicing (5 suara, invert, velocity), gaya main (Block / Strum / Arp), Octave, dan Chord Type masih ada di data / mesin (`mgchord-theory.ts`) dengan nilai bawaan, tapi kontrolnya tidak ditampilkan di UI.
+
+Tombol Play hanya preview (suara sederhana milik plugin sendiri, tempo ikut project); Spasi = play / stop, Esc = tutup. Setelan MGCHORD ikut tersimpan di file project (`mgchord`).
 
 Kode: `src/mgchord-theory.ts` (teori murni: skala, chord, voicing, progression, MIDI), `src/mgchord.ts` (jendela + preview), blok "MGCHORD" di `src/styles.css`, kartu di `src/fx-rack.ts`, jembatan ke pattern + simpan project di `src/main.ts` (`setMgchordBridge`).
 Tes: `node tools/mgchord-test.ts` (nama chord vs referensi, voicing, invert, strum / arp, panjang progression, header MIDI).
