@@ -4,7 +4,7 @@
 // SAVE mengirim nada ke pattern yang sedang dipilih di timeline; Drag & Drop MIDI / tombol unduh menghasilkan file .mid.
 // Inti teori ada di mgchord-theory.ts (murni, dites lewat tools/mgchord-test.ts).
 
-import { createMaster, pianoTone } from './mgchord-audio';
+import { createMaster, loadPiano, pianoTone } from './mgchord-audio';
 import {
   NOTE_NAMES, PRESETS, SCALES,
   buildNotes, chordAt, defaultVoicing, slotChord, triadAt, midiName, randomProgression, slotsOf, toMidi, totalBeats, voice,
@@ -75,6 +75,8 @@ function ac(): AudioContext {
     actx = new A({ latencyHint: 'interactive' });
     const master = createMaster(actx); out = master.input;   // low-cut -> EQ -> compressor -> limiter -> soft-clip (+ reverb ruang kecil)
     an = actx.createAnalyser(); an.fftSize = 2048; an.smoothingTimeConstant = 0; master.tap.connect(an);   // tap untuk waveform real-time
+    const base = import.meta.env.BASE_URL + 'samples/piano/';   // sample piano asli (21 file, ~1,4 MB); sebelum selesai dimuat dipakai synth cadangan
+    void loadPiano(actx, f => fetch(base + f + '.mp3').then(r => { if (!r.ok) throw new Error(f); return r.arrayBuffer(); }));
   }
   if (actx.state === 'suspended') void actx.resume();
   return actx;
@@ -480,6 +482,7 @@ function build(): void {
   }
   openFn = () => {
     prevFocus = document.activeElement; el.hidden = false; document.body.classList.add('mgc-open');
+    ac();   // buat AudioContext + mulai muat sample piano sejak jendela dibuka (klik pembuka = gestur pengguna), supaya chord pertama sudah piano asli
     renderAll(); commit(); win.focus({ preventScroll: true }); requestAnimationFrame(drawRoll);
     if (!specRaf) specRaf = requestAnimationFrame(specLoop);
   };

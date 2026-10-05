@@ -1,12 +1,54 @@
-// MGCHORD: suara preview = piano + rantai mixing. Murni Web Audio (tanpa DOM), jadi bisa dirender offline untuk dites (tools/mgchord-audio-test.ts).
-//   pianoTone: tiap nada = 2-3 senar sedikit sumbang (chorus alami) dengan spektrum piano (titik pukul palu 1/8 senar), ketukan palu (noise pendek),
-//              filter yang menutup seiring waktu (awal cerah, lalu hangat), decay dua tahap (nada rendah ngambang lebih lama), damper saat nada dilepas, posisi stereo menurut tinggi nada.
-//   createMaster: low-cut -> EQ (kurangi gumam 300 Hz, tambah presence + udara) -> compressor perekat -> limiter -> soft-clip pengaman (tidak pernah pecah),
-//              ditambah reverb ruang kecil (paralel) supaya chord terdengar penuh tanpa tebal / bising.
+// MGCHORD: suara preview = piano ASLI (sample) + rantai mixing. Murni Web Audio (tanpa DOM), jadi bisa dirender offline untuk dites (tools/mgchord-audio-test.ts).
+//   loadPiano / pianoTone: sample Salamander Grand Piano (Alexander Holm, CC BY 3.0; file di public/samples/piano, tiap 3 nada C2..C7). Nada diambil dari sample terdekat lalu digeser pitch-nya
+//              (playbackRate), velocity mengatur volume + kecerahan, nada dilepas dengan damper. Selama sample belum termuat (atau gagal dimuat) dipakai synthTone sebagai cadangan.
+//   synthTone: piano sintetis (senar sumbang + spektrum piano + ketukan palu), hanya cadangan.
+//   createMaster: low-cut -> EQ halus -> compressor perekat -> limiter -> soft-clip pengaman (tidak pernah pecah), plus reverb ruang kecil (paralel) supaya chord terdengar penuh tanpa tebal / bising.
 
 const waves = new WeakMap<BaseAudioContext, Map<number, PeriodicWave>>();
 const noises = new WeakMap<BaseAudioContext, AudioBuffer>();
+const samples = new WeakMap<BaseAudioContext, Map<number, AudioBuffer>>();
 const clamp = (v: number, a: number, b: number): number => Math.min(b, Math.max(a, v));
+
+// ---------- piano sample ----------
+const SEMI_NAME: Record<number, string> = { 0: 'C', 3: 'Ds', 6: 'Fs', 9: 'A' };   // nama file: C4.mp3, Ds4.mp3, Fs4.mp3, A4.mp3 (Ds = D#, Fs = F#)
+/** Nomor MIDI -> nama file (tanpa .mp3) untuk semua sample: C2..C7 tiap 3 nada (21 file). */
+export const PIANO_FILES: Map<number, string> = (() => {
+  const m = new Map<number, string>();
+  for (let oct = 2; oct <= 6; oct++) for (const semi of [0, 3, 6, 9]) m.set(12 * (oct + 1) + semi, SEMI_NAME[semi] + oct);
+  m.set(96, 'C7'); return m;
+})();
+
+/** Muat semua sample piano ke `c`. `getBytes(namaFile)` mengambil isi file mp3 (di browser: fetch, di tes: baca dari disk). Mengembalikan jumlah sample yang berhasil dimuat; sample yang gagal dilewati. */
+export async function loadPiano(c: BaseAudioContext, getBytes: (file: string) => Promise<ArrayBuffer>): Promise<number> {
+  const got = new Map<number, AudioBuffer>();
+  await Promise.all([...PIANO_FILES].map(async ([midi, file]) => {
+    try { got.set(midi, await c.decodeAudioData(await getBytes(file))); } catch { /* satu sample gagal: sisanya tetap dipakai */ }
+  }));
+  if (got.size) samples.set(c, got);
+  return got.size;
+}
+export const pianoReady = (c: BaseAudioContext): boolean => samples.has(c);
+
+// Satu nada dari sample terdekat (selisih seri paling kecil, seri -> yang lebih rendah), pitch digeser lewat playbackRate
+function sampleTone(c: BaseAudioContext, dest: AudioNode, bank: Map<number, AudioBuffer>, midi: number, when: number, dur: number, vel: number): void {
+  let key = -1; for (const k of bank.keys()) if (key < 0 || Math.abs(k - midi) < Math.abs(key - midi) || (Math.abs(k - midi) === Math.abs(key - midi) && k < key)) key = k;
+  const v = clamp(vel, 0.05, 1), end = when + Math.max(0.08, dur), rel = 0.09 + 0.16 * clamp((72 - midi) / 48, 0, 1);   // damper: nada rendah dilepas lebih lambat
+  const src = c.createBufferSource(), lp = c.createBiquadFilter(), g = c.createGain();
+  src.buffer = bank.get(key)!; src.playbackRate.value = 2 ** ((midi - key) / 12);
+  lp.type = 'lowpass'; lp.Q.value = 0.5; lp.frequency.value = clamp(440 * 2 ** ((midi - 69) / 12) * (10 + v * 40), 3000, 18000);   // nada pelan sedikit lebih gelap, nada keras cerah
+  const peak = SAMPLE_GAIN * (0.18 + 0.82 * v ** 1.3);
+  g.gain.setValueAtTime(peak, when); g.gain.setValueAtTime(peak, end); g.gain.setTargetAtTime(0, end, rel);
+  src.connect(lp); lp.connect(g); g.connect(dest);
+  src.start(when); src.stop(end + rel * 7 + 0.05);
+  src.onended = () => { src.disconnect(); lp.disconnect(); g.disconnect(); };
+}
+const SAMPLE_GAIN = 0.8;   // level sample asli sebelum master: disamakan dengan synth cadangan (progression ~ -21 dBFS RMS) supaya tidak melompat saat sample selesai dimuat (dikalibrasi lewat tools/mgchord-audio-test.ts)
+
+/** Bunyikan satu nada piano ke `dest`. midi = nomor nada, when = waktu mulai (detik AudioContext), dur = lama tuts ditahan (detik), vel = 0..1. Pakai sample kalau sudah termuat, kalau belum synth cadangan. */
+export function pianoTone(c: BaseAudioContext, dest: AudioNode, midi: number, when: number, dur: number, vel: number): void {
+  const bank = samples.get(c);
+  if (bank) sampleTone(c, dest, bank, midi, when, dur, vel); else synthTone(c, dest, midi, when, dur, vel);
+}
 
 // Spektrum satu senar piano: partial n = |sin(n*pi/8)| (palu memukul di 1/8 senar, partial ke-8 / 16 melemah) / n^1.05, dibatasi sebelum aliasing
 function waveFor(c: BaseAudioContext, midi: number): PeriodicWave {
@@ -25,8 +67,8 @@ function noiseFor(c: BaseAudioContext): AudioBuffer {
   noises.set(c, b); return b;
 }
 
-/** Bunyikan satu nada piano ke `dest`. midi = nomor nada, when = waktu mulai (detik AudioContext), dur = lama tuts ditahan (detik), vel = 0..1. */
-export function pianoTone(c: BaseAudioContext, dest: AudioNode, midi: number, when: number, dur: number, vel: number): void {
+/** Piano sintetis (cadangan): sama arti parameternya dengan pianoTone. */
+function synthTone(c: BaseAudioContext, dest: AudioNode, midi: number, when: number, dur: number, vel: number): void {
   const f = 440 * 2 ** ((midi - 69) / 12), v = clamp(vel, 0.05, 1), end = when + Math.max(0.08, dur);
   const peak = 0.2 * (0.12 + 0.88 * v ** 1.5);
   const tau = Math.max(0.45, 3.2 * 2 ** (-(midi - 36) / 30));          // decay panjang: makin tinggi makin cepat habis
@@ -63,9 +105,9 @@ export interface Master { input: GainNode; tap: AudioNode }
 export function createMaster(c: BaseAudioContext, dest: AudioNode = c.destination): Master {
   const input = c.createGain(); input.gain.value = 1.7;   // gain masuk: progression nyaman di sekitar -21 dBFS RMS, akor 7 nada velocity penuh tetap terkendali (diukur lewat tools/mgchord-audio-test.ts)
   const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 38; hp.Q.value = 0.7;                                // buang gemuruh di bawah piano
-  const mud = c.createBiquadFilter(); mud.type = 'peaking'; mud.frequency.value = 300; mud.Q.value = 1; mud.gain.value = -2.5;       // kurangi gumam akor
-  const pres = c.createBiquadFilter(); pres.type = 'peaking'; pres.frequency.value = 3200; pres.Q.value = 0.8; pres.gain.value = 1.8;  // presence: jelas di speaker kecil
-  const air = c.createBiquadFilter(); air.type = 'highshelf'; air.frequency.value = 9000; air.gain.value = 2;                          // udara
+  const mud = c.createBiquadFilter(); mud.type = 'peaking'; mud.frequency.value = 300; mud.Q.value = 1; mud.gain.value = -1.5;       // kurangi gumam akor
+  const pres = c.createBiquadFilter(); pres.type = 'peaking'; pres.frequency.value = 3200; pres.Q.value = 0.8; pres.gain.value = 0.8;  // presence: jelas di speaker kecil
+  const air = c.createBiquadFilter(); air.type = 'highshelf'; air.frequency.value = 9000; air.gain.value = 1;                          // udara
   const comp = c.createDynamicsCompressor();                                                                                           // perekat: puncak nada keras dirapikan
   comp.threshold.value = -22; comp.knee.value = 20; comp.ratio.value = 3.5; comp.attack.value = 0.01; comp.release.value = 0.25;
   const lim = c.createDynamicsCompressor();                                                                                            // limiter
@@ -80,7 +122,7 @@ export function createMaster(c: BaseAudioContext, dest: AudioNode = c.destinatio
   const rhp = c.createBiquadFilter(); rhp.type = 'highpass'; rhp.frequency.value = 280;
   const rlp = c.createBiquadFilter(); rlp.type = 'lowpass'; rlp.frequency.value = 7000;
   const conv = c.createConvolver(); conv.buffer = ir; conv.normalize = true;
-  const wet = c.createGain(); wet.gain.value = 0.2;
+  const wet = c.createGain(); wet.gain.value = 0.12;
   comp.connect(rhp); rhp.connect(rlp); rlp.connect(conv); conv.connect(wet); wet.connect(lim);
   return { input, tap: clip };
 }
