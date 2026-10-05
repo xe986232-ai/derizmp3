@@ -2,7 +2,7 @@
 // Cek: 21 sample piano asli termuat, pitch tepat, tidak ada NaN, puncak tidak pernah pecah (< 0.99), tidak terlalu pelan / terlalu keras, akor 7 nada velocity penuh tetap terkendali, synth cadangan juga aman.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { buildNotes, defaultVoicing, type Settings, type Slot } from '../src/mgchord-theory.ts';
-import { createMaster, loadPiano, pianoTone, PIANO_FILES } from '../src/mgchord-audio.ts';
+import { createMaster, loadPiano, voiceTone, PIANO_FILES, type Voice } from '../src/mgchord-audio.ts';
 
 let wa: typeof import('node-web-audio-api');
 try { wa = await import('node-web-audio-api'); } catch { console.log('SKIP node-web-audio-api belum terpasang: npm i --no-save node-web-audio-api'); process.exit(0); }
@@ -14,13 +14,13 @@ const SR = 44100;
 
 const bytesOf = async (f: string): Promise<ArrayBuffer> => { const b = readFileSync(new URL(`../public/samples/piano/${f}.mp3`, import.meta.url)); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer; };
 let loaded = 0;
-async function render(notes: { p: number; s: number; l: number; v: number }[], bpm: number, secs: number, withSamples = true): Promise<Float32Array[]> {
+async function render(notes: { p: number; s: number; l: number; v: number }[], bpm: number, secs: number, withSamples = true, voice: Voice = 'piano'): Promise<Float32Array[]> {
   const c = new wa.OfflineAudioContext(2, Math.ceil(SR * secs), SR) as unknown as OfflineAudioContext;
   if (withSamples) loaded = await loadPiano(c, bytesOf);   // tanpa ini dipakai synth cadangan
   const m = createMaster(c), spb = 60 / bpm;
-  for (const n of notes) pianoTone(c, m.input, n.p, 0.05 + n.s * spb, n.l * spb, n.v);
+  for (const n of notes) voiceTone(c, m.input, voice, n.p, 0.05 + n.s * spb, n.l * spb, n.v);
   const buf = await c.startRendering();
-  return [buf.getChannelData(0), buf.getChannelData(1)];
+  return [buf.getChannelData(0).slice(), buf.getChannelData(1).slice()];   // salin: hasil render sebelumnya tetap valid setelah render berikutnya
 }
 function stats(ch: Float32Array[]): { peak: number; rms: number; nan: boolean } {
   let peak = 0, sum = 0, n = 0, nan = false;
@@ -55,6 +55,20 @@ for (const midi of [43, 58, 61, 69, 77, 90, 96]) {   // nada di antara sample (d
   let best = 0, bf = 0;
   for (let f = want * 0.93; f < want * 1.07; f += want * 0.001) { let re = 0, im = 0; for (let i = 0; i < seg.length; i += 2) { const ph = 2 * Math.PI * f * i / SR; re += seg[i] * Math.cos(ph); im += seg[i] * Math.sin(ph); } const mag = Math.hypot(re, im); if (mag > best) { best = mag; bf = f; } }
   check(`pitch nada ${midi} tepat (+-2%)`, Math.abs(bf / want - 1) < 0.02, `${want.toFixed(1)} Hz -> ${bf.toFixed(1)} Hz`);
+}
+
+for (const voice of ['pad', 'pluck'] as Voice[]) {   // dua synth: level setara piano, tidak pecah, tidak NaN, pitch tepat, ekor habis
+  const x = await render(prog, 100, 11.5, true, voice), sx = stats(x), fx = stats([(await render(full, 100, 6, true, voice))[0]]);
+  console.log(`${voice}: progression peak ${db(sx.peak).toFixed(1)} dBFS, rms ${db(sx.rms).toFixed(1)} dBFS | 7 nada penuh peak ${db(fx.peak).toFixed(1)} dBFS`);
+  check(`${voice}: tidak ada NaN dan tidak pecah`, !sx.nan && sx.peak < 0.99 && !fx.nan && fx.peak < 0.99);
+  check(`${voice}: level selisih < 2.5 dB dari piano`, Math.abs(db(sx.rms) - db(sa.rms)) < 2.5, `${(db(sx.rms) - db(sa.rms)).toFixed(1)} dB`);
+  check(`${voice}: ekor menghilang`, db(stats([x[0].slice(Math.floor(SR * 11))]).rms) < -55);
+  for (const midi of [48, 60, 72]) {
+    const one = await render([{ p: midi, s: 0, l: 2, v: 0.8 }], 120, 2.5, true, voice), seg = one[0].slice(Math.floor(SR * 0.25), Math.floor(SR * 0.25) + 16384), want = 440 * 2 ** ((midi - 69) / 12);
+    let best = 0, bf = 0;
+    for (let f = want * 0.93; f < want * 1.07; f += want * 0.001) { let re = 0, im = 0; for (let i = 0; i < seg.length; i += 2) { const ph = 2 * Math.PI * f * i / SR; re += seg[i] * Math.cos(ph); im += seg[i] * Math.sin(ph); } const mag = Math.hypot(re, im); if (mag > best) { best = mag; bf = f; } }
+    check(`${voice}: pitch nada ${midi} tepat (+-2%)`, Math.abs(bf / want - 1) < 0.02, `${want.toFixed(1)} Hz -> ${bf.toFixed(1)} Hz`);
+  }
 }
 
 const l = a[0], r = a[1]; let diff = 0; for (let i = 0; i < l.length; i++) diff += Math.abs(l[i] - r[i]);

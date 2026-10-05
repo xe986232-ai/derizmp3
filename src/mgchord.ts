@@ -1,10 +1,10 @@
 // MGCHORD: pembuat chord progression. Jendela plugin (dibuka dari halaman Plugin di panel efek, seperti MPCS), tampilan panel biru:
-//   header (preset + SAVE) -> Key / Length / Audio + tombol bulat besar (acak progression) + undo / redo
+//   header (preset + SAVE) -> Key / Length / Sound (Piano / Pad / Pluck) + tombol bulat besar (acak progression) + undo / redo
 //   -> penggaris bar + blok chord (Fm, Cm7, ...) -> piano roll gelap dengan pasak oranye di batas chord -> Play / Drag & Drop MIDI / unduh.
 // SAVE mengirim nada ke pattern yang sedang dipilih di timeline; Drag & Drop MIDI / tombol unduh menghasilkan file .mid.
 // Inti teori ada di mgchord-theory.ts (murni, dites lewat tools/mgchord-test.ts).
 
-import { createMaster, loadPiano, pianoTone } from './mgchord-audio';
+import { createMaster, loadPiano, voiceTone, VOICES, type Voice } from './mgchord-audio';
 import {
   NOTE_NAMES, PRESETS, SCALES, STYLES, STYLE_INFO,
   buildNotes, chordAt, defaultVoicing, slotChord, triadAt, midiName, randomProgression, slotsOf, toMidi, totalBeats, voice,
@@ -82,7 +82,8 @@ function ac(): AudioContext {
   if (actx.state === 'suspended') void actx.resume();
   return actx;
 }
-const tone = pianoTone;
+let sound: Voice = 'piano';   // suara preview yang dipilih di menu samping: Piano / Pad / Pluck
+const tone = (c: BaseAudioContext, dest: AudioNode, midi: number, when: number, dur: number, vel: number): void => voiceTone(c, dest, sound, midi, when, dur, vel);
 
 function build(): void {
   const el = document.createElement('div');
@@ -113,7 +114,7 @@ function build(): void {
             '<div class="mgc__cd" data-dd="scale"><button type="button" class="mgc__cdb" aria-haspopup="listbox" aria-expanded="false" aria-label="Chord mayor atau minor"><span></span></button></div>' +
           '</div></div>' +
           '<div class="mgc__r"><span>Length</span><div class="mgc__sg"><button type="button" data-a="len" data-s="4">4 bars</button><button type="button" data-a="len" data-s="8">8 bars</button></div></div>' +
-          '<div class="mgc__r"><span>Audio</span><div class="mgc__sg"><button type="button" data-a="aud" data-s="0">Off</button><button type="button" data-a="aud" data-s="1">On</button></div></div>' +
+          '<div class="mgc__r"><span>Sound</span><div class="mgc__sg">' + VOICES.map(v => `<button type="button" data-a="snd" data-s="${v.id}">${v.label}</button>`).join('') + '</div></div>' +
         '</div>' +
         '<div class="mgc__gen">' +
           `<button type="button" class="mgc__big" data-a="dice" aria-label="Acak progression" title="Acak progression"><i>${ICON.dice}</i></button>` +
@@ -141,7 +142,7 @@ function build(): void {
   const $ = <T extends HTMLElement>(q: string): T => el.querySelector<T>(q)!;
   const lane = $('.mgc__lane'), marks = $('.mgc__marks'), cv = $<HTMLCanvasElement>('.mgc__cv'), g = cv.getContext('2d')!;
   let notes: OutNote[] = [], playing = false, phBeat = -1, raf = 0, prevFocus: Element | null = null;
-  let audioOn = true, linked = false, hist: string[] = [], hi = -1;
+  let linked = false, hist: string[] = [], hi = -1;
 
   // ---------- waveform real-time, berjalan terus (menggulung ke kiri) ----------
   // Algoritma kick-waveform-demo: sample dibagi per kolom, tiap kolom diambil min/max-nya, digambar sebagai SATU poligon terisi menyambung (rata, tanpa garis tengah, pixel-snapped).
@@ -291,7 +292,7 @@ function build(): void {
     const ps = el.querySelector<HTMLSelectElement>('select[data-k="preset"]'); if (ps) ps.value = String(S.preset);
     $('.mgc__pname').textContent = S.preset >= 0 && PRESETS[S.preset] ? PRESETS[S.preset].name : 'New progression';
     el.querySelectorAll<HTMLElement>('[data-a="len"]').forEach(b => b.classList.toggle('is-on', +b.dataset.s! === S.bars));
-    el.querySelectorAll<HTMLElement>('[data-a="aud"]').forEach(b => b.classList.toggle('is-on', (+b.dataset.s! === 1) === audioOn));
+    el.querySelectorAll<HTMLElement>('[data-a="snd"]').forEach(b => b.classList.toggle('is-on', b.dataset.s === sound));
     $('.mgc__link').textContent = linked ? 'Linked' : 'Unlinked';
   }
 
@@ -349,7 +350,6 @@ function build(): void {
   let bus: GainNode | null = null, t0 = 0, spb = 0.5, sched = 0, timer = 0;
   const quality = (): 'Major' | 'Minor' => (S.st.scale === 'Minor' ? 'Minor' : 'Major');   // pilihan dropdown Chord = mutu chord untuk tuts berikutnya
   const playChord = (i: number): void => {
-    if (!audioOn) return;
     const c = ac(), t = c.currentTime + 0.02, spb = 60 / (bridge ? bridge.bpm() : 120);
     const sl: Slot = S.slots[i] ?? { deg: 0, beats: 4, root: 0, q: quality() };   // belum ada chord: dengarkan contoh C
     const b = c.createGain(); b.connect(out!);
@@ -410,7 +410,7 @@ function build(): void {
     len: b => { fitBars(+b.dataset.s!); changed(); },
     clear: () => { if (!S.slots.length) return; stopPlay(); S.slots = []; S.sel = -1; S.preset = -1; changed(); },
     del: () => { if (S.sel < 0 || !S.slots[S.sel]) return; S.slots.splice(S.sel, 1); S.sel = S.slots.length ? Math.min(S.sel, S.slots.length - 1) : -1; changed(); },
-    aud: b => { audioOn = b.dataset.s === '1'; renderControls(); },
+    snd: b => { const v = b.dataset.s as Voice; if (v === sound) return; sound = v; renderControls(); if (!playing) playChord(Math.max(S.sel, 0)); },   // ganti suara: langsung dengarkan chord terpilih dengan suara baru
     dice: () => { S.slots = randomProgression(clamp(S.bars * 4, 8, MAX_BEATS)).map(sl => { const sc = SCALES[quality()], r = sc[sl.deg], m3 = mod(sc[(sl.deg + 2) % 7] - r, 12); return { deg: sl.deg, beats: sl.beats, root: mod(r, 12), q: m3 === 4 ? 'Major' as const : 'Minor' as const }; }); S.sel = 0; S.preset = -1; changed(); playChord(0); },
     undo: () => { if (hi > 0) { hi--; restore(); } },
     redo: () => { if (hi < hist.length - 1) { hi++; restore(); } },

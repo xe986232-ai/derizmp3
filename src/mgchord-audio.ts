@@ -2,6 +2,7 @@
 //   loadPiano / pianoTone: sample Salamander Grand Piano (Alexander Holm, CC BY 3.0; file di public/samples/piano, tiap 3 nada C2..C7). Nada diambil dari sample terdekat lalu digeser pitch-nya
 //              (playbackRate), velocity mengatur volume + kecerahan, nada dilepas dengan damper. Selama sample belum termuat (atau gagal dimuat) dipakai synthTone sebagai cadangan.
 //   synthTone: piano sintetis (senar sumbang + spektrum piano + ketukan palu), hanya cadangan.
+//   voiceTone: pilihan suara preview = 'piano' (sample asli) / 'pad' (Synth 1: saw hangat, tebal) / 'pluck' (Synth 2: saw cerah, petik pendek).
 //   createMaster: low-cut -> EQ halus -> compressor perekat -> limiter -> soft-clip pengaman (tidak pernah pecah), plus reverb ruang kecil (paralel) supaya chord terdengar penuh tanpa tebal / bising.
 
 const waves = new WeakMap<BaseAudioContext, Map<number, PeriodicWave>>();
@@ -97,6 +98,62 @@ function synthTone(c: BaseAudioContext, dest: AudioNode, midi: number, when: num
   hg.gain.setValueAtTime(0.0001, when); hg.gain.linearRampToValueAtTime(hp, when + 0.0015); hg.gain.setTargetAtTime(0.0001, when + 0.0015, 0.012);
   nz.connect(bp); bp.connect(hg); hg.connect(pan); nz.start(when, (midi % 7) * 0.02); nz.stop(when + 0.08);
   oscs[oscs.length - 1].onended = () => { g.disconnect(); lp.disconnect(); pan.disconnect(); hg.disconnect(); };
+}
+
+// ---------- synth (dua pilihan suara selain piano) ----------
+export type Voice = 'piano' | 'pad' | 'pluck';
+export const VOICES: { id: Voice; label: string }[] = [{ id: 'piano', label: 'Piano' }, { id: 'pad', label: 'Pad' }, { id: 'pluck', label: 'Pluck' }];
+
+/** Synth 1 "Pad": tiga saw sumbang halus + sub sine, filter terbuka pelan lalu menghangat, attack lembut, release panjang. Enak untuk chord panjang. */
+function padTone(c: BaseAudioContext, dest: AudioNode, midi: number, when: number, dur: number, vel: number): void {
+  const f = 440 * 2 ** ((midi - 69) / 12), v = clamp(vel, 0.05, 1), end = when + Math.max(0.15, dur), rel = 0.14 + 0.1 * clamp((72 - midi) / 48, 0, 1);
+  const peak = PAD_GAIN * (0.2 + 0.8 * v ** 1.2), atk = 0.035;
+  const g = c.createGain(), lp = c.createBiquadFilter(), pan = c.createStereoPanner();
+  pan.pan.value = clamp((midi - 60) / 36, -0.5, 0.5);
+  lp.type = 'lowpass'; lp.Q.value = 0.8;
+  lp.frequency.setValueAtTime(clamp(f * 2.2, 500, 3000), when);                                // mulai agak tertutup ...
+  lp.frequency.setTargetAtTime(clamp(f * (4 + v * 5), 1400, 7500), when, 0.25);                // ... membuka pelan, jadi tidak tajam
+  g.gain.setValueAtTime(0.0001, when); g.gain.linearRampToValueAtTime(peak, when + atk);
+  g.gain.setTargetAtTime(peak * 0.78, when + atk, 0.5);                                         // sedikit turun ke sustain
+  g.gain.setValueAtTime(peak * 0.78, Math.max(end, when + atk + 0.02)); g.gain.setTargetAtTime(0.0001, Math.max(end, when + atk + 0.02), rel);
+  const stop = end + rel * 7 + 0.05, oscs: OscillatorNode[] = [];
+  [[-9, 'sawtooth', 0.36], [0, 'sawtooth', 0.36], [9, 'sawtooth', 0.36], [0, 'sine', 0.3]].forEach(([dt, type, amp], i) => {
+    const o = c.createOscillator(), og = c.createGain();
+    o.type = type as OscillatorType; o.frequency.value = i === 3 ? f / 2 : f; o.detune.value = dt as number; og.gain.value = amp as number;
+    o.connect(og); og.connect(lp); o.start(when); o.stop(stop); oscs.push(o);
+  });
+  lp.connect(g); g.connect(pan); pan.connect(dest);
+  oscs[oscs.length - 1].onended = () => { g.disconnect(); lp.disconnect(); pan.disconnect(); };
+}
+
+/** Synth 2 "Pluck": dua saw + sub kotak, filter menutup cepat (petikan cerah lalu hangat), amplitudo jatuh ke sustain rendah. Enak untuk pola arpeggio / stab. */
+function pluckTone(c: BaseAudioContext, dest: AudioNode, midi: number, when: number, dur: number, vel: number): void {
+  const f = 440 * 2 ** ((midi - 69) / 12), v = clamp(vel, 0.05, 1), end = when + Math.max(0.1, dur), rel = 0.12 + 0.12 * clamp((72 - midi) / 48, 0, 1);
+  const peak = PLUCK_GAIN * (0.18 + 0.82 * v ** 1.3);
+  const g = c.createGain(), lp = c.createBiquadFilter(), pan = c.createStereoPanner();
+  pan.pan.value = clamp((midi - 60) / 30, -0.6, 0.6);
+  lp.type = 'lowpass'; lp.Q.value = 2.2;
+  lp.frequency.setValueAtTime(clamp(f * (9 + v * 9), 2500, 14000), when);                      // petikan cerah (makin keras makin cerah) ...
+  lp.frequency.setTargetAtTime(clamp(f * 2.2, 500, 3500), when + 0.005, 0.16);                 // ... lalu menutup cepat
+  g.gain.setValueAtTime(0.0001, when); g.gain.linearRampToValueAtTime(peak, when + 0.003);
+  g.gain.setTargetAtTime(peak * 0.28, when + 0.003, 0.22);                                      // jatuh ke sustain rendah
+  g.gain.setValueAtTime(peak * 0.28, Math.max(end, when + 0.05)); g.gain.setTargetAtTime(0.0001, Math.max(end, when + 0.05), rel);
+  const stop = end + rel * 7 + 0.05, oscs: OscillatorNode[] = [];
+  [[-7, 'sawtooth', 0.5, 1], [7, 'sawtooth', 0.5, 1], [0, 'square', 0.2, 0.5]].forEach(([dt, type, amp, mul]) => {
+    const o = c.createOscillator(), og = c.createGain();
+    o.type = type as OscillatorType; o.frequency.value = f * (mul as number); o.detune.value = dt as number; og.gain.value = amp as number;
+    o.connect(og); og.connect(lp); o.start(when); o.stop(stop); oscs.push(o);
+  });
+  lp.connect(g); g.connect(pan); pan.connect(dest);
+  oscs[oscs.length - 1].onended = () => { g.disconnect(); lp.disconnect(); pan.disconnect(); };
+}
+const PAD_GAIN = 0.095, PLUCK_GAIN = 0.14;   // level synth disamakan dengan piano (dikalibrasi lewat tools/mgchord-audio-test.ts)
+
+/** Bunyikan satu nada dengan suara pilihan (piano / pad / pluck). Parameter sama dengan pianoTone. */
+export function voiceTone(c: BaseAudioContext, dest: AudioNode, voice: Voice, midi: number, when: number, dur: number, vel: number): void {
+  if (voice === 'pad') padTone(c, dest, midi, when, dur, vel);
+  else if (voice === 'pluck') pluckTone(c, dest, midi, when, dur, vel);
+  else pianoTone(c, dest, midi, when, dur, vel);
 }
 
 export interface Master { input: GainNode; tap: AudioNode }
