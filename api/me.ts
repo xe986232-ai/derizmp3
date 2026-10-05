@@ -1,7 +1,7 @@
 // GET /api/me : dipanggil aplikasi saat dibuka dan berkala. 200 = lisensi masih sah (cookie diperpanjang), 401 = dicabut / habis / perangkat dihapus.
-import { COOKIE, DEVICE_COOKIE, SESSION_SEC, clearCookie, getCookie, setCookie, signSession, verifySession } from '../server/session';
-import { licenseOf, licenseOk, rest } from '../server/supabase';
-import { json } from './_issue';
+import { COOKIE, DEVICE_COOKIE, SESSION_SEC, clearCookie, getCookie, setCookie, signSession, verifySession } from '../server/session.js';
+import { licenseOf, licenseOk, rest } from '../server/supabase.js';
+import { json } from './_issue.js';
 
 export async function GET(req: Request): Promise<Response> {
   const s = await verifySession(getCookie(req, COOKIE), process.env.SESSION_SECRET);

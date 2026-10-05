@@ -1,5 +1,5 @@
-import { createUser, deleteUser, hashToken, licenseOf, rest } from '../server/supabase';
-import { issue, json } from './_issue';
+import { createUser, deleteUser, hashToken, licenseOf, rest } from '../server/supabase.js';
+import { issue, json } from './_issue.js';
 
 // Aktivasi token: buat akun lalu KLAIM token secara atomik (PATCH hanya kena baris yang user_id-nya masih kosong),
 // jadi dua orang yang memakai token yang sama bersamaan tidak mungkin sama-sama berhasil.

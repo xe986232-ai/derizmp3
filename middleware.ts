@@ -1,6 +1,6 @@
 // Gerbang versi full (Vercel Routing Middleware). Berjalan SEBELUM file apa pun dikirim:
 // tanpa sesi valid, kode aplikasi tidak pernah sampai ke browser. Hanya halaman login + file kecil PWA yang publik.
-import { COOKIE, getCookie, verifySession } from './server/session';
+import { COOKIE, getCookie, verifySession } from './server/session.js';
 
 export const config = { matcher: '/((?!api/).*)' };   // /api/* dijaga fungsinya sendiri
 

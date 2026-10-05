@@ -1,6 +1,6 @@
 // Dipakai bersama oleh /api/session: pasang slot perangkat lalu terbitkan cookie sesi.
-import { DEVICE_COOKIE, COOKIE, SESSION_SEC, getCookie, setCookie, signSession } from '../server/session';
-import { rest, type License } from '../server/supabase';
+import { DEVICE_COOKIE, COOKIE, SESSION_SEC, getCookie, setCookie, signSession } from '../server/session.js';
+import { rest, type License } from '../server/supabase.js';
 
 export const json = (data: unknown, status = 200, cookies: string[] = []): Response => {
   const h = new Headers({ 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });

@@ -1,9 +1,9 @@
 // POST /api/session  { action: 'login' | 'redeem', email, password, token? }
 //  - redeem: aktivasi pertama. Token (sekali pakai) dikunci ke akun baru. Satu token = satu akun.
 //  - login : masuk lagi dengan email + password (lisensi harus aktif, perangkat dalam batas).
-import { redeemToken } from './_redeem';
-import { issue, json } from './_issue';
-import { licenseOf, licenseOk, passwordLogin } from '../server/supabase';
+import { redeemToken } from './_redeem.js';
+import { issue, json } from './_issue.js';
+import { licenseOf, licenseOk, passwordLogin } from '../server/supabase.js';
 
 export async function POST(req: Request): Promise<Response> {
   let b: { action?: string; email?: string; password?: string; token?: string };
