@@ -1817,6 +1817,15 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mgc__pow{font-size:15px;font-weight:900;letter-spacing:.03em;color:#8c8c8c;white-space:nowrap}
 .mgc__x{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:transparent;color:#8a8a8a}
 .mgc__x:hover{background:rgba(0,0,0,.08);color:#333}
+.mgc__drag{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;transition:background .15s ease,color .15s ease,transform .12s ease}
+.mgc__drag:active{cursor:grabbing;transform:scale(.92)}
+/* seret hasil ke timeline: jendela plugin disembunyikan, hanya ikon biru yang melayang mengikuti jari; track di bawahnya disorot */
+.mgc.is-dragout .mgc__wrap,.mgc.is-dragout .mgc__back{opacity:0;transition:opacity .12s ease}
+.mgc__ghost{position:fixed;left:0;top:0;z-index:240;width:40px;height:40px;display:grid;place-items:center;border-radius:50%;color:#fff;pointer-events:none;will-change:transform;background:#3f6fd8;
+  box-shadow:0 0 0 3px rgba(255,255,255,.35),0 8px 20px rgba(0,0,0,.45);transition:box-shadow .15s ease}
+.mgc__ghost svg{width:18px;height:18px}
+.mgc__ghost.is-hot{box-shadow:0 0 0 3px #fff,0 0 16px rgba(91,143,243,.9),0 8px 20px rgba(0,0,0,.45)}
+.lane.is-over{box-shadow:inset 0 0 0 2px #5b8ff3,inset 0 0 22px rgba(91,143,243,.25)}
 .mgc__kr{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:4px}
 .mgc__cd{position:relative;min-width:0}
 .mgc__cdb{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:30px;padding:0 18px 0 8px;border-radius:3px;background:var(--blue2);color:#fff;font-size:13px;transition:background .12s ease}

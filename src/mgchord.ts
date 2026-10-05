@@ -12,7 +12,12 @@ import {
 } from './mgchord-theory';
 
 // Jembatan ke main.ts: tempo project + kirim nada ke pattern terpilih (mengembalikan pesan kalau gagal, null kalau berhasil)
-export interface MgBridge { bpm(): number; send(notes: { p: number; s: number; l: number; v: number }[], beats: number): string | null }
+export interface MgBridge {
+  bpm(): number;
+  send(notes: { p: number; s: number; l: number; v: number }[], beats: number): string | null;
+  /** Nada dilepas di atas sebuah track (lane) di timeline: bikin pattern baru di bar tempat dilepas. ok=false = tidak ada pattern yang dibuat (msg = alasannya). */
+  drop(notes: { p: number; s: number; l: number; v: number }[], beats: number, lane: HTMLElement, clientX: number): { ok: boolean; msg: string };
+}
 let bridge: MgBridge | null = null;
 export const setMgchordBridge = (b: MgBridge): void => { bridge = b; };
 
@@ -56,6 +61,7 @@ const ICON = {
   undo: svg('<path d="M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3"/>', 14),
   trash: svg('<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13M10 11v6M14 11v6"/>', 14),
   redo: svg('<path d="M15 14l5-5-5-5M20 9H10a6 6 0 000 12h3"/>', 14),
+  drag: svg('<circle cx="9" cy="6" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.7" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.7" fill="currentColor" stroke="none"/>', 16),
   grip: svg('<path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/>', 12),
   move: svg('<path d="M12 3v18M3 12h18M8 7l4-4 4 4M8 17l4 4 4-4M7 8l-4 4 4 4M17 8l4 4-4 4" stroke-width="2"/>', 18),
 };
@@ -104,6 +110,7 @@ function build(): void {
           (PRESETS.length ? `<button type="button" class="mgc__arr" data-a="pprev" aria-label="Preset sebelumnya">${ICON.prev}</button><button type="button" class="mgc__arr" data-a="pnext" aria-label="Preset berikutnya">${ICON.next}</button>` : '') +
         '</div>' +
         '<span class="mgc__pow">Powered by DERIZ</span>' +
+        `<button type="button" class="mgc__x mgc__drag" aria-label="Seret hasil ke track di timeline" title="Tahan lalu seret ke track di timeline: hasil chord jadi pattern baru di bar tempat dilepas">${ICON.drag}</button>` +
         `<button type="button" class="mgc__x" data-a="close" aria-label="Tutup" title="Tutup (Esc)">${ICON.close}</button>` +
       '</header>' +
       '<canvas class="mgc__spec" aria-hidden="true"></canvas>' +
@@ -451,6 +458,50 @@ function build(): void {
   $('.mgc__dnd').addEventListener('dragstart', e => {
     const url = URL.createObjectURL(new Blob([toMidi(notes, bridge ? bridge.bpm() : 120) as BlobPart], { type: 'audio/midi' }));
     e.dataTransfer?.setData('DownloadURL', `audio/midi:${midiFile()}:${url}`); setTimeout(() => URL.revokeObjectURL(url), 60000);
+  });
+  // ---------- seret hasil ke playlist ----------
+  // Tahan ikon grip di kiri tombol X: jendela plugin menghilang, hanya ikon yang melayang mengikuti jari / kursor. Lepas di atas sebuah track di timeline =
+  // hasil progression jadi pattern baru di bar tempat dilepas (lewat bridge.drop di main.ts). Pakai pointer events sendiri karena drag & drop HTML tidak jalan dengan sentuhan.
+  const LIFT = 38;   // di layar sentuh ikon melayang di atas jari supaya tidak tertutup; titik jatuhnya = posisi ikon
+  let dg: { id: number; x0: number; y0: number; touch: boolean; ghost: HTMLElement | null; over: HTMLElement | null } | null = null;
+  const laneAt = (x: number, y: number): HTMLElement | null => {
+    for (const n of document.elementsFromPoint(x, y)) {   // elemen pertama di bawah plugin (jendela yang disembunyikan tetap ikut hit-test, jadi dilewati); garis playhead juga dilewati
+      if (n.closest('.mgc') || n.classList.contains('playhead')) continue;
+      return n.closest<HTMLElement>('.lane');
+    }
+    return null;
+  };
+  const dgPoint = (e: PointerEvent): { x: number; y: number } => ({ x: e.clientX, y: e.clientY - (dg?.touch ? LIFT : 0) });
+  function dgMove(e: PointerEvent): void {
+    if (!dg || e.pointerId !== dg.id) return;
+    if (!dg.ghost) {
+      if (Math.hypot(e.clientX - dg.x0, e.clientY - dg.y0) < 8) return;   // di bawah 8 px = ketukan biasa, jendela belum disembunyikan
+      stopPlay(); closePop();
+      const gh = document.createElement('div'); gh.className = 'mgc__ghost'; gh.innerHTML = ICON.drag; document.body.appendChild(gh);
+      dg.ghost = gh; el.classList.add('is-dragout');
+    }
+    e.preventDefault();
+    const p = dgPoint(e); dg.ghost.style.transform = `translate(${p.x - 20}px,${p.y - 20}px)`;
+    const l = laneAt(p.x, p.y);
+    if (l !== dg.over) { dg.over?.classList.remove('is-over'); l?.classList.add('is-over'); dg.over = l; dg.ghost.classList.toggle('is-hot', !!l); }
+  }
+  function dgEnd(e: PointerEvent): void {
+    if (!dg || e.pointerId !== dg.id) return;
+    const d = dg; dg = null;
+    window.removeEventListener('pointermove', dgMove); window.removeEventListener('pointerup', dgEnd); window.removeEventListener('pointercancel', dgEnd);
+    if (!d.ghost) { toastMsg('Tahan lalu seret ke track di timeline'); return; }   // ketukan tanpa geser
+    d.over?.classList.remove('is-over'); d.ghost.remove(); el.classList.remove('is-dragout');
+    const p = { x: e.clientX, y: e.clientY - (d.touch ? LIFT : 0) }, lane = e.type === 'pointerup' ? laneAt(p.x, p.y) : null;
+    if (!lane) { toastMsg('Lepas di atas sebuah track di timeline'); return; }   // jatuh di tempat lain: jendela kembali
+    const r = bridge ? bridge.drop(notes.map(n => ({ p: n.p, s: n.s, l: n.l, v: n.v })), span(), lane, p.x) : { ok: false, msg: 'Plugin belum tersambung ke timeline' };
+    if (r.ok) close(); else toastMsg(r.msg);   // pattern sudah terpasang: plugin ditutup supaya hasilnya kelihatan (pesan sukses ditampilkan timeline)
+  }
+  $('.mgc__drag').addEventListener('pointerdown', e => {
+    if (dg) return;
+    e.preventDefault();
+    if (!notes.length) { toastMsg('Belum ada chord — klik tuts keyboard di kanan'); return; }
+    dg = { id: e.pointerId, x0: e.clientX, y0: e.clientY, touch: e.pointerType !== 'mouse', ghost: null, over: null };
+    window.addEventListener('pointermove', dgMove, { passive: false }); window.addEventListener('pointerup', dgEnd); window.addEventListener('pointercancel', dgEnd);
   });
   // keyboard C5..C6: tekan = bunyi (lewat bus preview, jadi ikut tampil di waveform)
   const kbd = $('.mgc__kb');

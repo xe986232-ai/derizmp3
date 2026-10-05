@@ -1297,6 +1297,30 @@ setMgchordBridge({
     if (fit < beats - 1e-6) return 'Terkirim, tapi pattern kurang panjang (' + Math.floor(fit / 4) + ' bar). Panjangkan pattern untuk sisanya';
     if (!hasSynth(lt) && !fxRack.derizIds(lt).length) return 'Terkirim ke pattern, tapi track ini belum punya instrumen (pakai track Supersaw)';
     return null;
+  },
+  // nada dilepas di atas sebuah track: pattern baru dibuat di bar tempat dilepas (bagian kosong), panjangnya mengikuti progression selama muat
+  drop(notes, beats, lane, cx) {
+    if (!lane || !lane.isConnected) return {ok: false, msg: 'Lepas di atas sebuah track di timeline'};
+    const lt = lane.dataset.track, cont = document.querySelector('.trackheader-container[data-track="' + lt + '"]');
+    if (!cont || cont.dataset.ins === 'Audio clip' || cont.dataset.ins === 'Automation' || lane.dataset.auTarget) return {ok: false, msg: 'Track ini bukan track nada. Lepas di track instrumen'};
+    const x = cx - lane.getBoundingClientRect().left, pats = [...lane.querySelectorAll('.pattern')];
+    if (pats.some(p => pl(p) <= x && x < pl(p) + pw(p))) return {ok: false, msg: 'Lepas di bagian kosong track, bukan di atas pattern lain'};
+    let start = Math.floor(Math.max(0, x) / BAR_W) * BAR_W;
+    for (const p of pats) if (pl(p) + pw(p) > start && pl(p) <= x) start = pl(p) + pw(p);
+    let end = Math.min(start + beats / 4 * BAR_W, W);
+    for (const p of pats) if (pl(p) >= start && pl(p) < end) end = pl(p);   // jangan menabrak pattern berikutnya
+    if (end - start < BAR_W / 2) return {ok: false, msg: 'Tidak ada ruang kosong di sini. Coba lepas di bar lain'};
+    const el = createPattern(lane, {start, width: end - start});
+    el.dataset.prId = 'pat' + (++prSeq);
+    const fit = (end - start) / BAR_W * 4;
+    setPianoRollNotes(editKey(el), notes.filter(n => n.s < fit - 1e-6).map(n => ({p: Math.max(24, Math.min(108, n.p)), s: n.s, l: Math.min(n.l, fit - n.s), ...(n.v < 1 ? {v: Math.round(n.v * 1000) / 1000} : {})})));
+    renderPatNotes(el); patBarPlace(); selectPattern(el);
+    el.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'smooth'});
+    let msg = 'Chord ditambahkan ke ' + document.getElementById('track-name-' + lt).textContent;
+    if (fit < beats - 1e-6) msg += ' (pattern ' + Math.floor(fit / 4) + ' bar, panjangkan untuk sisanya)';
+    else if (!hasSynth(lt) && !fxRack.derizIds(lt).length) msg += ' (track ini belum punya instrumen)';
+    toast(msg);
+    return {ok: true, msg};
   }
 });
 // ===== Menu "Tambahkan track" =====
