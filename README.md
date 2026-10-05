@@ -3,7 +3,7 @@
 Hasil porting `web-daw.html` ke Vite + TypeScript (tahap 1, tanpa perubahan tampilan/perilaku).
 
 ## Jalankan
-```
+```x
 npm install
 npm run dev        # development
 npm run build      # typecheck + build ke dist/
