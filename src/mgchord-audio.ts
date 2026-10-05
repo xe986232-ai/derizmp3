@@ -42,7 +42,7 @@ function sampleTone(c: BaseAudioContext, dest: AudioNode, bank: Map<number, Audi
   src.start(when); src.stop(end + rel * 7 + 0.05);
   src.onended = () => { src.disconnect(); lp.disconnect(); g.disconnect(); };
 }
-const SAMPLE_GAIN = 0.8;   // level sample asli sebelum master: disamakan dengan synth cadangan (progression ~ -21 dBFS RMS) supaya tidak melompat saat sample selesai dimuat (dikalibrasi lewat tools/mgchord-audio-test.ts)
+const SAMPLE_GAIN = 0.8;   // level sample asli sebelum master: disamakan dengan synth cadangan supaya tidak melompat saat sample selesai dimuat (dikalibrasi lewat tools/mgchord-audio-test.ts)
 
 /** Bunyikan satu nada piano ke `dest`. midi = nomor nada, when = waktu mulai (detik AudioContext), dur = lama tuts ditahan (detik), vel = 0..1. Pakai sample kalau sudah termuat, kalau belum synth cadangan. */
 export function pianoTone(c: BaseAudioContext, dest: AudioNode, midi: number, when: number, dur: number, vel: number): void {
@@ -103,15 +103,15 @@ export interface Master { input: GainNode; tap: AudioNode }
 
 /** Rantai mixing preview: sambungkan semua suara ke `input`; `tap` (setelah soft-clip) cocok untuk analyser waveform. */
 export function createMaster(c: BaseAudioContext, dest: AudioNode = c.destination): Master {
-  const input = c.createGain(); input.gain.value = 1.7;   // gain masuk: progression nyaman di sekitar -21 dBFS RMS, akor 7 nada velocity penuh tetap terkendali (diukur lewat tools/mgchord-audio-test.ts)
+  const input = c.createGain(); input.gain.value = 5;   // gain masuk + compressor kuat + limiter: progression ~ -14 dBFS RMS (volume musik biasa), akor 7 nada velocity penuh tetap tidak pecah (diukur lewat tools/mgchord-audio-test.ts)
   const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 38; hp.Q.value = 0.7;                                // buang gemuruh di bawah piano
   const mud = c.createBiquadFilter(); mud.type = 'peaking'; mud.frequency.value = 300; mud.Q.value = 1; mud.gain.value = -1.5;       // kurangi gumam akor
   const pres = c.createBiquadFilter(); pres.type = 'peaking'; pres.frequency.value = 3200; pres.Q.value = 0.8; pres.gain.value = 0.8;  // presence: jelas di speaker kecil
   const air = c.createBiquadFilter(); air.type = 'highshelf'; air.frequency.value = 9000; air.gain.value = 1;                          // udara
   const comp = c.createDynamicsCompressor();                                                                                           // perekat: puncak nada keras dirapikan
-  comp.threshold.value = -22; comp.knee.value = 20; comp.ratio.value = 3.5; comp.attack.value = 0.01; comp.release.value = 0.25;
+  comp.threshold.value = -28; comp.knee.value = 20; comp.ratio.value = 5; comp.attack.value = 0.01; comp.release.value = 0.25;
   const lim = c.createDynamicsCompressor();                                                                                            // limiter
-  lim.threshold.value = -4; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.06;
+  lim.threshold.value = -6; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.06;
   const clip = c.createWaveShaper(), curve = new Float32Array(2049);                                                                   // soft-clip pengaman: lurus sampai 0.7, lalu melengkung, tidak pernah lewat ~0.98
   for (let i = 0; i < curve.length; i++) { const x = (i / 1024) - 1, a = Math.abs(x); curve[i] = Math.sign(x) * (a <= 0.7 ? a : 0.7 + 0.28 * Math.tanh((a - 0.7) / 0.28)); }
   clip.curve = curve; clip.oversample = '2x';

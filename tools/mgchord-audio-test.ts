@@ -36,8 +36,8 @@ check('semua sample piano asli termuat', loaded === PIANO_FILES.size, `${loaded}
 console.log(`progression Cm-Ab-Eb-Bb: peak ${db(sa.peak).toFixed(1)} dBFS, rms ${db(sa.rms).toFixed(1)} dBFS`);
 check('progression: tidak ada NaN', !sa.nan);
 check('progression: tidak pecah (peak < 0.99)', sa.peak < 0.99);
-check('progression: tidak terlalu pelan (rms > -25 dBFS)', db(sa.rms) > -25);
-check('progression: tidak terlalu keras (rms < -16 dBFS)', db(sa.rms) < -16);
+check('progression: cukup keras (rms > -16 dBFS)', db(sa.rms) > -16);
+check('progression: tidak berlebihan (rms < -11 dBFS)', db(sa.rms) < -11);
 
 const full = [48, 52, 55, 60, 64, 67, 72].map(p => ({ p, s: 0, l: 4, v: 1 }));   // 7 nada sekaligus, velocity penuh = kasus terburuk
 const b = await render(full, 100, 6), sb = stats(b);
