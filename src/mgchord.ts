@@ -7,7 +7,7 @@
 import { createMaster, loadPiano, voiceTone, VOICES, type Voice } from './mgchord-audio';
 import {
   NOTE_NAMES, PRESETS, SCALES, STYLES, STYLE_INFO,
-  buildNotes, chordAt, defaultVoicing, slotChord, triadAt, midiName, randomProgression, slotsOf, toMidi, totalBeats, voice,
+  buildNotes, chordAt, defaultVoicing, slotChord, midiName, randomProgression, slotsOf, toMidi, totalBeats, voice,
   type OutNote, type PlayStyle, type Rhythm, type Settings, type Slot, type Voicing,
 } from './mgchord-theory';
 
@@ -506,13 +506,13 @@ function build(): void {
   // keyboard C5..C6: tekan = bunyi (lewat bus preview, jadi ikut tampil di waveform)
   const kbd = $('.mgc__kb');
   const playNote = (p: number): void => { const c = ac(), bb = c.createGain(); bb.connect(out!); tone(c, bb, p, c.currentTime + 0.01, 0.9, 0.8); setTimeout(() => bb.disconnect(), 2200); };
-  const playKey = (k: HTMLElement): void => {   // klik tuts = tambah chord 3 batang (mayor / minor sesuai dropdown Chord) di nada itu, ke ujung progression, lalu bunyikan
+  const playKey = (k: HTMLElement): void => {   // klik tuts = tambah chord 3 batang (mayor / minor sesuai dropdown Chord) di nada itu, ke ujung progression; bunyinya hanya SATU nada (tuts yang ditekan), bukan pola style, supaya tidak bertabrakan dengan preview
     const pc = mod(+k.dataset.p!, 12), q = quality(), left = S.bars * 4 - totalBeats(S.slots);
+    playNote(+k.dataset.p!);
     if (left <= 0) {
-      const c = ac(), bb = c.createGain(); bb.connect(out!); voice(triadAt(pc, q), S.vc).forEach(n => tone(c, bb, n.p, c.currentTime + 0.01, 1.1, n.v)); setTimeout(() => bb.disconnect(), 2500);
       toastMsg(`Progression penuh (${S.bars} bar) — pilih 8 bars atau hapus chord`); return;
     }
-    S.slots.push({ deg: 0, beats: Math.min(4, left), root: pc, q }); S.sel = S.slots.length - 1; S.preset = -1; changed(); playChord(S.sel);
+    S.slots.push({ deg: 0, beats: Math.min(4, left), root: pc, q }); S.sel = S.slots.length - 1; S.preset = -1; changed();
   };
   const releaseKeys = (): void => keyEls.forEach(k => k.classList.remove('pressed'));
   kbd.addEventListener('pointerdown', e => { const k = (e.target as HTMLElement).closest<HTMLElement>('[data-p]'); if (!k) return; k.classList.add('pressed'); playKey(k); e.preventDefault(); });
