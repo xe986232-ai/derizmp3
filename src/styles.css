@@ -1804,7 +1804,7 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mgc__win button:focus-visible,.mgc__win select:focus-visible,.mgc__ch:focus-visible,.mgc__h:focus-visible,.mgc__dnd:focus-visible,.mgc__pn:focus-within{outline:2px solid #fff;outline-offset:2px}
 /* header terang: logo kiri, nama progression + SAVE di tengah, WEB DAW kanan */
 .mgc__head{display:flex;align-items:center;gap:14px;flex:none;height:56px;padding:0 16px;background:#f4f6fb;color:#a3aec8}
-.mgc__logo{display:flex;align-items:center;gap:8px;font-size:30px;font-weight:900;letter-spacing:.01em;color:var(--blue3);white-space:nowrap}
+.mgc__logo{display:flex;align-items:center;gap:6px;font-size:28px;font-weight:900;letter-spacing:.01em;color:var(--blue3);-webkit-text-stroke:1.5px #2c55b4;paint-order:stroke fill;text-shadow:0 2px 0 #2c55b4;white-space:nowrap}
 .mgc__prog{display:flex;align-items:center;gap:8px;margin:0 auto;font-size:15px}
 .mgc__pn{position:relative;display:flex;align-items:center;justify-content:center;flex:0 1 230px;min-width:0;height:30px;padding:0 12px;border-radius:3px;background:#e6eaf4;color:#8090b0;font-weight:700;text-transform:none}
 .mgc__pn select{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
@@ -1924,19 +1924,20 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 @media (max-height:560px) and (orientation:landscape){
   .mgc{padding:max(4px,env(safe-area-inset-top)) max(6px,env(safe-area-inset-right)) max(4px,env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left));grid-template-rows:minmax(0,1fr)}
   .mgc__wrap{flex-direction:row;height:min(100%,336px);gap:4px}
-  .mgc__win{flex:1 1 0;max-width:640px;height:100%;overflow:hidden;font-size:10px;border-radius:8px}
-  .mgc__head{height:28px;padding:0 8px;gap:6px}.mgc__logo{font-size:14px;gap:4px}.mgc__logo svg{width:22px;height:13px}
-  .mgc__pn{flex-basis:110px;height:20px;padding:0 8px;font-size:10px}.mgc__save{height:20px;padding:0 8px;font-size:10px}.mgc__pow{display:none}.mgc__x{width:20px;height:20px}
+  .mgc__win{flex:1 1 0;max-width:480px;height:100%;overflow:hidden;font-size:8px;border-radius:8px}
+  .mgc__head{height:28px;padding:0 8px;gap:6px}.mgc__logo{font-size:13px;gap:4px;-webkit-text-stroke-width:1px;text-shadow:0 1px 0 #2c55b4}.mgc__logo svg{width:20px;height:12px}
+  .mgc__pn{flex-basis:96px;height:18px;padding:0 6px;font-size:8px}.mgc__save{height:18px;padding:0 7px;font-size:8px}.mgc__pow{display:none}.mgc__x{width:20px;height:20px}
   .mgc__body{padding:4px 8px 6px}
-  .mgc__ctrl{flex-wrap:nowrap;gap:4px}.mgc__cdb,.mgc__sg,.mgc__bars{height:22px;font-size:10px;border-radius:3px}.mgc__sg button{font-size:10px}.mgc__cdb{padding:0 14px 0 4px}.mgc__cdb::after{right:5px;width:5px;height:5px;border-width:0 1.5px 1.5px 0}
+  .mgc__ctrl{flex-wrap:nowrap;gap:4px}.mgc__cdb,.mgc__sg,.mgc__bars{height:22px;font-size:8px;font-weight:700;border-radius:3px}.mgc__sg button{font-size:8px;font-weight:700}.mgc__cdb{padding:0 14px 0 4px}.mgc__cdb::after{right:5px;width:5px;height:5px;border-width:0 1.5px 1.5px 0}
   .mgc__ur{order:0;gap:3px}.mgc__ur button{width:22px;height:22px}.mgc__ur svg{width:11px;height:11px}.mgc__big{order:0;margin-left:0;width:34px;height:26px;border-radius:7px}.mgc__big svg{width:18px;height:18px}
   .mgc__spec{height:34px;margin-top:4px;border-radius:4px}.mgc__ruler{height:12px;margin-top:3px}.mgc__marks{font-size:9px}.mgc__marks i{border-left-width:1px;padding-left:3px}
   .mgc__lane{height:20px;margin:1px 0 3px;gap:2px}.mgc__ch{font-size:12px;border-radius:4px}.mgc__h{width:12px;height:12px;margin-top:-6px}.mgc__h svg{width:8px;height:8px}
   .mgc__roll{height:auto;flex:1 1 0;min-height:0;border-radius:5px}
-  .mgc__foot{margin-top:5px;gap:8px}.mgc__go,.mgc__drag,.mgc__dl{width:30px;height:30px}.mgc__go svg,.mgc__drag svg,.mgc__dl svg{width:15px;height:15px}.mgc__dnd{font-size:9px;margin-left:0}.mgc__bpm{display:block;font-size:9px}
-  .mgc__kbd{width:84px;height:auto;border-radius:8px}.mgc__kbt{padding:5px 5px 0}.mgc__kbt .mgc__cdb{height:20px;padding:0 11px 0 3px;font-size:9px}.mgc__cd[data-dd="range"] .mgc__cdb span::before{content:none}.mgc__kbt .mgc__cdb::after{right:4px}
+  .mgc__foot{margin-top:5px;gap:8px}.mgc__go,.mgc__drag,.mgc__dl{width:30px;height:30px}.mgc__go svg,.mgc__drag svg,.mgc__dl svg{width:15px;height:15px}.mgc__dnd{font-size:8px;margin-left:0}.mgc__bpm{display:block;font-size:8px}
+  .mgc__kbd{width:96px;height:auto;border-radius:8px}.mgc__kbt{padding:5px 5px 0}.mgc__kbt .mgc__cdb{height:20px;padding:0 11px 0 3px;font-size:8px;font-weight:700}.mgc__cd[data-dd="range"] .mgc__cdb span::before{content:none}.mgc__kbt .mgc__cdb::after{right:4px}
   .mgc__kb{min-height:0;margin:6px}.mgc__wk span,.mgc__bk span{font-size:8px}.mgc__wk span{right:5px}.mgc__bk span{right:3px}
   .mgc__toast{bottom:36px}
+  .mgc__pop{font-size:8px;padding:3px}.mgc__po{min-height:20px;padding:0 8px}
 }
 @media (prefers-reduced-motion:reduce){.mgc__pop{animation:none}.mgc__toast{animation:none}.mgc__big,.mgc__go,.mgc__drag{transition:none}}
 .fxc--mgchord{padding:12px 14px 12px 16px;background-image:linear-gradient(90deg,rgba(91,143,243,.28),transparent 60%)}

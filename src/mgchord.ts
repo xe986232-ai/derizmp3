@@ -108,7 +108,7 @@ function build(): void {
     '<div class="mgc__wrap">' +
     '<div class="mgc__win" role="dialog" aria-modal="true" aria-label="MGCHORD" tabindex="-1">' +
       '<header class="mgc__head">' +
-        `<span class="mgc__logo">${LAMP}MGCHORD</span>` +
+        `<span class="mgc__logo">MGCHORD${LAMP}</span>` +
         '<div class="mgc__prog">' +
           (PRESETS.length ? `<label class="mgc__pn"><span class="mgc__pname"></span><select data-k="preset" aria-label="Pilih progression">${presetOpts}</select></label>` : '<div class="mgc__pn mgc__pn--none"><span class="mgc__pname"></span></div>') +
           '<button type="button" class="mgc__save" data-a="save" title="Kirim nada ke pattern yang dipilih di timeline">Save</button>' +
