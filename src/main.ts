@@ -2138,7 +2138,7 @@ async function projectRestore(rec) {
   toStart(); syncWaves(); metroUI && metroUI.sync && metroUI.sync();
   undoStack = []; redoStack = []; histCur = histCapture(); histSync();
 }
-setProjectIO({snapshot: projectSnapshot, restore: projectRestore, toast});
+if (!DEMO) setProjectIO({snapshot: projectSnapshot, restore: projectRestore, toast});   // DEMO: tidak dipasang, jadi projectSnapshot / projectRestore tidak ikut di bundel demo
 
 // ===== Export audio: merekam keluaran master selama project diputar dari bar 1 (lihat export-audio.ts) =====
 const contentEndBar = () => {   // ujung kanan clip / pattern paling akhir di timeline, dalam bar

@@ -137,7 +137,7 @@ Kode: `src/mgchord-theory.ts` (teori murni: skala, chord, voicing, progression, 
 Tes: `node tools/mgchord-test.ts` (nama chord vs referensi, voicing, invert, strum / arp, panjang progression, header MIDI). Tes suara + mixing: `npm i --no-save node-web-audio-api && node tools/mgchord-audio-test.ts [hasil.wav]` (render offline dengan sample asli: 21 sample termuat, pitch tepat, peak / RMS, kasus terburuk, synth cadangan, ekor; opsional simpan WAV untuk didengar).
 
 ## Versi DEMO
-Satu kode, dua build. Build demo membuang kode fitur berbayar dari bundelnya (bukan sekadar disembunyikan).
+Satu kode, dua build. Fitur versi penuh benar-benar tidak ada di bundel demo (bukan sekadar disembunyikan), dan itu diperiksa lewat isi `dist-demo/`.
 ```
 npm run build        # versi penuh -> dist/
 npm run build:demo   # versi demo  -> dist-demo/ (pasang di alamat terpisah)
@@ -145,5 +145,19 @@ npm run build:demo   # versi demo  -> dist-demo/ (pasang di alamat terpisah)
 Batas demo ada di satu tempat: `src/demo.ts` (`LIMITS`, `CONTACT_URL`). Ringkas: 4 track (maks 2 DERIZ), timeline 32 bar, audio 30 detik,
 export audio / download MPCS / drag hasil MPCS diberi bunyi penanda "DEMO" (export juga maks 30 detik), tanpa simpan / buka project,
 tanpa Automation Clip, tanpa panel Debug Audio, MGCHORD: 4 bar, 3 style, suara Piano, MIDI 2 chord.
+Judul tab, nama PWA, dan nama di layar utama iOS bertanda "Demo" (`demoBranding` di `vite.config.ts`).
 Isi `CONTACT_URL` (mis. link WhatsApp) supaya tombol "Hubungi untuk versi penuh" muncul. Event analitik (`locked_click`, `demo_open`, dst.)
 dikirim ke Plausible bila skripnya dipasang di `index.html`; kalau tidak, tidak terjadi apa-apa.
+
+### Cara fitur penuh dibuang dari bundel demo
+- **Modul sendiri diganti stub** (plugin `demoStubs` di `vite.config.ts`, hanya mode demo): `automation`, `audio-debug`, `project-store` diganti file berisi nama ekspor yang sama tapi kosong di `src/demo-stubs/`. Kode asli (kurva + editor Automation, panel Debug Audio, IndexedDB project) tidak masuk ke `dist-demo`. Fitur penuh-saja baru yang berupa modul sendiri: buat stub di `src/demo-stubs/` lalu tambahkan namanya ke `DEMO_STUBBED`.
+- **Percabangan konstanta** untuk yang menyatu dengan modul lain: `setProjectIO` tidak dipasang di demo (`main.ts`), pola 9 style MGCHORD berbayar dan synth Pad / Pluck hanya ada kalau `__DEMO__` false (`mgchord-theory.ts`, `mgchord-audio.ts`). Dua file itu tetap bebas import supaya bisa dites di Node; `__DEMO__` tidak ada di Node, jadi tes selalu menguji versi penuh.
+- Yang masih ikut di demo: nama style / suara terkunci (tampil dengan 🔒 sebagai pancingan), tombol "Create Automation Clip" (menampilkan pemberitahuan), dan CSS fitur-fitur itu. Hanya logikanya yang dibuang.
+
+Cek cepat setelah mengubah fitur demo: `npm run build && npm run build:demo`, lalu cari string khas fitur di `dist-demo/assets/*.js` (mis. `autoov__win`, `DEBUG AUDIO`, `createObjectStore`); semuanya harus 0 di demo dan ada di `dist/`.
+
+### Pasang demo (alamat terpisah)
+Demo dan versi penuh sebaiknya dua project hosting terpisah dengan alamat berbeda (service worker dan cache PWA terikat ke alamat).
+- **Vercel:** buat project baru dari repo ini, lalu Build Command `npm run build:demo`, Output Directory `dist-demo`. Atau lewat CLI: `vercel deploy --prod --local-config vercel.demo.json` (berisi pengaturan yang sama + header cache: `sw.js` tidak di-cache, `assets/*` immutable).
+- **Netlify / Cloudflare Pages / lainnya:** Build `npm run build:demo`, publish `dist-demo`. Pastikan `sw.js` tidak di-cache lama, supaya versi baru cepat sampai ke pengguna.
+- Aplikasi dilayani dari akar domain (`/manifest.webmanifest`, `/icons/...`), jadi pasang di domain / subdomain sendiri, bukan di subfolder.

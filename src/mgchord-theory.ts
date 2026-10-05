@@ -159,9 +159,14 @@ const H = 4;   // ditahan sampai akhir bar
 const P = (rows: [number, number, number, number][]): Ev[] => rows.map(([at, i, len, v]) => ({ at, i, len, v }));   // [at, i, len, v]
 const stack = (at: number, idx: number[], len: number, v: number[]): [number, number, number, number][] => idx.map((i, k) => [at, i, len, v[k]]);
 const T3 = [3, 5, 6, 7, 6, 5, 3, 5, 6, 7, 6, 5, 4, 5, 6, 8, 6, 5];
-export const PATTERNS: Partial<Record<PlayStyle, Ev[]>> = {
+// Build demo: hanya Block / Stab / Pluck yang punya pola (samakan dengan LIMITS.mgcStyles di demo.ts). Pola style lain TIDAK ikut di bundel demo
+// (`DEMO ? {} : {...}` dilipat bundler jadi `{}`). Di build penuh dan di Node (tes) __DEMO__ tidak ada / false, jadi semua pola ada.
+const DEMO = typeof __DEMO__ !== 'undefined' && __DEMO__;
+const PATTERNS_OPEN: Partial<Record<PlayStyle, Ev[]>> = {
   Stab: P([0.5, 1.5, 2.5, 3.5].flatMap(at => stack(at, [3, 4, 5], 0.25, [0.8, 0.8, 0.8]))),   // contoh MIDI: C minor = C4 D#4 G4 dipukul serentak di offbeat, 1/16, velocity ~0.8
   Pluck: P([[0, 3, H, 0.8], [0.5, 5, H, 0.5], [1, 6, H, 0.72], [1.5, 7, H, 0.36], [3, 6, H, 0.46]]),
+};
+const PATTERNS_FULL: Partial<Record<PlayStyle, Ev[]>> = DEMO ? {} : {
   'Pad Run': P([[0, 3, H, 0.5], [0, 7, 2.25, 0.2], [0.5, 5, H, 0.55], [0.5, 6, H, 0.45], [2, 5, H, 0.68], [2.5, 7, H, 0.8], [3, 8, H, 0.5], [3.5, 7, H, 0.4]]),
   Turun: P([[0, 7, H, 0.7], [0.5, 6, H, 0.55], [1, 5, H, 0.65], [1.5, 4, H, 0.4], [3, 3, H, 0.55]]),
   Tangga: P([[0, 3, H, 0.7], [0.5, 4, H, 0.4], [1, 5, H, 0.55], [1.5, 6, H, 0.35], [2, 7, H, 0.65], [2.5, 8, H, 0.4], [3, 6, H, 0.5]]),
@@ -172,6 +177,7 @@ export const PATTERNS: Partial<Record<PlayStyle, Ev[]>> = {
   Bell: P([[0, 3, H, 0.6], [0.5, 6, 0.5, 0.45], [1.5, 7, 0.5, 0.55], [2.5, 6, 0.5, 0.5], [3.5, 8, 0.5, 0.6]]),
   Roll: P([[0, 3, 0.25, 0.5], [0.25, 5, 0.25, 0.4], [0.5, 6, 0.25, 0.5], [0.75, 7, 0.25, 0.6], [1, 8, 1, 0.75], [2, 3, 0.25, 0.5], [2.25, 5, 0.25, 0.4], [2.5, 6, 0.25, 0.5], [2.75, 7, 0.25, 0.6], [3, 8, 1, 0.7]]),
 };
+export const PATTERNS: Partial<Record<PlayStyle, Ev[]>> = { ...PATTERNS_OPEN, ...PATTERNS_FULL };
 const lim = (p: number): number => Math.max(12, Math.min(120, p)), vlim = (v: number): number => Math.max(0.05, Math.min(1, v));
 
 // Humanize bawaan (semua style, supaya strum / petikan terasa natural): velocity tiap nada sedikit berbeda (+-HUMAN_VEL, acak TETAP berdasarkan posisi + nada,

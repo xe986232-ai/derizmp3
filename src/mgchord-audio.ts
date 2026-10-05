@@ -101,6 +101,7 @@ function synthTone(c: BaseAudioContext, dest: AudioNode, midi: number, when: num
 }
 
 // ---------- synth (dua pilihan suara selain piano) ----------
+const DEMO = typeof __DEMO__ !== 'undefined' && __DEMO__;   // true hanya di build demo; tanpa import supaya modul ini tetap bisa dites di Node
 export type Voice = 'piano' | 'pad' | 'pluck';
 export const VOICES: { id: Voice; label: string }[] = [{ id: 'piano', label: 'Piano' }, { id: 'pad', label: 'Pad' }, { id: 'pluck', label: 'Pluck' }];
 
@@ -151,8 +152,9 @@ const PAD_GAIN = 0.095, PLUCK_GAIN = 0.14;   // level synth disamakan dengan pia
 
 /** Bunyikan satu nada dengan suara pilihan (piano / pad / pluck). Parameter sama dengan pianoTone. */
 export function voiceTone(c: BaseAudioContext, dest: AudioNode, voice: Voice, midi: number, when: number, dur: number, vel: number): void {
-  if (voice === 'pad') padTone(c, dest, midi, when, dur, vel);
-  else if (voice === 'pluck') pluckTone(c, dest, midi, when, dur, vel);
+  // Build demo: hanya piano. padTone / pluckTone tidak lagi dirujuk, jadi tidak ikut di bundel demo (di Node / build penuh __DEMO__ = false).
+  if (!DEMO && voice === 'pad') padTone(c, dest, midi, when, dur, vel);
+  else if (!DEMO && voice === 'pluck') pluckTone(c, dest, midi, when, dur, vel);
   else pianoTone(c, dest, midi, when, dur, vel);
 }
 
