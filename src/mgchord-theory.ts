@@ -128,67 +128,57 @@ export function randomProgression(totalBeats: number, rnd: () => number = Math.r
   return out;
 }
 
-// ---------- gaya main (style): 10 susunan nada ----------
-// Block / Strum / Arp Up / Arp Down / Arp Ping punya logika sendiri di buildNotes; sisanya (Genjreng, Alberti, Oom-Pah, Charleston, Reggae)
-// ditulis sebagai TABEL pola satu bar (4 ketukan) di PATTERNS di bawah, jadi gampang diubah / ditambah tanpa menyentuh kode lain.
-export type PlayStyle = 'Block' | 'Strum' | 'Genjreng' | 'Arp Up' | 'Arp Down' | 'Arp Ping' | 'Alberti' | 'Oom-Pah' | 'Charleston' | 'Reggae';
-export const STYLES: PlayStyle[] = ['Block', 'Strum', 'Genjreng', 'Arp Up', 'Arp Down', 'Arp Ping', 'Alberti', 'Oom-Pah', 'Charleston', 'Reggae'];
+// ---------- gaya main (style): susunan nada per bar ----------
+// Block = semua nada chord bunyi bersamaan. Style lain = TABEL pola satu bar (4 ketukan) di PATTERNS di bawah, diulang tiap bar selama chord berjalan.
+// Pola diambil dari contoh MIDI "Indian Beat": nada dipetik jarang + sinkop (ketukan 0, 0.5, 1, 1.5, 3), tersebar di dua oktaf, ditahan sampai akhir bar, velocity naik turun.
+export type PlayStyle = 'Block' | 'Pluck' | 'Pad Run' | 'Turun' | 'Tangga' | 'Tresillo' | 'Dholak' | 'Tisra' | 'Pad Pluck' | 'Bell' | 'Roll';
+export const STYLES: PlayStyle[] = ['Block', 'Pluck', 'Pad Run', 'Turun', 'Tangga', 'Tresillo', 'Dholak', 'Tisra', 'Pad Pluck', 'Bell', 'Roll'];
 export const STYLE_INFO: Record<PlayStyle, { label: string; desc: string }> = {
-  Block: { label: 'Block', desc: 'Semua nada chord bunyi bersamaan dan ditahan sepanjang chord' },
-  Strum: { label: 'Strum', desc: 'Satu sapuan gitar pelan dari nada bawah ke atas, ditahan (cocok untuk balada)' },
-  Genjreng: { label: 'Genjreng', desc: 'Genjrengan gitar bawah-bawah-atas-atas-bawah-atas (D DU UDU) dalam tiap bar' },
-  'Arp Up': { label: 'Arp Up', desc: 'Nada dipetik satu-satu dari bawah ke atas (1/8, diulang)' },
-  'Arp Down': { label: 'Arp Down', desc: 'Nada dipetik satu-satu dari atas ke bawah (1/8, diulang)' },
-  'Arp Ping': { label: 'Arp Ping', desc: 'Naik sampai oktaf lalu turun lagi, bolak-balik' },
-  Alberti: { label: 'Alberti', desc: 'Pola piano klasik bawah-atas-tengah-atas (fingerpicking 1/8)' },
-  'Oom-Pah': { label: 'Oom-Pah', desc: 'Bass akar, chord, bass kuint, chord (gaya country / polka)' },
-  Charleston: { label: 'Charleston', desc: 'Chord sinkopasi: ketukan 1, "dan" ketukan 2, ketukan 3, "dan" ketukan 4' },
-  Reggae: { label: 'Reggae', desc: 'Chord pendek di tiap offbeat (skank) dengan bass akar di ketukan 1 dan 3' },
+  Block: { label: 'Block', desc: 'Polos: semua nada chord bunyi bersamaan dan ditahan sepanjang chord' },
+  Pluck: { label: 'Pluck', desc: 'Pola contoh Indian Beat: akar, kuint, oktaf, terts atas, oktaf (ketukan 0, 0.5, 1, 1.5, 3), ditahan sampai akhir bar' },
+  'Pad Run': { label: 'Pad Run', desc: 'Pola contoh Indian Beat bagian 2: akar + kuint ditahan, lalu lari nada naik-turun di dua ketukan terakhir' },
+  Turun: { label: 'Turun', desc: 'Kebalikan Pluck: mulai dari nada tinggi, turun ke akar, ditahan sampai akhir bar' },
+  Tangga: { label: 'Tangga', desc: 'Nada naik bertahap (1/8) dan menumpuk ditahan, seperti tangga' },
+  Tresillo: { label: 'Tresillo', desc: 'Tiga pukulan chord utuh sinkopasi 3 + 3 + 2 (ketukan 0, 1.5, 3)' },
+  Dholak: { label: 'Dholak', desc: 'Petikan pendek sinkopasi ala ketukan dholak, enam pukulan per bar' },
+  Tisra: { label: 'Tisra', desc: 'Petikan triplet (tiga per ketukan) naik-turun, aksen di tiap ketukan' },
+  'Pad Pluck': { label: 'Pad Pluck', desc: 'Akar + kuint ditahan sebagai pad, petikan tinggi pendek masuk di paruh kedua bar' },
+  Bell: { label: 'Bell', desc: 'Akar ditahan, petikan tinggi pendek seperti lonceng di tiap offbeat' },
+  Roll: { label: 'Roll', desc: 'Roll cepat 1/16 naik empat nada lalu satu nada tinggi, diulang di paruh kedua bar' },
 };
-export interface Rhythm { style: PlayStyle; rate: number; strum: number }   // rate: panjang langkah arp (ketukan: 0.25 = 1/16, 0.5 = 1/8, 1 = 1/4); strum: jeda antar nada pada style Strum (ketukan)
+export interface Rhythm { style: PlayStyle; rate: number; strum: number }   // rate / strum: sisa format lama (tidak dipakai lagi), tetap ada supaya project lama terbuka
 
 export interface OutNote { p: number; s: number; l: number; v: number; slot: number }   // s / l dalam ketukan dari awal progression; slot = indeks chord asal
 
-// Satu kejadian dalam pola satu bar. at / len dalam ketukan; v = pengali velocity.
-//   chord = semua nada (up: disapu dari atas ke bawah, kalau tidak dari bawah ke atas), bass = akar satu oktaf di bawah, bass5 = kuint satu oktaf di bawah,
-//   tone = satu nada chord urutan ke-i dari bawah (i melewati jumlah nada = naik oktaf).
-interface Ev { at: number; len: number; v: number; k: 'chord' | 'bass' | 'bass5' | 'tone'; i?: number; up?: boolean }
-const eighths = (seq: number[], vel: number[]): Ev[] => seq.map((i, n) => ({ at: n * 0.5, len: 0.475, v: vel[n % vel.length], k: 'tone' as const, i }));
+// Satu nada dalam pola satu bar: at = ketukan (0..4), i = urutan nada chord dari bawah (0 akar, 1 terts, 2 kuint, 3 akar +1 oktaf, 4 terts +1 oktaf, 5 kuint +1 oktaf, 6 akar +2 oktaf, ...),
+// len = panjang (ketukan; angka besar = ditahan sampai akhir bar, otomatis dipotong di akhir bar / chord), v = velocity 0..1 (mutlak, tidak ikut voicing).
+// Contoh: chord F#m + Pluck = F#4 C#5 F#5 A5 F#5 (persis contoh MIDI).
+interface Ev { at: number; i: number; len: number; v: number }
+const H = 4;   // ditahan sampai akhir bar
+const P = (rows: [number, number, number, number][]): Ev[] => rows.map(([at, i, len, v]) => ({ at, i, len, v }));   // [at, i, len, v]
+const stack = (at: number, idx: number[], len: number, v: number[]): [number, number, number, number][] => idx.map((i, k) => [at, i, len, v[k]]);
+const T3 = [3, 5, 6, 7, 6, 5, 3, 5, 6, 7, 6, 5, 4, 5, 6, 8, 6, 5];
 export const PATTERNS: Partial<Record<PlayStyle, Ev[]>> = {
-  Genjreng: [   // D  D U  U D U  (bawah = turun dari nada bawah, atas = naik dari nada atas, lebih lembut)
-    { at: 0, len: 1, v: 1, k: 'chord' }, { at: 1, len: 0.5, v: 0.9, k: 'chord' }, { at: 1.5, len: 1, v: 0.62, k: 'chord', up: true },
-    { at: 2.5, len: 0.5, v: 0.62, k: 'chord', up: true }, { at: 3, len: 0.5, v: 0.9, k: 'chord' }, { at: 3.5, len: 0.5, v: 0.68, k: 'chord', up: true },
-  ],
-  Alberti: eighths([0, 2, 1, 2, 0, 2, 1, 2], [1, 0.62, 0.8, 0.62, 0.95, 0.62, 0.8, 0.62]),
-  'Oom-Pah': [
-    { at: 0, len: 0.9, v: 0.95, k: 'bass' }, { at: 1, len: 0.9, v: 0.7, k: 'chord' }, { at: 2, len: 0.9, v: 0.85, k: 'bass5' }, { at: 3, len: 0.9, v: 0.7, k: 'chord' },
-  ],
-  Charleston: [
-    { at: 0, len: 1.4, v: 1, k: 'chord' }, { at: 1.5, len: 0.4, v: 0.8, k: 'chord' }, { at: 2, len: 1.4, v: 0.9, k: 'chord' }, { at: 3.5, len: 0.4, v: 0.8, k: 'chord' },
-  ],
-  Reggae: [
-    { at: 0, len: 1.4, v: 0.8, k: 'bass' }, { at: 0.5, len: 0.3, v: 0.85, k: 'chord' }, { at: 1.5, len: 0.3, v: 0.85, k: 'chord' },
-    { at: 2, len: 1.4, v: 0.75, k: 'bass' }, { at: 2.5, len: 0.3, v: 0.85, k: 'chord' }, { at: 3.5, len: 0.3, v: 0.85, k: 'chord' },
-  ],
+  Pluck: P([[0, 3, H, 0.8], [0.5, 5, H, 0.5], [1, 6, H, 0.72], [1.5, 7, H, 0.36], [3, 6, H, 0.46]]),
+  'Pad Run': P([[0, 3, H, 0.5], [0, 7, 2.25, 0.2], [0.5, 5, H, 0.55], [0.5, 6, H, 0.45], [2, 5, H, 0.68], [2.5, 7, H, 0.8], [3, 8, H, 0.5], [3.5, 7, H, 0.4]]),
+  Turun: P([[0, 7, H, 0.7], [0.5, 6, H, 0.55], [1, 5, H, 0.65], [1.5, 4, H, 0.4], [3, 3, H, 0.55]]),
+  Tangga: P([[0, 3, H, 0.7], [0.5, 4, H, 0.4], [1, 5, H, 0.55], [1.5, 6, H, 0.35], [2, 7, H, 0.65], [2.5, 8, H, 0.4], [3, 6, H, 0.5]]),
+  Tresillo: P([...stack(0, [3, 5, 6], 1.5, [0.75, 0.55, 0.6]), ...stack(1.5, [4, 6, 7], 1.5, [0.6, 0.5, 0.55]), ...stack(3, [3, 5, 6], 1, [0.7, 0.5, 0.55])]),
+  Dholak: P([[0, 3, 0.5, 0.8], [0.5, 6, 1, 0.45], [1.5, 5, 0.5, 0.6], [2, 6, 1, 0.7], [3, 4, 0.5, 0.5], [3.5, 5, 0.5, 0.4]]),
+  Tisra: P(T3.slice(0, 12).map((i, k): [number, number, number, number] => [k / 3, i, 0.3, k % 3 === 0 ? 0.7 : 0.4])),
+  'Pad Pluck': P([[0, 3, H, 0.5], [0, 5, H, 0.4], [1.5, 7, 0.5, 0.7], [2, 8, 0.5, 0.55], [3, 7, 0.5, 0.65], [3.5, 6, 0.5, 0.45]]),
+  Bell: P([[0, 3, H, 0.6], [0.5, 6, 0.5, 0.45], [1.5, 7, 0.5, 0.55], [2.5, 6, 0.5, 0.5], [3.5, 8, 0.5, 0.6]]),
+  Roll: P([[0, 3, 0.25, 0.5], [0.25, 5, 0.25, 0.4], [0.5, 6, 0.25, 0.5], [0.75, 7, 0.25, 0.6], [1, 8, 1, 0.75], [2, 3, 0.25, 0.5], [2.25, 5, 0.25, 0.4], [2.5, 6, 0.25, 0.5], [2.75, 7, 0.25, 0.6], [3, 8, 1, 0.7]]),
 };
-const SWEEP = 0.04;   // jeda antar nada saat disapu (ketukan) pada style Genjreng
 const lim = (p: number): number => Math.max(12, Math.min(120, p)), vlim = (v: number): number => Math.max(0.05, Math.min(1, v));
 
-function patternNotes(ev: Ev[], c: Chord, vn: VNote[], t: number, beats: number, si: number, out: OutNote[]): void {
-  const sorted = [...vn].sort((a, b) => a.p - b.p), n = sorted.length, five = c.iv.find(x => x >= 6 && x <= 8) ?? 7;
+function patternNotes(ev: Ev[], vn: VNote[], t: number, beats: number, si: number, out: OutNote[]): void {
+  const sorted = [...vn].sort((a, b) => a.p - b.p), n = sorted.length;
   for (let b0 = 0; b0 < beats - 1e-9; b0 += 4) {   // pola satu bar diulang sampai chord habis
+    const end = Math.min(beats, b0 + 4);   // nada tidak melewati akhir bar maupun akhir chord
     for (const e of ev) {
-      const s = b0 + e.at; if (s >= beats - 1e-9) continue;
-      const l = Math.min(e.len, beats - s);
-      if (e.k === 'chord') {
-        const seq = e.up ? [...sorted].reverse() : sorted;
-        seq.forEach((x, j) => { const g = Math.min(SWEEP, (l * 0.5) / n); out.push({ p: x.p, s: t + s + j * g, l: Math.max(0.05, l - j * g), v: vlim(x.v * e.v), slot: si }); });
-      } else if (e.k === 'tone') {
-        const i = e.i ?? 0, x = sorted[i % n];
-        out.push({ p: lim(x.p + 12 * Math.floor(i / n)), s: t + s, l, v: vlim(x.v * e.v), slot: si });
-      } else {
-        out.push({ p: lim(c.root + (e.k === 'bass5' ? five : 0) - 12), s: t + s, l, v: vlim(0.9 * e.v), slot: si });
-      }
+      const s = b0 + e.at; if (s >= end - 1e-9) continue;
+      out.push({ p: lim(sorted[e.i % n].p + 12 * Math.floor(e.i / n)), s: t + s, l: Math.min(e.len, end - s), v: vlim(e.v), slot: si });
     }
   }
 }
@@ -197,24 +187,10 @@ export function buildNotes(st: Settings, slots: Slot[], vc: Voicing, rh: Rhythm)
   const out: OutNote[] = [];
   let t = 0;
   slots.forEach((sl, si) => {
-    const c = slotChord(st, sl), vn = voice(c, vc);
+    const vn = voice(slotChord(st, sl), vc), pat = PATTERNS[rh.style];
     if (vn.length) {
-      if (rh.style === 'Strum') {
-        const sorted = [...vn].sort((a, b) => a.p - b.p), gap = Math.min(rh.strum, sl.beats / (sorted.length + 1));
-        sorted.forEach((n, i) => out.push({ p: n.p, s: t + i * gap, l: sl.beats - i * gap, v: n.v, slot: si }));
-      } else if (rh.style === 'Arp Up' || rh.style === 'Arp Down' || rh.style === 'Arp Ping') {
-        let sorted = [...vn].sort((a, b) => (rh.style === 'Arp Down' ? b.p - a.p : a.p - b.p));
-        if (rh.style === 'Arp Ping') {   // naik sampai oktaf akar, lalu turun tanpa mengulang nada ujung: 0 1 2 3 2 1 | 0 1 2 3 ...
-          const up = [...vn].sort((a, b) => a.p - b.p), top = { p: lim(up[0].p + 12), v: up[0].v };
-          sorted = [...up, top, ...up.slice(1).reverse()];
-        }
-        const step = rh.rate, cnt = Math.max(1, Math.round(sl.beats / step));
-        for (let k = 0; k < cnt; k++) { const n = sorted[k % sorted.length]; out.push({ p: n.p, s: t + k * step, l: step * 0.95, v: n.v, slot: si }); }
-      } else if (PATTERNS[rh.style]) {
-        patternNotes(PATTERNS[rh.style]!, c, vn, t, sl.beats, si, out);
-      } else {   // Block (dan nama style yang tidak dikenal)
-        for (const n of vn) out.push({ p: n.p, s: t, l: sl.beats, v: n.v, slot: si });
-      }
+      if (pat) patternNotes(pat, vn, t, sl.beats, si, out);
+      else for (const n of vn) out.push({ p: n.p, s: t, l: sl.beats, v: n.v, slot: si });   // Block (dan nama style yang tidak dikenal)
     }
     t += sl.beats;
   });

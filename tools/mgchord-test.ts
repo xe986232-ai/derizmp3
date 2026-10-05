@@ -30,36 +30,37 @@ for (const p of PRESETS) {
 }
 const rp = randomProgression(16, (() => { let x = 7; return () => (x = (x * 16807) % 2147483647) / 2147483647; })());
 eq('random fills 16 beats', totalBeats(rp), 16);
-const arp = buildNotes(S(), [{ deg: 0, beats: 4 }], vc, { style: 'Arp Up', rate: 0.5, strum: 0 });
-eq('arp 1/8 over 1 bar = 8 notes', arp.length, 8);
-const str = buildNotes(S(), [{ deg: 0, beats: 4 }], vc, { style: 'Strum', rate: 0.5, strum: 0.2 });
-eq('strum offsets', str.map(n => +n.s.toFixed(2)), [0, 0.2, 0.4, 0.6, 0.8]);
 const mid = toMidi(buildNotes(S(), [{ deg: 0, beats: 4 }], vc, { style: 'Block', rate: 0.5, strum: 0 }), 120);
 eq('midi header', String.fromCharCode(...mid.slice(0, 4)) + String.fromCharCode(...mid.slice(14, 18)), 'MThdMTrk');
 eq('default voicing = 3 batang', voice(triadAt(0, 'Major'), defaultVoicing()).map(n => n.p), [48, 52, 55]);
 eq('C minor = C D# G', voice(triadAt(0, 'Minor'), defaultVoicing()).map(n => n.p), [48, 51, 55]);
 eq('triad names', [triadAt(0, 'Major').name, triadAt(1, 'Minor').name], ['C', 'C#m']);
 
-// ---- 10 style susunan nada ----
-eq('ada 10 style', STYLES.length, 10);
+// ---- style susunan nada (pola dari contoh MIDI Indian Beat) ----
+eq('Block + 10 pola', STYLES.length, 11);
 const v3 = defaultVoicing(), bar = [{ deg: 0, beats: 4 }], two = [{ deg: 0, beats: 4 }, { deg: 3, beats: 4 }];
 const rh = (style: (typeof STYLES)[number]) => ({ style, rate: 0.5, strum: 0.12 });
 for (const sty of STYLES) {
   const n = buildNotes(S(), two, v3, rh(sty));
   const ok = n.length > 0 && n.every(x => Number.isFinite(x.p) && x.p >= 12 && x.p <= 120 && x.s >= 0 && x.l > 0 && x.v > 0 && x.v <= 1 && x.s < 8 && x.slot === (x.s < 4 ? 0 : 1));
   eq('style ' + sty + ': nada valid, di dalam chordnya', ok, true);
-  eq('style ' + sty + ': tidak ada nada melewati akhir chord (maks 1e-6)', n.every(x => x.s + x.l <= (x.slot + 1) * 4 + 1e-6), true);
+  eq('style ' + sty + ': tidak melewati akhir bar (maks 1e-6)', n.every(x => x.s + x.l <= (x.slot + 1) * 4 + 1e-6), true);
 }
+// contoh MIDI: F# minor, chord F#m - D - A - E (derajat i VI III VII), tiap chord 1 bar. Pluck harus sama dengan bar 1 / bar 7 contoh.
+const fsm = S({ root: 6, scale: 'Minor' }), prog = [0, 5, 2, 6].map(deg => ({ deg, beats: 4 }));
+const pl = buildNotes(fsm, prog, v3, rh('Pluck')), at = (b: number) => pl.filter(n => n.slot === b);
+eq('Pluck F#m = F#4 C#5 F#5 A5 F#5', at(0).map(n => n.p), [66, 73, 78, 81, 78]);
+eq('Pluck F#m ketukan', at(0).map(n => n.s), [0, 0.5, 1, 1.5, 3]);
+eq('Pluck A = A4 E5 A5 C#6 A5 (bar 7 contoh)', at(2).map(n => n.p), [69, 76, 81, 85, 81]);
+eq('Pluck E = E4 B4 E5 G#5 E5 (bar 8 contoh)', at(3).map(n => n.p), [64, 71, 76, 80, 76]);
+eq('Pluck ditahan sampai akhir bar', at(0).map(n => n.s + n.l), [4, 4, 4, 4, 4]);
+eq('Pad Run F#m bagian lari', buildNotes(fsm, [prog[0]], v3, rh('Pad Run')).filter(n => n.s >= 2).map(n => [n.p, n.s]), [[73, 2], [81, 2.5], [85, 3], [81, 3.5]]);
+eq('Tresillo = 3 pukulan x 3 nada', buildNotes(S(), bar, v3, rh('Tresillo')).length, 9);
+eq('Dholak = 6 pukulan', buildNotes(S(), bar, v3, rh('Dholak')).length, 6);
+eq('Tisra = 12 petikan triplet', buildNotes(S(), bar, v3, rh('Tisra')).length, 12);
+eq('Roll = 10 nada', buildNotes(S(), bar, v3, rh('Roll')).length, 10);
 eq('Block = 3 nada', buildNotes(S(), bar, v3, rh('Block')).length, 3);
-eq('Genjreng = 6 sapuan x 3 nada per bar', buildNotes(S(), bar, v3, rh('Genjreng')).length, 18);
-eq('Genjreng: awal tiap sapuan', [...new Set(buildNotes(S(), bar, v3, rh('Genjreng')).map(n => Math.floor(n.s * 2) / 2))], [0, 1, 1.5, 2.5, 3, 3.5]);
-eq('Genjreng sapuan bawah naik, sapuan atas turun', [buildNotes(S(), bar, v3, rh('Genjreng')).slice(0, 3).map(n => n.p), buildNotes(S(), bar, v3, rh('Genjreng')).slice(6, 9).map(n => n.p)], [[48, 52, 55], [55, 52, 48]]);
-eq('Alberti = 8 nada bawah-atas-tengah-atas', buildNotes(S(), bar, v3, rh('Alberti')).slice(0, 4).map(n => n.p), [48, 55, 52, 55]);
-eq('Arp Ping urutan', buildNotes(S(), bar, v3, rh('Arp Ping')).map(n => n.p), [48, 52, 55, 60, 55, 52, 48, 52]);
-eq('Oom-Pah: bass C2, chord, bass G2, chord', buildNotes(S(), bar, v3, rh('Oom-Pah')).filter(n => n.p < 48).map(n => [n.p, n.s]), [[36, 0], [43, 2]]);
-eq('Charleston: 4 serangan x 3 nada', buildNotes(S(), bar, v3, rh('Charleston')).length, 12);
-eq('Reggae: chord di offbeat saja', [...new Set(buildNotes(S(), bar, v3, rh('Reggae')).filter(n => n.p >= 48).map(n => Math.floor(n.s)))], [0, 1, 2, 3]);
-eq('pola diulang tiap bar (8 ketukan = 2x Alberti)', buildNotes(S(), [{ deg: 0, beats: 8 }], v3, rh('Alberti')).length, 16);
-eq('chord 2 ketukan dipotong di batasnya', buildNotes(S(), [{ deg: 0, beats: 2 }], v3, rh('Oom-Pah')).every(n => n.s + n.l <= 2 + 1e-6), true);
-eq('style tak dikenal jatuh ke Block', buildNotes(S(), bar, v3, rh('Nope' as never)).length, 3);
+eq('pola diulang tiap bar (8 ketukan = 2x Pluck)', buildNotes(S(), [{ deg: 0, beats: 8 }], v3, rh('Pluck')).length, 10);
+eq('chord 2 ketukan dipotong di batasnya', buildNotes(S(), [{ deg: 0, beats: 2 }], v3, rh('Pluck')).every(n => n.s + n.l <= 2 + 1e-6), true);
+eq('style lama / tak dikenal jatuh ke Block', buildNotes(S(), bar, v3, rh('Genjreng' as never)).length, 3);
 console.log(fail ? fail + ' GAGAL' : 'semua lolos'); process.exit(fail ? 1 : 0);
