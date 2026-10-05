@@ -79,7 +79,7 @@ const kbMarkup = (lo: number): string => {   // keyboard card VERTIKAL: C paling
   return KB_WHITES.map((o, i) => `<button type="button" class="mgc__wk" data-p="${lo + o}" aria-label="${midiName(lo + o)}" style="top:${(KB_WHITES.length - 1 - i) * wp}%"><span>${midiName(lo + o)}</span></button>`).join('') +
     KB_BLACKS.map(o => `<button type="button" class="mgc__bk" data-p="${lo + o}" aria-label="${midiName(lo + o)}" style="top:calc(${100 - KB_WHITES.filter(w => w < o).length * wp}% - ${wp * 0.3235}%)"><span>${midiName(lo + o)}</span></button>`).join('');
 };
-const KW = 64, PEG = 34;                   // lebar kolom tuts (sama dengan --kw di CSS) dan tinggi strip pasak oranye
+const KW = 0;                            // tidak ada kolom tuts di piano roll (tampilan sama dengan video promo)
 
 
 // ---------- suara preview: piano + mixing (mgchord-audio.ts), AudioContext sendiri ----------
@@ -108,41 +108,34 @@ function build(): void {
     '<div class="mgc__wrap">' +
     '<div class="mgc__win" role="dialog" aria-modal="true" aria-label="MGCHORD" tabindex="-1">' +
       '<header class="mgc__head">' +
-        `<span class="mgc__logo">MGCHORD${LAMP}</span>` +
+        `<span class="mgc__logo">${LAMP}MGCHORD</span>` +
         '<div class="mgc__prog">' +
-          (PRESETS.length ? `<label class="mgc__pn"><i class="mgc__tri"></i><span class="mgc__pname"></span><select data-k="preset" aria-label="Pilih progression">${presetOpts}</select></label>` : '<div class="mgc__pn mgc__pn--none"><span class="mgc__pname"></span></div>') +
+          (PRESETS.length ? `<label class="mgc__pn"><span class="mgc__pname"></span><select data-k="preset" aria-label="Pilih progression">${presetOpts}</select></label>` : '<div class="mgc__pn mgc__pn--none"><span class="mgc__pname"></span></div>') +
           '<button type="button" class="mgc__save" data-a="save" title="Kirim nada ke pattern yang dipilih di timeline">Save</button>' +
-          (PRESETS.length ? `<button type="button" class="mgc__arr" data-a="pprev" aria-label="Preset sebelumnya">${ICON.prev}</button><button type="button" class="mgc__arr" data-a="pnext" aria-label="Preset berikutnya">${ICON.next}</button>` : '') +
         '</div>' +
-        '<span class="mgc__pow">Powered by DERIZ</span>' +
-        `<button type="button" class="mgc__x mgc__drag" aria-label="Seret hasil ke track di timeline" title="Tahan lalu seret ke track di timeline: hasil chord jadi pattern baru di bar tempat dilepas">${ICON.drag}</button>` +
+        '<span class="mgc__pow">Web DAW</span>' +
         `<button type="button" class="mgc__x" data-a="close" aria-label="Tutup" title="Tutup (Esc)">${ICON.close}</button>` +
       '</header>' +
+      '<div class="mgc__body">' +
+      '<div class="mgc__ctrl">' +
+        '<div class="mgc__cd" data-dd="style"><button type="button" class="mgc__cdb" aria-haspopup="listbox" aria-expanded="false" aria-label="Style susunan nada"><span></span></button></div>' +
+        '<div class="mgc__sg" role="group" aria-label="Chord mayor atau minor"><button type="button" data-a="scale" data-s="Major">Major</button><button type="button" data-a="scale" data-s="Minor">Minor</button></div>' +
+        '<div class="mgc__cd" data-dd="sound"><button type="button" class="mgc__cdb" aria-haspopup="listbox" aria-expanded="false" aria-label="Pilih suara preview"><span></span></button></div>' +
+        '<button type="button" class="mgc__bars" data-a="len" data-s="8" title="Panjang progression: 4 / 8 bar">4 Bars</button>' +
+        `<div class="mgc__ur"><button type="button" data-a="undo" aria-label="Undo">${ICON.undo}</button><button type="button" data-a="redo" aria-label="Redo">${ICON.redo}</button><button type="button" data-a="clear" aria-label="Kosongkan progression" title="Kosongkan semua chord">${ICON.trash}</button></div>` +
+        `<button type="button" class="mgc__big" data-a="dice" aria-label="Acak progression" title="Acak progression"><i>${ICON.dice}</i></button>` +
+      '</div>' +
       '<canvas class="mgc__spec" aria-hidden="true"></canvas>' +
-      '<div class="mgc__main"><aside class="mgc__side">' +
-        '<div class="mgc__ctl">' +
-          '<div class="mgc__r"><span>Style / Chord</span><div class="mgc__kr">' +
-            '<div class="mgc__cd" data-dd="style"><button type="button" class="mgc__cdb" aria-haspopup="listbox" aria-expanded="false" aria-label="Style susunan nada"><span></span></button></div>' +
-            '<div class="mgc__cd" data-dd="scale"><button type="button" class="mgc__cdb" aria-haspopup="listbox" aria-expanded="false" aria-label="Chord mayor atau minor"><span></span></button></div>' +
-          '</div></div>' +
-          '<div class="mgc__r"><span>Length</span><div class="mgc__sg"><button type="button" data-a="len" data-s="4">4 bars</button><button type="button" data-a="len" data-s="8">8 bars</button></div></div>' +
-          '<div class="mgc__r"><span>Sound</span><div class="mgc__cd" data-dd="sound"><button type="button" class="mgc__cdb" aria-haspopup="listbox" aria-expanded="false" aria-label="Pilih suara preview"><span></span></button></div></div>' +
-        '</div>' +
-        '<div class="mgc__gen">' +
-          `<button type="button" class="mgc__big" data-a="dice" aria-label="Acak progression" title="Acak progression"><i>${ICON.dice}</i></button>` +
-          `<div class="mgc__ur"><button type="button" data-a="undo" aria-label="Undo">${ICON.undo}</button><button type="button" data-a="redo" aria-label="Redo">${ICON.redo}</button><button type="button" data-a="clear" aria-label="Kosongkan progression" title="Kosongkan semua chord">${ICON.trash}</button></div>` +
-        '</div>' +
-        '<span class="mgc__link">Unlinked</span>' +
-      '</aside>' +
-      '<section class="mgc__seq">' +
-        `<div class="mgc__ruler"><div class="mgc__corner"><button type="button" class="mgc__mini" data-a="play" aria-label="Putar preview">${ICON.playS}</button><span>On</span></div><div class="mgc__marks"></div></div>` +
-        '<div class="mgc__lane" role="listbox" aria-label="Chord progression"></div>' +
-        '<div class="mgc__roll"><canvas class="mgc__cv" role="img" aria-label="Piano roll hasil chord"></canvas></div>' +
-      '</section></div>' +
+      '<div class="mgc__ruler"><div class="mgc__marks"></div></div>' +
+      '<div class="mgc__lane" role="listbox" aria-label="Chord progression"></div>' +
+      '<div class="mgc__roll"><canvas class="mgc__cv" role="img" aria-label="Piano roll hasil chord"></canvas></div>' +
       '<div class="mgc__foot">' +
         `<button type="button" class="mgc__go" data-a="play" aria-label="Putar preview" title="Putar / henti preview (Spasi)">${ICON.play}</button>` +
-        `<div class="mgc__dnd" draggable="true" role="button" tabindex="0" data-a="midi" title="Seret ke DAW atau klik untuk unduh .mid">${ICON.move}<span>Drag &amp; drop MIDI</span></div>` +
+        `<button type="button" class="mgc__drag" aria-label="Seret hasil ke track di timeline" title="Tahan lalu seret ke track di timeline: hasil chord jadi pattern baru di bar tempat dilepas">${ICON.drag}</button>` +
         `<button type="button" class="mgc__dl" data-a="midi" aria-label="Download MIDI" title="Download MIDI">${ICON.dl}</button>` +
+        '<div class="mgc__dnd" draggable="true" role="button" tabindex="0" data-a="midi" title="Seret ke DAW atau klik untuk unduh .mid"><span>Drag &amp; Drop MIDI&nbsp;&nbsp;/&nbsp;&nbsp;Download .mid</span></div>' +
+        '<span class="mgc__bpm"></span>' +
+      '</div>' +
       '</div>' +
     '</div>' +
     `<aside class="mgc__kbd" aria-label="Keyboard"><div class="mgc__kbt"><div class="mgc__cd" data-dd="range"><button type="button" class="mgc__cdb" aria-haspopup="listbox" aria-expanded="false" aria-label="Pilih rentang keyboard"><span></span></button></div></div><div class="mgc__kb" role="group">${kbMarkup(kbLo())}</div></aside>` +
@@ -154,7 +147,7 @@ function build(): void {
   const $ = <T extends HTMLElement>(q: string): T => el.querySelector<T>(q)!;
   const lane = $('.mgc__lane'), marks = $('.mgc__marks'), cv = $<HTMLCanvasElement>('.mgc__cv'), g = cv.getContext('2d')!;
   let notes: OutNote[] = [], playing = false, phBeat = -1, raf = 0, prevFocus: Element | null = null;
-  let linked = false, hist: string[] = [], hi = -1;
+  let hist: string[] = [], hi = -1;
 
   // ---------- waveform real-time, berjalan terus (menggulung ke kiri) ----------
   // Algoritma kick-waveform-demo: sample dibagi per kolom, tiap kolom diambil min/max-nya, digambar sebagai SATU poligon terisi menyambung (rata, tanpa garis tengah, pixel-snapped).
@@ -200,11 +193,11 @@ function build(): void {
       if (Math.abs(yBottom - yTop) < 2) { yTop = mid - 1; yBottom = mid + 1; }   // minimal 2 px supaya garis tetap terlihat saat senyap
       tops[col] = yTop; bottoms[col] = yBottom;
     }
-    sg.fillStyle = 'rgba(255,255,255,.95)'; sg.beginPath(); sg.moveTo(0, bottoms[0]);
+    sg.fillStyle = '#bcd2ff'; sg.shadowColor = 'rgba(190,215,255,.9)'; sg.shadowBlur = 8 * dpr; sg.beginPath(); sg.moveTo(0, bottoms[0]);
     for (let col = 0; col < numCols; col++) sg.lineTo(col * barW + barW / 2, bottoms[col]);
     sg.lineTo(numCols * barW, bottoms[numCols - 1]);
     for (let col = numCols - 1; col >= 0; col--) sg.lineTo(col * barW + barW / 2, tops[col]);
-    sg.lineTo(0, tops[0]); sg.closePath(); sg.fill();
+    sg.lineTo(0, tops[0]); sg.closePath(); sg.fill(); sg.shadowBlur = 0;
   };
   const specLoop = (): void => { if (el.hidden) { specRaf = 0; lastT = 0; return; } drawSpec(); specRaf = requestAnimationFrame(specLoop); };
 
@@ -313,54 +306,55 @@ function build(): void {
     syncKb(); ddLabels();
     const ps = el.querySelector<HTMLSelectElement>('select[data-k="preset"]'); if (ps) ps.value = String(S.preset);
     $('.mgc__pname').textContent = S.preset >= 0 && PRESETS[S.preset] ? PRESETS[S.preset].name : 'New progression';
-    el.querySelectorAll<HTMLElement>('[data-a="len"]').forEach(b => b.classList.toggle('is-on', +b.dataset.s! === S.bars));
-    $('.mgc__link').textContent = linked ? 'Linked' : 'Unlinked';
+    const lb = $('[data-a="len"]'); lb.textContent = `${S.bars} Bars`; lb.dataset.s = String(S.bars === 4 ? 8 : 4);   // satu tombol: ketuk untuk pindah 4 <-> 8 bar
+    el.querySelectorAll<HTMLElement>('[data-a="scale"]').forEach(b => b.classList.toggle('is-on', b.dataset.s === S.st.scale));
+    $('.mgc__bpm').textContent = `${Math.round(bridge ? bridge.bpm() : 120)} BPM • ${NOTE_NAMES[S.st.root]} ${S.st.scale}`;
   }
 
-  // Piano roll: grid gelap + kolom tuts, nada putih (alpha = velocity), chord terpilih disorot, pasak oranye di awal tiap chord
+  // Piano roll terang (sama dengan video promo): latar #f6f9ff, baris tuts hitam samar, garis ketukan biru, nada gradasi biru (emas saat dimainkan), pasak oranye menggantung di batas chord
   function drawRoll(): void {
     const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1, W = Math.floor(r.width), H = Math.floor(r.height);
     if (W < 20 || H < 20) return;
     if (cv.width !== Math.floor(W * dpr) || cv.height !== Math.floor(H * dpr)) { cv.width = Math.floor(W * dpr); cv.height = Math.floor(H * dpr); }
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const peg = Math.min(PEG, Math.round(H * 0.2)), gh = H - peg, tot = span(), x0 = KW, pw = W - KW, ppb = pw / tot;
+    const gh = H, tot = span(), x0 = KW, pw = W - KW, ppb = pw / tot;
     let lo = 127, hi2 = 0; for (const n of notes) { lo = Math.min(lo, n.p); hi2 = Math.max(hi2, n.p); }
     if (hi2 < lo) { lo = kbLo(); hi2 = lo + 24; }   // belum ada nada: tampilkan rentang keyboard yang dipilih
     lo -= 2; hi2 += 2; while (hi2 - lo < (gh < 120 ? 14 : 22)) { lo--; hi2++; }
     const rows = hi2 - lo + 1, rh = gh / rows, yOf = (p: number): number => (hi2 - p) * rh;
-    g.fillStyle = '#2e2e2e'; g.fillRect(0, 0, W, H);
-    for (let p = lo; p <= hi2; p++) { g.fillStyle = BLACK_PC.has(p % 12) ? '#272727' : '#3b3b3b'; g.fillRect(x0, yOf(p), pw, rh); }
+    g.fillStyle = '#f6f9ff'; g.fillRect(0, 0, W, H);
+    for (let p = lo; p <= hi2; p++) {
+      if (BLACK_PC.has(p % 12)) { g.fillStyle = 'rgba(63,111,216,.06)'; g.fillRect(x0, yOf(p), pw, rh); }
+      if (p % 12 === 0) { g.fillStyle = 'rgba(63,111,216,.2)'; g.fillRect(x0, yOf(p) + rh - 1, pw, 1); }
+    }
     let t = 0;
-    S.slots.forEach((sl, i) => { if (i === S.sel) { g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(x0 + t * ppb, 0, sl.beats * ppb, gh); } t += sl.beats; });
-    for (let h = 0; h <= tot * 2; h++) {
-      const b = h / 2, x = Math.round(x0 + b * ppb) + .5;
-      g.strokeStyle = b % 4 === 0 ? 'rgba(255,255,255,.4)' : Number.isInteger(b) ? 'rgba(255,255,255,.16)' : 'rgba(255,255,255,.06)'; g.lineWidth = 1;
-      g.beginPath(); g.moveTo(x, 0); g.lineTo(x, gh); g.stroke();
+    S.slots.forEach((sl, i) => { if (i === S.sel) { g.fillStyle = 'rgba(63,111,216,.07)'; g.fillRect(x0 + t * ppb, 0, sl.beats * ppb, gh); } t += sl.beats; });
+    for (let b = 0; b <= tot; b++) {   // garis per ketukan; garis bar lebih tebal
+      const bar = b % 4 === 0, x = Math.round(x0 + b * ppb);
+      g.fillStyle = bar ? 'rgba(63,111,216,.22)' : 'rgba(63,111,216,.08)'; g.fillRect(bar ? x - 1 : x, 0, bar ? 2 : 1, gh);
     }
     for (const n of notes) {
-      const x = x0 + n.s * ppb, w = Math.max(2, n.l * ppb - 2), y = yOf(n.p) + 1;
-      g.globalAlpha = 0.55 + 0.45 * n.v; g.fillStyle = '#fff';
-      g.beginPath(); g.roundRect(x, y, w, Math.max(2, rh - 2), Math.min(3, rh / 2)); g.fill();
+      const x = x0 + n.s * ppb + 1, w = Math.max(5, n.l * ppb - 4), y = yOf(n.p) + 1, h = Math.max(2, rh - 2.5);
+      const act = phBeat >= 0 && phBeat >= n.s && phBeat < n.s + n.l;
+      const gr = g.createLinearGradient(0, y, 0, y + h);
+      if (act) { gr.addColorStop(0, '#ffd77f'); gr.addColorStop(1, '#f2b632'); } else { gr.addColorStop(0, '#6f9cf5'); gr.addColorStop(1, '#3f6fd8'); }
+      g.globalAlpha = 0.7 + 0.3 * n.v; g.fillStyle = gr;
+      g.shadowColor = act ? 'rgba(242,182,50,.9)' : 'rgba(63,111,216,.3)'; g.shadowBlur = act ? 14 : 6; g.shadowOffsetY = act ? 0 : 2;
+      g.beginPath(); g.roundRect(x, y, w, h, Math.min(3, rh / 2)); g.fill();
     }
-    g.globalAlpha = 1;
-    g.fillStyle = '#f4f4f4'; g.fillRect(0, 0, KW, gh);   // kolom tuts
-    g.font = '600 9px system-ui,sans-serif'; g.textBaseline = 'middle';
-    for (let p = lo; p <= hi2; p++) {
-      const y = yOf(p);
-      if (BLACK_PC.has(p % 12)) { g.fillStyle = '#202020'; g.fillRect(0, y, KW * 0.62, rh); }
-      else { g.fillStyle = '#c4c4c4'; g.fillRect(0, y + rh - 0.5, KW, 1); }
-      if (p % 12 === 0 && rh >= 8) { g.fillStyle = '#444'; g.fillText(midiName(p), KW - 22, y + rh / 2); }
-    }
-    g.fillStyle = '#383838'; g.fillRect(0, gh, W, peg);   // strip pasak oranye
+    g.globalAlpha = 1; g.shadowBlur = 0; g.shadowOffsetY = 0;
     t = 0;
-    for (const sl of S.slots) {
-      const x = Math.round(x0 + t * ppb);
-      g.strokeStyle = '#8a8a8a'; g.lineWidth = 1; g.beginPath(); g.moveTo(x + .5, gh); g.lineTo(x + .5, H); g.stroke();
-      const gr = g.createLinearGradient(x - 5, 0, x + 5, 0); gr.addColorStop(0, '#f4b64f'); gr.addColorStop(1, '#d6862a');
-      g.fillStyle = gr; g.beginPath(); g.roundRect(x - 5, gh + 3, 10, Math.max(6, peg - 8), 3); g.fill(); t += sl.beats;
+    for (const sl of S.slots) {   // pasak oranye di batas chord (bukan di awal progression)
+      if (t > 0) { const x = Math.round(x0 + t * ppb); g.fillStyle = '#f2b632'; g.beginPath(); g.roundRect(x - 6, 0, 12, Math.min(26, H * 0.2), [0, 0, 6, 6]); g.fill(); }
+      t += sl.beats;
     }
-    if (!notes.length) { g.fillStyle = 'rgba(255,255,255,.4)'; g.font = '600 12px system-ui,sans-serif'; g.textAlign = 'center'; g.fillText('Piano roll kosong — klik tuts keyboard di kanan', x0 + pw / 2, gh / 2); g.textAlign = 'start'; }
-    if (phBeat >= 0) { g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x0 + phBeat * ppb, 0); g.lineTo(x0 + phBeat * ppb, gh); g.stroke(); }
+    if (!notes.length) { g.fillStyle = 'rgba(63,111,216,.55)'; g.font = '700 12px system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('Piano roll kosong — klik tuts keyboard di kanan', x0 + pw / 2, gh / 2); g.textAlign = 'start'; }
+    if (phBeat >= 0) {
+      const x = x0 + phBeat * ppb, tx = Math.max(x0, x - 130), tg = g.createLinearGradient(x - 130, 0, x, 0);
+      tg.addColorStop(0, 'rgba(63,111,216,0)'); tg.addColorStop(1, 'rgba(63,111,216,.2)');
+      g.fillStyle = tg; g.fillRect(tx, 0, x - tx, gh);
+      g.fillStyle = '#3f6fd8'; g.shadowColor = 'rgba(63,111,216,.8)'; g.shadowBlur = 14; g.fillRect(x - 1.5, 0, 3, gh); g.shadowBlur = 0;
+    }
   }
   const renderAll = (): void => { recompute(); renderControls(); renderLane(); drawRoll(); };
   refreshFn = () => { S.sel = S.slots.length ? clamp(S.sel, 0, S.slots.length - 1) : -1; if (!el.hidden) { renderAll(); } commit(); };
@@ -413,7 +407,7 @@ function build(): void {
   const idxOf = (b: HTMLElement): number => +(b.closest<HTMLElement>('.mgc__ch')?.dataset.i ?? S.sel);
   const fitBars = (bars: number): void => {   // 4 / 8 bar: ubah panjang timeline; chord yang melewati batas baru dipotong
     S.bars = bars; const want = bars * 4, res: Slot[] = [];
-    for (let t = 0; t < S.slots.length && t < want; ) { const b = Math.min(S.slots[res.length].beats, want - t); res.push({ deg: S.slots[res.length].deg, beats: b }); t += b; }
+    for (let t = 0; res.length < S.slots.length && t < want; ) { const b = Math.min(S.slots[res.length].beats, want - t); res.push({ ...S.slots[res.length], beats: b }); t += b; }   // (perbaikan: dulu t (ketukan) dibandingkan dengan jumlah chord, jadi ganti 4 <-> 8 bar menghapus chord, dan root / q chord ikut hilang)
     S.slots = res; S.sel = res.length ? Math.min(Math.max(S.sel, 0), res.length - 1) : -1;
   };
   const stepDeg = (b: HTMLElement, d: number): void => {   // chord naik / turun setengah nada (triad); chord diatonik lama: ganti derajat
@@ -429,6 +423,7 @@ function build(): void {
     'deg-': b => stepDeg(b, -1),
     'deg+': b => stepDeg(b, 1),
     len: b => { fitBars(+b.dataset.s!); changed(); },
+    scale: b => { S.st.scale = b.dataset.s!; changed(); playChord(S.sel); },
     clear: () => { if (!S.slots.length) return; stopPlay(); S.slots = []; S.sel = -1; S.preset = -1; changed(); },
     del: () => { if (S.sel < 0 || !S.slots[S.sel]) return; S.slots.splice(S.sel, 1); S.sel = S.slots.length ? Math.min(S.sel, S.slots.length - 1) : -1; changed(); },
     dice: () => { S.slots = randomProgression(clamp(S.bars * 4, 8, MAX_BEATS)).map(sl => { const sc = SCALES[quality()], r = sc[sl.deg], m3 = mod(sc[(sl.deg + 2) % 7] - r, 12); return { deg: sl.deg, beats: sl.beats, root: mod(r, 12), q: m3 === 4 ? 'Major' as const : 'Minor' as const }; }); S.sel = 0; S.preset = -1; changed(); playChord(0); },
@@ -438,7 +433,6 @@ function build(): void {
     save: () => {
       if (!notes.length) { toastMsg('Belum ada chord — klik tuts keyboard di kanan'); return; }
       const msg = bridge ? bridge.send(notes.map(n => ({ p: n.p, s: n.s, l: n.l, v: n.v })), span()) : 'Plugin belum tersambung ke timeline';
-      if (!msg) { linked = true; renderControls(); }
       toastMsg(msg ?? 'Nada dikirim ke pattern');
     },
   };
