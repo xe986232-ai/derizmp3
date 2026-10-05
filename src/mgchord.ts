@@ -5,7 +5,7 @@
 // Inti teori ada di mgchord-theory.ts (murni, dites lewat tools/mgchord-test.ts).
 
 import {
-  NOTE_NAMES, PRESETS, SCALE_NAMES, VOICES,
+  NOTE_NAMES, PRESETS, VOICES,
   buildNotes, chordAt, defaultVoicing, midiName, randomProgression, slotsOf, toMidi, totalBeats, voice,
   type OutNote, type Rhythm, type Settings, type Slot, type Voicing,
 } from './mgchord-theory';
@@ -94,7 +94,6 @@ function tone(c: BaseAudioContext, dest: AudioNode, midi: number, when: number, 
 function build(): void {
   const el = document.createElement('div');
   el.className = 'mgc'; el.hidden = true;
-  const keyOpts = NOTE_NAMES.map((n, r) => SCALE_NAMES.map(sc => `<option value="${r}|${sc}">${n} ${sc}</option>`).join('')).join('');
   const wp = 100 / KB_WHITES.length;   // keyboard card VERTIKAL: C5 di bawah, naik sampai C6 di atas. Tuts putih menumpuk ke atas, tuts hitam pendek menempel di sisi kiri dan berpusat di batas tuts putih
   const kbKeys = KB_WHITES.map((p, i) => `<button type="button" class="mgc__wk" data-p="${p}" aria-label="${midiName(p)}" style="top:${(KB_WHITES.length - 1 - i) * wp}%"><span>${midiName(p)}</span></button>`).join('') +
     KB_BLACKS.map(p => `<button type="button" class="mgc__bk" data-p="${p}" aria-label="${midiName(p)}" style="top:calc(${100 - KB_WHITES.filter(w => w < p).length * wp}% - ${wp * 0.3235}%)"><span>${midiName(p)}</span></button>`).join('');
@@ -116,7 +115,10 @@ function build(): void {
       '<canvas class="mgc__spec" aria-hidden="true"></canvas>' +
       '<div class="mgc__main"><aside class="mgc__side">' +
         '<div class="mgc__ctl">' +
-          `<div class="mgc__r"><span>Key</span><label class="mgc__dd"><select data-k="key" aria-label="Key">${keyOpts}</select></label></div>` +
+          '<div class="mgc__r"><span>Key</span><div class="mgc__kr">' +
+            '<div class="mgc__cd" data-dd="root"><button type="button" class="mgc__cdb" aria-haspopup="listbox" aria-expanded="false" aria-label="Nada dasar (key)"><span></span></button></div>' +
+            '<div class="mgc__cd" data-dd="scale"><button type="button" class="mgc__cdb" aria-haspopup="listbox" aria-expanded="false" aria-label="Mayor atau minor"><span></span></button></div>' +
+          '</div></div>' +
           '<div class="mgc__r"><span>Length</span><div class="mgc__sg"><button type="button" data-a="len" data-s="4">4 bars</button><button type="button" data-a="len" data-s="8">8 bars</button></div></div>' +
           '<div class="mgc__r"><span>Audio</span><div class="mgc__sg"><button type="button" data-a="aud" data-s="0">Off</button><button type="button" data-a="aud" data-s="1">On</button></div></div>' +
         '</div>' +
@@ -226,8 +228,67 @@ function build(): void {
     marks.innerHTML = Array.from({ length: bars }, (_, b) => `<i style="left:${(b * 4 / tot) * 100}%">${b + 1}</i>`).join('');
     renderKeys();
   }
+  // ---------- dropdown custom (bukan select bawaan browser): daftar pilihan muncul sebagai panel biru, bisa dioperasikan dengan panah / Enter / Esc ----------
+  type DdKey = 'root' | 'scale';
+  const DD: Record<DdKey, { v: string; t: string }[]> = {
+    root: NOTE_NAMES.map((n, i) => ({ v: String(i), t: n })),
+    scale: [{ v: 'Major', t: 'Major' }, { v: 'Minor', t: 'Minor' }],   // hanya dua pilihan: mayor dan minor
+  };
+  const ddValue = (k: DdKey): string => (k === 'root' ? String(S.st.root) : S.st.scale);
+  const ddLabels = (): void => {
+    (Object.keys(DD) as DdKey[]).forEach(k => { const sp = el.querySelector<HTMLElement>(`[data-dd="${k}"] .mgc__cdb span`); if (sp) sp.textContent = DD[k].find(o => o.v === ddValue(k))?.t ?? ddValue(k); });
+  };
+  const pop = document.createElement('div'); pop.className = 'mgc__pop'; pop.setAttribute('role', 'listbox'); pop.hidden = true; el.appendChild(pop);
+  let popFor: DdKey | null = null, popBtn: HTMLElement | null = null;
+  const closePop = (refocus = false): void => {
+    if (pop.hidden) return;
+    pop.hidden = true; popBtn?.setAttribute('aria-expanded', 'false');
+    if (refocus) popBtn?.focus({ preventScroll: true });
+    popFor = null; popBtn = null;
+  };
+  const openPop = (btn: HTMLElement): void => {
+    const k = btn.closest<HTMLElement>('[data-dd]')!.dataset.dd as DdKey;
+    if (popFor === k && !pop.hidden) { closePop(); return; }
+    closePop();
+    popFor = k; popBtn = btn; btn.setAttribute('aria-expanded', 'true');
+    const cur = ddValue(k);
+    pop.innerHTML = DD[k].map(o => `<div role="option" tabindex="-1" class="mgc__po${o.v === cur ? ' is-on' : ''}" data-v="${o.v}" aria-selected="${o.v === cur}">${o.t}</div>`).join('');
+    pop.hidden = false;
+    const r = btn.getBoundingClientRect(), vh = window.innerHeight, below = vh - r.bottom - 8, above = r.top - 8, up = below < 120 && above > below;
+    pop.style.minWidth = Math.max(r.width, 64) + 'px'; pop.style.left = Math.max(4, Math.min(r.left, window.innerWidth - r.width - 4)) + 'px';
+    pop.style.maxHeight = Math.max(80, Math.min(260, up ? above : below)) + 'px';
+    if (up) { pop.style.top = ''; pop.style.bottom = (vh - r.top + 4) + 'px'; } else { pop.style.bottom = ''; pop.style.top = (r.bottom + 4) + 'px'; }
+    (pop.querySelector<HTMLElement>('.is-on') ?? pop.firstElementChild as HTMLElement | null)?.focus({ preventScroll: false });
+  };
+  const pickPop = (o: HTMLElement): void => {
+    const k = popFor; if (!k) return; const v = o.dataset.v!;
+    closePop(true);
+    if (k === 'root') S.st.root = Math.max(0, +v); else S.st.scale = v;
+    changed(); playChord(S.sel);
+  };
+  pop.addEventListener('click', e => { const o = (e.target as HTMLElement).closest<HTMLElement>('.mgc__po'); if (o) pickPop(o); });
+  pop.addEventListener('keydown', e => {
+    e.stopPropagation();
+    const items = [...pop.querySelectorAll<HTMLElement>('.mgc__po')], i = items.indexOf(document.activeElement as HTMLElement);
+    if (e.key === 'ArrowDown') items[Math.min(items.length - 1, i + 1)]?.focus();
+    else if (e.key === 'ArrowUp') items[Math.max(0, i - 1)]?.focus();
+    else if (e.key === 'Home') items[0]?.focus();
+    else if (e.key === 'End') items[items.length - 1]?.focus();
+    else if (e.key === 'Enter' || e.key === ' ') { if (i >= 0) pickPop(items[i]); }
+    else if (e.key === 'Escape' || e.key === 'Tab') closePop(true);
+    else return;
+    e.preventDefault();
+  });
+  pop.addEventListener('keyup', e => e.stopPropagation());
+  el.addEventListener('pointerdown', e => { const t = e.target as HTMLElement; if (!pop.hidden && !t.closest('.mgc__pop') && !t.closest('.mgc__cdb')) closePop(); });
+  window.addEventListener('resize', () => closePop());
+  el.querySelectorAll<HTMLElement>('.mgc__cdb').forEach(b => {
+    b.addEventListener('click', () => openPop(b));
+    b.addEventListener('keydown', e => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); openPop(b); } });
+  });
+
   function renderControls(): void {
-    $<HTMLSelectElement>('select[data-k="key"]').value = `${S.st.root}|${S.st.scale}`;
+    ddLabels();
     $<HTMLSelectElement>('select[data-k="preset"]').value = String(S.preset);
     $('.mgc__pname').textContent = S.preset >= 0 ? PRESETS[S.preset].name : 'New progression';
     const bars = totalBeats(S.slots) / 4;
@@ -375,8 +436,7 @@ function build(): void {
   });
   el.addEventListener('change', e => {
     const s = e.target as HTMLSelectElement; if (!s.dataset.k) return;
-    if (s.dataset.k === 'key') { const [r, sc] = s.value.split('|'); S.st.root = Math.max(0, +r); S.st.scale = sc; changed(); }
-    else if (s.dataset.k === 'preset') { if (+s.value >= 0) loadPreset(+s.value); else { S.preset = -1; renderAll(); commit(); } }
+    if (s.dataset.k === 'preset') { if (+s.value >= 0) loadPreset(+s.value); else { S.preset = -1; renderAll(); commit(); } }
   });
   // seret file .mid langsung ke DAW / folder (Chrome / Edge)
   $('.mgc__dnd').addEventListener('dragstart', e => {
@@ -409,7 +469,7 @@ function build(): void {
   new ResizeObserver(() => { if (!el.hidden) drawRoll(); }).observe(cv);
 
   function close(): void {
-    stopPlay(); el.hidden = true; document.body.classList.remove('mgc-open');
+    closePop(); stopPlay(); el.hidden = true; document.body.classList.remove('mgc-open');
     if (prevFocus instanceof HTMLElement && prevFocus.isConnected) prevFocus.focus({ preventScroll: true });
   }
   openFn = () => {

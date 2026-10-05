@@ -1816,11 +1816,19 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mgc__pow{font-size:15px;font-weight:900;letter-spacing:.03em;color:#8c8c8c;white-space:nowrap}
 .mgc__x{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:transparent;color:#8a8a8a}
 .mgc__x:hover{background:rgba(0,0,0,.08);color:#333}
-.mgc__dd{position:relative;display:flex;align-items:center;height:30px;border-radius:3px;background:var(--blue2)}
-.mgc__dd::before{content:"";position:absolute;left:9px;width:13px;height:13px;border:1.5px solid #dbe6ff;border-radius:50%;pointer-events:none}
-.mgc__dd::after{content:"";position:absolute;left:13px;top:10px;width:4px;height:4px;border:solid #dbe6ff;border-width:0 1.5px 1.5px 0;transform:rotate(45deg);pointer-events:none}
-.mgc__dd select{width:100%;height:100%;padding:0 10px 0 34px;border:0;background:transparent;appearance:none;-webkit-appearance:none;text-align:center;text-align-last:center;font-size:13px;cursor:pointer}
-.mgc__dd select option{background:var(--blue3);color:#fff;text-transform:none}
+.mgc__kr{display:grid;grid-template-columns:1fr 1.5fr;gap:4px}
+.mgc__cd{position:relative;min-width:0}
+.mgc__cdb{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:30px;padding:0 18px 0 8px;border-radius:3px;background:var(--blue2);color:#fff;font-size:13px;transition:background .12s ease}
+.mgc__cdb:hover,.mgc__cdb[aria-expanded="true"]{background:var(--blue3)}
+.mgc__cdb::after{content:"";position:absolute;right:8px;top:50%;width:5px;height:5px;margin-top:-4px;border:solid #dbe6ff;border-width:0 1.5px 1.5px 0;transform:rotate(45deg);transition:transform .15s ease}
+.mgc__cdb[aria-expanded="true"]::after{margin-top:-1px;transform:rotate(-135deg)}
+.mgc__pop{position:fixed;z-index:10;overflow-y:auto;padding:4px;border-radius:5px;background:#3f6fd8;color:#fff;box-shadow:0 14px 36px -6px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.12);font:800 13px/1.2 'Arial Rounded MT Bold','Nunito','Trebuchet MS',system-ui,sans-serif;letter-spacing:.02em;text-transform:uppercase;animation:mgc-pop .12s ease-out;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.4) transparent}
+.mgc__pop[hidden]{display:none}
+.mgc__po{display:flex;align-items:center;justify-content:center;min-height:30px;padding:0 12px;border-radius:3px;cursor:pointer;outline:none;color:rgba(255,255,255,.75)}
+.mgc__po:hover,.mgc__po:focus-visible{background:#4a7de6;color:#fff}
+.mgc__po.is-on{background:#fff;color:#2f5fcf}
+.mgc__po.is-on:hover,.mgc__po.is-on:focus-visible{background:#fff}
+@keyframes mgc-pop{from{opacity:0;transform:translateY(-4px)}}
 .mgc__sg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;height:30px;border-radius:3px;overflow:hidden}
 .mgc__sg button{background:#5d8cf0;color:rgba(255,255,255,.4);font-size:13px}
 .mgc__sg button.is-on{background:var(--blue3);color:#fff}
@@ -1890,8 +1898,7 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
   .mgc__pn{width:110px;height:20px;padding:0 8px;gap:6px}.mgc__save{height:20px;padding:0 8px}.mgc__pow{display:none}.mgc__x{width:20px;height:20px}
   .mgc__spec{height:44px}
   .mgc__main{flex-direction:row;padding:4px 0 0 6px}.mgc__side{width:112px;gap:4px;padding:0 6px 4px 0}
-  .mgc__ctl{gap:3px}.mgc__r{gap:2px;font-size:9px}.mgc__dd,.mgc__sg{height:18px}.mgc__sg button,.mgc__dd select{font-size:9px}
-  .mgc__dd::before{left:5px;width:10px;height:10px}.mgc__dd::after{left:8px;top:5px;width:3px;height:3px}.mgc__dd select{padding-left:22px}
+  .mgc__ctl{gap:3px}.mgc__r{gap:2px;font-size:9px}.mgc__cdb,.mgc__sg{height:18px}.mgc__sg button,.mgc__cdb,.mgc__po{font-size:9px}.mgc__po{min-height:20px}
   .mgc__gen{flex-direction:row;justify-content:center;gap:6px}.mgc__ur{flex-direction:column;gap:4px}.mgc__ur button{width:20px;height:18px}
   .mgc__big{width:56px;height:56px;padding:4px}.mgc__big svg{width:28px;height:28px}.mgc__big i{box-shadow:inset 0 0 0 3px rgba(255,255,255,.28)}
   .mgc__link{padding:2px 6px;font-size:8px}
@@ -1902,7 +1909,7 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
   .mgc__foot{height:28px;grid-template-columns:50% 1fr 48px;margin-bottom:4px}.mgc__go svg{width:15px;height:15px}.mgc__dnd{font-size:9px;gap:5px}.mgc__dnd svg,.mgc__dl svg{width:12px;height:12px}
   .mgc__toast{bottom:36px}
 }
-@media (prefers-reduced-motion:reduce){.mgc__toast{animation:none}.mgc__big{transition:none}}
+@media (prefers-reduced-motion:reduce){.mgc__pop{animation:none}.mgc__toast{animation:none}.mgc__big{transition:none}}
 .fxc--mgchord{padding:12px 14px 12px 16px;background-image:linear-gradient(90deg,rgba(91,143,243,.28),transparent 60%)}
 .fxc--mgchord .fxc__title{font-family:'Syncopate',system-ui,sans-serif;font-size:13px;font-weight:700;letter-spacing:.22em}
 @media (max-width:1100px){.mgc{padding-top:calc(max(10px,env(safe-area-inset-top)) + 42px)}}   /* tombol menu global DAW (z 500) ada di pojok kanan atas: jendela mulai di bawahnya */
