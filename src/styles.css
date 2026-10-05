@@ -1869,7 +1869,21 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
   .mgc__roll{height:220px}.mgc__foot{grid-template-columns:1fr 1fr 56px}
 }
 @media (max-height:560px) and (orientation:landscape){
-  .mgc__top{min-height:0;padding:8px 14px}.mgc__big{width:104px;height:104px}.mgc__big svg{width:48px;height:48px}.mgc__mascot{height:120px}.mgc__roll{height:150px}.mgc__foot{height:48px}
+  .mgc{padding:max(4px,env(safe-area-inset-top)) max(6px,env(safe-area-inset-right)) max(4px,env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left));grid-template-rows:minmax(0,1fr)}
+  .mgc__win{height:100%;width:min(1076px,100%);overflow:hidden;font-size:11px}
+  .mgc__head{min-height:32px;padding:3px 8px 3px 10px;gap:8px}.mgc__logo{font-size:18px}.mgc__logo svg{width:28px;height:17px}
+  .mgc__pn{width:170px;height:22px}.mgc__save{height:22px}.mgc__pow{font-size:11px}.mgc__x{width:24px;height:24px}
+  .mgc__top{min-height:0;padding:6px 14px;gap:10px}.mgc__ctl{gap:5px}.mgc__r{grid-template-columns:60px 1fr;gap:8px;font-size:12px}
+  .mgc__dd,.mgc__sg{height:22px}.mgc__sg button,.mgc__dd select{font-size:11px}.mgc__dd::before{left:7px}.mgc__dd::after{left:11px;top:7px}.mgc__dd select{padding-left:28px}
+  .mgc__gen{flex-direction:row;gap:8px}.mgc__ur{flex-direction:column;gap:6px}
+  .mgc__big{width:76px;height:76px;padding:5px}.mgc__big svg{width:38px;height:38px}.mgc__big i{box-shadow:inset 0 0 0 3px rgba(255,255,255,.28)}
+  .mgc__mascot{height:80px}.mgc__link{padding:3px 8px;font-size:9px}
+  .mgc__seq{display:flex;flex-direction:column;flex:1 1 0;min-height:0}
+  .mgc__ruler{height:20px}.mgc__marks{font-size:10px}.mgc__marks i{padding-top:4px}
+  .mgc__lane{height:20px;margin-top:3px;margin-bottom:3px}.mgc__ch{font-size:11px}.mgc__h{width:14px;height:14px}.mgc__h svg{width:10px;height:10px}
+  .mgc__roll{height:auto;flex:1 1 0;min-height:0}
+  .mgc__foot{height:34px;margin-bottom:4px}.mgc__go svg{width:18px;height:18px}.mgc__dnd{font-size:11px;gap:6px}.mgc__dnd svg,.mgc__dl svg{width:15px;height:15px}
+  .mgc__toast{bottom:44px}
 }
 @media (prefers-reduced-motion:reduce){.mgc__toast{animation:none}.mgc__big{transition:none}}
 .fxc--mgchord{padding:12px 14px 12px 16px;background-image:linear-gradient(90deg,rgba(91,143,243,.28),transparent 60%)}

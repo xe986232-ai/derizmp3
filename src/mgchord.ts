@@ -174,10 +174,10 @@ function build(): void {
     if (W < 20 || H < 20) return;
     if (cv.width !== Math.floor(W * dpr) || cv.height !== Math.floor(H * dpr)) { cv.width = Math.floor(W * dpr); cv.height = Math.floor(H * dpr); }
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const gh = H - PEG, tot = totalBeats(S.slots), x0 = KW, pw = W - KW, ppb = pw / tot;
+    const peg = Math.min(PEG, Math.round(H * 0.2)), gh = H - peg, tot = totalBeats(S.slots), x0 = KW, pw = W - KW, ppb = pw / tot;
     let lo = 127, hi2 = 0; for (const n of notes) { lo = Math.min(lo, n.p); hi2 = Math.max(hi2, n.p); }
     if (hi2 < lo) { lo = 48; hi2 = 72; }
-    lo -= 2; hi2 += 2; while (hi2 - lo < 22) { lo--; hi2++; }
+    lo -= 2; hi2 += 2; while (hi2 - lo < (gh < 120 ? 14 : 22)) { lo--; hi2++; }
     const rows = hi2 - lo + 1, rh = gh / rows, yOf = (p: number): number => (hi2 - p) * rh;
     g.fillStyle = '#2e2e2e'; g.fillRect(0, 0, W, H);
     for (let p = lo; p <= hi2; p++) { g.fillStyle = BLACK_PC.has(p % 12) ? '#272727' : '#3b3b3b'; g.fillRect(x0, yOf(p), pw, rh); }
@@ -202,13 +202,13 @@ function build(): void {
       else { g.fillStyle = '#c4c4c4'; g.fillRect(0, y + rh - 0.5, KW, 1); }
       if (p % 12 === 0 && rh >= 8) { g.fillStyle = '#444'; g.fillText(midiName(p), KW - 22, y + rh / 2); }
     }
-    g.fillStyle = '#383838'; g.fillRect(0, gh, W, PEG);   // strip pasak oranye
+    g.fillStyle = '#383838'; g.fillRect(0, gh, W, peg);   // strip pasak oranye
     t = 0;
     for (const sl of S.slots) {
       const x = Math.round(x0 + t * ppb);
       g.strokeStyle = '#8a8a8a'; g.lineWidth = 1; g.beginPath(); g.moveTo(x + .5, gh); g.lineTo(x + .5, H); g.stroke();
       const gr = g.createLinearGradient(x - 5, 0, x + 5, 0); gr.addColorStop(0, '#f4b64f'); gr.addColorStop(1, '#d6862a');
-      g.fillStyle = gr; g.beginPath(); g.roundRect(x - 5, gh + 4, 10, PEG - 12, 3); g.fill(); t += sl.beats;
+      g.fillStyle = gr; g.beginPath(); g.roundRect(x - 5, gh + 3, 10, Math.max(6, peg - 8), 3); g.fill(); t += sl.beats;
     }
     if (phBeat >= 0) { g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x0 + phBeat * ppb, 0); g.lineTo(x0 + phBeat * ppb, gh); g.stroke(); }
   }
