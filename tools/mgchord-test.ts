@@ -63,4 +63,13 @@ eq('Block = 3 nada', buildNotes(S(), bar, v3, rh('Block')).length, 3);
 eq('pola diulang tiap bar (8 ketukan = 2x Pluck)', buildNotes(S(), [{ deg: 0, beats: 8 }], v3, rh('Pluck')).length, 10);
 eq('chord 2 ketukan dipotong di batasnya', buildNotes(S(), [{ deg: 0, beats: 2 }], v3, rh('Pluck')).every(n => n.s + n.l <= 2 + 1e-6), true);
 eq('style lama / tak dikenal jatuh ke Block', buildNotes(S(), bar, v3, rh('Genjreng' as never)).length, 3);
+// ---- humanize bawaan: velocity per nada + sapuan halus ----
+const base = buildNotes(S(), bar, v3, rh('Pluck')).map(n => n.v);
+eq('velocity per nada tetap (tidak acak tiap hitung)', buildNotes(S(), bar, v3, rh('Pluck')).map(n => n.v), base);
+eq('velocity Pluck dekat nilai pola (+-10%): 0.8 0.5 0.72 0.36 0.46', base.every((v, i) => Math.abs(v - [0.8, 0.5, 0.72, 0.36, 0.46][i]) <= [0.8, 0.5, 0.72, 0.36, 0.46][i] * 0.1 + 1e-9), true);
+eq('velocity berbeda antar nada (tidak rata)', new Set(base.map(v => v.toFixed(3))).size, 5);
+eq('Tresillo ketukan 0: tiga nada disapu naik 0.02', buildNotes(S(), bar, v3, rh('Tresillo')).slice(0, 3).map(n => +n.s.toFixed(3)), [0, 0.02, 0.04]);
+eq('Block disapu halus naik', buildNotes(S(), bar, v3, rh('Block')).map(n => +n.s.toFixed(3)), [0, 0.02, 0.04]);
+eq('Block tetap berakhir di akhir chord', buildNotes(S(), bar, v3, rh('Block')).every(n => Math.abs(n.s + n.l - 4) < 1e-9), true);
+eq('humanize tidak menggeser nada tunggal Pluck', buildNotes(S(), bar, v3, rh('Pluck')).map(n => n.s), [0, 0.5, 1, 1.5, 3]);
 console.log(fail ? fail + ' GAGAL' : 'semua lolos'); process.exit(fail ? 1 : 0);

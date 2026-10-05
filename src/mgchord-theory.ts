@@ -134,7 +134,7 @@ export function randomProgression(totalBeats: number, rnd: () => number = Math.r
 export type PlayStyle = 'Block' | 'Pluck' | 'Pad Run' | 'Turun' | 'Tangga' | 'Tresillo' | 'Dholak' | 'Tisra' | 'Pad Pluck' | 'Bell' | 'Roll';
 export const STYLES: PlayStyle[] = ['Block', 'Pluck', 'Pad Run', 'Turun', 'Tangga', 'Tresillo', 'Dholak', 'Tisra', 'Pad Pluck', 'Bell', 'Roll'];
 export const STYLE_INFO: Record<PlayStyle, { label: string; desc: string }> = {
-  Block: { label: 'Block', desc: 'Polos: semua nada chord bunyi bersamaan dan ditahan sepanjang chord' },
+  Block: { label: 'Block', desc: 'Polos: semua nada chord ditahan sepanjang chord (disapu sangat halus supaya natural)' },
   Pluck: { label: 'Pluck', desc: 'Pola contoh Indian Beat: akar, kuint, oktaf, terts atas, oktaf (ketukan 0, 0.5, 1, 1.5, 3), ditahan sampai akhir bar' },
   'Pad Run': { label: 'Pad Run', desc: 'Pola contoh Indian Beat bagian 2: akar + kuint ditahan, lalu lari nada naik-turun di dua ketukan terakhir' },
   Turun: { label: 'Turun', desc: 'Kebalikan Pluck: mulai dari nada tinggi, turun ke akar, ditahan sampai akhir bar' },
@@ -172,13 +172,21 @@ export const PATTERNS: Partial<Record<PlayStyle, Ev[]>> = {
 };
 const lim = (p: number): number => Math.max(12, Math.min(120, p)), vlim = (v: number): number => Math.max(0.05, Math.min(1, v));
 
+// Humanize bawaan (semua style, supaya strum / petikan terasa natural): velocity tiap nada sedikit berbeda (+-HUMAN_VEL, acak TETAP berdasarkan posisi + nada,
+// jadi hasilnya sama setiap kali dihitung / diputar / diekspor) dan nada yang bunyi bersamaan disapu naik dari bawah, STAGGER ketukan per nada.
+const HUMAN_VEL = 0.1, STAGGER = 0.02;
+const jit = (a: number, b: number): number => { const x = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453; return x - Math.floor(x); };   // 0..1, deterministik
+const human = (v: number, s: number, p: number): number => vlim(v * (1 + (jit(s * 7.31, p) - 0.5) * 2 * HUMAN_VEL));
+
 function patternNotes(ev: Ev[], vn: VNote[], t: number, beats: number, si: number, out: OutNote[]): void {
   const sorted = [...vn].sort((a, b) => a.p - b.p), n = sorted.length;
   for (let b0 = 0; b0 < beats - 1e-9; b0 += 4) {   // pola satu bar diulang sampai chord habis
-    const end = Math.min(beats, b0 + 4);   // nada tidak melewati akhir bar maupun akhir chord
+    const end = Math.min(beats, b0 + 4), seen = new Map<number, number>();   // nada tidak melewati akhir bar maupun akhir chord; seen = berapa nada sudah bunyi di ketukan yang sama
     for (const e of ev) {
-      const s = b0 + e.at; if (s >= end - 1e-9) continue;
-      out.push({ p: lim(sorted[e.i % n].p + 12 * Math.floor(e.i / n)), s: t + s, l: Math.min(e.len, end - s), v: vlim(e.v), slot: si });
+      const k = seen.get(e.at) ?? 0; seen.set(e.at, k + 1);
+      const s = b0 + e.at + Math.min(k * STAGGER, 0.2); if (s >= end - 1e-9) continue;
+      const p = lim(sorted[e.i % n].p + 12 * Math.floor(e.i / n));
+      out.push({ p, s: t + s, l: Math.min(e.len - k * STAGGER, end - s), v: human(e.v, t + s, p), slot: si });
     }
   }
 }
@@ -190,7 +198,7 @@ export function buildNotes(st: Settings, slots: Slot[], vc: Voicing, rh: Rhythm)
     const vn = voice(slotChord(st, sl), vc), pat = PATTERNS[rh.style];
     if (vn.length) {
       if (pat) patternNotes(pat, vn, t, sl.beats, si, out);
-      else for (const n of vn) out.push({ p: n.p, s: t, l: sl.beats, v: n.v, slot: si });   // Block (dan nama style yang tidak dikenal)
+      else [...vn].sort((a, b) => a.p - b.p).forEach((n, k) => { const d = Math.min(k * STAGGER, sl.beats / 4); out.push({ p: n.p, s: t + d, l: sl.beats - d, v: human(n.v, t + d, n.p), slot: si }); });   // Block (dan nama style yang tidak dikenal): chord utuh, disapu halus
     }
     t += sl.beats;
   });
