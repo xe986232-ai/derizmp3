@@ -26,7 +26,7 @@ const STEPS: Step[] = [
     text: 'Ini tutorial singkat Melvox. Aku tunjukkan fungsi tiap menu satu per satu. Kamu bisa menutupnya kapan saja, dan membukanya lagi lewat tombol gelembung chat di pojok kanan atas.' },
 
   { title: 'Tambahkan track', targets: ['.addtrack'], prefer: ['right', 'top', 'bottom'],
-    text: 'Mulai dari sini. Ketuk untuk memilih instrumen track: Drums, Audio clip, Supersaw, Minisynth, GMS Synth, DW Sampler, atau DERIZ.' + (DEMO ? ` Di versi demo dibatasi ${LIMITS.tracks} track.` : '') },
+    text: 'Mulai dari sini. Ketuk untuk memilih instrumen track: Audio clip, Supersaw, atau DERIZ.' + (DEMO ? ` Di versi demo dibatasi ${LIMITS.tracks} track.` : '') },
   { title: 'Ikon instrumen', targets: [T('.trackheader__left-content')], prefer: ['right', 'bottom'],
     text: 'Ikon di kiri kartu track adalah tombol instrumen. Ketuk untuk menampilkan instrumen track ini.' },
   { title: 'Nama dan saklar track', targets: [T('.trackheader__top-row')], prefer: ['right', 'bottom'],
