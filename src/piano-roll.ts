@@ -1325,7 +1325,7 @@ function build(): HTMLElement {
       '<canvas class="pr__ruler" aria-hidden="true"></canvas>' +
       '<canvas class="pr__keys" aria-hidden="true"></canvas>' +
       '<div class="pr__scroll"><div class="pr__space"></div><div class="pr__clip"><canvas class="pr__gridbg" aria-hidden="true"></canvas><canvas class="pr__grid" role="img" aria-label="Grid nada"></canvas></div></div>' +
-      '<div class="pr__phclip" aria-hidden="true"><div class="pr__ph"><svg width="9" height="20" viewBox="0 0 9 20"><path d="M1.5 0h6A1.5 1.5 0 0 1 9 1.5v9.2l-.6 2L4.5 19 .6 12.7 0 10.7V1.5A1.5 1.5 0 0 1 1.5 0z" fill="currentColor"/></svg><i></i></div></div>' +
+      '<div class="pr__phclip" aria-hidden="true"><div class="pr__ph"><svg width="9" height="20" viewBox="0 0 9 20"><path d="M4.5 8.8 8.3 14 4.5 19.2.7 14z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="currentColor"/></svg><i></i></div></div>' +
     '</div>' +
     '<div class="pr__vel">' +
       '<div class="pr__velbody" id="prVelBody"><canvas class="pr__velc" role="img" aria-label="Velocity tiap nada: seret batang untuk mengubah"></canvas></div>' +
