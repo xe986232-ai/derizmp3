@@ -2189,7 +2189,7 @@ html[data-ui="mono"] .pr__corner{background:#18181b}
   font:700 11px/1 'Syncopate',system-ui,sans-serif;letter-spacing:.28em;box-shadow:0 6px 22px rgba(34,199,232,.45);will-change:transform}
 body.is-pdragging,body.is-pdragging *{cursor:grabbing!important;user-select:none!important;-webkit-user-select:none!important}
 .derizov.is-pdrag{pointer-events:none}
-.derizov.is-pdrag .derizov__win{opacity:.28;transition:opacity .15s ease}
-.derizov.is-pdrag .derizov__back{opacity:.15}
+/* seperti MPCS: begitu ditarik, jendela DERIZ langsung hilang; hanya label yang melayang. Dilepas di luar piano roll = jendela kembali */
+.derizov.is-pdrag .derizov__win,.derizov.is-pdrag .derizov__back{opacity:0;transition:opacity .12s ease}
 #pianoRoll.is-drop{outline:3px dashed #22c7e8;outline-offset:-3px;box-shadow:inset 0 0 0 9999px rgba(34,199,232,.08)}
-@media (prefers-reduced-motion:reduce){.derizov.is-pdrag .derizov__win{transition:none}}
+@media (prefers-reduced-motion:reduce){.derizov.is-pdrag .derizov__win,.derizov.is-pdrag .derizov__back{transition:none}}
