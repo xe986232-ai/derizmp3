@@ -35,7 +35,7 @@ import { slideSource, glideBeats } from './note-slide';
 import { velAlpha } from './velocity';
 import { DEMO, LIMITS, demoNotice, demoMount } from './demo';
 import { initTutorial } from './tutorial';
-const demoTrackFull = (ins) => { if (!DEMO) return false; const cs = [...document.querySelectorAll('.trackheader-container')]; if (cs.length >= LIMITS.tracks) { demoNotice('track'); return true; } if (ins === 'DERIZ' && cs.filter(c => c.dataset.ins === 'DERIZ').length >= LIMITS.deriz) { demoNotice('deriz'); return true; } if (ins === 'DERIZ' && fxRack.derizCount() >= LIMITS.derizPlugins) { demoNotice('derizplug'); return true; } return false; };   // DEMO: batas jumlah track / DERIZ
+const demoTrackFull = (ins) => { if (!DEMO) return false; const cs = [...document.querySelectorAll('.trkcard-wrap')]; if (cs.length >= LIMITS.tracks) { demoNotice('track'); return true; } if (ins === 'DERIZ' && cs.filter(c => c.dataset.ins === 'DERIZ').length >= LIMITS.deriz) { demoNotice('deriz'); return true; } if (ins === 'DERIZ' && fxRack.derizCount() >= LIMITS.derizPlugins) { demoNotice('derizplug'); return true; } return false; };   // DEMO: batas jumlah track / DERIZ
 import { openPianoRoll, closePianoRoll, isPianoRollOpen, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollPreviewHandler, setPianoRollSeekHandler, getNoteColor, setNoteColor, getPianoRollNotes, setPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, clearPianoRollNotes, PR_BEATS } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 registerSW();   // PWA: bisa di-install & jalan offline (aktif pada hasil build)
@@ -44,8 +44,8 @@ initLandscape();
 initMenuPanel();
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const EASE_OUT = 'cubic-bezier(.22,1,.36,1)', EASE_SPRING = 'cubic-bezier(.34,1.56,.64,1)', EASE_INOUT = 'cubic-bezier(.65,0,.35,1)';
-const TRACK_TPL = document.querySelector('.trackheader-container').cloneNode(true);
-TRACK_TPL.querySelector('.trackheader').classList.remove('trackheader--selected');   // track baru tidak otomatis terpilih dari template
+const TRACK_TPL = document.querySelector('.trkcard-wrap').cloneNode(true);
+TRACK_TPL.querySelector('.trkcard').classList.remove('trkcard--on');   // track baru tidak otomatis terpilih dari template
 // Gambar penggaris bar/ketukan (bisa di-zoom)
 let BARS = 32;   // bertambah otomatis kalau audio yang di-upload lebih panjang dari timeline
 const MAX_BARS = 300, H = 48;
@@ -110,7 +110,7 @@ function paintRuler(force) {
 }
 sizeRuler(); paintRuler();
 window.addEventListener('derizmp3:ui', () => paintRuler(true));   // ganti Tema UI: ruler digambar ulang
-const initRec = root => root.querySelectorAll('.trackheader__rec-mode-button').forEach(btn => {
+const initRec = root => root.querySelectorAll('.trkcard__arm').forEach(btn => {
   btn.addEventListener('click', () => {
     const on = btn.getAttribute('aria-checked') === 'true';
     btn.setAttribute('aria-checked', String(!on));
@@ -241,7 +241,7 @@ function removeTrack(cont, lane) {
 }
 function openMenu(btn) {
   closeMenu(true);
-  const cont = btn.closest('.trackheader-container');
+  const cont = btn.closest('.trkcard-wrap');
   const cur = cont.style.getPropertyValue('--track-color') || COLORS[0];
   menu = document.createElement('div');
   menu.className = 'track-menu';
@@ -251,13 +251,13 @@ function openMenu(btn) {
   const rnTarget = lastPat && rnPats.includes(lastPat) ? lastPat : rnPats[0] || null;   // pattern terakhir dipilih di track ini, kalau tidak ada: yang paling kiri
   menu.innerHTML =
     '<button role="menuitem" class="track-menu__item" data-act="rename"' + (rnTarget ? '' : ' disabled title="Track ini belum punya pattern"') + '>' +
-      '<span class="app-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.9 2.9a2.4 2.4 0 0 1 3.4 0l.8.8a2.4 2.4 0 0 1 0 3.4L8.9 19.3a2 2 0 0 1-.9.5l-4.4 1.1a.8.8 0 0 1-1-1L3.7 15.5a2 2 0 0 1 .5-.9L16.9 2.9Zm1.7 1.7L6 17.2l-.6 2.4 2.4-.6L20.4 6.4l-1.8-1.8Z"/></svg></span>' +
+      '<span class="ico"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.9 2.9a2.4 2.4 0 0 1 3.4 0l.8.8a2.4 2.4 0 0 1 0 3.4L8.9 19.3a2 2 0 0 1-.9.5l-4.4 1.1a.8.8 0 0 1-1-1L3.7 15.5a2 2 0 0 1 .5-.9L16.9 2.9Zm1.7 1.7L6 17.2l-.6 2.4 2.4-.6L20.4 6.4l-1.8-1.8Z"/></svg></span>' +
       '<span>Ganti nama pattern</span></button>' +
     '<button role="menuitem" class="track-menu__item" data-act="duplicate"' + (cont.dataset.ins === 'Automation' ? ' disabled title="Track Automation tidak bisa diduplikat"' : '') + '>' +
-      '<span class="app-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8.5 2.5h9A3 3 0 0 1 20.5 5.5v9a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-9a3 3 0 0 1 3-3Zm0 2a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-9Z"/><path d="M3.5 8.5a1 1 0 0 1 1 1v8a2 2 0 0 0 2 2h8a1 1 0 1 1 0 2h-8a4 4 0 0 1-4-4v-8a1 1 0 0 1 1-1Z"/></svg></span>' +
+      '<span class="ico"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8.5 2.5h9A3 3 0 0 1 20.5 5.5v9a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-9a3 3 0 0 1 3-3Zm0 2a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-9Z"/><path d="M3.5 8.5a1 1 0 0 1 1 1v8a2 2 0 0 0 2 2h8a1 1 0 1 1 0 2h-8a4 4 0 0 1-4-4v-8a1 1 0 0 1 1-1Z"/></svg></span>' +
       '<span>Duplicate track</span></button>' +
     '<button role="menuitem" class="track-menu__item track-menu__item--danger" data-act="delete">' +
-      '<span class="app-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5.397 9.652a1.166 1.166 0 0 0-1.165 1.165V21.71a1.165 1.165 0 0 0 1.165 1.165h13.206a1.166 1.166 0 0 0 1.165-1.165V10.817a1.165 1.165 0 0 0-2.33 0v9.728H6.562v-9.728a1.165 1.165 0 0 0-1.165-1.165Zm8.545-8.527h-3.884a1.165 1.165 0 1 0 0 2.33h3.884a1.165 1.165 0 0 0 0-2.33Z"/><path d="M11.223 17.05v-6.215a1.165 1.165 0 0 0-2.33 0v6.214a1.165 1.165 0 0 0 2.33 0Zm3.884 0v-6.215a1.165 1.165 0 1 0-2.33 0v6.214a1.165 1.165 0 0 0 2.33 0Zm3.496-12.041H5.397a1.165 1.165 0 1 0 0 2.33h13.206a1.165 1.165 0 1 0 0-2.33Z"/></svg></span>' +
+      '<span class="ico"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5.397 9.652a1.166 1.166 0 0 0-1.165 1.165V21.71a1.165 1.165 0 0 0 1.165 1.165h13.206a1.166 1.166 0 0 0 1.165-1.165V10.817a1.165 1.165 0 0 0-2.33 0v9.728H6.562v-9.728a1.165 1.165 0 0 0-1.165-1.165Zm8.545-8.527h-3.884a1.165 1.165 0 1 0 0 2.33h3.884a1.165 1.165 0 0 0 0-2.33Z"/><path d="M11.223 17.05v-6.215a1.165 1.165 0 0 0-2.33 0v6.214a1.165 1.165 0 0 0 2.33 0Zm3.884 0v-6.215a1.165 1.165 0 1 0-2.33 0v6.214a1.165 1.165 0 0 0 2.33 0Zm3.496-12.041H5.397a1.165 1.165 0 1 0 0 2.33h13.206a1.165 1.165 0 1 0 0-2.33Z"/></svg></span>' +
       '<span>Delete track</span></button>' +
     '<button role="menuitem" class="track-menu__item" data-act="color" aria-expanded="false">' +
       '<span class="track-menu__dot" style="background:' + cur + '"></span><span>Color</span>' +
@@ -318,7 +318,7 @@ function openColors(cont, it) {
     cont.style.setProperty('--track-color', sw.dataset.c);
     const ln = document.querySelector('.lane[data-track="' + cont.dataset.track + '"]');
     if (ln) ln.style.setProperty('--track-color', sw.dataset.c);
-    const ib = cont.querySelector('.trackheader__instrument-button');
+    const ib = cont.querySelector('.trkcard__inst');
     if (ib && !REDUCE) ib.animate([
       {transform:'scale(1)', boxShadow:'0 0 0 0 ' + sw.dataset.c},
       {transform:'scale(1.28)', boxShadow:'0 0 0 10px transparent', offset:.5},
@@ -326,7 +326,7 @@ function openColors(cont, it) {
     closeMenu();
   });
 }
-const initMore = root => root.querySelectorAll('.trackheader__more-options').forEach(btn => {
+const initMore = root => root.querySelectorAll('.trkcard__menu').forEach(btn => {
   btn.addEventListener('click', e => {
     e.stopPropagation(); closeAddMenu(true);
     if (menuBtn === btn) closeMenu(); else openMenu(btn);
@@ -382,7 +382,7 @@ const trimPatNotes = (id, beat) => { trimPianoRollNotes(id, beat); for (const k 
 setPianoRollChangeHandler(id => { const el = lanesEl.querySelector('.pattern[data-pr-id="' + patBase(id) + '"]'); if (el) renderPatNotes(el); });
 document.addEventListener('prbarschange', () => lanesEl.querySelectorAll('.pattern[data-pr-id]').forEach(renderPatNotes));   // Pengaturan > Grid Piano Roll diganti: note mini di semua pattern ikut lebar grid yang baru
 function createPattern(lane, sl, ci) {   // ci = {clip, off}: pattern ini adalah audio clip
-  const cont = document.querySelector('.trackheader-container[data-track="' + lane.dataset.track + '"]');
+  const cont = document.querySelector('.trkcard-wrap[data-track="' + lane.dataset.track + '"]');
   const col = cont && cont.style.getPropertyValue('--track-color');
   if (col) lane.style.setProperty('--track-color', col);
   const nm = document.getElementById('track-name-' + lane.dataset.track);
@@ -737,18 +737,18 @@ function openEdit(el, keepView = false) {
     color: lane.style.getPropertyValue('--track-color') || undefined,
     keepView,
   });
-  if (keepView && kbdCont) { const cont = document.querySelector('.trackheader-container[data-track="' + id + '"]'); if (cont) openKbd(cont, hasSynth(id) ? null : fxRack.derizIds(id)[0] ?? null); }
+  if (keepView && kbdCont) { const cont = document.querySelector('.trkcard-wrap[data-track="' + id + '"]'); if (cont) openKbd(cont, hasSynth(id) ? null : fxRack.derizIds(id)[0] ?? null); }
   renderPlayhead();
 }
 // Masuk ke pattern dari tombol titik tiga di DERIZ: piano roll yang sama, tapi nadanya milik DERIZ ini (dimainkan lewat sampler DERIZ ini)
-const trackColorOf = track => { const c = document.querySelector('.trackheader-container[data-track="' + track + '"]'); return (c && getComputedStyle(c).getPropertyValue('--track-color').trim()) || '#a66cff'; };
+const trackColorOf = track => { const c = document.querySelector('.trkcard-wrap[data-track="' + track + '"]'); return (c && getComputedStyle(c).getPropertyValue('--track-color').trim()) || '#a66cff'; };
 // nada instrumen lain di pattern yang sama (DERIZ lain di track mana pun + Supersaw milik track pattern): ditampilkan meredup di piano roll;
 // ditahan = pindah ke VST pemiliknya (open), jadi tidak perlu keluar-masuk lewat titik tiga
 function patGhosts(el, curKey) {
   const prId = el.dataset.prId, lt = el.parentElement.dataset.track, out = [];
   const add = (key, track, open) => { if (key !== curKey && !out.some(g => g.key === key)) out.push({key, color: trackColorOf(track), open}); };
   if (hasSynth(lt)) add(prId, lt, () => openEdit(el, true));
-  document.querySelectorAll('.trackheader-container').forEach(c => fxRack.derizIds(c.dataset.track).forEach(id => add(patKey(prId, id, lt), c.dataset.track, () => enterPatternAs(el, id, true))));
+  document.querySelectorAll('.trkcard-wrap').forEach(c => fxRack.derizIds(c.dataset.track).forEach(id => add(patKey(prId, id, lt), c.dataset.track, () => enterPatternAs(el, id, true))));
   return out;
 }
 // tombol Edit: kunci nada instrumen track pemilik pattern (Supersaw = polos; DERIZ = DERIZ pertama yang ada di track itu)
@@ -760,7 +760,7 @@ function enterPatternAs(el, fxId, keepView = false) {
   if (!el.isConnected) return;
   const lane = el.parentElement, track = fxRack.derizTrackOf(fxId); if (track === undefined) return;
   if (!el.dataset.prId) el.dataset.prId = 'pat' + (++prSeq);
-  const nm = document.getElementById('track-name-' + track), cont = document.querySelector('.trackheader-container[data-track="' + track + '"]');
+  const nm = document.getElementById('track-name-' + track), cont = document.querySelector('.trkcard-wrap[data-track="' + track + '"]');
   prStartBar = pl(el) / BAR_W;
   prvTarget = {track, fx: fxId};   // nada di piano roll ini milik DERIZ fxId
   openPianoRoll({
@@ -778,7 +778,7 @@ const patternBridge = {
   list(fxId) {
     const rows = [...lanesEl.querySelectorAll('.pattern:not([data-clip]):not([data-au-id])')].map(el => {
       const lane = el.parentElement, lt = lane.dataset.track, id = el.dataset.prId;
-      const nm = document.getElementById('track-name-' + lt), cont = document.querySelector('.trackheader-container[data-track="' + lt + '"]');
+      const nm = document.getElementById('track-name-' + lt), cont = document.querySelector('.trkcard-wrap[data-track="' + lt + '"]');
       return {
         title: el.querySelector('.pattern__title').textContent || 'Pattern',
         trackName: nm ? nm.textContent : 'Track',
@@ -910,13 +910,13 @@ function createAutomationClip() {
   const x = Math.max(0, Math.min(posBars * BAR_W, W - BAR_W / 2));   // mulai dari playhead
   let lane = [...lanesEl.querySelectorAll('.lane')].find(l => l.dataset.auTarget === tag && slot(l, x)), sl = lane && slot(lane, x);
   if (!lane) {   // belum ada lane untuk knob ini (atau penuh di posisi itu): track Automation baru
-    const src = document.querySelector('.trackheader-container[data-track="' + t.track + '"]');
+    const src = document.querySelector('.trkcard-wrap[data-track="' + t.track + '"]');
     addTrack({n: 'Automation', c: AUTO_COLOR});
     const id = trackSeq;
     lane = lanesEl.querySelector('.lane[data-track="' + id + '"]');
-    const cont = document.querySelector('.trackheader-container[data-track="' + id + '"]');
+    const cont = document.querySelector('.trkcard-wrap[data-track="' + id + '"]');
     document.getElementById('track-name-' + id).textContent = title;
-    cont.querySelector('.trackheader__track-name-button').title = title;
+    cont.querySelector('.trkcard__title-btn').title = title;
     cont.querySelector('input[type=range]').setAttribute('aria-label', 'Volume, ' + title);
     lane.dataset.auTarget = tag;
     sl = slot(lane, x) || slot(lane, 0);
@@ -1181,7 +1181,7 @@ function setKbdHeight(h) {
   rs.setProperty('--bh', Math.round(kh * 0.613) + 'px');
 }
 function openKbdForSelected() {
-  const cont = (selTrack && selTrack.closest('.trackheader-container')) || document.querySelector('.trackheader-container');
+  const cont = (selTrack && selTrack.closest('.trkcard-wrap')) || document.querySelector('.trkcard-wrap');
   if (cont) openKbd(cont);   // keyboard memainkan track yang sedang dipilih
   return !!cont;
 }
@@ -1236,7 +1236,7 @@ window.addEventListener('resize', () => { if (kbdEl.classList.contains('is-open'
 initRec(document); initSliders(document); initKnobs(document); initMore(document);
 
 // ===== Pilih track: klik card atau lane-nya (tidak membuka keyboard), efek glass hanya di track yang dipilih =====
-let selTrack = document.querySelector('.trackheader--selected');
+let selTrack = document.querySelector('.trkcard--on');
 // Record Mode: semua lane di timeline di-blur kecuali lane track yang dipilih
 // Blur baru aktif saat ADA PATTERN TERPILIH (default Record Mode tanpa blur); yang tetap jelas = lane track pattern itu
 function syncRecFocus() {
@@ -1248,10 +1248,10 @@ document.addEventListener('recmodechange', () => { patBarShow(selPat); syncRecFo
 new MutationObserver(syncRecFocus).observe(lanesEl, {childList: true});   // track baru / dihapus ikut disesuaikan
 syncRecFocus();
 function selectTrack(cont) {
-  const th = cont && cont.querySelector('.trackheader');
+  const th = cont && cont.querySelector('.trkcard');
   if (!th || selTrack === th) return;
-  if (selTrack) selTrack.classList.remove('trackheader--selected');
-  selTrack = th; th.classList.add('trackheader--selected');
+  if (selTrack) selTrack.classList.remove('trkcard--on');
+  selTrack = th; th.classList.add('trkcard--on');
   syncRecFocus();
   fxRack.show(cont.dataset.track);   // panel efek ikut pindah ke track terpilih
   if (kbdEl.classList.contains('is-open')) openKbd(cont);   // keyboard yang sudah terbuka ikut pindah ke track terpilih
@@ -1260,13 +1260,13 @@ initPatternJelly(lanesEl);   // Record Mode: card pattern (kotak ungu di timelin
 initRecordJelly(document.querySelector('.headers-list'), document.querySelector('.workspace'));   // Record Mode: card track terpilih bisa digoyang (drag + kenyal + rotasi)
 initTrackReorder(document.querySelector('.headers-list'), lanesEl, document.querySelector('.workspace'), () => { patBarPlace(); });   // tahan + geser icon channel mixer: pindah urutan track (card + lane), semua mode
 document.querySelector('.headers-list').addEventListener('pointerdown', e => {
-  const c = e.target.closest('.trackheader-container');
+  const c = e.target.closest('.trkcard-wrap');
   if (c) selectTrack(c);
 });
 lanesEl.addEventListener('pointerdown', e => {
   const l = e.target.closest('.lane');
   if (l) {
-    const hc = document.querySelector('.trackheader-container[data-track="' + l.dataset.track + '"]');
+    const hc = document.querySelector('.trkcard-wrap[data-track="' + l.dataset.track + '"]');
     selectTrack(hc);
   }
 });
@@ -1285,7 +1285,7 @@ function setPanel(collapsed) {
   const t = collapsed ? 'Buka panel track' : 'Tutup panel track';
   panelToggle.setAttribute('aria-expanded', String(!collapsed));
   panelToggle.setAttribute('aria-label', t); panelToggle.title = t;
-  document.querySelectorAll('.trackheader__left-content').forEach(b => b.title = t);
+  document.querySelectorAll('.trkcard__lead').forEach(b => b.title = t);
   closeMenu(true); closeAddMenu(true); dismissAdd(true);
   const w1 = tlistEl.offsetWidth;                          // lebar akhir (CSS tidak lagi punya transisi width)
   if (!REDUCE && w0 !== w1 && tlistEl.animate) {
@@ -1302,13 +1302,13 @@ function setPanel(collapsed) {
 const panelCollapsed = () => tlistEl.classList.contains('tracklist--collapsed');
 panelToggle.addEventListener('click', () => setPanel(!panelCollapsed()));
 document.querySelector('.headers-list').addEventListener('click', e => {
-  if (e.target.closest('.trackheader__left-content')) setPanel(!panelCollapsed());
+  if (e.target.closest('.trkcard__lead')) setPanel(!panelCollapsed());
 });
-document.querySelectorAll('.trackheader__left-content').forEach(b => b.title = 'Tutup panel track');
+document.querySelectorAll('.trkcard__lead').forEach(b => b.title = 'Tutup panel track');
 // Panel efek (kanan): lebar timeline berubah selama animasi, jadi ruler & toolbar pattern digambar ulang tiap frame
 const fxRack = initFxRack(() => ({ ctx: audio(), dest: master }), patternBridge);   // isi panel efek: tombol +, card pilihan efek, dan card tiap efek (per track)
 initEffectsPanel(settled => { paintRuler(settled); patBarPlace(); }, () => { closeMenu(true); closeAddMenu(true); dismissAdd(true); fxRack.closePicker(true); });
-fxRack.show(selTrack ? selTrack.closest('.trackheader-container').dataset.track : null);
+fxRack.show(selTrack ? selTrack.closest('.trkcard-wrap').dataset.track : null);
 // MGCHORD: kirim nada hasil progression ke pattern yang sedang dipilih di timeline (pattern dilebarkan kalau muat, nada lama diganti)
 setMgchordBridge({
   bpm: () => BPM,
@@ -1334,7 +1334,7 @@ setMgchordBridge({
   // nada dilepas di atas sebuah track: pattern baru dibuat di bar tempat dilepas (bagian kosong), panjangnya mengikuti progression selama muat
   drop(notes, beats, lane, cx) {
     if (!lane || !lane.isConnected) return {ok: false, msg: 'Lepas di atas sebuah track di timeline'};
-    const lt = lane.dataset.track, cont = document.querySelector('.trackheader-container[data-track="' + lt + '"]');
+    const lt = lane.dataset.track, cont = document.querySelector('.trkcard-wrap[data-track="' + lt + '"]');
     if (!cont || cont.dataset.ins === 'Audio clip' || cont.dataset.ins === 'Automation' || lane.dataset.auTarget) return {ok: false, msg: 'Track ini bukan track nada. Lepas di track instrumen'};
     const x = cx - lane.getBoundingClientRect().left, pats = [...lane.querySelectorAll('.pattern')];
     if (pats.some(p => pl(p) <= x && x < pl(p) + pw(p))) return {ok: false, msg: 'Lepas di bagian kosong track, bukan di atas pattern lain'};
@@ -1361,7 +1361,7 @@ const INSTRUMENTS = [
   {n:'Audio clip', c:'#14b8a6'}, {n:'Supersaw', c:'#5b3de8'}, {n:'DERIZ', c:'#22c7e8'}
 ];
 let addMenu = null, addBtn = null;
-let trackSeq = Math.max(1, ...[...document.querySelectorAll('.trackheader-container')].map(c => +c.dataset.track));
+let trackSeq = Math.max(1, ...[...document.querySelectorAll('.trkcard-wrap')].map(c => +c.dataset.track));
 function closeAddMenu(instant) {
   const m = addMenu, b = addBtn; addMenu = addBtn = null;
   if (b) b.setAttribute('aria-expanded', 'false');
@@ -1407,21 +1407,21 @@ function addTrack(t) {
   const id = ++trackSeq, cont = TRACK_TPL.cloneNode(true);
   cont.dataset.track = id; cont.dataset.ins = t.n; cont.classList.add('is-new');
   cont.style.setProperty('--track-color', t.c);
-  const used = [...document.querySelectorAll('.trackheader__track-name-button span')].map(x => x.textContent);
+  const used = [...document.querySelectorAll('.trkcard__title-btn span')].map(x => x.textContent);
   let name = t.n, n = 2;
   while (used.includes(name)) name = t.n + ' ' + n++;
   const nm = cont.querySelector('[id^="track-name-"]');
   nm.id = 'track-name-' + id; nm.textContent = name;
-  cont.querySelector('.trackheader__track-name-button').title = name;
-  if (t.n === 'Audio clip') cont.querySelector('.trackheader__instrument-button .app-icon').innerHTML = ICON_AUDIO_CLIP;
-  if (t.n === 'Automation') cont.querySelector('.trackheader__instrument-button .app-icon').innerHTML = ICON_AUTO;   // track khusus Automation Clip (dibuat dari titik tiga di transport)
+  cont.querySelector('.trkcard__title-btn').title = name;
+  if (t.n === 'Audio clip') cont.querySelector('.trkcard__inst .ico').innerHTML = ICON_AUDIO_CLIP;
+  if (t.n === 'Automation') cont.querySelector('.trkcard__inst .ico').innerHTML = ICON_AUTO;   // track khusus Automation Clip (dibuat dari titik tiga di transport)
   cont.querySelector('input[type=range]').setAttribute('aria-label', 'Volume, ' + name);
   const lane = document.createElement('div');
   lane.className = 'lane'; lane.dataset.track = id; lane.style.setProperty('--track-color', t.c);
   document.querySelector('.headers-list').appendChild(cont);
   lanesEl.insertBefore(lane, lanesEl.querySelector('.playhead'));
   initRec(cont); initSliders(cont); initKnobs(cont); initMore(cont);
-  cont.querySelector('.trackheader__left-content').title = panelCollapsed() ? 'Buka panel track' : 'Tutup panel track';
+  cont.querySelector('.trkcard__lead').title = panelCollapsed() ? 'Buka panel track' : 'Tutup panel track';
   if (t.n === 'Supersaw') fxRack.addInstrument(id, 'supersaw');   // plugin synth otomatis muncul di panel efek track ini
   if (t.n === 'DERIZ') fxRack.addInstrument(id, 'deriz');   // plugin DERIZ (spektrogram + upload audio) juga otomatis muncul di track ini
   selectTrack(cont);
@@ -1444,10 +1444,10 @@ function duplicateTrack(src) {
   if (!sLane || src.dataset.ins === 'Automation') return;
   if (demoTrackFull(src.dataset.ins)) return;
   const sName = document.getElementById('track-name-' + sid).textContent;
-  const base = sName.replace(/\s+\d+$/, ''), used = new Set([...document.querySelectorAll('.trackheader__track-name-button span')].map(x => x.textContent));
+  const base = sName.replace(/\s+\d+$/, ''), used = new Set([...document.querySelectorAll('.trkcard__title-btn span')].map(x => x.textContent));
   let n = 2; while (used.has(base + ' ' + n)) n++;
   const name = base + ' ' + n, color = src.style.getPropertyValue('--track-color') || COLORS[0];
-  const sPwr = src.querySelector('.trackheader__pwr'), sVol = src.querySelector('input[type=range]'), sPan = src.querySelector('.knob-input');
+  const sPwr = src.querySelector('.trkcard__power'), sVol = src.querySelector('input[type=range]'), sPan = src.querySelector('.knob-input');
   const derizSrc = fxRack.derizIds(sid), derizState = fxRack.derizExport(sid), fxs = fxRack.fxExport(sid);
   if (DEMO && fxRack.derizCount() + derizSrc.length > LIMITS.derizPlugins) { demoNotice('derizplug'); return; }   // DEMO: salinan track tidak boleh melewati batas plugin DERIZ
   const pats = [...sLane.querySelectorAll('.pattern')].sort((a, b) => pl(a) - pl(b));
@@ -1455,10 +1455,10 @@ function duplicateTrack(src) {
 
   addTrack({n: src.dataset.ins || 'Audio clip', c: color});
   const id = String(trackSeq);
-  const cont = document.querySelector('.trackheader-container[data-track="' + id + '"]'), lane = lanesEl.querySelector('.lane[data-track="' + id + '"]');
+  const cont = document.querySelector('.trkcard-wrap[data-track="' + id + '"]'), lane = lanesEl.querySelector('.lane[data-track="' + id + '"]');
   src.after(cont); sLane.after(lane);   // addTrack menaruh di paling bawah: pindahkan ke tepat di bawah track asal (card + lane)
   document.getElementById('track-name-' + id).textContent = name;
-  cont.querySelector('.trackheader__track-name-button').title = name;
+  cont.querySelector('.trkcard__title-btn').title = name;
   const vol = cont.querySelector('input[type=range]');
   if (vol && sVol) { vol.setAttribute('aria-label', 'Volume, ' + name); vol.value = sVol.value; vol.dispatchEvent(new Event('input', {bubbles: true})); }
   const pan = cont.querySelector('.knob-input');
@@ -1469,7 +1469,7 @@ function duplicateTrack(src) {
   while (fxRack.derizIds(id).length < derizSrc.length) { const k = fxRack.derizIds(id).length; if (k === 0) fxRack.addInstrument(id, 'deriz'); else fxRack.addDeriz(id); if (fxRack.derizIds(id).length === k) break; }
   derizState.forEach((st, i) => { if (fxRack.derizIds(id)[i] !== undefined) fxRack.derizImport(id, i, st); });
   if (fxs.length) fxRack.fxImport(id, fxs);
-  if (sPwr && sPwr.getAttribute('aria-checked') === 'false') cont.querySelector('.trackheader__pwr').click();
+  if (sPwr && sPwr.getAttribute('aria-checked') === 'false') cont.querySelector('.trkcard__power').click();
 
   // pattern: posisi, lebar, judul, audio clip, dan nada (nada DERIZ track asal dipetakan ke DERIZ ke-i di track baru)
   const newDz = fxRack.derizIds(id);
@@ -1503,7 +1503,7 @@ window.addEventListener('scroll', closeAddMenu, true);
 let BPM = 120, SEC_PER_BAR = 240 / BPM;               // 4/4: 1 bar = 4 ketukan; BPM bisa diubah lewat panel metronome (tombol M)
 const metro = {on: false, countIn: false};
 const phEl = document.getElementById('playhead');
-const tc = document.querySelector('.transport-controls');
+const tc = document.querySelector('.tp');
 const btnPlay = tc.querySelector('.play'), btnMetro = document.getElementById('btnMetro');
 const btnRew = tc.querySelector('.rewind'), btnFwd = tc.querySelector('.forward');
 let posBars = 0, playing = false, playRaf = 0, startPos = 0, startCtx = 0, nextBeat = 0, metroTimer = 0, lastBeat = -1;
@@ -1614,7 +1614,7 @@ const placementSig = () => JSON.stringify([
 let schedSig = '';
 function scheduleClips(countIn) {
   const ctx = audio(), beat = 60 / BPM, lead = countIn ? 4 * beat : 0;
-  document.querySelectorAll('.trackheader-container').forEach(c => {
+  document.querySelectorAll('.trkcard-wrap').forEach(c => {
     const sl = c.querySelector('input[type=range]'); if (sl) setTrackVolume(c.dataset.track, +sl.value);
   });
   const cold = fxRack.derizWarm();   // sampler DERIZ yang belum siap disiapkan lebih dulu; kalau ada yang dari nol, start ditunda sebentar supaya nada pertama tidak terlambat
@@ -1667,7 +1667,7 @@ setPianoRollSeekHandler((beats, final) => {
 });
 // Tap / seret penggaris timeline utama (sama seperti penggaris piano roll): playhead langsung pindah ke posisi jari, di mana pun.
 // Saat diseret sambil main, playhead ditahan di jari; suara pindah saat jari dilepas. Dekat tepi layar, timeline ikut menggulir.
-const rulerHd = document.querySelector('.timeline-controls-header-wrapper');
+const rulerHd = document.querySelector('.tl-headwrap');
 let rSeekId = -1, rSeekX = 0, rScrollRaf = 0;
 function rulerSeek(clientX, final) {
   posBars = Math.max(0, Math.min(BARS, (clientX - tlEl.getBoundingClientRect().left) / BAR_W));
@@ -1835,7 +1835,7 @@ new MutationObserver(ms => {
 }).observe(lanesEl, {childList: true, subtree: true, attributes: true, attributeFilter: ['style']});
 // switch on/off track (ungu = nyala): mati -> track hening (meter ikut nol), pattern di lane diredupkan
 document.querySelector('.headers-list').addEventListener('click', e => {
-  const sw = e.target.closest && e.target.closest('.trackheader__pwr'), c = sw && sw.closest('.trackheader-container');
+  const sw = e.target.closest && e.target.closest('.trkcard__power'), c = sw && sw.closest('.trkcard-wrap');
   if (!c) return;
   const off = sw.getAttribute('aria-checked') === 'true';   // sebelumnya nyala -> sekarang mati
   sw.setAttribute('aria-checked', String(!off));
@@ -1846,7 +1846,7 @@ document.querySelector('.headers-list').addEventListener('click', e => {
 });
 // slider volume track -> volume audio clip (langsung terdengar saat diputar)
 document.querySelector('.headers-list').addEventListener('input', e => {
-  const sl = e.target.closest && e.target.closest('input[type=range]'), c = sl && sl.closest('.trackheader-container');
+  const sl = e.target.closest && e.target.closest('input[type=range]'), c = sl && sl.closest('.trkcard-wrap');
   if (c) setTrackVolume(c.dataset.track, +sl.value);
 });
 
@@ -2042,9 +2042,9 @@ initTrackMeters();   // meter level stereo di card track
 const r3p = v => Math.round(v * 1e3) / 1e3;
 function projectSnapshot() {
   const clips = {}, tracks = [], seenClips = new Set(), dKeys = new Map();   // dKeys: audio DERIZ -> kunci 'd1', 'd2', ... (audio yang sama dipakai bersama disimpan sekali)
-  document.querySelectorAll('.trackheader-container').forEach(c => {
+  document.querySelectorAll('.trkcard-wrap').forEach(c => {
     const id = c.dataset.track, lane = lanesEl.querySelector('.lane[data-track="' + id + '"]');
-    const sl = c.querySelector('input[type=range]'), pwr = c.querySelector('.trackheader__pwr');
+    const sl = c.querySelector('input[type=range]'), pwr = c.querySelector('.trkcard__power');
     const pats = [...(lane ? lane.querySelectorAll('.pattern') : [])].map(p => {
       const o = {s: r3p(pl(p) / BAR_W), w: r3p(pw(p) / BAR_W), t: p.querySelector('.pattern__title').textContent};
       if (p.dataset.clip) {
@@ -2097,7 +2097,7 @@ function projectSnapshot() {
 function clearProject() {
   if (playing) pausePlay();
   stopAllSynth(); stopClips(actx); selectPattern(null); dismissAdd(true); closeKbd();
-  document.querySelectorAll('.trackheader-container').forEach(c => {
+  document.querySelectorAll('.trkcard-wrap').forEach(c => {
     const lane = lanesEl.querySelector('.lane[data-track="' + c.dataset.track + '"]');
     stopTrack(actx, c.dataset.track); fxRack.drop(c.dataset.track);
     if (lane) lane.remove(); c.remove();
@@ -2125,9 +2125,9 @@ async function projectRestore(rec) {
   for (const t of d.tracks) {
     addTrack({n: t.ins, c: t.color || COLORS[0]});
     const id = String(trackSeq); trMap[t.id] = id;
-    const cont = document.querySelector('.trackheader-container[data-track="' + id + '"]'), lane = lanesEl.querySelector('.lane[data-track="' + id + '"]');
+    const cont = document.querySelector('.trkcard-wrap[data-track="' + id + '"]'), lane = lanesEl.querySelector('.lane[data-track="' + id + '"]');
     document.getElementById('track-name-' + id).textContent = t.name;
-    cont.querySelector('.trackheader__track-name-button').title = t.name;
+    cont.querySelector('.trkcard__title-btn').title = t.name;
     const sl = cont.querySelector('input[type=range]');
     if (sl) { sl.setAttribute('aria-label', 'Volume, ' + t.name); sl.value = t.vol; sl.dispatchEvent(new Event('input', {bubbles: true})); }
     panTip.hidden = true;
@@ -2137,7 +2137,7 @@ async function projectRestore(rec) {
       fxRack.derizImport(id, i, {on: st.on !== false, v: st.v || {}, ...(z ? {z: {name: st.z.name, start: st.z.start || 0, zoom: st.z.zoom || 1, view: st.z.view || 0, buf: z}} : {})});
     });
     if (t.fx && t.fx.length) fxRack.fxImport(id, t.fx);   // Reverb / EQ / Filter / Supersaw: jenis, nyala, nilai knob
-    if (t.off) cont.querySelector('.trackheader__pwr').click();
+    if (t.off) cont.querySelector('.trkcard__power').click();
     for (const p of t.pats) {
       const el = createPattern(lane, {start: p.s * BAR_W, width: p.w * BAR_W}, p.c && clipMap[p.c] ? {clip: clipMap[p.c], off: p.o || 0} : null);
       el.querySelector('.pattern__title').textContent = p.t;
@@ -2163,7 +2163,7 @@ async function projectRestore(rec) {
     const tr = a.t && trMap[a.t.tr], fx = tr !== undefined ? fxRack.fxFind(tr, a.t.ft, a.t.fi) : undefined;
     setupAutoEl(el, importClip(fx !== undefined ? {track: tr, fxId: fx, key: a.t.k} : null, a));
   }
-  const first = document.querySelector('.trackheader-container');
+  const first = document.querySelector('.trkcard-wrap');
   if (first) selectTrack(first);
   toStart(); syncWaves(); metroUI && metroUI.sync && metroUI.sync();
   undoStack = []; redoStack = []; histCur = histCapture(); histSync();

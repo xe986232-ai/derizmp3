@@ -194,6 +194,15 @@ export function initMenuPanel(): MenuPanel {
             '<button type="button" class="mp__expbtn" data-install-btn>' + IC_DL + '<span>Install ke layar utama</span></button>' +
             '<p class="mp__hint" data-install-hint></p>' +
           '</div>' +
+          // Credits & lisensi pihak ketiga (wajib tampil di semua build, termasuk versi penuh)
+          '<div class="mp__card mp__item mp__set" style="--i:9">' +
+            '<div class="mp__sub"><span>Credits &amp; lisensi</span></div>' +
+            '<ul class="mp__cr">' +
+              '<li><b>Piano</b>: Salamander Grand Piano V3 oleh Alexander Holm, lisensi <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener noreferrer">CC BY 3.0</a>. Sample dipakai apa adanya; nadanya digeser pitch-nya saat dimainkan.</li>' +
+              '<li><b>Font</b>: Plus Jakarta Sans dan Syncopate, lisensi <a href="https://openfontlicense.org/" target="_blank" rel="noopener noreferrer">SIL Open Font License 1.1</a>.</li>' +
+              '<li><b>Encoder MP3</b>: lamejs (@breezystack/lamejs), lisensi <a href="https://www.gnu.org/licenses/lgpl-3.0.html" target="_blank" rel="noopener noreferrer">LGPL-3.0</a>.</li>' +
+            '</ul>' +
+          '</div>' +
         '</section>' +
       '</div>' +
     '</div>';

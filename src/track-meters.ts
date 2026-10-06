@@ -44,7 +44,7 @@ export function initTrackMeters(): void {
     requestAnimationFrame(frame);
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
     if (document.hidden || tlist?.classList.contains('tracklist--collapsed')) return;   // tersembunyi: tidak perlu dihitung
-    document.querySelectorAll<HTMLElement>('.trackheader-container').forEach(el => {
+    document.querySelectorAll<HTMLElement>('.trkcard-wrap').forEach(el => {
       const id = el.dataset.track!, bars = el.querySelectorAll<HTMLElement>('.trackmeter__bar');
       if (bars.length < 2) return;
       let st = state.get(id);

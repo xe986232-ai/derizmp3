@@ -18,7 +18,7 @@ interface Step {
 }
 
 const SEEN_KEY = 'derizmp3.tutorialSeen';
-const T = (n: string): string => `.trackheader-container ${n}`;   // elemen di kartu track pertama
+const T = (n: string): string => `.trkcard-wrap ${n}`;   // elemen di kartu track pertama
 const SET = (attr: string): string => `.mp__page[data-page="settings"] .mp__card:has([${attr}])`;
 
 const STEPS: Step[] = [
@@ -27,15 +27,15 @@ const STEPS: Step[] = [
 
   { title: 'Tambahkan track', targets: ['.addtrack'], prefer: ['right', 'top', 'bottom'],
     text: 'Mulai dari sini. Ketuk untuk memilih instrumen track: Audio clip, Supersaw, atau DERIZ.' + (DEMO ? ` Di versi demo dibatasi ${LIMITS.tracks} track.` : '') },
-  { title: 'Ikon instrumen', targets: [T('.trackheader__left-content')], prefer: ['right', 'bottom'],
+  { title: 'Ikon instrumen', targets: [T('.trkcard__lead')], prefer: ['right', 'bottom'],
     text: 'Ikon di kiri kartu track adalah tombol instrumen. Ketuk untuk menampilkan instrumen track ini.' },
-  { title: 'Nama dan saklar track', targets: [T('.trackheader__top-row')], prefer: ['right', 'bottom'],
+  { title: 'Nama dan saklar track', targets: [T('.trkcard__head')], prefer: ['right', 'bottom'],
     text: 'Baris atas kartu track berisi nama track, saklar nyala/mati (matikan untuk menonaktifkan suara track), dan titik tiga untuk opsi lainnya.' },
-  { title: 'Mode rekam', targets: [T('.trackheader__rec-mode-button')], prefer: ['right', 'bottom'],
+  { title: 'Mode rekam', targets: [T('.trkcard__arm')], prefer: ['right', 'bottom'],
     text: 'Tombol S adalah Mode rekam untuk track ini. Ketuk untuk menyalakan atau mematikannya.' },
-  { title: 'Volume track', targets: [T('.trackheader__slider')], prefer: ['right', 'bottom'],
+  { title: 'Volume track', targets: [T('.trkcard__vol')], prefer: ['right', 'bottom'],
     text: 'Geser untuk mengatur volume track, dari 0 sampai 150%.' },
-  { title: 'Pan', targets: [T('.trackheader__pan')], prefer: ['right', 'bottom'],
+  { title: 'Pan', targets: [T('.trkcard__pan')], prefer: ['right', 'bottom'],
     text: 'Putar knob ini untuk menggeser suara ke kiri atau kanan. Ketuk dua kali untuk mengembalikannya ke tengah.' },
   { title: 'Opsi track', scene: 'track-menu', targets: ['.track-menu'], prefer: ['right', 'left', 'bottom'],
     text: 'Titik tiga membuka opsi track: Ganti nama pattern, Duplicate track (gandakan track beserta isinya), Delete track, dan Color untuk mengganti warna track.' },
@@ -45,7 +45,7 @@ const STEPS: Step[] = [
   { title: 'Penggaris timeline', targets: ['#ruler'], prefer: ['bottom', 'top'],
     text: 'Ketuk atau seret penggaris ini untuk memindahkan playhead ke posisi mana pun di timeline.' },
 
-  { title: 'Kontrol putar', targets: ['.transport-controls__center'], prefer: ['top', 'bottom'],
+  { title: 'Kontrol putar', targets: ['.tp__mid'], prefer: ['top', 'bottom'],
     text: 'Mundur (←), Putar/Jeda (Space), dan Maju cepat (→). Tombol keyboard komputer juga bisa dipakai.' },
   { title: 'Pitch project', targets: ['#btnPitch'], prefer: ['top', 'right'],
     text: 'Menggeser nada seluruh project dari −12 sampai +12 semitone. Audio clip di timeline tidak ikut berubah.' },
@@ -54,7 +54,7 @@ const STEPS: Step[] = [
   { title: 'Opsi transport', targets: ['#btnMore'], prefer: ['top', 'right'],
     text: DEMO ? 'Titik tiga ini berisi opsi tambahan. Fitur Create Automation Clip di dalamnya ada di versi penuh.'
       : 'Titik tiga berisi opsi tambahan. Sentuh sebuah knob lebih dulu, lalu pilih Create Automation Clip untuk mengotomasi knob itu.' },
-  { title: 'Undo dan Redo', targets: ['.transport-controls__side--right'], prefer: ['top', 'left'],
+  { title: 'Undo dan Redo', targets: ['.tp__side--r'], prefer: ['top', 'left'],
     text: 'Urungkan (Ctrl+Z) dan Ulangi (Ctrl+Shift+Z) perubahan terakhirmu.' },
   { title: 'Keyboard virtual', targets: ['#kbdToggle'], prefer: ['top', 'left'],
     text: 'Panah ini membuka dan menutup panel bawah. Di dalamnya ada keyboard virtual: mainkan lewat sentuhan atau keyboard komputer (baris Z–M dan Q–P), dengan tombol oktaf untuk menggeser rentang nada.' },
@@ -143,7 +143,7 @@ export function initTutorial(): void {
   window.addEventListener('pointerdown', () => { viaKeyboard = false; }, true);
 
   // ---------- menyiapkan layar untuk tiap langkah ----------
-  const closeTrackMenu = (): void => { if ($('.track-menu')) $<HTMLButtonElement>('.trackheader__more-options[aria-expanded="true"]')?.click(); };
+  const closeTrackMenu = (): void => { if ($('.track-menu')) $<HTMLButtonElement>('.trkcard__menu[aria-expanded="true"]')?.click(); };
   async function setScene(s: Step): Promise<void> {
     const scene = s.scene ?? 'main', menuBtn = $<HTMLButtonElement>('#menuBtn');
     const menuOpen = !!menuBtn?.classList.contains('is-open');
@@ -153,7 +153,7 @@ export function initTutorial(): void {
       const t = $<HTMLButtonElement>('#fxToggle');
       if (t && t.getAttribute('aria-expanded') !== 'true') { t.click(); await wait(560); }
     }
-    if (scene === 'track-menu' && !$('.track-menu')) { $<HTMLButtonElement>(T('.trackheader__more-options'))?.click(); await wait(260); }
+    if (scene === 'track-menu' && !$('.track-menu')) { $<HTMLButtonElement>(T('.trkcard__menu'))?.click(); await wait(260); }
     if (scene === 'menu' && menuBtn) {
       if (!menuOpen) { menuBtn.click(); await wait(440); }
       const want = s.page ?? 'home', now = $('.mp__page:not([hidden])')?.getAttribute('data-page') ?? 'home';

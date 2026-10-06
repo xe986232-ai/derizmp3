@@ -16,14 +16,14 @@ export const MAX_TILT = 28;                   // derajat
 export const LIFT = 1.06;                     // card membesar saat terangkat
 
 // elemen yang tidak boleh memulai drag (punya interaksi sendiri)
-const NO_DRAG = 'input, [role="slider"], .knob, .trackheader__pwr, .trackheader__rec-mode-button, .trackheader__more-options, [contenteditable="true"], .trackheader-separator';
+const NO_DRAG = 'input, [role="slider"], .knob, .trkcard__power, .trkcard__arm, .trkcard__menu, [contenteditable="true"], .trkcard-sep';
 
 export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement): void {
   const root = document.documentElement;
   const recOn = (): boolean => root.dataset.rec === 'on';
 
-  let card: HTMLElement | null = null;       // .trackheader yang sedang bergerak
-  let cont: HTMLElement | null = null;       // .trackheader-container (tidak ikut bertransform = patokan posisi asli)
+  let card: HTMLElement | null = null;       // .trkcard yang sedang bergerak
+  let cont: HTMLElement | null = null;       // .trkcard-wrap (tidak ikut bertransform = patokan posisi asli)
   let raf = 0, last = 0;
   let pointerId = -1, held = false, pending = false;
   let x = 0, y = 0, vx = 0, vy = 0;          // offset card dari posisi asal + kecepatan (px, px/s)
@@ -54,7 +54,7 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
   ['pointerdown', 'pointerup', 'pointercancel', 'lostpointercapture', 'contextmenu'].forEach(t =>
     document.addEventListener(t, ev => { if (card || t === 'pointerdown') dbg(t + (ev.cancelable === false ? '' : ' ') + ((ev as PointerEvent).pointerType || '') + (card ? ' held=' + held : '')); }, true));
 
-  const selected = (): HTMLElement | null => headersList.querySelector('.trackheader--selected');
+  const selected = (): HTMLElement | null => headersList.querySelector('.trkcard--on');
 
   function measureNatural(): void {
     if (!card) return;
@@ -93,7 +93,7 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
     homeNext = card.nextSibling;
     layer = document.createElement('div');
     layer.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;overflow:visible;pointer-events:none';
-    // aturan CSS panel yang dilipat ('.tracklist--collapsed .trackheader__...') bergantung pada ancestor ini
+    // aturan CSS panel yang dilipat ('.tracklist--collapsed .trkcard__...') bergantung pada ancestor ini
     if (cont.closest('.tracklist--collapsed')) layer.className = 'tracklist--collapsed';
     layer.appendChild(card);
     document.body.appendChild(layer);
@@ -178,11 +178,11 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
     if (!recOn() || e.button > 0 || pointerId !== -1) return;
     const target = e.target as HTMLElement;
     if (target.closest(NO_DRAG)) return;
-    const th = target.closest('.trackheader') as HTMLElement | null;
+    const th = target.closest('.trkcard') as HTMLElement | null;
     const sel = selected();
     if (!th || th !== sel) return;                      // hanya track yang sedang dipilih
     if (card && card !== th) finish();
-    card = th; cont = th.closest('.trackheader-container') as HTMLElement;
+    card = th; cont = th.closest('.trkcard-wrap') as HTMLElement;
     pointerId = e.pointerId; pending = true; held = false;
     p0x = e.clientX; p0y = e.clientY; o0x = x; o0y = y;
     const r = th.getBoundingClientRect();
@@ -236,7 +236,7 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
   // Listener harus di document (capture): setelah terangkat card sudah di <body>, bukan lagi di headersList.
   document.addEventListener('contextmenu', e => {
     const t = e.target as HTMLElement | null;
-    if (card || (recOn() && t && t.closest && t.closest('.trackheader--selected'))) e.preventDefault();
+    if (card || (recOn() && t && t.closest && t.closest('.trkcard--on'))) e.preventDefault();
   }, true);
   document.addEventListener('selectstart', e => { if (card) e.preventDefault(); }, true);
   document.addEventListener('dragstart', e => { if (card) e.preventDefault(); }, true);
@@ -245,6 +245,6 @@ export function initRecordJelly(headersList: HTMLElement, workspace: HTMLElement
 
   // ganti track / Record Mode dimatikan -> hentikan goyangan
   document.addEventListener('recmodechange', () => { if (!recOn() && card) finish(); });
-  new MutationObserver(() => { if (card && !card.classList.contains('trackheader--selected')) finish(); })
+  new MutationObserver(() => { if (card && !card.classList.contains('trkcard--on')) finish(); })
     .observe(headersList, { subtree: true, attributes: true, attributeFilter: ['class'] });
 }

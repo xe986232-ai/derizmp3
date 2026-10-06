@@ -46,10 +46,10 @@ export function initTrackReorder(
   function begin(): void {
     timer = 0;
     if (!btn) return;
-    const cont = btn.closest('.trackheader-container') as HTMLElement | null;
+    const cont = btn.closest('.trkcard-wrap') as HTMLElement | null;
     if (!cont) return;
     rows = ([...headersList.children] as HTMLElement[])
-      .filter(el => el.classList.contains('trackheader-container'))
+      .filter(el => el.classList.contains('trkcard-wrap'))
       .map(c => ({ c, l: laneOf(c), h: c.getBoundingClientRect().height }));
     from = to = rows.findIndex(r => r.c === cont);
     if (from < 0) { cancel(); return; }
@@ -166,10 +166,10 @@ export function initTrackReorder(
 
   headersList.addEventListener('pointerdown', e => {
     if (e.button > 0 || pid !== -1) return;
-    const b = (e.target as HTMLElement).closest('.trackheader__left-content') as HTMLElement | null;
+    const b = (e.target as HTMLElement).closest('.trkcard__lead') as HTMLElement | null;
     if (!b) return;
     // Record Mode: card yang sedang dipilih dikuasai drag bebas (record-jelly.ts), jadi tahan icon tidak memicu pindah urutan
-    if (root.dataset.rec === 'on' && b.closest('.trackheader--selected')) return;
+    if (root.dataset.rec === 'on' && b.closest('.trkcard--on')) return;
     btn = b; pid = e.pointerId; sx = e.clientX; sy = curY = e.clientY;
     suppressClick = false;
     try { b.setPointerCapture(e.pointerId); } catch { /* abaikan */ }
@@ -207,7 +207,7 @@ export function initTrackReorder(
   // setelah tahan + geser (atau tahan saja), klik yang menyusul -> jangan buka/tutup panel track
   headersList.addEventListener('click', e => {
     if (!suppressClick) return;
-    if ((e.target as HTMLElement).closest('.trackheader__left-content')) {
+    if ((e.target as HTMLElement).closest('.trkcard__lead')) {
       e.stopPropagation(); e.preventDefault();
     }
     suppressClick = false;
@@ -215,7 +215,7 @@ export function initTrackReorder(
 
   // tahan lama di HP memunculkan menu konteks / seleksi: matikan hanya untuk tombol icon
   headersList.addEventListener('contextmenu', e => {
-    if ((e.target as HTMLElement).closest('.trackheader__left-content')) e.preventDefault();
+    if ((e.target as HTMLElement).closest('.trkcard__lead')) e.preventDefault();
   });
 
   // jaga-jaga: tab disembunyikan / Esc saat mode pindah aktif -> batalkan tanpa memindah
