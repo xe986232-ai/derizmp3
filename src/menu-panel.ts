@@ -10,6 +10,7 @@ import { saveProject, loadProject, deleteProject, listProjects, projectExists, r
 import { installState, promptInstall, onInstallChange } from './pwa';
 import { FULL, getProfile, initialOf, loadProfile, onProfile, removeAvatar, saveName, shownName, uploadAvatar } from './account';
 import { signOut } from './license';
+import { SHOP_CAT, SHOP_PAGE, initShopPage } from './shop-page';
 
 // Jembatan ke main.ts (yang memegang data timeline): snapshot dan pemulihan project
 export interface ProjectIO {
@@ -93,7 +94,8 @@ export function initMenuPanel(): MenuPanel {
           PROFILE_CAT +
           '<button type="button" class="mp__cat mp__item" style="--i:1" data-go="project">' + IC_FOLDER + '<span class="mp__cat__t"><b>Project</b><small>Simpan &amp; buka project</small></span>' + IC_CHEV + '</button>' +
           '<button type="button" class="mp__cat mp__item" style="--i:2" data-go="export">' + IC_EXPORT + '<span class="mp__cat__t"><b>Export</b><small>Simpan hasil jadi MP3 / WAV</small></span>' + IC_CHEV + '</button>' +
-          '<button type="button" class="mp__cat mp__item" style="--i:3" data-go="settings">' + IC_GEAR + '<span class="mp__cat__t"><b>Pengaturan</b><small>Preferensi aplikasi</small></span>' + IC_CHEV + '</button>' +
+          SHOP_CAT +
+          '<button type="button" class="mp__cat mp__item" style="--i:4" data-go="settings">' + IC_GEAR + '<span class="mp__cat__t"><b>Pengaturan</b><small>Preferensi aplikasi</small></span>' + IC_CHEV + '</button>' +
         '</nav>' +
         PROFILE_PAGE +
         // kategori Project
@@ -124,6 +126,8 @@ export function initMenuPanel(): MenuPanel {
             '<p class="mp__hint">Memutar project dari bar 1 sampai akhir isi timeline lalu merekamnya, jadi lama export sama dengan durasi lagu. Tab jangan ditutup atau dipindah.</p>' +
           '</div>' +
         '</section>' +
+        // kategori Shop Plugin (halaman di shop-page.ts)
+        SHOP_PAGE +
         // kategori Pengaturan
         '<section class="mp__page" data-page="settings" aria-label="Pengaturan" hidden>' +
           '<div class="mp__card mp__item mp__set" style="--i:1">' +
@@ -329,7 +333,8 @@ export function initMenuPanel(): MenuPanel {
   });
 
   // ===== Halaman kategori (home / project / export / settings) =====
-  const TITLES: Record<string, string> = {home: 'Menu', project: 'Project', export: 'Export', settings: 'Pengaturan', profile: 'Profil'};
+  initShopPage(panel);
+  const TITLES: Record<string, string> = {home: 'Menu', project: 'Project', export: 'Export', shop: 'Shop Plugin', settings: 'Pengaturan', profile: 'Profil'};
   const pages = [...panel.querySelectorAll<HTMLElement>('.mp__page')];
   const titleEl = panel.querySelector('.mp__title') as HTMLElement;
   const backBtn = panel.querySelector('.mp__back') as HTMLButtonElement;
