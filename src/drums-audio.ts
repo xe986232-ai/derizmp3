@@ -19,6 +19,13 @@ export const DRUM_KIT: readonly DrumPad[] = [
   { id: 'crash', name: 'Crash', midi: 49 }
 ];
 
+// baris alat untuk sebuah nada MIDI (alias GM ikut: 35 -> Kick, 40 -> Snare, 44 -> Hat, 57 -> Crash; lainnya -> Tom)
+export const drumRow = (midi: number): number => {
+  const i = DRUM_KIT.findIndex(d => d.midi === midi);
+  if (i >= 0) return i;
+  return midi === 35 ? 0 : midi === 40 ? 1 : midi === 44 ? 4 : midi === 57 ? 7 : 6;
+};
+
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 export const drumLevel = (v: number): number => clamp01(v) * clamp01(v) * 1.6;      // 0.8 ≈ 1.0 (level standar, sama dengan Supersaw)
 export const drumTuneSemis = (v: number): number => (clamp01(v) - 0.5) * 12;         // -6 .. +6 semiton

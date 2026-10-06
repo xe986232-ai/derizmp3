@@ -23,7 +23,8 @@ import { initMenuPanel, setProjectIO } from './menu-panel';
 import { dbgRun, dbgZoom } from './audio-debug';
 import { mpcsExport, mpcsImport } from './mpcs';
 import { setMgchordBridge, mgchordExport, mgchordImport } from './mgchord';
-import { setDrumsBridge, drumsRefresh } from './drums';
+import { setDrumsBridge, drumsRefresh, openDrums } from './drums';
+import { drumRow, DRUM_KIT } from './drums-audio';
 import { setExportIO } from './export-audio';
 import { hasSynth, isDrumsTrack, startVoice, releaseVoice, playNote, stopAllSynth } from './synth-engine';
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
@@ -370,6 +371,11 @@ function renderPatNotes(el) {
   let box = el.querySelector('.pattern__notes');
   if (!notes.length) { if (box) box.remove(); return; }
   if (!box) { box = document.createElement('div'); box.className = 'pattern__notes'; el.insertBefore(box, el.querySelector('.pattern__handle')); }
+  if (isDrumsTrack(el.parentElement.dataset.track)) {   // pattern Drums: tampil sebagai blok per alat (8 baris tetap), bukan tinggi nada
+    box.innerHTML = '<svg viewBox="0 0 ' + PR_BEATS + ' ' + DRUM_KIT.length + '" preserveAspectRatio="none" aria-hidden="true" style="width:calc(var(--bar) * ' + PR_BEATS / 4 + ')">' +
+      notes.map(n => '<rect x="' + n.s + '" y="' + (drumRow(n.p) + 0.12) + '" width="0.2" height="0.76" rx="0.05"' + (n.v !== undefined ? ' fill-opacity="' + velAlpha(n.v).toFixed(2) + '"' : '') + '/>').join('') + '</svg>';
+    return;
+  }
   let lo = 127, hi = 0; notes.forEach(n => { lo = Math.min(lo, n.p); hi = Math.max(hi, n.p); });
   const rows = Math.max(hi - lo + 1, 8), top = (rows - (hi - lo + 1)) / 2;   // minimal 8 baris supaya 1-2 nada tidak jadi balok raksasa
   box.innerHTML = '<svg viewBox="0 0 ' + PR_BEATS + ' ' + rows + '" preserveAspectRatio="none" aria-hidden="true" style="width:calc(var(--bar) * ' + PR_BEATS / 4 + ')">' +
@@ -730,6 +736,7 @@ function openEdit(el, keepView = false) {
   const lane = el.parentElement, id = lane.dataset.track;
   const nm = document.getElementById('track-name-' + id);
   if (!el.dataset.prId) el.dataset.prId = 'pat' + (++prSeq);   // kunci supaya nada piano roll tersimpan per pattern
+  if (isDrumsTrack(id)) { selectPattern(el); openDrums(); return; }   // track Drums: pola disusun di editor blok (step sequencer), bukan piano roll
   prStartBar = pl(el) / BAR_W; prEl = el;
   prvTarget = {track: id, fx: hasSynth(id) ? null : fxRack.derizIds(id)[0] ?? null};   // sama dengan pemilik editKey(el)
   openPianoRoll({
