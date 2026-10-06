@@ -196,7 +196,7 @@ function gridCovers(l: number, t: number) {
 }
 let bgSig = '', prevSl = 0, prevSt = 0;   // bgSig: tanda isi lapis latar terakhir (sama = tidak digambar ulang); prevSl/prevSt: scroll saat gambar terakhir (untuk arah gerak)
 function drawGrid(zoomOnly = false) {
-  const tg = performance.now();   // zoomOnly: frame ini hanya zoom, note tidak berubah -> lewati deteksi note baru / hilang
+  // zoomOnly: frame ini hanya zoom, note tidak berubah -> lewati deteksi note baru / hilang
   const vw0 = sc.clientWidth, vh0 = sc.clientHeight, sl = sc.scrollLeft, stp = sc.scrollTop;
   const dense = (window.devicePixelRatio || 1) > 2;   // layar rapat (HP 3x): canvas digambar tajam di 3x, overscan dikecilkan supaya jumlah pixel tetap wajar
   let vw: number, vh: number, sx: number, sy: number;
@@ -287,7 +287,7 @@ function drawGrid(zoomOnly = false) {
     c.globalAlpha = 1 - t; drawNoteBody(c, gh.n, sx, sy, false); if (gh.h) drawHandle(c, gh.n, sx, sy, 1 - easeOut(t)); c.globalAlpha = 1;
   }
   if (animating) schedule();
-  drawn = {ppb, rowH, ox: sx, oy: sy, w: vw, h: vh, vw: vw0, vh: vh0}; placeGrid(sl, stp); hudGrid = performance.now() - tg;
+  drawn = {ppb, rowH, ox: sx, oy: sy, w: vw, h: vh, vw: vw0, vh: vh0}; placeGrid(sl, stp);
   // marquee
   if (g && g.kind === 'marquee') {
     const a = g.x0 - sx, b = g.y0 - sy, w = g.x - g.x0, h = g.y - g.y0;
@@ -659,7 +659,7 @@ function flushZoom() {
 // Saat zoom, grid TIDAK digambar ulang: gambar terakhir hanya diskalakan GPU lewat CSS transform (hampir gratis).
 // Begitu zoom berhenti ZOOM_IDLE ms (atau jari lepas), layout ditulis sekali dan grid digambar ulang tajam.
 const ZOOM_IDLE = 120;
-let zoomEndT = 0, hudGrid = 0, hudMode = 'full';
+let zoomEndT = 0;
 function commitZoom() {
   zoomEndT = 0;
   if (!zoomPend) return;
@@ -670,42 +670,28 @@ function commitZoom() {
   zoomFrame = true; schedule();
 }
 function redraw() {
-  const t0 = performance.now();
   if (zoomPend) {
     const z = zoomPend;
     if (!pinch && drawn.ppb === ppb && drawn.rowH === rowH && !gridCovers(z.l, z.t)) {   // geser sudah melewati overscan: gambar ulang sekarang
       window.clearTimeout(zoomEndT); zoomEndT = 0; flushZoom(); zoomFrame = true; gridDirty = true;
     } else {
-      hudMode = 'preview';
       placeGrid(z.l, z.t); drawKeys(true); drawRuler(); drawVel(); placePlayhead();
       if (selBar && !selBar.hidden) { selBar.hidden = true; selBarOn = false; }
       window.clearTimeout(zoomEndT); zoomEndT = window.setTimeout(commitZoom, ZOOM_IDLE);
-      hudTick(t0); return;
+      return;
     }
   }
   if (!gridDirty && gridCovers(sc.scrollLeft, sc.scrollTop)) {   // hanya scroll biasa & masih di dalam canvas: geser saja
-    hudMode = 'scroll';
     placeGrid(sc.scrollLeft, sc.scrollTop); drawKeys(); drawRuler(); drawVel(); placeSelBar(); placePlayhead();
-    hudTick(t0); return;
+    return;
   }
-  hudMode = 'full'; gridDirty = false;
+  gridDirty = false;
   const zo = zoomFrame; zoomFrame = false;
   drawGrid(zo); drawKeys(); drawRuler(); drawVel(); placeSelBar(); placePlayhead();
   // notifyChange membuat JSON seluruh note: di frame zoom ditunda (note tidak berubah), supaya tidak ikut membebani gesture
   if (zo || g) { window.clearTimeout(notifyT); notifyT = window.setTimeout(notifyChange, 250); } else notifyChange();   // selama drag / zoom tidak ada JSON + render ulang pratinjau pattern tiap frame; jari lepas = langsung
-  hudTick(t0);
 }
 
-// ---------- penghitung FPS sementara (hapus blok ini + elemen .pr__hud kalau sudah tidak perlu) ----------
-let hudEl: HTMLElement | null = null; const hudT: number[] = []; let hudJs = 0;
-function hudTick(t0: number) {
-  const now = performance.now(); hudJs = now - t0;
-  hudT.push(now); if (hudT.length > 30) hudT.shift();
-  if (!hudEl) return;
-  let fps = 0;
-  if (hudT.length > 1) { const span = hudT[hudT.length - 1] - hudT[0]; fps = span > 0 ? (hudT.length - 1) * 1000 / span : 0; }
-  hudEl.textContent = 'FPS ' + Math.round(fps) + ' · js ' + hudJs.toFixed(1) + 'ms · grid ' + hudGrid.toFixed(1) + 'ms · ' + hudMode;
-}
 let notifyT = 0;
 function schedule() { gridDirty = true; scheduleScroll(); }
 function scheduleScroll() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; redraw(); }); }   // scroll murni: isi grid tidak berubah
@@ -1242,7 +1228,6 @@ function build(): HTMLElement {
   gclip = el.querySelector<HTMLElement>('.pr__clip')!;
   kc = el.querySelector<HTMLCanvasElement>('.pr__keys')!;
   rc = el.querySelector<HTMLCanvasElement>('.pr__ruler')!;
-  hudEl = document.createElement('div'); hudEl.className = 'pr__hud'; hudEl.setAttribute('aria-hidden', 'true'); el.querySelector('.pr__main')!.appendChild(hudEl);
   btnUndo = el.querySelector<HTMLButtonElement>('[data-act="undo"]')!;
   btnRedo = el.querySelector<HTMLButtonElement>('[data-act="redo"]')!;
 

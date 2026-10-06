@@ -903,7 +903,6 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .pr__clip{grid-area:1/1;position:sticky;top:0;left:0;overflow:hidden;align-self:start;justify-self:start;touch-action:none}
 .pr__grid{position:absolute;top:0;left:0;display:block;touch-action:none;-webkit-user-select:none;user-select:none;transform-origin:0 0;will-change:transform}
 .pr__gridbg{position:absolute;top:0;left:0;display:block;pointer-events:none;transform-origin:0 0;will-change:transform}   /* lapis latar grid (baris + garis): di bawah lapis nada, tidak menerima sentuhan */
-.pr__hud{position:absolute;right:6px;bottom:6px;z-index:5;padding:3px 7px;border:1px solid #3a3a4a;border-radius:4px;background:#101016;color:#c9c9d6;font:600 10px/1.3 ui-monospace,monospace;pointer-events:none}
 
 /* panel Velocity: hanya batang velocity (tanpa strip judul, supaya grid tidak menyempit); tombol buka/tutup = panah kecil di kanan bawah */
 .pr__vel{flex:none;background:#101016}
@@ -915,7 +914,6 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .pr__velbtn.is-open svg{transform:rotate(90deg)}
 .pr__velbtn:hover,.pr__velbtn:focus-visible{color:var(--text);border-color:#4a4a5a}
 .pr__velbtn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.pr__hud{right:38px}
 @media (prefers-reduced-motion:reduce){.pr__velbtn svg{transition:none}}
 @media (prefers-reduced-motion:reduce){#pianoRoll{transition:none}}
 
