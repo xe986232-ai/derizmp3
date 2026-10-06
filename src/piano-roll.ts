@@ -297,53 +297,124 @@ function drawGrid(zoomOnly = false) {
 }
 
 let keysSig = '', rulerSig = '';   // tanda masukan gambar terakhir: kalau sama, tidak digambar ulang (mis. pinch horizontal tidak menyentuh keys)
-// Keyboard di kiri grid: gaya sama dengan keyboard DERIZ (tuts putih gradasi + bibir gelap di ujung depan, tuts hitam gradasi
-// gelap bersudut membulat dengan bayangan, tuts tertekan berwarna track), hanya diputar 90 derajat: pangkal tuts di kiri, ujung depan di kanan (sisi grid).
-const KEYS_BG = '#17171e', KEY_WHITE_A = '#fbfbfd', KEY_WHITE_B = '#e4e4ec', KEY_BLACK_A = '#2c2c38', KEY_BLACK_B = '#0e0e13', KEY_LABEL = PR.dim;
-function keyPath(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, rr: number) {   // sudut kiri lurus (terpotong tepi canvas), sudut kanan membulat
-  c.beginPath(); c.moveTo(x, y); c.lineTo(x + w - rr, y); c.arcTo(x + w, y, x + w, y + rr, rr);
-  c.lineTo(x + w, y + h - rr); c.arcTo(x + w, y + h, x + w - rr, y + h, rr); c.lineTo(x, y + h); c.closePath();
+// ===== Keyboard piano roll: desain "Ivory Capsule" =====
+// Rel kiri gelap (tempat tuts masuk ke badan piano) + tuts putih gading berujung kapsul + tuts hitam ebony berkilap.
+// Tuts tertekan: masuk 2px ke kanan, terisi warna track dengan cahaya lembut. Tiap C diberi penanda warna track di rel kiri.
+// Tuts bisa dimainkan langsung: tekan / seret di keyboard = bunyi nada (lewat handler preview yang sama dengan grid).
+const KEY_RAIL = 7;                       // lebar rel kiri
+const KB = {
+  body: '#13131a', railA: '#30303f', railB: '#1a1a23',
+  ivA: '#ece6da', ivB: '#fffdf9', ivC: '#d6d0c2',          // putih gading: pangkal, tengah, ujung
+  ebA: '#454553', ebB: '#1b1b23', ebC: '#08080c',           // ebony: pangkal, tengah, ujung
+  label: '#6f7396', labelC: '#3c3f60'
+};
+const keyWL = () => KEY_W - 2 - KEY_RAIL;                   // panjang tuts putih
+const keyBL = () => keyWL() * (showNoteNames ? 0.5 : 0.6);  // panjang tuts hitam (nama nada tampil: dipendekkan supaya label tidak tertutup)
+const lumOf = (hex: string): number => { const k = hexRgb(hex); return (0.299 * k[0] + 0.587 * k[1] + 0.114 * k[2]) / 255; };
+function capsule(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {   // kiri lurus, kanan membulat penuh
+  c.beginPath(); c.moveTo(x, y); c.lineTo(x + w - r, y); c.arcTo(x + w, y, x + w, y + r, r);
+  c.lineTo(x + w, y + h - r); c.arcTo(x + w, y + h, x + w - r, y + h, r); c.lineTo(x, y + h); c.closePath();
 }
-// Tuts: isi tuts hanya bergantung pada rowH / nama nada / warna / hover, bukan pada posisi geser. Jadi seluruh deret tuts (C1..C8)
-// digambar SATU KALI ke bitmap offscreen dengan kode gambar yang sama (gradient, bibir, bayangan tuts hitam), lalu tiap frame geser / zoom
-// cukup di-blit (drawImage). Tampilan akhir identik; bayangan (shadowBlur) per tuts tidak lagi dihitung ulang tiap frame.
+// Isi tuts hanya bergantung pada rowH / nama nada / warna / hover, bukan pada posisi geser. Seluruh deret (C1..C8) digambar SATU KALI
+// ke bitmap offscreen, lalu tiap frame geser / zoom cukup di-blit (drawImage); bayangan per tuts tidak dihitung ulang tiap frame.
 let keyStrip: HTMLCanvasElement | null = null, keyStripSig = '', keyStripRow = 0, keyStripDpr = 1;
-const KEY_MAX_PX = 16000;   // batas aman tinggi canvas di HP; kalau lewat, jatuh ke gambar langsung seperti semula
+const KEY_MAX_PX = 16000;   // batas aman tinggi canvas di HP; kalau lewat, digambar langsung
 function paintKeys(c: CanvasRenderingContext2D, dpr: number, sy: number, vh: number, hover: number) {
-  c.fillStyle = KEYS_BG; c.fillRect(0, 0, KEY_W, vh);
+  const WL = keyWL(), BL = keyBL(), rgb = hexRgb(color), onColorDark = lumOf(color) > 0.6;
+  const pressA = mixRgb(rgb, [0, 0, 0], 0.22), pressB = color, pressC = mixRgb(rgb, [255, 255, 255], 0.28);
+  c.fillStyle = KB.body; c.fillRect(0, 0, KEY_W, vh);
   const r0 = Math.max(0, Math.floor(sy / rowH) - 1), r1 = Math.min(ROWS - 1, Math.floor((sy + vh) / rowH) + 1);
-  const KW = KEY_W - 2, BL = KW * (showNoteNames ? 0.5 : 0.62);   // panjang tuts putih / hitam (nama nada tampil: tuts hitam dipendekkan supaya label tidak tertutup)
-  const gw = c.createLinearGradient(0, 0, KW, 0); gw.addColorStop(0, KEY_WHITE_A); gw.addColorStop(1, KEY_WHITE_B);
-  const gb = c.createLinearGradient(0, 0, BL, 0); gb.addColorStop(0, KEY_BLACK_A); gb.addColorStop(1, KEY_BLACK_B);
-  // 1) tuts putih: tiap tuts mengisi barisnya sendiri + setengah baris tuts hitam di atas / bawahnya (seperti piano asli), jarak 1px antar tuts
+  // rel kiri
+  const rail = c.createLinearGradient(0, 0, KEY_RAIL, 0); rail.addColorStop(0, KB.railA); rail.addColorStop(1, KB.railB);
+  c.fillStyle = rail; c.fillRect(0, 0, KEY_RAIL, vh);
+  c.fillStyle = 'rgba(255,255,255,.06)'; c.fillRect(0, 0, 1, vh);
+  c.fillStyle = 'rgba(0,0,0,.45)'; c.fillRect(KEY_RAIL - 1, 0, 1, vh);
+
+  const ivory = c.createLinearGradient(KEY_RAIL, 0, KEY_RAIL + WL, 0);
+  ivory.addColorStop(0, KB.ivA); ivory.addColorStop(0.5, KB.ivB); ivory.addColorStop(1, KB.ivC);
+  const ebony = c.createLinearGradient(KEY_RAIL, 0, KEY_RAIL + BL, 0);
+  ebony.addColorStop(0, KB.ebA); ebony.addColorStop(0.55, KB.ebB); ebony.addColorStop(1, KB.ebC);
+  const pressW = c.createLinearGradient(KEY_RAIL, 0, KEY_RAIL + WL, 0);
+  pressW.addColorStop(0, pressA); pressW.addColorStop(0.5, pressB); pressW.addColorStop(1, pressC);
+  const pressK = c.createLinearGradient(KEY_RAIL, 0, KEY_RAIL + BL, 0);
+  pressK.addColorStop(0, pressA); pressK.addColorStop(1, pressB);
+  const hinge = c.createLinearGradient(KEY_RAIL, 0, KEY_RAIL + 12, 0); hinge.addColorStop(0, 'rgba(0,0,0,.30)'); hinge.addColorStop(1, 'rgba(0,0,0,0)');
+
+  // 1) tuts putih: tiap tuts mengisi barisnya + setengah baris tuts hitam di atas / bawahnya, jarak 1,5px antar tuts
   for (let r = r0; r <= r1; r++) {
     const p = P_MAX - r; if (isBlack(p)) continue;
-    const y = r * rowH - sy, top = y + (isBlack(p + 1) ? -rowH / 2 : 0) + 0.5, bot = y + rowH + (isBlack(p - 1) ? rowH / 2 : 0) - 0.5;
-    const dn = p === hover, x = dn ? 1 : 0, h = bot - top, rr = Math.min(5, h / 2.5);
-    c.save(); keyPath(c, x, top, KW, h, rr); c.fillStyle = dn ? color : gw; c.fill(); c.clip();
-    c.fillStyle = dn ? 'rgba(0,0,0,.2)' : 'rgba(0,0,0,.12)'; c.fillRect(x + KW - (dn ? 2 : 3), top, 3, h);   // bibir gelap di ujung depan tuts
+    const y = r * rowH - sy, top = y + (isBlack(p + 1) ? -rowH / 2 : 0) + 0.75, bot = y + rowH + (isBlack(p - 1) ? rowH / 2 : 0) - 0.75;
+    const h = bot - top, dn = p === hover, x = KEY_RAIL + (dn ? 2 : 0), w = WL - (dn ? 2 : 0), rr = Math.min(h / 2, 7);
+    c.save();
+    if (dn) { c.shadowColor = soft(color, 0.55); c.shadowBlur = 10 * dpr; }
+    capsule(c, x, top, w, h, rr); c.fillStyle = dn ? pressW : ivory; c.fill();
     c.restore();
+    c.save(); capsule(c, x, top, w, h, rr); c.clip();
+    const sheen = c.createLinearGradient(0, top, 0, bot);   // kilau atas -> bayangan bawah
+    sheen.addColorStop(0, dn ? 'rgba(255,255,255,.22)' : 'rgba(255,255,255,.6)'); sheen.addColorStop(0.4, 'rgba(255,255,255,0)'); sheen.addColorStop(1, 'rgba(0,0,0,.11)');
+    c.fillStyle = sheen; c.fillRect(x, top, w, h);
+    c.fillStyle = hinge; c.fillRect(x, top, 12, h);
+    c.fillStyle = dn ? 'rgba(0,0,0,.28)' : 'rgba(255,255,255,.9)'; c.fillRect(x, top, w, dn ? 2 : 1);   // sisi atas: tertekan = bayangan masuk
+    c.fillStyle = 'rgba(0,0,0,.2)'; c.fillRect(x, bot - 1, w, 1);
+    c.restore();
+    c.save(); capsule(c, x + 0.5, top + 0.5, w - 1, h - 1, rr); c.strokeStyle = 'rgba(0,0,0,.14)'; c.lineWidth = 1; c.stroke(); c.restore();
+    if (p % 12 === 0) { c.fillStyle = dn ? '#fff' : color; c.beginPath(); c.roundRect(1.5, top + 2, 3, Math.max(2, h - 4), 1.5); c.fill(); }   // penanda C di rel kiri
   }
-  // 2) tuts hitam di atasnya, dengan bayangan jatuh ke arah ujung depan (kanan)
+  // 2) tuts hitam: ebony berkilap, bayangan jatuh ke kanan
   for (let r = r0; r <= r1; r++) {
     const p = P_MAX - r; if (!isBlack(p)) continue;
-    const y = r * rowH - sy + 1, h = rowH - 2, dn = p === hover, x = dn ? 1 : 0, rr = Math.min(4, h / 2.5);
-    c.save(); c.shadowColor = 'rgba(0,0,0,.5)'; c.shadowBlur = 5 * dpr; c.shadowOffsetX = 3 * dpr; c.shadowOffsetY = 0;
-    keyPath(c, x, y, BL, h, rr); c.fillStyle = dn ? color : gb; c.fill();
+    const y = r * rowH - sy + 1, h = rowH - 2, dn = p === hover, x = KEY_RAIL + (dn ? 2 : 0), w = BL - (dn ? 2 : 0), rr = Math.min(h / 2.2, 6);
+    c.save();
+    c.shadowColor = dn ? soft(color, 0.6) : 'rgba(0,0,0,.55)'; c.shadowBlur = (dn ? 9 : 6) * dpr; c.shadowOffsetX = dn ? 0 : 2.5 * dpr; c.shadowOffsetY = dn ? 0 : 1.5 * dpr;
+    capsule(c, x, y, w, h, rr); c.fillStyle = dn ? pressK : ebony; c.fill();
     c.restore();
-    c.save(); keyPath(c, x, y, BL, h, rr); c.clip();
-    c.fillStyle = dn ? 'rgba(255,255,255,.12)' : 'rgba(255,255,255,.07)'; c.fillRect(x + BL - (dn ? 2 : 3), y, 3, h);
+    c.save(); capsule(c, x, y, w, h, rr); c.clip();
+    c.fillStyle = dn ? 'rgba(255,255,255,.28)' : 'rgba(255,255,255,.2)'; c.fillRect(x + 2, y + 0.5, w - 6, 1);   // garis kilau atas
+    const gloss = c.createLinearGradient(x, 0, x + w, 0); gloss.addColorStop(0, 'rgba(255,255,255,.17)'); gloss.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = gloss; c.fillRect(x + 1, y + h * 0.2, w - 3, Math.max(1.5, h * 0.2));                          // pita kilap
+    c.fillStyle = 'rgba(255,255,255,.1)'; c.fillRect(x + w - 2, y, 1, h);                                        // pantulan ujung
     c.restore();
   }
-  // 3) nama nada (tiap C, tuts yang disentuh, atau semua kalau Tampilkan Nama Nada aktif)
-  c.font = '600 10px system-ui,sans-serif'; c.textBaseline = 'middle'; c.textAlign = 'right';
+  // 3) nama nada (tiap C, tuts yang disentuh, atau semua kalau Note Key aktif)
+  c.textBaseline = 'middle'; c.textAlign = 'right';
   for (let r = r0; r <= r1; r++) {
-    const p = P_MAX - r, y = r * rowH - sy;
-    if (p % 12 === 0 || p === hover || (showNoteNames && rowH >= 11)) { c.fillStyle = p !== hoverP ? KEY_LABEL : isBlack(p) ? '#16161d' : '#fff'; c.fillText(pname(p), KW - 5, y + rowH / 2 + 0.5); }   // tuts hitam tertekan: label jatuh di bagian putih, jadi gelap
+    const p = P_MAX - r, isC = p % 12 === 0, y = r * rowH - sy;
+    if (!(isC || p === hover || (showNoteNames && rowH >= 11))) continue;
+    c.font = (isC ? '700 10px' : '600 9px') + ' system-ui,sans-serif';
+    c.fillStyle = p === hover && !isBlack(p) ? (onColorDark ? '#16161d' : '#fff') : isC ? KB.labelC : KB.label;
+    c.fillText(pname(p), KEY_W - 7, y + rowH / 2 + 0.5);
   }
   c.textAlign = 'start';
-  c.fillStyle = PR.rulerLine; c.fillRect(KEY_W - 1, 0, 1, vh);
+  c.fillStyle = PR.rulerLine; c.fillRect(KEY_W - 1, 0, 1, vh);   // garis temu dengan grid
 }
+
+// Interaksi keyboard: tekan / seret = bunyikan nada (glissando), lepas = berhenti. Mouse tanpa klik hanya menyorot tuts + baris grid-nya.
+let keyPtr = -1;   // id pointer yang sedang menekan (-1 = tidak ada)
+function keyAt(e: PointerEvent): number {
+  const r = kc.getBoundingClientRect(), x = e.clientX - r.left - KEY_RAIL, f = (e.clientY - r.top + curT()) / rowH, row = Math.floor(f);
+  if (row < 0 || row >= ROWS) return -1;
+  const p = P_MAX - row;
+  if (!isBlack(p) || x < keyBL()) return p;   // area tuts hitam, atau baris tuts putih
+  const q = f - row < 0.5 ? p + 1 : p - 1;     // bagian putih di sebelah tuts hitam: setengah atas milik tuts putih di atasnya, setengah bawah milik yang di bawahnya
+  return q >= P_MIN && q <= P_MAX ? q : p;
+}
+const setKeyHover = (p: number) => { if (p !== hoverP) { hoverP = p; schedule(); } };
+function onKeyDown(e: PointerEvent) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  e.preventDefault(); keyPtr = e.pointerId;
+  try { kc.setPointerCapture(e.pointerId); } catch { /* abaikan */ }
+  const p = keyAt(e); setKeyHover(p); if (p >= 0) pvPlay(p, true);
+}
+function onKeyMove(e: PointerEvent) {
+  if (keyPtr !== -1 && keyPtr !== e.pointerId) return;
+  const p = keyAt(e); setKeyHover(p);
+  if (keyPtr !== -1 && p >= 0) pvPlay(p, true);
+}
+function onKeyUp(e: PointerEvent) {
+  if (keyPtr !== e.pointerId) return;
+  keyPtr = -1; pvStop(); setKeyHover(e.pointerType === 'mouse' && e.type === 'pointerup' ? keyAt(e) : -1);
+}
+function onKeyLeave() { if (keyPtr === -1) setKeyHover(-1); }
 
 function drawKeys(preview = false) {
   const vh = sc.clientHeight, sy = curT(), dprRaw = window.devicePixelRatio || 1, dpr = Math.min(dprRaw, 8);
@@ -1300,6 +1371,12 @@ function build(): HTMLElement {
   gc.addEventListener('pointerup', onUp);
   gc.addEventListener('pointercancel', onUp);
   gc.addEventListener('pointerleave', () => { if (hoverP !== -1 && !g) { hoverP = -1; schedule(); } });
+  kc.addEventListener('pointerdown', onKeyDown);
+  kc.addEventListener('pointermove', onKeyMove);
+  kc.addEventListener('pointerup', onKeyUp);
+  kc.addEventListener('pointercancel', onKeyUp);
+  kc.addEventListener('pointerleave', onKeyLeave);
+  kc.addEventListener('contextmenu', e => e.preventDefault());
   gc.addEventListener('wheel', onWheel, {passive: false});
   gc.addEventListener('contextmenu', e => e.preventDefault());
   sc.addEventListener('scroll', scheduleScroll, {passive: true});
