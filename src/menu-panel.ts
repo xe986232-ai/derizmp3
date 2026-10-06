@@ -8,6 +8,8 @@ import { setAudioDebug, loadAudioDebug } from './audio-debug';
 import { DEMO, demoNotice } from './demo';
 import { saveProject, loadProject, deleteProject, listProjects, projectExists, recordToJson, jsonToRecord } from './project-store';
 import { installState, promptInstall, onInstallChange } from './pwa';
+import { FULL, getProfile, initialOf, loadProfile, onProfile, removeAvatar, saveName, shownName, uploadAvatar } from './account';
+import { signOut } from './license';
 
 // Jembatan ke main.ts (yang memegang data timeline): snapshot dan pemulihan project
 export interface ProjectIO {
@@ -30,6 +32,34 @@ const IC_GEAR = svgi('<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l
 const IC_EXPORT = svgi('<path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>');
 const IC_CHEV = svgi('<path d="M9 5l7 7-7 7"/>', 16);
 const IC_BACK = svgi('<path d="M15 5l-7 7 7 7"/>', 18);
+const AVA = (cls = ''): string => '<span class="mp__ava ' + cls + '" data-ava><img alt="" hidden><b></b></span>';
+
+// Kartu profil di atas daftar kategori + halaman Profil (hanya build full; di build lain string ini kosong)
+const PROFILE_CAT = FULL
+  ? '<button type="button" class="mp__cat mp__profcat mp__item" style="--i:1" data-go="profile" aria-label="Profil">' + AVA() + '<span class="mp__cat__t"><b data-pname>Akun</b><small data-pmail>Lihat &amp; ubah profil</small></span>' + IC_CHEV + '</button>'
+  : '';
+const PROFILE_PAGE = FULL
+  ? '<section class="mp__page" data-page="profile" aria-label="Profil" hidden>' +
+      '<div class="mp__card mp__item mp__pf" style="--i:1">' +
+        '<button type="button" class="mp__avabtn" data-pick aria-label="Ganti foto profil">' + AVA('mp__ava--lg') + '<i class="mp__avacam" aria-hidden="true">' + svgi('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>', 16) + '</i></button>' +
+        '<div class="mp__pfbtns"><button type="button" class="mp__imp" data-pick>Ganti foto</button><button type="button" class="mp__imp mp__imp--bad" data-delava hidden>Hapus foto</button></div>' +
+        '<input type="file" accept="image/*" data-file hidden>' +
+      '</div>' +
+      '<div class="mp__card mp__item" style="--i:2">' +
+        '<div class="mp__sub"><span>Nama</span></div>' +
+        '<input type="text" class="mp__inp" data-nameinp maxlength="40" autocomplete="name" placeholder="Nama kamu" aria-label="Nama">' +
+        '<button type="button" class="mp__prim" data-savename>Simpan nama</button>' +
+        '<p class="mp__hint mp__pmsg" data-pmsg role="status"></p>' +
+      '</div>' +
+      '<div class="mp__card mp__item" style="--i:3">' +
+        '<div class="mp__sub"><span>Email</span></div><p class="mp__hint" data-pemail style="word-break:break-all"></p>' +
+      '</div>' +
+      '<div class="mp__card mp__item" style="--i:4">' +
+        '<button type="button" class="mp__prim mp__prim--bad" data-signout>Keluar dari akun</button>' +
+        '<p class="mp__hint" style="margin-top:8px">Keluar juga mengosongkan salinan offline di perangkat ini. Slot perangkat tidak dibebaskan.</p>' +
+      '</div>' +
+    '</section>'
+  : '';
 
 const ICON_GRID =
   '<svg class="menu-btn__ic menu-btn__ic--grid" viewBox="0 0 24 24" aria-hidden="true">' +
@@ -60,10 +90,12 @@ export function initMenuPanel(): MenuPanel {
       '<div class="mp__body">' +
         // halaman utama: daftar kategori
         '<nav class="mp__page" data-page="home" aria-label="Kategori menu">' +
+          PROFILE_CAT +
           '<button type="button" class="mp__cat mp__item" style="--i:1" data-go="project">' + IC_FOLDER + '<span class="mp__cat__t"><b>Project</b><small>Simpan &amp; buka project</small></span>' + IC_CHEV + '</button>' +
           '<button type="button" class="mp__cat mp__item" style="--i:2" data-go="export">' + IC_EXPORT + '<span class="mp__cat__t"><b>Export</b><small>Simpan hasil jadi MP3 / WAV</small></span>' + IC_CHEV + '</button>' +
           '<button type="button" class="mp__cat mp__item" style="--i:3" data-go="settings">' + IC_GEAR + '<span class="mp__cat__t"><b>Pengaturan</b><small>Preferensi aplikasi</small></span>' + IC_CHEV + '</button>' +
         '</nav>' +
+        PROFILE_PAGE +
         // kategori Project
         '<section class="mp__page" data-page="project" aria-label="Project" hidden>' +
           '<div class="mp__card mp__item mp__save" style="--i:1">' +
@@ -297,7 +329,7 @@ export function initMenuPanel(): MenuPanel {
   });
 
   // ===== Halaman kategori (home / project / export / settings) =====
-  const TITLES: Record<string, string> = {home: 'Menu', project: 'Project', export: 'Export', settings: 'Pengaturan'};
+  const TITLES: Record<string, string> = {home: 'Menu', project: 'Project', export: 'Export', settings: 'Pengaturan', profile: 'Profil'};
   const pages = [...panel.querySelectorAll<HTMLElement>('.mp__page')];
   const titleEl = panel.querySelector('.mp__title') as HTMLElement;
   const backBtn = panel.querySelector('.mp__back') as HTMLButtonElement;
@@ -318,6 +350,45 @@ export function initMenuPanel(): MenuPanel {
     if (t) go(t.dataset.go as string);
   });
   backBtn.addEventListener('click', () => go('home'));
+
+  // ===== Profil (nama + foto, hanya build full) =====
+  if (FULL) {
+    const q = <T extends HTMLElement>(s: string): T => panel.querySelector(s) as T;
+    const nameInp = q<HTMLInputElement>('[data-nameinp]'), msg = q<HTMLElement>('[data-pmsg]'), fileIn = q<HTMLInputElement>('[data-file]');
+    const say = (t: string, bad = false): void => { msg.textContent = t; msg.style.color = bad ? '#ff7a8a' : ''; };
+    const paint = (): void => {
+      const p = getProfile();
+      panel.querySelectorAll<HTMLElement>('[data-ava]').forEach(a => {
+        const img = a.querySelector('img') as HTMLImageElement, ini = a.querySelector('b') as HTMLElement;
+        ini.textContent = initialOf(p);
+        if (p?.avatar) { if (img.getAttribute('src') !== p.avatar) img.src = p.avatar; img.hidden = false; ini.hidden = true; }
+        else { img.hidden = true; img.removeAttribute('src'); ini.hidden = false; }
+        img.onerror = () => { img.hidden = true; ini.hidden = false; };   // offline / foto gagal dimuat: tampil inisial
+      });
+      q('[data-pname]').textContent = shownName(p);
+      q('[data-pmail]').textContent = p?.email || 'Lihat & ubah profil';
+      q('[data-pemail]').textContent = p?.email || '-';
+      q<HTMLElement>('[data-delava]').hidden = !p?.avatar;
+      if (document.activeElement !== nameInp) nameInp.value = p?.name || '';
+    };
+    onProfile(paint); paint(); void loadProfile();
+
+    panel.addEventListener('click', async e => {
+      const t = e.target as HTMLElement;
+      if (t.closest('[data-pick]')) { fileIn.click(); return; }
+      if (t.closest('[data-delava]')) { say('Menghapus foto...'); const er = await removeAvatar(); say(er || 'Foto dihapus.', !!er); return; }
+      const sv = t.closest('[data-savename]') as HTMLButtonElement | null;
+      if (sv) { sv.disabled = true; say('Menyimpan...'); const er = await saveName(nameInp.value); say(er || 'Nama disimpan.', !!er); sv.disabled = false; return; }
+      const so = t.closest('[data-signout]') as HTMLButtonElement | null;
+      if (so && confirm('Keluar dari akun di perangkat ini?')) { so.disabled = true; await signOut(); }
+    });
+    fileIn.addEventListener('change', async () => {
+      const f = fileIn.files?.[0]; fileIn.value = '';
+      if (!f) return;
+      say('Mengunggah foto...'); const er = await uploadAvatar(f); say(er || 'Foto diperbarui.', !!er);
+    });
+    nameInp.addEventListener('keydown', e => { if (e.key === 'Enter') (q('[data-savename]') as HTMLButtonElement).click(); });
+  }
 
   let open = false;
 

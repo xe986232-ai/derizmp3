@@ -29,7 +29,7 @@ input{width:100%;height:40px;padding:0 12px;border-radius:12px;border:1px solid 
 input:focus{outline:0}
 input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-#tokRow[hidden]{display:none}
+#tokRow[hidden],#nameRow[hidden]{display:none}
 .go{width:100%;height:44px;margin-top:18px;border:0;border-radius:22px;background:#f2f2f6;color:#16161d;font:inherit;font-weight:700;cursor:pointer}
 .go:hover{background:#fff}
 .go:disabled{opacity:.6;cursor:default}
@@ -50,6 +50,10 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <label for="token">Token dari pembelian</label>
       <input id="token" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="MLVX-XXXX-XXXX-XXXX-XXXX">
     </div>
+    <div id="nameRow" hidden>
+      <label for="uname">Nama <span style="font-weight:400">(opsional, tampil di profil)</span></label>
+      <input id="uname" maxlength="40" autocomplete="name" placeholder="Nama kamu">
+    </div>
     <label for="email">Email</label>
     <input id="email" type="email" autocomplete="username" required>
     <label for="pw">Password <span id="pwHint"></span></label>
@@ -65,7 +69,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   function set(m) {
     mode = m;
     $('tLogin').setAttribute('aria-selected', m === 'login'); $('tRedeem').setAttribute('aria-selected', m === 'redeem');
-    $('tokRow').hidden = m !== 'redeem';
+    $('tokRow').hidden = m !== 'redeem'; $('nameRow').hidden = m !== 'redeem';
     $('token').required = m === 'redeem';
     $('pw').autocomplete = m === 'redeem' ? 'new-password' : 'current-password';
     $('pwHint').textContent = m === 'redeem' ? '(buat password baru, min. 8 karakter)' : '';
@@ -82,7 +86,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     $('err').textContent = ''; $('go').disabled = true;
     fetch('/api/session', {
       method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: mode, email: $('email').value, password: $('pw').value, token: $('token').value })
+      body: JSON.stringify({ action: mode, email: $('email').value, password: $('pw').value, token: $('token').value, name: mode === 'redeem' ? $('uname').value : undefined })
     }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (x) {
         if (x.ok) { try { localStorage.setItem('mx_last_ok', String(Date.now())); } catch (_) {} location.replace(nextUrl()); return; }

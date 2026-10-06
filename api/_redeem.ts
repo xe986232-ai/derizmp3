@@ -1,9 +1,10 @@
+import { cleanName } from './_auth.js';
 import { createUser, deleteUser, hashToken, licenseOf, rest } from '../server/supabase.js';
 import { issue, json } from './_issue.js';
 
 // Aktivasi token: buat akun lalu KLAIM token secara atomik (PATCH hanya kena baris yang user_id-nya masih kosong),
 // jadi dua orang yang memakai token yang sama bersamaan tidak mungkin sama-sama berhasil.
-export async function redeemToken(req: Request, email: string, password: string, token: string): Promise<Response> {
+export async function redeemToken(req: Request, email: string, password: string, token: string, name?: unknown): Promise<Response> {
   const BAD = json({ error: 'Token tidak valid atau sudah dipakai.' }, 400);   // satu pesan untuk semua kegagalan token (tidak membocorkan mana yang ada)
   if (token.replace(/[^A-Za-z0-9]/g, '').length < 12) return BAD;
   const th = await hashToken(token);
@@ -19,6 +20,9 @@ export async function redeemToken(req: Request, email: string, password: string,
     body: { user_id: u.id, email, claimed_at: new Date().toISOString(), expires_at: d ? new Date(Date.now() + d * 864e5).toISOString() : null },
   });
   if (!claimed.length) { await deleteUser(u.id); return BAD; }   // keduluan orang lain: batalkan akun yang barusan dibuat
+
+  const dn = cleanName(name);   // nama tampilan (opsional); gagal menyimpan tidak boleh menggagalkan aktivasi
+  if (dn) await rest('profiles?on_conflict=user_id', { method: 'POST', upsert: true, body: { user_id: u.id, display_name: dn } }).catch(() => undefined);
 
   const lic = await licenseOf(u.id);
   return lic ? issue(req, u.id, lic) : json({ error: 'Gagal mengaktifkan lisensi.' }, 500);

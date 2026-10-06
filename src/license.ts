@@ -33,6 +33,13 @@ async function check(): Promise<void> {
   if (Date.now() - lastOk() > GRACE_MS) offlineWall();
 }
 
+// Keluar dari akun ini: hapus sesi di server, kosongkan cache aplikasi, kembali ke halaman login.
+export async function signOut(): Promise<void> {
+  try { await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }); } catch { /* tetap lanjut: cache dihapus di bawah */ }
+  try { localStorage.removeItem('mx_prof'); } catch { /* abaikan */ }
+  await wipeAndLeave();
+}
+
 export function startLicenseGuard(): void {
   if (typeof __FULL__ === 'undefined' || !__FULL__) return;
   void check();

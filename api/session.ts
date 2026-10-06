@@ -6,13 +6,13 @@ import { issue, json } from './_issue.js';
 import { licenseOf, licenseOk, passwordLogin } from '../server/supabase.js';
 
 export async function POST(req: Request): Promise<Response> {
-  let b: { action?: string; email?: string; password?: string; token?: string };
+  let b: { action?: string; email?: string; password?: string; token?: string; name?: string };
   try { b = await req.json(); } catch { return json({ error: 'Permintaan tidak valid.' }, 400); }
   const email = String(b.email || '').trim().toLowerCase(), password = String(b.password || '');
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || password.length < 8 || password.length > 128) return json({ error: 'Email atau password (minimal 8 karakter) tidak valid.' }, 400);
 
   try {
-    if (b.action === 'redeem') return await redeemToken(req, email, password, String(b.token || ''));
+    if (b.action === 'redeem') return await redeemToken(req, email, password, String(b.token || ''), b.name);
     const uid = await passwordLogin(email, password);
     if (!uid) return json({ error: 'Email atau password salah.' }, 401);
     const lic = await licenseOf(uid);
