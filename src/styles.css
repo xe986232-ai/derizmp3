@@ -2181,3 +2181,15 @@ html[data-ui="mono"] .pr__corner{background:#18181b}
 .trkcard__pan .circle-bg,.trkcard__pan .circle,.trkcard__pan .circle-inner-stroke{display:none}
 .trkcard__pan .circle-inner{fill:#f1f1f5;transform-origin:18px 18px;transform:scale(1.16)}
 .trkcard__pan .knob-pos{stroke:#16161d;stroke-width:3.2}
+
+/* ---- drag & drop DERIZ ke piano roll ---- */
+.fxc--deriz .fxc__pat{touch-action:none;cursor:grab}
+.fxc--deriz .fxc__title{touch-action:none}
+.pd-ghost{position:fixed;left:0;top:0;z-index:600;pointer-events:none;padding:6px 12px;border-radius:999px;background:rgba(34,199,232,.92);color:#04121a;
+  font:700 11px/1 'Syncopate',system-ui,sans-serif;letter-spacing:.28em;box-shadow:0 6px 22px rgba(34,199,232,.45);will-change:transform}
+body.is-pdragging,body.is-pdragging *{cursor:grabbing!important;user-select:none!important;-webkit-user-select:none!important}
+.derizov.is-pdrag{pointer-events:none}
+.derizov.is-pdrag .derizov__win{opacity:.28;transition:opacity .15s ease}
+.derizov.is-pdrag .derizov__back{opacity:.15}
+#pianoRoll.is-drop{outline:3px dashed #22c7e8;outline-offset:-3px;box-shadow:inset 0 0 0 9999px rgba(34,199,232,.08)}
+@media (prefers-reduced-motion:reduce){.derizov.is-pdrag .derizov__win{transition:none}}

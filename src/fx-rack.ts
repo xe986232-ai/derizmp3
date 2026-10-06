@@ -465,7 +465,7 @@ function cardHtml(fx: Fx, i: number): string {
     : `<div class="fxc__knobs">${d.params.map(p => cellHtml(d, fx, p)).join('')}</div>`;
   return `<section class="fxc${fx.on ? '' : ' is-off'}${fx.min ? ' is-min' : ''}${tabs.length ? ' has-tabs' : ''}${fx.type === 'deriz' ? ' fxc--deriz' : ''}${fx.type === 'eq' ? ' fxc--eq' : ''}${fx.type === 'reverb' ? ' fxc--rv' : ''}" data-fx="${fx.id}" data-kind="${pageOf(fx.type)}" style="--i:${i}" aria-label="${d.name}">` +
     `<header class="fxc__head"><h3 class="fxc__name"><button type="button" class="fxc__title" aria-expanded="${!fx.min}" title="Klik untuk minimize / maximize">${d.name}</button></h3>${tabBar}` +
-    (fx.type === 'deriz' ? `<button type="button" class="fxc__pat" aria-haspopup="menu" aria-expanded="false" aria-label="Pattern: pilih pattern untuk diisi DERIZ" title="Masuk ke pattern">${ICON_PAT}</button>` : '') +
+    (fx.type === 'deriz' ? `<button type="button" class="fxc__pat" aria-haspopup="menu" aria-expanded="false" aria-label="Pattern: tarik ke piano roll, atau klik untuk memilih pattern" title="Tarik & lepas ke piano roll (atau klik untuk pilih pattern)">${ICON_PAT}</button>` : '') +
     `<button type="button" class="fxc__pwr" role="switch" aria-checked="${fx.on}" aria-label="${d.name} nyala / mati" title="Nyala / mati"></button>` +
     (fx.type === 'deriz' || fx.type === 'eq' || fx.type === 'reverb' ? `<button type="button" class="fxc__pop" aria-label="Buka ${d.name} di tengah layar" title="Maximize (buka di tengah layar)">${ICON_POP}</button><button type="button" class="fxc__close" aria-label="Tutup ${d.name}" title="Tutup (Esc)">${ICON_X}</button>` : '') +
     (d.synth && fx.type !== 'deriz' ? '' : `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi ${d.name}" title="Opsi">${ICON_MORE}</button>`) + `</header>` +
@@ -521,6 +521,7 @@ export interface PatternRow { title: string; trackName: string; color: string; b
 export interface PatternBridge {
   list(fxId: number): PatternRow[];           // semua pattern instrumen di timeline, urut dari atas ke bawah lalu kiri ke kanan (notes = nada milik DERIZ fxId)
   open(row: PatternRow, fxId: number): void;  // masuk ke pattern: buka piano roll untuk DERIZ ini
+  drop(fxId: number): boolean;                // DERIZ di-drag & drop ke piano roll yang sedang terbuka: piano roll langsung jadi milik DERIZ ini (false = tidak ada piano roll terbuka)
   removed(fxId: number, track: string, ownedPlain: boolean): void;   // DERIZ dihapus: buang nadanya dari semua pattern (ownedPlain: ikut buang nada kunci polos di pattern track-nya)
 }
 
@@ -1271,6 +1272,54 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   onRoots('pointerup', endDrag);
   onRoots('pointercancel', endDrag);
   onRoots('lostpointercapture', endDrag);
+
+  // ---------- drag & drop DERIZ ke piano roll: tarik ikon pattern / judul DERIZ, lepas di atas piano roll = langsung masuk ke piano roll ----------
+  // Tidak perlu lagi memilih pattern lewat menu: piano roll yang sedang terbuka otomatis jadi milik DERIZ yang dilepas.
+  const PD_MOVE = 6;   // px: di bawah ini dianggap klik biasa (menu pattern / minimize tetap jalan)
+  let pd: { fxId: number; sx: number; sy: number; on: boolean; ghost: HTMLElement | null; pid: number } | null = null;
+  let pdSuppressClick = false;
+  const overRoll = (x: number, y: number) => !!document.elementFromPoint(x, y)?.closest('#pianoRoll');
+  function pdStart(): void {
+    if (!pd) return;
+    pd.on = true;
+    closeMenu(true); hideTip();
+    const g = document.createElement('div');
+    g.className = 'pd-ghost'; g.textContent = 'DERIZ';
+    document.body.appendChild(g);
+    pd.ghost = g;
+    ov.classList.add('is-pdrag');   // jendela DERIZ di tengah layar jangan menghalangi piano roll di belakangnya
+    document.body.classList.add('is-pdragging');
+  }
+  function pdMove(e: PointerEvent): void {
+    if (!pd || e.pointerId !== pd.pid) return;
+    if (!pd.on) { if (Math.hypot(e.clientX - pd.sx, e.clientY - pd.sy) < PD_MOVE) return; pdStart(); }
+    if (pd.ghost) pd.ghost.style.transform = `translate(${e.clientX + 12}px,${e.clientY + 12}px)`;
+    document.getElementById('pianoRoll')?.classList.toggle('is-drop', overRoll(e.clientX, e.clientY));
+  }
+  function pdEnd(e: PointerEvent): void {
+    if (!pd || e.pointerId !== pd.pid) return;
+    const s = pd; pd = null;
+    document.removeEventListener('pointermove', pdMove, true);
+    document.removeEventListener('pointerup', pdEnd, true);
+    document.removeEventListener('pointercancel', pdEnd, true);
+    if (!s.on) return;   // hanya klik: biarkan click handler biasa
+    pdSuppressClick = true; setTimeout(() => { pdSuppressClick = false; }, 0);
+    s.ghost?.remove();
+    ov.classList.remove('is-pdrag');
+    document.body.classList.remove('is-pdragging');
+    document.getElementById('pianoRoll')?.classList.remove('is-drop');
+    if (e.type === 'pointerup' && patterns && overRoll(e.clientX, e.clientY) && patterns.drop(s.fxId)) closeOverlay(true);   // lepas di piano roll: masuk, jendela DERIZ ditutup
+  }
+  onRoots('pointerdown', e => {
+    const t = e.target as Element;
+    if (e.button !== 0 || pd || !patterns) return;
+    const h = t.closest<HTMLElement>('.fxc--deriz .fxc__pat, .fxc--deriz .fxc__title'); if (!h) return;
+    const fx = find(h); if (!fx || fx.type !== 'deriz') return;
+    pd = { fxId: fx.id, sx: e.clientX, sy: e.clientY, on: false, ghost: null, pid: e.pointerId };
+    document.addEventListener('pointermove', pdMove, true);
+    document.addEventListener('pointerup', pdEnd, true);
+    document.addEventListener('pointercancel', pdEnd, true);
+  });
   onRoots('dblclick', e => {
     const el = (e.target as Element).closest<HTMLElement>(CTL); if (!el) return;
     const c = ctx(el); if (!c) return;
@@ -1558,6 +1607,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   onRoots('click', e => {
     const t = e.target as Element, card = t.closest<HTMLElement>('.fxc');
     if (!card || t.matches('.deriz__file')) return;
+    if (pdSuppressClick) { pdSuppressClick = false; return; }   // klik susulan setelah drag ke piano roll: bukan klik sungguhan
     const ob = t.closest<HTMLButtonElement>('.dly__opt'); if (ob) { setOpt(card, ob); return; }   // tombol mode Delay (Ø, Ping Pong, Dual, sumber tempo, Link)
     if (t.closest('.dly__sum')) { openOverlay(card); return; }
     if (t.closest('.fxc__mp')) { openMpcs(); return; }

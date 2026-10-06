@@ -714,6 +714,7 @@ function deletePattern() {
 }
 // Tombol "Edit": pattern instrumen -> buka piano roll; pattern audio clip (tidak punya nada) -> tetap ganti nama seperti sebelumnya
 let prSeq = 0, prStartBar = 0;   // prStartBar: posisi awal pattern yang sedang dibuka di piano roll (dalam bar), supaya playhead-nya relatif
+let prEl = null;   // elemen pattern yang sedang dibuka di piano roll (target drag & drop DERIZ)
 let prvTarget = null;   // instrumen yang dibunyikan piano roll saat nada ditambah / digeser: {track, fx}; fx = id DERIZ (null = DERIZ pertama track / Supersaw)
 function editPattern() {
   const el = selPat; if (!el) return;
@@ -727,7 +728,7 @@ function openEdit(el, keepView = false) {
   const lane = el.parentElement, id = lane.dataset.track;
   const nm = document.getElementById('track-name-' + id);
   if (!el.dataset.prId) el.dataset.prId = 'pat' + (++prSeq);   // kunci supaya nada piano roll tersimpan per pattern
-  prStartBar = pl(el) / BAR_W;
+  prStartBar = pl(el) / BAR_W; prEl = el;
   prvTarget = {track: id, fx: hasSynth(id) ? null : fxRack.derizIds(id)[0] ?? null};   // sama dengan pemilik editKey(el)
   openPianoRoll({
     id: editKey(el),
@@ -761,7 +762,7 @@ function enterPatternAs(el, fxId, keepView = false) {
   const lane = el.parentElement, track = fxRack.derizTrackOf(fxId); if (track === undefined) return;
   if (!el.dataset.prId) el.dataset.prId = 'pat' + (++prSeq);
   const nm = document.getElementById('track-name-' + track), cont = document.querySelector('.trkcard-wrap[data-track="' + track + '"]');
-  prStartBar = pl(el) / BAR_W;
+  prStartBar = pl(el) / BAR_W; prEl = el;
   prvTarget = {track, fx: fxId};   // nada di piano roll ini milik DERIZ fxId
   openPianoRoll({
     id: patKey(el.dataset.prId, fxId, lane.dataset.track),
@@ -791,6 +792,10 @@ const patternBridge = {
     return rows.sort((a, b) => a.top - b.top || a.left - b.left);
   },
   open(row, fxId) { if (row.ref.isConnected) enterPatternAs(row.ref, fxId); },
+  drop(fxId) {   // DERIZ di-drag & drop ke piano roll yang terbuka: piano roll pindah ke nada DERIZ ini, tampilan (zoom / scroll) tetap
+    if (!isPianoRollOpen() || !prEl || !prEl.isConnected) return false;
+    enterPatternAs(prEl, fxId, true); toast('DERIZ masuk ke piano roll'); return true;
+  },
   removed(fxId, track, ownedPlain) {
     dropPianoRollNotesOf(String(fxId));
     if (ownedPlain) lanesEl.querySelectorAll('.pattern[data-pr-id]').forEach(p => { if (p.parentElement.dataset.track === track) clearPianoRollNotes(p.dataset.prId); });
