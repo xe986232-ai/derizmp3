@@ -82,7 +82,7 @@ function paintRuler(force) {
   canvas.style.left = x0 + 'px'; canvas.style.width = (x1 - x0) + 'px';
   g.setTransform(d, 0, 0, d, -x0 * d, 0);
   const ut = uiTheme();   // warna tick ruler per tema UI
-  const RA = ut === 'mono' ? '#8a8a9a' : ut === 'classic' ? '#8c8c9e' : '#9486ad', RB = ut === 'mono' ? '#6a6a76' : ut === 'classic' ? '#717183' : '#6f6385', RC = ut === 'mono' ? '#52525c' : ut === 'classic' ? '#5a5a6b' : '#5a4f70';
+  const RA = ut === 'mono' ? '#8a8a9a' : '#9486ad', RB = ut === 'mono' ? '#6a6a76' : '#6f6385', RC = ut === 'mono' ? '#52525c' : '#5a4f70';
   const every = BAR_W < 28 ? 4 : BAR_W < 50 ? 2 : 1;
   const beat = BAR_W >= 56, sub = BAR_W >= 160, mid = BAR_W >= 640, fine = BAR_W >= 1280;
   const step = fine ? 1 : mid ? 2 : sub ? 4 : beat ? 16 : 64;   // dalam satuan 1/64 bar
@@ -251,17 +251,17 @@ function openMenu(btn) {
   const rnTarget = lastPat && rnPats.includes(lastPat) ? lastPat : rnPats[0] || null;   // pattern terakhir dipilih di track ini, kalau tidak ada: yang paling kiri
   menu.innerHTML =
     '<button role="menuitem" class="track-menu__item" data-act="rename"' + (rnTarget ? '' : ' disabled title="Track ini belum punya pattern"') + '>' +
-      '<span class="ico"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.9 2.9a2.4 2.4 0 0 1 3.4 0l.8.8a2.4 2.4 0 0 1 0 3.4L8.9 19.3a2 2 0 0 1-.9.5l-4.4 1.1a.8.8 0 0 1-1-1L3.7 15.5a2 2 0 0 1 .5-.9L16.9 2.9Zm1.7 1.7L6 17.2l-.6 2.4 2.4-.6L20.4 6.4l-1.8-1.8Z"/></svg></span>' +
+      '<span class="ico"><svg class="ico-ln" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg></span>' +
       '<span>Ganti nama pattern</span></button>' +
     '<button role="menuitem" class="track-menu__item" data-act="duplicate"' + (cont.dataset.ins === 'Automation' ? ' disabled title="Track Automation tidak bisa diduplikat"' : '') + '>' +
-      '<span class="ico"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8.5 2.5h9A3 3 0 0 1 20.5 5.5v9a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-9a3 3 0 0 1 3-3Zm0 2a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-9Z"/><path d="M3.5 8.5a1 1 0 0 1 1 1v8a2 2 0 0 0 2 2h8a1 1 0 1 1 0 2h-8a4 4 0 0 1-4-4v-8a1 1 0 0 1 1-1Z"/></svg></span>' +
+      '<span class="ico"><svg class="ico-ln" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></span>' +
       '<span>Duplicate track</span></button>' +
     '<button role="menuitem" class="track-menu__item track-menu__item--danger" data-act="delete">' +
-      '<span class="ico"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5.397 9.652a1.166 1.166 0 0 0-1.165 1.165V21.71a1.165 1.165 0 0 0 1.165 1.165h13.206a1.166 1.166 0 0 0 1.165-1.165V10.817a1.165 1.165 0 0 0-2.33 0v9.728H6.562v-9.728a1.165 1.165 0 0 0-1.165-1.165Zm8.545-8.527h-3.884a1.165 1.165 0 1 0 0 2.33h3.884a1.165 1.165 0 0 0 0-2.33Z"/><path d="M11.223 17.05v-6.215a1.165 1.165 0 0 0-2.33 0v6.214a1.165 1.165 0 0 0 2.33 0Zm3.884 0v-6.215a1.165 1.165 0 1 0-2.33 0v6.214a1.165 1.165 0 0 0 2.33 0Zm3.496-12.041H5.397a1.165 1.165 0 1 0 0 2.33h13.206a1.165 1.165 0 1 0 0-2.33Z"/></svg></span>' +
+      '<span class="ico"><svg class="ico-ln" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span>' +
       '<span>Delete track</span></button>' +
     '<button role="menuitem" class="track-menu__item" data-act="color" aria-expanded="false">' +
       '<span class="track-menu__dot" style="background:' + cur + '"></span><span>Color</span>' +
-      '<svg class="track-menu__chev" viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M6.045 20.89a1.164 1.164 0 0 0 1.639.174l5.05-4.079 5.048-4.078a1.164 1.164 0 0 0 0-1.813l-5.049-4.078-5.049-4.078A1.165 1.165 0 1 0 6.22 4.75l4.488 3.625L15.196 12l-4.488 3.625L6.22 19.25a1.166 1.166 0 0 0-.175 1.64Z"/></svg></button>' +
+      '<svg class="track-menu__chev ico-ln" viewBox="0 0 24 24" width="14" height="14" stroke-width="2.4" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>' +
     '';
   document.body.appendChild(menu);
   // posisi: di sebelah kanan tombol, kalau tidak muat pindah ke kiri

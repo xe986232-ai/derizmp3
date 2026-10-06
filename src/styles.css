@@ -1241,7 +1241,6 @@ body:has(.pr.is-open) .menu-btn{opacity:0;pointer-events:none;transform:scale(.8
 .mp__sw--black{background:#000}
 .mp__sw--tdefault{background:linear-gradient(135deg,#25252f 50%,#5b3de8 50%)}   /* contoh warna tiap theme */
 .mp__sw--tink{background:linear-gradient(135deg,#0f0d13 50%,#ff5c9e 50%)}
-.mp__sw--tclassic{background:linear-gradient(135deg,#14141c 50%,#6244f0 50%)}
 .mp__sw--tmono{background:linear-gradient(135deg,#101012 50%,#e5e5ea 50%)}
 .mp__sw--tjembut{background:linear-gradient(135deg,#13131a 50%,#000 50%)}
 .mp__sw--w1,.mp__sw--w2{width:20px;border-radius:3px;border:0}   /* ikon mini: satu batang / dua batang */
@@ -2139,13 +2138,14 @@ html[data-ui="mono"] .lane.alt{background-color:rgba(255,255,255,.02)}
 html[data-ui="mono"] .pr__main,html[data-ui="mono"] .pr__scroll,html[data-ui="mono"] .pr__vel{background:#101012}
 html[data-ui="mono"] .pr__corner{background:#18181b}
 
-/* ===== Tema UI "Classic": tampilan asli sebelum identitas baru (latar biru-abu, grid putih kebiruan, aksen ungu), dengan sedikit penyesuaian warna ===== */
-html[data-ui="classic"]{--bg:#14141c;--panel:#14141c;--line:#2e2e3b;--accent:#6244f0;--accent-soft:rgba(98,68,240,.28);--tl-ruler:#181821;--tl-grid:226,228,255;--tl-play:#eeeef6}
-html[data-ui="classic"] .lane.alt{background-color:rgba(255,255,255,.02)}
-html[data-ui="classic"] .pr__main,html[data-ui="classic"] .pr__scroll,html[data-ui="classic"] .pr__vel{background:#111119}
-html[data-ui="classic"] .pr__corner{background:#1f1f29}
 
 /* Credits & lisensi di menu Pengaturan */
 .mp__cr{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:1.5;color:var(--muted)}
 .mp__cr b{color:inherit;font-weight:600}
 .mp__cr a{color:inherit;text-decoration:underline;text-underline-offset:2px}
+
+/* Ikon garis (Lucide, ISC): menimpa fill bawaan .ico svg */
+.ico svg.ico-ln,svg.ico-ln{fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
+.mp__lic{margin-top:6px;font-size:12px}
+.mp__lic summary{cursor:pointer}
+.mp__lic p{margin:6px 0 0}

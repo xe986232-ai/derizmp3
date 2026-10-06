@@ -130,8 +130,7 @@ const LEVEL_FILL = LEVELS.map(l => gl(l[1]));
 // Tema UI: Ink Rose (bawaan) / Mono Graphite. Warna canvas diganti di tempat, lalu digambar ulang lewat event dari menu.
 const UI_PR = {
   ink:  { g: '166,140,206', bg: '#0f0d13', rowWhite: '#1b1722', rowBlack: '#15121b', ruler: '#19151f', rulerLine: '#2a2233', rulerText: '#e6dcf5', t1: '#8f7fb0', t2: '#5e5280', t3: '#3d3358' },
-  mono: { g: '200,200,212', bg: '#101012', rowWhite: '#1b1b1f', rowBlack: '#151517', ruler: '#18181b', rulerLine: '#2d2d33', rulerText: '#e5e5ea', t1: '#8a8a9a', t2: '#5c5c68', t3: '#3c3c46' },
-  classic: { g: '142,147,205', bg: '#111119', rowWhite: '#1f1f2a', rowBlack: '#171720', ruler: '#1f1f29', rulerLine: '#2d2d3f', rulerText: '#dcdff5', t1: '#8186b8', t2: '#52578a', t3: '#393d60' }
+  mono: { g: '200,200,212', bg: '#101012', rowWhite: '#1b1b1f', rowBlack: '#151517', ruler: '#18181b', rulerLine: '#2d2d33', rulerText: '#e5e5ea', t1: '#8a8a9a', t2: '#5c5c68', t3: '#3c3c46' }
 };
 function applyUiPalette(): void {
   const u = UI_PR[uiTheme()];
@@ -1191,7 +1190,7 @@ function setTool(t: Tool) {
 let showNoteNames = false;   // Note Key: tampilkan nama semua nada (C, C#, D, D#, ...) di keyboard kiri; mati = hanya C
 const PR_COLORS = ['#5b3de8', '#2f7bff', '#14b8a6', '#3fbf5f', '#ff9f1c', '#ff4d8d', '#ef4444', '#facc15'];   // sama dengan pilihan warna track di mixer
 syncTrackColors(PR_COLORS); window.addEventListener('derizmp3:ui', () => syncTrackColors(PR_COLORS));   // set warna mengikuti Tema UI (sama dengan COLORS di main.ts)
-const CHEV = '<svg class="track-menu__chev" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M6.045 20.89a1.164 1.164 0 0 0 1.639.174l5.05-4.079 5.048-4.078a1.164 1.164 0 0 0 0-1.813l-5.049-4.078-5.049-4.078A1.165 1.165 0 1 0 6.22 4.75l4.488 3.625L15.196 12l-4.488 3.625L6.22 19.25a1.166 1.166 0 0 0-.175 1.64Z"/></svg>';
+const CHEV = '<svg class="track-menu__chev ico-ln" viewBox="0 0 24 24" width="14" height="14" stroke-width="2.4" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>';
 const mico = (d: string) => '<svg class="pr__mico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
 const MICO = {
   view: mico('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
@@ -1326,7 +1325,7 @@ function build(): HTMLElement {
       '<canvas class="pr__ruler" aria-hidden="true"></canvas>' +
       '<canvas class="pr__keys" aria-hidden="true"></canvas>' +
       '<div class="pr__scroll"><div class="pr__space"></div><div class="pr__clip"><canvas class="pr__gridbg" aria-hidden="true"></canvas><canvas class="pr__grid" role="img" aria-label="Grid nada"></canvas></div></div>' +
-      '<div class="pr__phclip" aria-hidden="true"><div class="pr__ph"><svg width="9" height="20" viewBox="0 0 9 20"><path d="M5 0H4C1.79 0 0 1.79 0 4v8.6c0 .86.27 1.69.78 2.38L4.5 20l3.72-5.02A4 4 0 0 0 9 12.6V4c0-2.21-1.79-4-4-4Z" fill="currentColor"/></svg><i></i></div></div>' +
+      '<div class="pr__phclip" aria-hidden="true"><div class="pr__ph"><svg width="9" height="20" viewBox="0 0 9 20"><path d="M1.5 0h6A1.5 1.5 0 0 1 9 1.5v9.2l-.6 2L4.5 19 .6 12.7 0 10.7V1.5A1.5 1.5 0 0 1 1.5 0z" fill="currentColor"/></svg><i></i></div></div>' +
     '</div>' +
     '<div class="pr__vel">' +
       '<div class="pr__velbody" id="prVelBody"><canvas class="pr__velc" role="img" aria-label="Velocity tiap nada: seret batang untuk mengubah"></canvas></div>' +

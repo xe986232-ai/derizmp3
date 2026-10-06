@@ -135,7 +135,6 @@ export function initMenuPanel(): MenuPanel {
             '<div class=\"mp__seg mp__seg--wrap\" role=\"radiogroup\" aria-label=\"Tema UI\">' +
               '<button type=\"button\" class=\"mp__segbtn\" role=\"radio\" data-uitheme=\"ink\"><i class=\"mp__sw mp__sw--tink\"></i>Ink Rose</button>' +
               '<button type=\"button\" class=\"mp__segbtn\" role=\"radio\" data-uitheme=\"mono\"><i class=\"mp__sw mp__sw--tmono\"></i>Mono Graphite</button>' +
-              '<button type=\"button\" class=\"mp__segbtn\" role=\"radio\" data-uitheme=\"classic\"><i class=\"mp__sw mp__sw--tclassic\"></i>Classic</button>' +
             '</div>' +
           '</div>' +
           '<div class="mp__card mp__item mp__set" style="--i:1">' +
@@ -201,6 +200,8 @@ export function initMenuPanel(): MenuPanel {
               '<li><b>Piano</b>: Salamander Grand Piano V3 oleh Alexander Holm, lisensi <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener noreferrer">CC BY 3.0</a>. Sample dipakai apa adanya; nadanya digeser pitch-nya saat dimainkan.</li>' +
               '<li><b>Font</b>: Plus Jakarta Sans dan Syncopate, lisensi <a href="https://openfontlicense.org/" target="_blank" rel="noopener noreferrer">SIL Open Font License 1.1</a>.</li>' +
               '<li><b>Encoder MP3</b>: lamejs (@breezystack/lamejs), lisensi <a href="https://www.gnu.org/licenses/lgpl-3.0.html" target="_blank" rel="noopener noreferrer">LGPL-3.0</a>.</li>' +
+              '<li><b>Ikon</b>: sebagian ikon dari <a href="https://lucide.dev" target="_blank" rel="noopener noreferrer">Lucide</a>, lisensi ISC, Copyright (c) Lucide Icons and Contributors.' +
+                '<details class="mp__lic"><summary>Teks lisensi ISC</summary><p>Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies. THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.</p></details></li>' +
             '</ul>' +
           '</div>' +
         '</section>' +
@@ -228,9 +229,9 @@ export function initMenuPanel(): MenuPanel {
   const UI_KEY = 'derizmp3.ui';
   const uiBtns = [...panel.querySelectorAll<HTMLButtonElement>('[data-uitheme]')];
   const setUi = (v: string, save: boolean): void => {
-    const val = v === 'mono' || v === 'classic' ? v : 'ink';
+    const val = v === 'mono' ? v : 'ink';
     document.documentElement.dataset.ui = val;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', val === 'mono' ? '#101012' : val === 'classic' ? '#14141c' : '#0f0d13');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', val === 'mono' ? '#101012' : '#0f0d13');
     uiBtns.forEach(b => { const on = b.dataset.uitheme === val; b.classList.toggle('is-on', on); b.setAttribute('aria-checked', String(on)); });
     window.dispatchEvent(new CustomEvent('derizmp3:ui'));   // ruler & piano roll (canvas) menggambar ulang dengan warna baru
     if (save) { try { localStorage.setItem(UI_KEY, val); } catch { /* penyimpanan diblokir: tetap berlaku sampai halaman ditutup */ } }
