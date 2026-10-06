@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Admin Lisensi · Melvox</title>
+<meta name="theme-color" content="#13131a">
+<meta name="robots" content="noindex,nofollow">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<style>
+:root{--bg:#13131a;--panel:#1b1b24;--card:#25252f;--line:#2b2b37;--text:#f2f2f6;--muted:#b9b9c9;--accent:#5b3de8;--err:#ff7a8a;--ok:#5fd39a;--warn:#f0b35a;
+--bevel:inset 0 1px 0 rgba(255,255,255,.07),inset 0 -1px 0 rgba(0,0,0,.25),0 1px 3px rgba(0,0,0,.3)}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:13px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:max(14px,env(safe-area-inset-top)) 14px max(24px,env(safe-area-inset-bottom));min-height:100vh}
+h1{margin:0;font-size:14px;font-weight:600;letter-spacing:.3em}
+h2{margin:0 0 10px;font-size:13px;font-weight:600}
+[hidden]{display:none!important}
+.card{background:var(--card);border-radius:16px;box-shadow:var(--bevel);padding:14px}
+.wrap{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+label{display:block;margin:0 0 5px;font-size:12px;font-weight:500;color:var(--muted)}
+input,select,textarea{width:100%;height:38px;padding:0 11px;border-radius:11px;border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit;font-size:14px}
+textarea{height:auto;padding:10px 11px;font:12.5px/1.5 ui-monospace,Menlo,Consolas,monospace;resize:vertical}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button{font:inherit;cursor:pointer}
+.btn{height:36px;padding:0 14px;border:0;border-radius:18px;background:#f2f2f6;color:#16161d;font-weight:700}
+.btn:hover{background:#fff}.btn:disabled{opacity:.6;cursor:default}
+.ghost{height:30px;padding:0 11px;border:1px solid var(--line);border-radius:15px;background:none;color:var(--text);font-weight:600;font-size:12px}
+.ghost:hover{background:rgba(255,255,255,.06)}
+.ghost.danger{color:var(--err)}
+.err{min-height:18px;margin:10px 0 0;color:var(--err)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.stat{background:var(--card);border-radius:14px;box-shadow:var(--bevel);padding:10px 12px}
+.stat b{display:block;font-size:20px;font-weight:700}
+.stat span{color:var(--muted);font-size:11.5px}
+.form{display:grid;grid-template-columns:repeat(4,1fr) auto;gap:10px;align-items:end}
+.hint{margin:8px 0 0;color:var(--muted);font-size:12px}
+.bar{display:flex;gap:8px}
+.bar input{flex:1}.bar select{width:150px}
+.list{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.item{background:var(--card);border-radius:14px;box-shadow:var(--bevel);padding:12px;display:flex;flex-direction:column;gap:8px}
+.row1{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.id{font:12px ui-monospace,Menlo,Consolas,monospace;color:var(--muted)}
+.badge{padding:2px 9px;border-radius:10px;font-size:11.5px;font-weight:700;background:rgba(255,255,255,.08)}
+.b-active{color:var(--ok)}.b-unused{color:#9db4ff}.b-expired{color:var(--warn)}.b-revoked{color:var(--err)}
+.who{font-weight:600;font-size:14px;word-break:break-all}
+.note{color:var(--muted);word-break:break-word}
+.meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;color:var(--muted);font-size:12px}
+.meta b{color:var(--text);font-weight:600}
+.acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+.empty{padding:26px;text-align:center;color:var(--muted)}
+dialog{width:min(440px,calc(100% - 28px));border:0;border-radius:18px;background:var(--card);color:var(--text);box-shadow:var(--bevel),0 20px 60px rgba(0,0,0,.6);padding:16px}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+.fields{display:grid;gap:12px;margin:12px 0}
+.dact{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.warn{margin:0 0 10px;padding:9px 11px;border-radius:11px;background:rgba(240,179,90,.12);color:var(--warn)}
+.toast{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);padding:9px 16px;border-radius:18px;background:#f2f2f6;color:#16161d;font-weight:600;box-shadow:0 6px 24px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:opacity .2s;z-index:50;max-width:calc(100% - 28px)}
+.toast.on{opacity:1}.toast.bad{background:var(--err)}
+#loginView{min-height:80vh;display:flex;align-items:center;justify-content:center}
+#loginView .card{width:100%;max-width:340px}
+@media(max-width:720px){.stats{grid-template-columns:repeat(3,1fr)}.form{grid-template-columns:1fr 1fr}.form .btn{grid-column:1/-1}.bar{flex-direction:column}.bar select{width:100%}}
+</style>
+</head>
+<body>
+
+<div id="loginView" hidden>
+  <form class="card" id="lf">
+    <h1>MELVOX</h1>
+    <p style="margin:6px 0 14px;color:var(--muted)">Dashboard admin lisensi.</p>
+    <label for="apw">Password admin</label>
+    <input id="apw" type="password" autocomplete="current-password" required>
+    <button class="btn" id="lgo" type="submit" style="width:100%;margin-top:16px;height:42px">Masuk</button>
+    <p class="err" id="lerr" role="alert"></p>
+  </form>
+</div>
+
+<main class="wrap" id="app" hidden>
+  <div class="top">
+    <h1>MELVOX · LISENSI</h1>
+    <div style="display:flex;gap:6px"><button class="ghost" id="reload">Muat ulang</button><button class="ghost" id="logout">Keluar</button></div>
+  </div>
+
+  <section class="stats" id="stats"></section>
+
+  <section class="card">
+    <h2>Buat token baru</h2>
+    <div class="form">
+      <div><label for="cCount">Jumlah</label><input id="cCount" type="number" min="1" max="500" value="1" inputmode="numeric"></div>
+      <div><label for="cDev">Maks perangkat</label><input id="cDev" type="number" min="1" max="20" value="2" inputmode="numeric"></div>
+      <div><label for="cDays">Masa berlaku (hari)</label><input id="cDays" type="number" min="1" max="3650" placeholder="kosong = seumur hidup" inputmode="numeric"></div>
+      <div><label for="cNote">Catatan</label><input id="cNote" maxlength="200" placeholder="mis. Order #1201 Budi"></div>
+      <button class="btn" id="cGo">Buat</button>
+    </div>
+    <p class="hint">Masa berlaku dihitung sejak token diaktifkan pembeli. Token asli hanya tampil sekali setelah dibuat (database hanya menyimpan hash).</p>
+    <p class="err" id="cErr" role="alert"></p>
+  </section>
+
+  <div class="bar">
+    <input id="q" type="search" placeholder="Cari email, catatan, atau tempel token" autocomplete="off">
+    <select id="flt" aria-label="Filter status">
+      <option value="">Semua status</option><option value="unused">Belum dipakai</option><option value="active">Aktif</option><option value="expired">Berakhir</option><option value="revoked">Dicabut</option>
+    </select>
+  </div>
+
+  <section class="list" id="list"></section>
+</main>
+
+<dialog id="dTok">
+  <h2>Token baru</h2>
+  <p class="warn">Simpan sekarang. Token asli tidak bisa dilihat lagi setelah jendela ini ditutup.</p>
+  <textarea id="tokOut" rows="8" readonly></textarea>
+  <div class="dact" style="margin-top:12px">
+    <button class="ghost" id="tCopy">Salin semua</button><button class="ghost" id="tCsv">Unduh CSV</button><button class="btn" id="tClose">Selesai</button>
+  </div>
+</dialog>
+
+<dialog id="dEdit">
+  <h2 id="eTitle">Ubah lisensi</h2>
+  <div class="fields">
+    <div><label for="eNote">Catatan</label><input id="eNote" maxlength="200"></div>
+    <div><label for="eDev">Maks perangkat</label><input id="eDev" type="number" min="1" max="20" inputmode="numeric"></div>
+    <div id="eExtW"><label for="eExt">Perpanjang (hari)</label><input id="eExt" type="number" min="1" max="3650" placeholder="kosong = tidak diubah" inputmode="numeric"></div>
+    <div id="eDurW"><label for="eDur">Masa berlaku (hari, kosong = seumur hidup)</label><input id="eDur" type="number" min="1" max="3650" inputmode="numeric"></div>
+  </div>
+  <p class="err" id="eErr" role="alert" style="margin:0 0 8px"></p>
+  <div class="dact"><button class="ghost" id="eCancel">Batal</button><button class="btn" id="eSave">Simpan</button></div>
+</dialog>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var data = [], qHash = '', editing = null, lastTokens = [];
+  var LABEL = { active: 'Aktif', unused: 'Belum dipakai', expired: 'Berakhir', revoked: 'Dicabut' };
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function fmt(d) { return d ? new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'; }
+  function toast(m, bad) { var t = $('toast'); t.textContent = m; t.className = 'toast on' + (bad ? ' bad' : ''); clearTimeout(toast.t); toast.t = setTimeout(function () { t.className = 'toast'; }, 2600); }
+  function stateOf(l) {
+    if (l.status === 'revoked') return 'revoked';
+    if (!l.claimed) return 'unused';
+    if (l.expires_at && new Date(l.expires_at).getTime() < Date.now()) return 'expired';
+    return 'active';
+  }
+  async function sha256(s) { var h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))); return Array.prototype.map.call(h, function (b) { return b.toString(16).padStart(2, '0'); }).join(''); }
+
+  async function api(method, body) {
+    var r = await fetch('/api/admin', { method: method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin' });
+    var j = {}; try { j = await r.json(); } catch (e) {}
+    if (r.status === 401 && body && body.action !== 'login') { showLogin(); }
+    if (!r.ok) throw new Error(j.error || 'Gagal (' + r.status + ')');
+    return j;
+  }
+
+  function showLogin() { $('app').hidden = true; $('loginView').hidden = false; $('apw').focus(); }
+  function showApp() { $('loginView').hidden = true; $('app').hidden = false; }
+
+  async function load() {
+    try { var j = await api('GET'); data = j.licenses; showApp(); render(); }
+    catch (e) { if (/Belum masuk/.test(e.message)) showLogin(); else { showLogin(); $('lerr').textContent = e.message; } }
+  }
+
+  function render() {
+    var c = { total: data.length, unused: 0, active: 0, expired: 0, revoked: 0 };
+    data.forEach(function (l) { c[stateOf(l)]++; });
+    $('stats').innerHTML = [['Total', c.total], ['Belum dipakai', c.unused], ['Aktif', c.active], ['Berakhir', c.expired], ['Dicabut', c.revoked]]
+      .map(function (s) { return '<div class="stat"><b>' + s[1] + '</b><span>' + s[0] + '</span></div>'; }).join('');
+
+    var q = $('q').value.trim().toLowerCase(), f = $('flt').value;
+    var rows = data.filter(function (l) {
+      if (f && stateOf(l) !== f) return false;
+      if (!q) return true;
+      return (l.email || '').toLowerCase().indexOf(q) >= 0 || (l.note || '').toLowerCase().indexOf(q) >= 0 || l.token_hash.indexOf(q) === 0 || (qHash && l.token_hash === qHash);
+    });
+    if (!rows.length) { $('list').innerHTML = '<div class="empty card" style="grid-column:1/-1">' + (data.length ? 'Tidak ada yang cocok.' : 'Belum ada lisensi. Buat token pertama di atas.') + '</div>'; return; }
+    $('list').innerHTML = rows.map(function (l) {
+      var s = stateOf(l), n = (l.devices || []).length;
+      var last = (l.devices || []).reduce(function (a, d) { return !a || d.last_seen > a ? d.last_seen : a; }, '');
+      var acts = '<button class="ghost" data-a="edit" data-id="' + l.token_hash + '">Ubah</button>' +
+        (l.status === 'revoked' ? '<button class="ghost" data-a="restore" data-id="' + l.token_hash + '">Aktifkan</button>' : '<button class="ghost danger" data-a="revoke" data-id="' + l.token_hash + '">Cabut</button>') +
+        (n ? '<button class="ghost" data-a="reset_devices" data-id="' + l.token_hash + '">Reset perangkat</button>' : '') +
+        (!l.claimed ? '<button class="ghost danger" data-a="delete" data-id="' + l.token_hash + '">Hapus</button>' : '');
+      return '<article class="item"><div class="row1"><span class="id">#' + l.token_hash.slice(0, 8) + '</span><span class="badge b-' + s + '">' + LABEL[s] + '</span></div>' +
+        '<div class="who">' + esc(l.email || '(belum dipakai)') + '</div>' +
+        (l.note ? '<div class="note">' + esc(l.note) + '</div>' : '') +
+        '<div class="meta"><span>Perangkat: <b>' + n + '/' + l.max_devices + '</b></span><span>Berakhir: <b>' + (l.expires_at ? fmt(l.expires_at) : (l.claimed ? 'seumur hidup' : (l.duration_days ? l.duration_days + ' hari' : 'seumur hidup'))) + '</b></span>' +
+        '<span>Dibuat: <b>' + fmt(l.created_at) + '</b></span><span>' + (l.claimed ? 'Dipakai: <b>' + fmt(l.claimed_at) + '</b>' : '') + '</span>' +
+        (last ? '<span style="grid-column:1/-1">Terakhir aktif: <b>' + fmt(last) + '</b></span>' : '') + '</div>' +
+        '<div class="acts">' + acts + '</div></article>';
+    }).join('');
+  }
+
+  // login / logout
+  $('lf').addEventListener('submit', async function (e) {
+    e.preventDefault(); $('lerr').textContent = ''; $('lgo').disabled = true;
+    try { await api('POST', { action: 'login', password: $('apw').value }); $('apw').value = ''; await load(); }
+    catch (er) { $('lerr').textContent = er.message; }
+    $('lgo').disabled = false;
+  });
+  $('logout').addEventListener('click', async function () { try { await api('POST', { action: 'logout' }); } catch (e) {} data = []; showLogin(); });
+  $('reload').addEventListener('click', function () { load().then(function () { toast('Dimuat ulang'); }); });
+
+  // cari / filter (token yang ditempel di-hash di browser lalu dicocokkan dengan id)
+  $('q').addEventListener('input', async function () {
+    var n = $('q').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    qHash = n.length >= 12 ? await sha256(n) : '';
+    render();
+  });
+  $('flt').addEventListener('change', render);
+
+  // buat token
+  $('cGo').addEventListener('click', async function () {
+    $('cErr').textContent = ''; $('cGo').disabled = true;
+    try {
+      var j = await api('POST', { action: 'create', count: $('cCount').value, devices: $('cDev').value, days: $('cDays').value || null, note: $('cNote').value });
+      lastTokens = j.tokens; $('tokOut').value = j.tokens.join('\n'); $('dTok').showModal(); $('tokOut').select();
+      $('cNote').value = ''; await load();
+    } catch (e) { $('cErr').textContent = e.message; }
+    $('cGo').disabled = false;
+  });
+  $('tCopy').addEventListener('click', async function () {
+    try { await navigator.clipboard.writeText($('tokOut').value); toast('Token disalin'); } catch (e) { $('tokOut').select(); document.execCommand('copy'); toast('Token disalin'); }
+  });
+  $('tCsv').addEventListener('click', function () {
+    var note = $('cNote').value, days = $('cDays').value || '', dev = $('cDev').value;
+    var csv = 'token,max_perangkat,hari\n' + lastTokens.map(function (t) { return t + ',' + dev + ',' + days; }).join('\n') + '\n';
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'token-melvox-' + new Date().toISOString().slice(0, 10) + '.csv'; a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  });
+  $('tClose').addEventListener('click', function () { $('tokOut').value = ''; lastTokens = []; $('dTok').close(); });
+
+  // aksi pada kartu
+  $('list').addEventListener('click', async function (e) {
+    var b = e.target.closest('button[data-a]'); if (!b) return;
+    var a = b.dataset.a, id = b.dataset.id;
+    if (a === 'edit') return openEdit(id);
+    var msg = { revoke: 'Cabut lisensi ini? Pembeli akan terkunci paling lambat saat aplikasi memeriksa lagi.', reset_devices: 'Kosongkan semua slot perangkat lisensi ini?', delete: 'Hapus token yang belum dipakai ini? Tidak bisa dibatalkan.' }[a];
+    if (msg && !confirm(msg)) return;
+    b.disabled = true;
+    try { await api('POST', { action: a, id: id }); toast({ revoke: 'Dicabut', restore: 'Diaktifkan', reset_devices: 'Perangkat dikosongkan', delete: 'Dihapus' }[a]); await load(); }
+    catch (er) { toast(er.message, true); b.disabled = false; }
+  });
+
+  // ubah
+  function openEdit(id) {
+    var l = data.filter(function (x) { return x.token_hash === id; })[0]; if (!l) return;
+    editing = l; $('eErr').textContent = '';
+    $('eTitle').textContent = 'Ubah #' + id.slice(0, 8);
+    $('eNote').value = l.note || ''; $('eDev').value = l.max_devices; $('eExt').value = ''; $('eDur').value = l.duration_days || '';
+    $('eExtW').hidden = !l.expires_at; $('eDurW').hidden = l.claimed;
+    $('dEdit').showModal();
+  }
+  $('eCancel').addEventListener('click', function () { $('dEdit').close(); });
+  $('eSave').addEventListener('click', async function () {
+    var l = editing, body = { action: 'update', id: l.token_hash, note: $('eNote').value, max_devices: $('eDev').value };
+    if (!$('eExtW').hidden && $('eExt').value) body.extend_days = $('eExt').value;
+    if (!$('eDurW').hidden) body.duration_days = $('eDur').value || null;
+    $('eSave').disabled = true; $('eErr').textContent = '';
+    try { await api('POST', body); $('dEdit').close(); toast('Disimpan'); await load(); }
+    catch (e) { $('eErr').textContent = e.message; }
+    $('eSave').disabled = false;
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>

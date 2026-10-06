@@ -5,7 +5,8 @@ import { COOKIE, getCookie, verifySession } from './server/session.js';
 export const config = { matcher: '/((?!api/).*)' };   // /api/* dijaga fungsinya sendiri
 
 const PUBLIC = (p: string): boolean =>
-  p === '/login' || p === '/login.html' || p === '/manifest.webmanifest' || p.startsWith('/icons/');   // manifest diambil browser tanpa cookie, jadi harus publik
+  p === '/login' || p === '/login.html' || p === '/admin' || p === '/admin.html' ||   // /admin dijaga password admin sendiri (/api/admin)
+   p === '/manifest.webmanifest' || p.startsWith('/icons/');   // manifest diambil browser tanpa cookie, jadi harus publik
 
 export default async function middleware(req: Request): Promise<Response> {
   if (process.env.LICENSE_GATE !== 'on') return next();   // gerbang hanya aktif di project full (isi env LICENSE_GATE=on); project demo lolos begitu saja

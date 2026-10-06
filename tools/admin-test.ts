@@ -1,0 +1,73 @@
+// Uji API dashboard admin dengan Supabase TIRUAN (di memori). Jalankan: npx tsx tools/admin-test.ts
+process.env.SUPABASE_URL = 'http://sb.test'; process.env.SUPABASE_SERVICE_KEY = 'svc'; process.env.SESSION_SECRET = 'sec-xyz'; process.env.ADMIN_PASSWORD = 'adm-pass-123';
+import { hashToken } from '../server/supabase';
+
+type L = { token_hash: string; status: string; user_id: string | null; email: string | null; max_devices: number; duration_days: number | null; expires_at: string | null; note: string | null; created_at: string; claimed_at: string | null };
+const licenses: L[] = []; let devices: { token_hash: string; device_id: string; last_seen: string; created_at: string }[] = [];
+const real = globalThis.fetch; const J = (d: unknown, s = 200) => new Response(JSON.stringify(d), { status: s });
+globalThis.fetch = (async (input: any, init: any = {}) => {
+  const u = new URL(String(input)); const body = init.body ? JSON.parse(init.body) : undefined; const m = init.method || 'GET';
+  const p = u.pathname.replace('/rest/v1/', ''); const q = (k: string) => u.searchParams.get(k)?.replace(/^(eq|is)\./, '');
+  const ret = (rows: unknown[]) => (String(init.headers?.Prefer).includes('representation') ? J(rows) : new Response(null, { status: 204 }));
+  if (p === 'licenses') {
+    if (m === 'POST') { licenses.push(...body.map((b: any) => ({ user_id: null, email: null, status: 'active', expires_at: null, claimed_at: null, created_at: new Date().toISOString(), ...b }))); return new Response(null, { status: 201 }); }
+    const rows = licenses.filter((r) => (!q('token_hash') || r.token_hash === q('token_hash')) && (!q('user_id') || (q('user_id') === 'null' ? r.user_id === null : r.user_id === q('user_id'))));
+    if (m === 'PATCH') { rows.forEach((r) => Object.assign(r, body)); return ret(rows); }
+    if (m === 'DELETE') { rows.forEach((r) => licenses.splice(licenses.indexOf(r), 1)); return ret(rows); }
+    return J(rows.map((r) => ({ ...r, devices: devices.filter((d) => d.token_hash === r.token_hash) })));
+  }
+  if (p === 'devices' && m === 'DELETE') { devices = devices.filter((d) => d.token_hash !== q('token_hash')); return new Response(null, { status: 204 }); }
+  return real(input, init);
+}) as typeof fetch;
+
+const { GET, POST } = await import('../api/admin');
+let fail = 0; const ok = (n: string, c: boolean) => { console.log((c ? 'PASS ' : 'FAIL ') + n); if (!c) fail++; };
+const post = (b: object, cookie = '', extra: Record<string, string> = {}) => POST(new Request('https://x.test/api/admin', { method: 'POST', headers: { 'content-type': 'application/json', cookie, ...extra }, body: JSON.stringify(b) }));
+const get = (cookie = '') => GET(new Request('https://x.test/api/admin', { headers: { cookie } }));
+
+ok('tanpa login: GET 401', (await get()).status === 401);
+ok('tanpa login: create 401', (await post({ action: 'create', count: 1, devices: 2 })).status === 401);
+ok('password salah 401', (await post({ action: 'login', password: 'salah' })).status === 401);
+const lr = await post({ action: 'login', password: 'adm-pass-123' });
+ok('password benar 200 + cookie mx_a', lr.status === 200 && lr.headers.getSetCookie().join().includes('mx_a='));
+const C = lr.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+ok('cookie palsu ditolak', (await get('mx_a=abc.def')).status === 401);
+ok('Origin lain ditolak', (await post({ action: 'create', count: 1, devices: 2 }, C, { origin: 'https://evil.test' })).status === 403);
+ok('content-type bukan json ditolak', (await POST(new Request('https://x.test/api/admin', { method: 'POST', headers: { cookie: C, 'content-type': 'text/plain' }, body: '{}' }))).status === 400);
+
+ok('create jumlah ngawur 400', (await post({ action: 'create', count: 0, devices: 2 }, C)).status === 400);
+ok('create hari ngawur 400', (await post({ action: 'create', count: 1, devices: 2, days: 'abc' }, C)).status === 400);
+const cr = await post({ action: 'create', count: 3, devices: 2, days: 30, note: 'Order #1' }, C); const cj = await cr.json() as { tokens: string[] };
+ok('create 3 token format MLVX-XXXX-XXXX-XXXX-XXXX', cr.status === 200 && cj.tokens.length === 3 && cj.tokens.every((t) => /^MLVX(-[2-9A-HJ-NP-Z]{4}){4}$/.test(t)));
+ok('token unik', new Set(cj.tokens).size === 3);
+ok('hash di database cocok dengan hashToken (token bisa dipakai di /api/session)', licenses[0].token_hash === await hashToken(cj.tokens[0]) && licenses[0].duration_days === 30 && licenses[0].note === 'Order #1');
+ok('token asli tidak tersimpan di database', !JSON.stringify(licenses).includes(cj.tokens[0]));
+const lifetime = await (await post({ action: 'create', count: 1, devices: 1 }, C)).json() as { tokens: string[] };
+ok('tanpa hari = seumur hidup (null)', licenses[3].duration_days === null && !!lifetime.tokens[0]);
+
+const list = await (await get(C)).json() as { licenses: any[] };
+ok('list 4 lisensi, tanpa user_id bocor', list.licenses.length === 4 && list.licenses.every((l) => l.user_id === undefined && l.claimed === false));
+const id = licenses[0].token_hash;
+ok('revoke', (await post({ action: 'revoke', id }, C)).status === 200 && licenses[0].status === 'revoked');
+ok('restore', (await post({ action: 'restore', id }, C)).status === 200 && licenses[0].status === 'active');
+ok('id ngawur 400', (await post({ action: 'revoke', id: 'x' }, C)).status === 400);
+ok('id tidak ada 404', (await post({ action: 'revoke', id: 'a'.repeat(64) }, C)).status === 404);
+ok('update catatan + perangkat', (await post({ action: 'update', id, note: 'Budi', max_devices: 3 }, C)).status === 200 && licenses[0].note === 'Budi' && licenses[0].max_devices === 3);
+ok('update perangkat 99 ditolak', (await post({ action: 'update', id, max_devices: 99 }, C)).status === 400);
+ok('ubah masa berlaku sebelum aktif', (await post({ action: 'update', id, duration_days: 90 }, C)).status === 200 && licenses[0].duration_days === 90);
+ok('perpanjang token belum aktif ditolak 409', (await post({ action: 'update', id, extend_days: 30 }, C)).status === 409);
+
+// simulasi token sudah dipakai pembeli
+const used = licenses[1]; Object.assign(used, { user_id: 'uid-1', email: 'a@x.id', claimed_at: new Date().toISOString(), expires_at: new Date(Date.now() + 10 * 864e5).toISOString() });
+devices.push({ token_hash: used.token_hash, device_id: 'dev-12345678-aaaa', last_seen: new Date().toISOString(), created_at: new Date().toISOString() });
+const before = new Date(used.expires_at!).getTime();
+ok('perpanjang 30 hari dari tanggal berakhir', (await post({ action: 'update', id: used.token_hash, extend_days: 30 }, C)).status === 200 && Math.abs(new Date(used.expires_at!).getTime() - (before + 30 * 864e5)) < 1000);
+ok('ubah masa berlaku setelah aktif ditolak 409', (await post({ action: 'update', id: used.token_hash, duration_days: 5 }, C)).status === 409);
+const l2 = await (await get(C)).json() as { licenses: any[] };
+const lu = l2.licenses.find((l) => l.email === 'a@x.id');
+ok('list: claimed + perangkat (id dipendekkan)', lu.claimed === true && lu.devices.length === 1 && lu.devices[0].id === 'dev-1234');
+ok('hapus token yang sudah dipakai ditolak 409', (await post({ action: 'delete', id: used.token_hash }, C)).status === 409 && licenses.includes(used));
+ok('reset perangkat', (await post({ action: 'reset_devices', id: used.token_hash }, C)).status === 200 && devices.length === 0);
+ok('hapus token belum dipakai', (await post({ action: 'delete', id }, C)).status === 200 && licenses.length === 3);
+ok('logout menghapus cookie', (await post({ action: 'logout' }, C)).headers.getSetCookie().join().includes('Max-Age=0'));
+console.log(fail ? `\n${fail} GAGAL` : '\nSemua lulus'); process.exit(fail ? 1 : 0);

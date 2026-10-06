@@ -196,3 +196,15 @@ npm run license -- reset-devices budi@mail.com     # pembeli ganti HP / laptop
 Kirim ke pembeli: `https://domain-full-kamu/login?token=MLVX-XXXX-...` (token terisi otomatis di tab aktivasi).
 
 **Uji** (tanpa Supabase asli): `npx tsx tools/license-gate-test.ts` dan `npx tsx tools/license-flow-test.ts`. Typecheck server: `npx tsc -p tsconfig.server.json`.
+
+
+## Dashboard admin lisensi (`/admin`)
+Halaman web untuk membuat dan mengelola token lisensi tanpa CLI (versi full saja). Fungsinya sama dengan `npm run license`: buat token (1-500 sekaligus, maks perangkat, masa berlaku, catatan), cabut / aktifkan, reset slot perangkat, ubah catatan / jumlah perangkat, perpanjang masa berlaku, hapus token yang belum dipakai, cari (email, catatan, atau tempel token), dan unduh CSV token baru.
+
+Pasang di Vercel (project full), tambahkan env:
+- `ADMIN_PASSWORD` : password masuk dashboard (pakai yang panjang dan acak)
+- `SESSION_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` : sudah ada untuk sistem lisensi
+
+Lalu buka `https://domain-kamu/admin`. Sesi admin 8 jam (cookie `mx_a`, HttpOnly, beda rahasia dari sesi pembeli). Token asli hanya tampil sekali saat dibuat karena database hanya menyimpan hash.
+
+Kode: `admin.html` (UI), `api/admin.ts` (API), tes: `npx tsx tools/admin-test.ts`.

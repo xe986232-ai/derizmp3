@@ -25,6 +25,7 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET' || req.headers.has('range')) return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith('/api/') || url.pathname === '/admin' || url.pathname === '/admin.html' || url.pathname === '/login' || url.pathname === '/login.html') return;   // dashboard admin, API, dan login selalu lewat jaringan (tidak di-cache, tidak menimpa salinan aplikasi)
 
   // Buka halaman: coba jaringan dulu (dapat versi terbaru), kalau offline pakai salinan tersimpan.
   if (req.mode === 'navigate') {
