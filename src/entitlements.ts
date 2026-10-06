@@ -8,6 +8,7 @@ const KEY = 'mx_plg';
 const GRACE_MS = 7 * 24 * 3600 * 1000;      // salinan lokal boleh dipakai offline paling lama 7 hari sejak dikonfirmasi server
 
 let owned = new Set<string>();
+let pending = new Set<string>();   // sudah dipesan (Beli), menunggu token dari admin
 let at = 0;
 const subs = new Set<() => void>();
 const emit = (): void => subs.forEach((f) => f());
@@ -19,13 +20,14 @@ const keep = (): void => { try { localStorage.setItem(KEY, JSON.stringify({ owne
 
 export const isPaid = (id: string): boolean => (PAID as readonly string[]).includes(id);
 export const owns = (id: string): boolean => !FULL || !isPaid(id) || (owned.has(id) && Date.now() - at < GRACE_MS);
+export const isPending = (id: string): boolean => FULL && !owned.has(id) && pending.has(id);
 export const onEntitlements = (f: () => void): void => { subs.add(f); };
 
 export async function loadEntitlements(): Promise<void> {
   if (!FULL) return;
   try {
     const r = await fetch('/api/shop', { credentials: 'same-origin', cache: 'no-store' });
-    if (r.ok) { owned = new Set(((await r.json()) as { owned: string[] }).owned); at = Date.now(); keep(); emit(); }
+    if (r.ok) { const j = (await r.json()) as { owned: string[]; pending?: string[] }; owned = new Set(j.owned); pending = new Set(j.pending || []); at = Date.now(); keep(); emit(); }
   } catch { /* offline: pakai salinan terakhir */ }
 }
 if (FULL) {
@@ -37,10 +39,22 @@ if (FULL) {
 export async function redeemPlugin(token: string): Promise<{ ok: true; plugin: string } | { ok: false; error: string }> {
   try {
     const r = await fetch('/api/shop', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'redeem', token }) });
-    const j = (await r.json().catch(() => ({}))) as { error?: string; plugin?: string; owned?: string[] };
+    const j = (await r.json().catch(() => ({}))) as { error?: string; plugin?: string; owned?: string[]; pending?: string[] };
     if (!r.ok || !j.plugin) return { ok: false, error: j.error || 'Gagal (' + r.status + ')' };
-    owned = new Set(j.owned || [j.plugin]); at = Date.now(); keep(); emit();
+    owned = new Set(j.owned || [j.plugin]); pending = new Set(j.pending || []); at = Date.now(); keep(); emit();
     return { ok: true, plugin: j.plugin };
+  } catch { return { ok: false, error: 'Tidak bisa terhubung ke server.' }; }
+}
+
+// Pesan plugin (tombol Beli + konfirmasi). Server membuat token otomatis dan mengunci ke akun ini; token masuk dashboard admin,
+// pembeli memintanya ke admin lalu menebusnya di akun yang sama. Token tidak pernah dikirim ke pembeli.
+export async function buyPlugin(plugin: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const r = await fetch('/api/shop', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'buy', plugin }) });
+    const j = (await r.json().catch(() => ({}))) as { error?: string; ok?: boolean; pending?: string[]; owned?: string[] };
+    if (!r.ok || !j.ok) return { ok: false, error: j.error || 'Gagal (' + r.status + ')' };
+    pending = new Set(j.pending || [plugin]); if (j.owned) owned = new Set(j.owned); at = Date.now(); keep(); emit();
+    return { ok: true };
   } catch { return { ok: false, error: 'Tidak bisa terhubung ke server.' }; }
 }
 

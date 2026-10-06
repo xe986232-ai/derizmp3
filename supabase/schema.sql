@@ -64,3 +64,13 @@ create unique index if not exists plugin_licenses_user_plugin_uq
   on public.plugin_licenses (user_id, plugin) where user_id is not null and status = 'active';
 create index if not exists plugin_licenses_user_idx on public.plugin_licenses (user_id);
 alter table public.plugin_licenses enable row level security;
+
+-- ===== Pesanan dari Shop Plugin (tombol Beli). Sudah dijalankan sebagai migration "plugin_licenses_buyer_lock". =====
+-- Saat pembeli menekan Beli + konfirmasi, server membuat token otomatis (source = 'order') dan mengisi buyer_id = akun pemesan.
+-- Token tidak dikirim ke pembeli; admin melihatnya di dashboard lalu menyerahkannya. Hanya buyer_id yang bisa menebus (user_id baru terisi saat ditebus).
+alter table public.plugin_licenses add column if not exists buyer_id uuid references auth.users(id) on delete cascade;
+-- satu pesanan menunggu per (akun, plugin): menekan Beli berulang tidak membuat token baru
+create unique index if not exists plugin_licenses_pending_order_uq
+  on public.plugin_licenses (buyer_id, plugin)
+  where buyer_id is not null and user_id is null and status = 'active';
+create index if not exists plugin_licenses_buyer_idx on public.plugin_licenses (buyer_id) where buyer_id is not null;

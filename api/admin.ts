@@ -8,6 +8,8 @@
 //  POST { action: 'p_create', plugin, count, note }            buat token PLUGIN (Shop Plugin), token asli hanya dikirim sekali
 //  POST { action: 'p_reveal' | 'p_revoke' | 'p_restore' | 'p_delete', id }   kelola token plugin (p_delete hanya yang belum ditebus)
 //  POST { action: 'p_update', id, note }                        ubah catatan token plugin
+// Token plugin juga dibuat OTOMATIS saat pembeli menekan Beli di Shop Plugin (/api/shop 'buy', source 'order', buyer_id terisi):
+// muncul di daftar token plugin dengan nama akun pembeli; admin menyerahkan tokennya (ikon mata/salin) dan hanya akun itu yang bisa menebus.
 //  POST { action: 'reveal', id }           buka token asli satu lisensi (untuk ikon mata / tombol salin di dashboard)
 // id = token_hash. Token asli disimpan TERENKRIPSI (AES-GCM, kunci turunan SESSION_SECRET) di kolom token_enc, tidak pernah ikut
 // dalam daftar GET; hanya aksi 'reveal' (wajib sesi admin) yang membukanya. Token yang dibuat sebelum fitur ini hanya punya hash.
@@ -15,10 +17,10 @@ import { clearCookie, getCookie, setCookie, signSession, verifySession } from '.
 import { rest, sha256hex } from '../server/supabase.js';
 import { PAID_PLUGINS, isPaidPlugin } from '../server/plugins.js';
 import { json } from './_issue.js';
+import { ALPHA, newPluginToken, seal, unseal } from '../server/vault.js';
 
 const ACOOKIE = 'mx_a', ASEC = 8 * 3600;   // sesi admin 8 jam
 const ID = /^[0-9a-f]{64}$/;
-const ALPHA = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';   // sama dengan tools/license.mjs: tanpa 0/O/1/I
 const newToken = (): string => {
   const c = [...crypto.getRandomValues(new Uint8Array(16))].map((x) => ALPHA[x & 31]);   // 32 huruf => x & 31 tanpa bias; 16 x 5 bit = 80 bit
   return 'MLVX-' + [0, 1, 2, 3].map((i) => c.slice(i * 4, i * 4 + 4).join('')).join('-');
@@ -26,31 +28,7 @@ const newToken = (): string => {
 
 type Row = { token_hash: string; token_enc?: string | null; status: string; user_id: string | null; email: string | null; max_devices: number; duration_days: number | null; expires_at: string | null; note: string | null; created_at: string; claimed_at: string | null; devices?: { device_id: string; last_seen: string; created_at: string }[] };
 
-const newPluginToken = (): string => {
-  const c = [...crypto.getRandomValues(new Uint8Array(16))].map((x) => ALPHA[x & 31]);
-  return 'PLG-' + [0, 1, 2, 3].map((i) => c.slice(i * 4, i * 4 + 4).join('')).join('-');
-};
-
-// ---- Brankas token: enkripsi AES-GCM. Format tersimpan = base64url(iv 12 byte || ciphertext+tag). ----
-// token_hash dipakai sebagai data tambahan (AAD): ciphertext yang dipindah ke baris lain tidak akan bisa dibuka.
-const vaultKey = async (): Promise<CryptoKey> =>
-  crypto.subtle.importKey('raw', await crypto.subtle.digest('SHA-256', new TextEncoder().encode('melvox-token-vault:' + process.env.SESSION_SECRET)), 'AES-GCM', false, ['encrypt', 'decrypt']);
-const b64 = (u: Uint8Array): string => btoa(String.fromCharCode(...u)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-const unb64 = (s: string): Uint8Array => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
-async function seal(token: string, hash: string): Promise<string> {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(hash) }, await vaultKey(), new TextEncoder().encode(token)));
-  const o = new Uint8Array(12 + ct.length); o.set(iv); o.set(ct, 12);
-  return b64(o);
-}
-async function unseal(enc: string, hash: string): Promise<string | null> {
-  try {
-    const o = unb64(enc);
-    return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: o.slice(0, 12), additionalData: new TextEncoder().encode(hash) }, await vaultKey(), o.slice(12)));
-  } catch { return null; }   // kunci berubah (SESSION_SECRET diganti) atau data rusak
-}
-
-type PRow = { token_hash: string; token_enc: string | null; plugin: string; status: string; source: string; user_id: string | null; note: string | null; created_at: string; claimed_at: string | null };
+type PRow = { token_hash: string; token_enc: string | null; plugin: string; status: string; source: string; user_id: string | null; buyer_id: string | null; note: string | null; created_at: string; claimed_at: string | null };
 const secretOf = (): string => process.env.SESSION_SECRET + ':admin';   // beda dari rahasia sesi pembeli, jadi cookie pembeli tidak pernah sah sebagai admin
 const ready = (): boolean => !!process.env.ADMIN_PASSWORD && !!process.env.SESSION_SECRET;
 const isAdmin = async (req: Request): Promise<boolean> => (await verifySession(getCookie(req, ACOOKIE), secretOf()))?.uid === 'admin';
@@ -69,11 +47,11 @@ export async function GET(req: Request): Promise<Response> {
   if (!(await isAdmin(req))) return json({ error: 'Belum masuk.' }, 401);
   try {
     const rows = await rest<Row[]>('licenses?select=token_hash,token_enc,status,user_id,email,max_devices,duration_days,expires_at,note,created_at,claimed_at,devices(device_id,last_seen,created_at)&order=created_at.desc&limit=2000');
-    const pl = await rest<PRow[]>('plugin_licenses?select=token_hash,token_enc,plugin,status,source,user_id,note,created_at,claimed_at&order=created_at.desc&limit=2000');
-    const uids = [...new Set(pl.map((r) => r.user_id).filter((x): x is string => !!x))];
+    const pl = await rest<PRow[]>('plugin_licenses?select=token_hash,token_enc,plugin,status,source,user_id,buyer_id,note,created_at,claimed_at&order=created_at.desc&limit=2000');
+    const uids = [...new Set(pl.flatMap((r) => [r.user_id, r.buyer_id]).filter((x): x is string => !!x))];
     const mails = uids.length ? await rest<{ user_id: string; email: string | null }[]>(`licenses?user_id=in.(${uids.join(',')})&select=user_id,email`) : [];
     const mailOf = new Map(mails.map((m) => [m.user_id, m.email]));
-    const plugins = pl.map((r) => ({ token_hash: r.token_hash, plugin: r.plugin, status: r.status, source: r.source, note: r.note, created_at: r.created_at, claimed_at: r.claimed_at, claimed: !!r.user_id, email: r.user_id ? mailOf.get(r.user_id) ?? null : null, has_token: !!r.token_enc }));
+    const plugins = pl.map((r) => ({ token_hash: r.token_hash, plugin: r.plugin, status: r.status, source: r.source, note: r.note, created_at: r.created_at, claimed_at: r.claimed_at, claimed: !!r.user_id, email: r.user_id ? mailOf.get(r.user_id) ?? null : null, buyer_email: r.buyer_id ? mailOf.get(r.buyer_id) ?? '(akun dihapus)' : null, has_token: !!r.token_enc }));
     return json({ plugin_ids: PAID_PLUGINS, plugins, licenses: rows.map((r) => ({ ...r, token_enc: undefined, has_token: !!r.token_enc, user_id: undefined, claimed: !!r.user_id, devices: (r.devices || []).map((d) => ({ id: d.device_id.slice(0, 8), last_seen: d.last_seen })) })) });
   } catch (e) { console.error(e); return json({ error: 'Gagal membaca database.' }, 500); }
 }
@@ -142,7 +120,7 @@ export async function POST(req: Request): Promise<Response> {
       try {
         const r = await rest<unknown[]>('plugin_licenses?' + q, { method: 'PATCH', returnRows: true, body: { status: b.action === 'p_revoke' ? 'revoked' : 'active' } });
         return r.length ? json({ ok: true }) : json({ error: 'Token plugin tidak ditemukan.' }, 404);
-      } catch (e) { console.error(e); return json({ error: 'Gagal mengaktifkan. Kemungkinan akun itu sudah punya token aktif lain untuk plugin yang sama.' }, 409); }
+      } catch (e) { console.error(e); return json({ error: 'Gagal mengaktifkan. Kemungkinan akun itu sudah punya plugin ini atau sudah ada pesanan aktif lain untuk plugin yang sama.' }, 409); }
     }
     if (b.action === 'p_delete') {   // hanya yang belum ditebus; yang sudah dipakai cukup dicabut
       const r = await rest<unknown[]>(`plugin_licenses?${q}&user_id=is.null`, { method: 'DELETE', returnRows: true });

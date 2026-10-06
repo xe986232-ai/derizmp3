@@ -1,10 +1,11 @@
 // Halaman "Shop Plugin" di Menu (kategori sejajar Project / Export / Pengaturan).
 // Plugin gratis / bawaan = status "Terpasang". Plugin berbayar (entitlements.ts PAID, sekarang MGCHORD) di build full: "Dimiliki" kalau
-// token plugin sudah ditebus, selain itu tombol "Beli token" (ke penjual) + "Tebus token". Tahap manual: token dibuat admin di /admin.
+// token plugin sudah ditebus. Alur: tombol "Beli" + konfirmasi -> server membuat token otomatis (dikunci ke akun ini) dan masuk dashboard admin
+// -> status "Menunggu token dari admin" -> pembeli meminta token ke admin -> "Tebus token" (hanya akun yang memesan yang bisa menebus).
 // Kartu bergaya bevel (tepi atas terang, tepi bawah gelap, gambar masuk seperti layar), lihat blok ".shop" di styles.css.
 
 import { FULL } from './account';
-import { isPaid, onEntitlements, owns, redeemPlugin } from './entitlements';
+import { buyPlugin, isPaid, isPending, onEntitlements, owns, redeemPlugin } from './entitlements';
 
 type ShopKind = 'instrument' | 'effect';
 interface ShopItem { id: string; name: string; kind: ShopKind; desc: string; img: string; ar: string }
@@ -79,16 +80,56 @@ function initPaid(panel: HTMLElement): void {
   const paint = (): void => panel.querySelectorAll<HTMLElement>('.shop__act').forEach(el => {
     const id = el.dataset.act as string, name = CATALOG.find(c => c.id === id)?.name || id;
     if (owns(id)) { el.innerHTML = '<span class="shop__state"><i aria-hidden="true"></i>Dimiliki</span>'; return; }
-    el.innerHTML = (PRICE[id] ? '<b class="shop__price">' + esc(PRICE[id]) + '</b>' : '<span class="shop__price shop__price--lock">Berbayar</span>') +
-      (SAFE_CONTACT ? '<a class="plg__btn plg__btn--ghost" href="' + esc(SAFE_CONTACT) + '" target="_blank" rel="noopener noreferrer" aria-label="Beli token ' + esc(name) + '">Beli token</a>' : '') +
-      '<button type="button" class="plg__btn" data-redeem="' + id + '">Tebus token</button>';
+    const price = PRICE[id] ? '<b class="shop__price">' + esc(PRICE[id]) + '</b>' : '<span class="shop__price shop__price--lock">Berbayar</span>';
+    if (isPending(id)) {
+      el.innerHTML = '<span class="shop__state shop__state--wait"><i aria-hidden="true"></i>Menunggu token dari admin</span>' +
+        (SAFE_CONTACT ? '<a class="plg__btn plg__btn--ghost" href="' + esc(SAFE_CONTACT) + '" target="_blank" rel="noopener noreferrer" aria-label="Hubungi admin untuk token ' + esc(name) + '">Hubungi admin</a>' : '') +
+        '<button type="button" class="plg__btn" data-redeem="' + id + '">Tebus token</button>';
+      return;
+    }
+    el.innerHTML = price + '<button type="button" class="plg__btn" data-buy="' + id + '" aria-label="Beli ' + esc(name) + '">Beli</button>' +
+      '<button type="button" class="plg__btn plg__btn--ghost" data-redeem="' + id + '">Tebus token</button>';
   });
   paint();
   onEntitlements(paint);
   panel.addEventListener('click', e => {
-    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-redeem]');
+    const t = e.target as HTMLElement;
+    const bu = t.closest<HTMLButtonElement>('[data-buy]');
+    if (bu) { openBuy(bu.dataset.buy as string); return; }
+    const b = t.closest<HTMLButtonElement>('[data-redeem]');
     if (b) openRedeem(b.dataset.redeem as string);
   });
+}
+
+// Konfirmasi Beli -> pesanan dibuat (token otomatis, dikunci ke akun ini). Token TIDAK ditampilkan ke pembeli: diminta ke admin.
+function openBuy(id: string): void {
+  if (document.getElementById('plg-buy')) return;
+  const name = CATALOG.find(c => c.id === id)?.name || id;
+  const d = document.createElement('div');
+  d.id = 'plg-buy'; d.className = 'svov'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true'); d.setAttribute('aria-label', 'Beli ' + name);
+  d.innerHTML = '<div class="svov__back"></div><div class="svov__card"><h3 class="svov__title">Beli ' + esc(name) + '?</h3>' +
+    '<p class="plg__txt">Pesanan dibuat dan token otomatis dibuatkan untuk akun ini. Token itu hanya bisa dipakai di akun ini. Minta tokennya ke admin, lalu tebus di sini.</p>' +
+    '<p class="plg__err" role="alert"></p>' +
+    '<div class="plg__row"><button type="button" class="plg__btn plg__btn--ghost" data-x="close">Batal</button><button type="button" class="plg__btn" data-x="ok">Ya, beli</button></div></div>';
+  const err = d.querySelector<HTMLElement>('.plg__err')!, ok = d.querySelector<HTMLButtonElement>('[data-x="ok"]')!;
+  const close = (): void => { d.remove(); document.removeEventListener('keydown', onKey, true); };
+  const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+  d.addEventListener('click', async e => {
+    const t = e.target as HTMLElement;
+    if (t.classList.contains('svov__back') || t.dataset.x === 'close') { close(); return; }
+    if (t.dataset.x !== 'ok' || ok.disabled) return;
+    err.textContent = ''; ok.disabled = true; ok.textContent = 'Memproses…';
+    const r = await buyPlugin(id);
+    if (r.ok) {
+      d.querySelector('.svov__card')!.innerHTML = '<h3 class="svov__title">Pesanan ' + esc(name) + ' dibuat</h3><p class="plg__txt">Token sudah masuk ke admin. Minta tokennya ke admin, lalu tekan Tebus token di kartu ' + esc(name) + '.</p>' +
+        '<div class="plg__row">' + (SAFE_CONTACT ? '<a class="plg__btn plg__btn--ghost" href="' + esc(SAFE_CONTACT) + '" target="_blank" rel="noopener noreferrer">Hubungi admin</a>' : '') + '<button type="button" class="plg__btn" data-x="close">Selesai</button></div>';
+      return;
+    }
+    err.textContent = r.error; ok.disabled = false; ok.textContent = 'Ya, beli';
+  });
+  document.addEventListener('keydown', onKey, true);
+  document.body.appendChild(d);
+  ok.focus();
 }
 
 function openRedeem(id: string): void {
@@ -97,7 +138,7 @@ function openRedeem(id: string): void {
   const d = document.createElement('div');
   d.id = 'plg-redeem'; d.className = 'svov'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true'); d.setAttribute('aria-label', 'Tebus token ' + name);
   d.innerHTML = '<div class="svov__back"></div><form class="svov__card" autocomplete="off"><h3 class="svov__title">Tebus token ' + esc(name) + '</h3>' +
-    '<p class="plg__txt">Tempel token plugin dari penjual. Satu token berlaku untuk satu akun.</p>' +
+    '<p class="plg__txt">Tempel token plugin dari admin. Token hasil pesanan hanya berlaku di akun yang memesan.</p>' +
     '<input class="plg__in" name="t" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="64" placeholder="PLG-XXXX-XXXX-XXXX-XXXX" aria-label="Token plugin" required>' +
     '<p class="plg__err" role="alert"></p>' +
     '<div class="plg__row"><button type="button" class="plg__btn plg__btn--ghost" data-x="close">Batal</button><button type="submit" class="plg__btn">Tebus</button></div></form>';

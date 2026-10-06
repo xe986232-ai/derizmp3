@@ -52,6 +52,10 @@ export const licenseOf = async (uid: string): Promise<License | undefined> =>
 export const ownedPlugins = async (uid: string): Promise<string[]> =>
   (await rest<{ plugin: string }[]>(`plugin_licenses?user_id=eq.${uid}&status=eq.active&select=plugin`)).map((r) => r.plugin);
 
+// Plugin yang sudah dipesan akun ini (tekan Beli) tapi tokennya belum ditebus: menunggu token dari admin.
+export const pendingPlugins = async (uid: string): Promise<string[]> =>
+  (await rest<{ plugin: string }[]>(`plugin_licenses?buyer_id=eq.${uid}&user_id=is.null&status=eq.active&select=plugin`)).map((r) => r.plugin);
+
 // ---- Storage (bucket privat 'avatars', hanya bisa diakses dengan kunci service dari server) ----
 const sbHeaders = (extra: Record<string, string> = {}): Record<string, string> => { const k = env('SUPABASE_SERVICE_KEY'); return { apikey: k, Authorization: 'Bearer ' + k, ...extra }; };
 const obj = (path: string): string => env('SUPABASE_URL') + '/storage/v1/object/avatars/' + path;
