@@ -9,91 +9,258 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
 <style>
-:root{box-sizing:border-box;--bg:#13131a;--panel:#13131a;--card:#25252f;--line:#2b2b37;--text:#f2f2f6;--muted:#b9b9c9;--accent:#5b3de8;--err:#ff7a8a;
+:root{box-sizing:border-box;--bg:#13131a;--panel:#13131a;--card:#25252f;--line:#2b2b37;--text:#f2f2f6;--muted:#b9b9c9;--accent:#5b3de8;--accent2:#9d86ff;--err:#ff7a8a;--ok:#5fd39a;--ease:cubic-bezier(.2,.8,.2,1);
 --bevel:inset 0 1px 0 rgba(255,255,255,.07),inset 0 -1px 0 rgba(0,0,0,.25),0 1px 3px rgba(0,0,0,.3)}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
-body{background:var(--bg);color:var(--text);font:13px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom))}
-.card{position:relative;width:100%;max-width:340px;padding:18px 16px 16px;border-radius:18px;background-color:var(--card);box-shadow:var(--bevel)}
+body{background:var(--bg);color:var(--text);font:13px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom))}
+.card{position:relative;width:100%;max-width:360px;padding:16px 18px 18px;border-radius:20px;background-color:var(--card);box-shadow:var(--bevel);animation:cardIn .5s var(--ease) both}
 .card::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;padding:1px;
   background:linear-gradient(135deg,rgba(255,255,255,.17),rgba(255,255,255,.035) 32%,rgba(255,255,255,.01) 62%,rgba(255,255,255,.08));
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
   mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}
-h1{margin:0;font-size:14px;font-weight:600;letter-spacing:.3em}
-.sub{margin:6px 0 14px;font-size:13px;color:var(--muted)}
-.tabs{display:flex;gap:14px;margin-bottom:2px}
-.tabs button{height:28px;padding:0 5px;border:0;border-bottom:2px solid transparent;border-radius:0;background:none;color:var(--muted);font:inherit;font-weight:600;cursor:pointer}
-.tabs button[aria-selected=true]{color:var(--text);border-bottom-color:var(--accent)}
-label{display:block;margin:12px 0 5px;font-size:12.5px;font-weight:500;color:var(--muted)}
-input{width:100%;height:40px;padding:0 12px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--text);font:inherit;font-size:14px}
-input:focus{outline:0}
-input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-#tokRow[hidden],#nameRow[hidden]{display:none}
-.go{width:100%;height:44px;margin-top:18px;border:0;border-radius:22px;background:#f2f2f6;color:#16161d;font:inherit;font-weight:700;cursor:pointer}
+.card.shake{animation:shake .42s var(--ease)}
+.card.leave{animation:cardOut .28s ease-in forwards}
+.top{display:flex;align-items:center;gap:8px;height:30px}
+h1{margin:0;font-size:13px;font-weight:600;letter-spacing:.3em}
+.back{display:grid;place-items:center;width:30px;height:30px;margin-left:-8px;border:0;border-radius:50%;background:none;color:var(--muted);cursor:pointer;transition:opacity .2s,transform .25s var(--ease),background .15s}
+.back[hidden]{display:grid;opacity:0;pointer-events:none;transform:translateX(8px)}
+.back:hover{background:rgba(255,255,255,.08);color:var(--text)}
+.count{margin-left:auto;font-size:12px;color:var(--muted);transition:opacity .25s}
+.count:empty{opacity:0}
+.prog{display:flex;gap:5px;height:3px;margin:12px 0 4px;opacity:1;transition:opacity .3s,height .3s var(--ease),margin .3s var(--ease)}
+.prog.off{opacity:0;height:0;margin:0}
+.prog i{flex:1;border-radius:2px;background:var(--line);position:relative;overflow:hidden}
+.prog i::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transform:scaleX(0);transform-origin:left;transition:transform .45s var(--ease)}
+.prog i.on::after{transform:scaleX(1)}
+
+/* panggung langkah: semua langkah ditumpuk di satu sel; yang aktif muncul, yang sudah lewat keluar ke kiri, yang belum menunggu di kanan */
+.stage{display:grid;position:relative;transition:height .35s var(--ease)}
+.step{grid-area:1/1;align-self:start;opacity:0;visibility:hidden;pointer-events:none;transform:translateX(28px);transition:opacity .28s ease,transform .38s var(--ease),visibility 0s .38s}
+.step.is-left{transform:translateX(-28px)}
+.step.is-on{opacity:1;visibility:visible;pointer-events:auto;transform:none;transition:opacity .34s ease .06s,transform .42s var(--ease) .06s,visibility 0s}
+.no-anim .step,.no-anim .stage,.no-anim .prog i::after{transition:none!important}
+h2{margin:14px 0 4px;font-size:20px;font-weight:700;letter-spacing:-.2px}
+.sub{margin:0 0 14px;font-size:13px;color:var(--muted)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+input{width:100%;height:46px;padding:0 14px;border-radius:13px;border:1px solid var(--line);background:var(--panel);color:var(--text);font:inherit;font-size:16px;transition:border-color .2s,box-shadow .2s}
+input:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px rgba(91,61,232,.28)}
+.step.bad input{border-color:var(--err);box-shadow:0 0 0 3px rgba(255,122,138,.2)}
+.pwrow{position:relative}
+.pwrow input{padding-right:84px}
+.eye{position:absolute;right:6px;top:7px;height:32px;padding:0 10px;border:0;border-radius:10px;background:none;color:var(--muted);font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.eye:hover{color:var(--text);background:rgba(255,255,255,.07)}
+.opt{position:relative;display:block;width:100%;margin-top:10px;padding:14px 16px;border:0;border-radius:14px;text-align:left;color:var(--text);font:inherit;cursor:pointer;background-color:var(--card);box-shadow:var(--bevel);transition:transform .2s var(--ease),filter .2s;-webkit-tap-highlight-color:transparent}
+.opt::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;padding:1px;background:linear-gradient(135deg,rgba(255,255,255,.2),rgba(255,255,255,.03) 40%,rgba(255,255,255,.1));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}
+.opt b{display:block;font-size:15px;font-weight:700}
+.opt small{display:block;margin-top:2px;font-size:12.5px;color:var(--muted)}
+.opt::after{content:"";position:absolute;right:16px;top:50%;width:8px;height:8px;margin-top:-5px;border-right:2px solid var(--muted);border-top:2px solid var(--muted);transform:rotate(45deg);transition:transform .25s var(--ease),border-color .2s}
+.opt:hover{transform:translateY(-2px);filter:brightness(1.1)}
+.opt:hover::after{transform:translateX(3px) rotate(45deg);border-color:var(--text)}
+.opt:active{transform:translateY(1px);transition-duration:.08s}
+.opt:focus-visible,.back:focus-visible,.eye:focus-visible,.go:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.err{min-height:18px;margin:10px 0 0;color:var(--err);font-size:13px;opacity:0;transform:translateY(-4px);transition:opacity .2s,transform .25s var(--ease)}
+.err.on{opacity:1;transform:none}
+.go{position:relative;display:block;width:100%;height:46px;margin-top:6px;border:0;border-radius:23px;background:#f2f2f6;color:#16161d;font:inherit;font-weight:700;font-size:14.5px;cursor:pointer;overflow:hidden;transition:transform .15s var(--ease),background .2s,opacity .25s,height .3s var(--ease),margin .3s var(--ease)}
 .go:hover{background:#fff}
-.go:disabled{opacity:.6;cursor:default}
-.err{min-height:18px;margin:12px 0 0;color:var(--err);font-size:13px}
-.note{margin:10px 0 0;color:var(--muted);font-size:12.5px}
+.go:active{transform:scale(.98)}
+.go[hidden]{display:block;opacity:0;pointer-events:none;height:0;margin:0}
+.go:disabled{cursor:default}
+.go .dots{display:none;position:absolute;inset:0;align-items:center;justify-content:center;gap:5px}
+.go.busy .lbl{opacity:0}
+.go.busy .dots{display:flex}
+.dots i{width:7px;height:7px;border-radius:50%;background:#16161d;animation:dot 1s infinite ease-in-out}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+.skip{display:block;margin:10px auto 0;border:0;background:none;color:var(--muted);font:inherit;font-size:12.5px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.skip:hover{color:var(--text)}
+.note{margin:12px 0 0;color:var(--muted);font-size:12.5px;text-align:center}
+.done{text-align:center;padding:10px 0 6px}
+.done svg{width:64px;height:64px}
+.done circle{fill:none;stroke:var(--ok);stroke-width:3;stroke-dasharray:176;stroke-dashoffset:176}
+.done path{fill:none;stroke:var(--ok);stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:40;stroke-dashoffset:40}
+.step.is-on .done circle{animation:draw .6s var(--ease) .15s forwards}
+.step.is-on .done path{animation:draw .4s var(--ease) .6s forwards}
+.done h2{margin-top:12px}
+@keyframes cardIn{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes cardOut{to{opacity:0;transform:translateY(-10px) scale(.98)}}
+@keyframes shake{0%,100%{transform:none}18%{transform:translateX(-8px)}36%{transform:translateX(7px)}54%{transform:translateX(-5px)}72%{transform:translateX(3px)}}
+@keyframes dot{0%,80%,100%{transform:scale(.55);opacity:.4}40%{transform:scale(1);opacity:1}}
+@keyframes draw{to{stroke-dashoffset:0}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important;transition-delay:0s!important}}
 </style>
 </head>
-<body>
-<main class="card">
-  <h1>MELVOX</h1>
-  <p class="sub">Versi penuh. Masuk dengan akunmu.</p>
-  <div class="tabs" role="tablist">
-    <button type="button" role="tab" id="tLogin" aria-selected="true">Masuk</button>
-    <button type="button" role="tab" id="tRedeem" aria-selected="false">Aktifkan token</button>
+<body class="no-anim">
+<main class="card" id="card">
+  <div class="top">
+    <button type="button" class="back" id="back" aria-label="Kembali" hidden><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <h1>MELVOX</h1>
+    <span class="count" id="count" aria-live="polite"></span>
   </div>
-  <form id="f" autocomplete="on">
-    <div id="tokRow" hidden>
-      <label for="token">Token dari pembelian</label>
-      <input id="token" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="MLVX-XXXX-XXXX-XXXX-XXXX">
+  <div class="prog off" id="prog" aria-hidden="true"></div>
+
+  <form id="f" novalidate autocomplete="on">
+    <div class="stage" id="stage">
+
+      <section class="step" data-step="start">
+        <h2>Selamat datang</h2>
+        <p class="sub">Versi penuh Melvox. Pilih salah satu untuk lanjut.</p>
+        <button type="button" class="opt" data-mode="login"><b>Masuk</b><small>Sudah punya akun</small></button>
+        <button type="button" class="opt" data-mode="redeem"><b>Aktifkan token</b><small>Baru beli? Buat akunmu di sini</small></button>
+      </section>
+
+      <section class="step" data-step="token">
+        <h2 data-h>Masukkan token</h2>
+        <p class="sub" data-s>Token ada di pesan pembelianmu. Satu token hanya untuk satu akun.</p>
+        <label class="sr" for="token">Token</label>
+        <input id="token" name="token" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="MLVX-XXXX-XXXX-XXXX-XXXX" enterkeyhint="next">
+      </section>
+
+      <section class="step" data-step="name">
+        <h2>Siapa namamu?</h2>
+        <p class="sub">Opsional. Tampil di profilmu dan bisa diubah nanti.</p>
+        <label class="sr" for="uname">Nama</label>
+        <input id="uname" name="name" maxlength="40" autocomplete="name" placeholder="Nama kamu" enterkeyhint="next">
+      </section>
+
+      <section class="step" data-step="email">
+        <h2 data-h>Email kamu</h2>
+        <p class="sub" data-s>Masuk dengan email yang kamu pakai saat aktivasi.</p>
+        <label class="sr" for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="nama@email.com" inputmode="email" enterkeyhint="next">
+      </section>
+
+      <section class="step" data-step="pw">
+        <h2 data-h>Password</h2>
+        <p class="sub" data-s>Masukkan password akunmu.</p>
+        <label class="sr" for="pw">Password</label>
+        <div class="pwrow">
+          <input id="pw" name="password" type="password" autocomplete="current-password" minlength="8" maxlength="128" placeholder="Password" enterkeyhint="go">
+          <button type="button" class="eye" id="eye" aria-pressed="false">Tampilkan</button>
+        </div>
+      </section>
+
+      <section class="step" data-step="done">
+        <div class="done" role="status">
+          <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="28"/><path d="M20 33l8 8 16-17"/></svg>
+          <h2 id="doneT">Berhasil</h2>
+          <p class="sub" style="margin:0">Membuka aplikasi...</p>
+        </div>
+      </section>
+
     </div>
-    <div id="nameRow" hidden>
-      <label for="uname">Nama <span style="font-weight:400">(opsional, tampil di profil)</span></label>
-      <input id="uname" maxlength="40" autocomplete="name" placeholder="Nama kamu">
-    </div>
-    <label for="email">Email</label>
-    <input id="email" type="email" autocomplete="username" required>
-    <label for="pw">Password <span id="pwHint"></span></label>
-    <input id="pw" type="password" autocomplete="current-password" minlength="8" required>
-    <button class="go" id="go" type="submit">Masuk</button>
     <p class="err" id="err" role="alert"></p>
+    <button class="go" id="go" type="submit" hidden><span class="lbl" id="lbl">Lanjut</span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></button>
   </form>
   <p class="note" id="note">Satu token hanya untuk satu akun dan beberapa perangkat terbatas.</p>
 </main>
 <script>
 (function () {
-  var mode = 'login', $ = function (id) { return document.getElementById(id); };
-  function set(m) {
-    mode = m;
-    $('tLogin').setAttribute('aria-selected', m === 'login'); $('tRedeem').setAttribute('aria-selected', m === 'redeem');
-    $('tokRow').hidden = m !== 'redeem'; $('nameRow').hidden = m !== 'redeem';
-    $('token').required = m === 'redeem';
+  var $ = function (id) { return document.getElementById(id); };
+  var FLOWS = { login: ['email', 'pw'], redeem: ['token', 'name', 'email', 'pw'] };
+  var TXT = {
+    login:  { email: ['Email kamu', 'Masuk dengan email yang kamu pakai saat aktivasi.'], pw: ['Password', 'Masukkan password akunmu.'] },
+    redeem: { token: ['Masukkan token', 'Token ada di pesan pembelianmu. Satu token hanya untuk satu akun.'], email: ['Email untuk akunmu', 'Dipakai untuk masuk nanti.'], pw: ['Buat password', 'Minimal 8 karakter. Dipakai untuk masuk nanti.'] }
+  };
+  var steps = {}; [].forEach.call(document.querySelectorAll('.step'), function (s) { steps[s.dataset.step] = s; });
+  var card = $('card'), stage = $('stage'), go = $('go'), errEl = $('err'), prog = $('prog'), back = $('back');
+  var mode = null, order = ['start'], cur = 0, busy = false;
+
+  function setMode(m) {
+    mode = m; order = ['start'].concat(FLOWS[m]);
+    prog.innerHTML = FLOWS[m].map(function () { return '<i></i>'; }).join('');
+    var t = TXT[m];
+    Object.keys(t).forEach(function (k) { var h = steps[k].querySelector('[data-h]'), s = steps[k].querySelector('[data-s]'); h.textContent = t[k][0]; s.textContent = t[k][1]; });
     $('pw').autocomplete = m === 'redeem' ? 'new-password' : 'current-password';
-    $('pwHint').textContent = m === 'redeem' ? '(buat password baru, min. 8 karakter)' : '';
-    $('go').textContent = m === 'redeem' ? 'Aktifkan & masuk' : 'Masuk';
-    $('err').textContent = '';
+    $('email').autocomplete = 'username';
+    $('note').hidden = m !== 'redeem';
   }
-  $('tLogin').onclick = function () { set('login'); };
-  $('tRedeem').onclick = function () { set('redeem'); };
+
+  function setErr(msg) {
+    errEl.textContent = msg || ''; errEl.classList.toggle('on', !!msg);
+    var st = steps[order[cur]]; if (st) st.classList.toggle('bad', !!msg);
+    if (msg) { card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); }
+  }
+
+  function label() {
+    var n = order[cur], last = cur === order.length - 1;
+    $('lbl').textContent = n === 'name' && !$('uname').value.trim() ? 'Lewati' : last ? (mode === 'redeem' ? 'Aktifkan & masuk' : 'Masuk') : 'Lanjut';
+  }
+
+  function fit() { var el = steps[order[cur]]; if (el) stage.style.height = el.offsetHeight + 'px'; }
+
+  function render(focus) {
+    var name = order[cur];
+    Object.keys(steps).forEach(function (k) {
+      var el = steps[k], i = order.indexOf(k);
+      el.classList.toggle('is-on', k === name);
+      el.classList.toggle('is-left', i > -1 && i < cur);
+      el.classList.remove('bad');
+      if (k === name) el.removeAttribute('inert'); else el.setAttribute('inert', '');
+    });
+    var flowStep = name !== 'start' && name !== 'done';
+    prog.classList.toggle('off', !flowStep);
+    [].forEach.call(prog.children, function (b, i) { b.classList.toggle('on', i < cur); });
+    $('count').textContent = flowStep ? 'Langkah ' + cur + ' dari ' + FLOWS[mode].length : '';
+    back.hidden = !flowStep;
+    go.hidden = !flowStep;
+    $('note').style.display = name === 'start' || name === 'done' ? 'none' : '';
+    label(); setErr(''); fit();
+    if (focus) setTimeout(function () { var i = steps[name].querySelector('input'); if (i) i.focus({ preventScroll: true }); }, 180);
+  }
+
+  function check(n) {
+    var v;
+    if (n === 'token') { v = $('token').value.replace(/[^A-Za-z0-9]/g, ''); return v.length < 12 ? 'Token terlalu pendek. Cek lagi pesan pembelianmu.' : ''; }
+    if (n === 'email') { v = $('email').value.trim(); return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) ? '' : 'Format email belum benar.'; }
+    if (n === 'pw') { v = $('pw').value; return v.length < 8 ? 'Password minimal 8 karakter.' : v.length > 128 ? 'Password maksimal 128 karakter.' : ''; }
+    return '';
+  }
+
   var q = new URLSearchParams(location.search);
-  if (q.get('token')) { set('redeem'); $('token').value = q.get('token'); }
   function nextUrl() { var n = q.get('next') || '/'; return n.charAt(0) === '/' && n.charAt(1) !== '/' ? n : '/'; }   // cegah open-redirect
+
+  function submit() {
+    busy = true; go.disabled = true; go.classList.add('busy'); setErr('');
+    var body = { action: mode, email: $('email').value.trim(), password: $('pw').value };
+    if (mode === 'redeem') { body.token = $('token').value; body.name = $('uname').value.trim(); }
+    fetch('/api/session', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, s: r.status, d: d }; }); })
+      .then(function (x) {
+        busy = false; go.disabled = false; go.classList.remove('busy');
+        if (x.ok) {
+          try { localStorage.setItem('mx_last_ok', String(Date.now())); } catch (_) {}
+          var who = body.name || body.email.split('@')[0];
+          $('doneT').textContent = mode === 'redeem' ? 'Akun aktif, ' + who : 'Halo, ' + who;
+          order = order.concat('done'); cur = order.length - 1; render(false);
+          setTimeout(function () { card.classList.add('leave'); setTimeout(function () { location.replace(nextUrl()); }, 260); }, 1100);
+          return;
+        }
+        var msg = x.d.error || 'Gagal masuk.';
+        // kembali ke langkah yang bermasalah
+        var to = x.s === 409 ? 'email' : (mode === 'redeem' && x.s === 400 && /token/i.test(msg)) ? 'token' : 'pw';
+        if (to !== order[cur]) { cur = order.indexOf(to); render(true); }
+        setErr(msg);
+      })
+      .catch(function () { busy = false; go.disabled = false; go.classList.remove('busy'); setErr('Tidak bisa terhubung. Periksa internetmu.'); });
+  }
+
   $('f').addEventListener('submit', function (e) {
     e.preventDefault();
-    $('err').textContent = ''; $('go').disabled = true;
-    fetch('/api/session', {
-      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: mode, email: $('email').value, password: $('pw').value, token: $('token').value, name: mode === 'redeem' ? $('uname').value : undefined })
-    }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
-      .then(function (x) {
-        if (x.ok) { try { localStorage.setItem('mx_last_ok', String(Date.now())); } catch (_) {} location.replace(nextUrl()); return; }
-        $('err').textContent = x.d.error || 'Gagal masuk.'; $('go').disabled = false;
-      })
-      .catch(function () { $('err').textContent = 'Tidak bisa terhubung. Periksa internetmu.'; $('go').disabled = false; });
+    var n = order[cur]; if (busy || n === 'start' || n === 'done') return;
+    var m = check(n); if (m) { setErr(m); return; }
+    if (cur < order.length - 1) { cur++; render(true); } else submit();
   });
+  [].forEach.call(document.querySelectorAll('[data-mode]'), function (b) { b.addEventListener('click', function () { setMode(b.dataset.mode); cur = 1; render(true); }); });
+  back.addEventListener('click', function () { if (busy || cur <= 0) return; cur--; render(order[cur] !== 'start'); });
+  $('uname').addEventListener('input', label);
+  ['token', 'email', 'pw'].forEach(function (id) { $(id).addEventListener('input', function () { if (errEl.classList.contains('on')) setErr(''); }); });
+  $('eye').addEventListener('click', function () { var s = $('pw').type === 'password'; $('pw').type = s ? 'text' : 'password'; $('eye').textContent = s ? 'Sembunyikan' : 'Tampilkan'; $('eye').setAttribute('aria-pressed', String(s)); $('pw').focus(); });
+  window.addEventListener('resize', fit);
+
+  // tautan pembelian ?token=... : langsung ke alur aktivasi dengan token terisi
+  if (q.get('token')) { setMode('redeem'); $('token').value = q.get('token'); cur = 1; }
+  render(false);
+  requestAnimationFrame(function () { requestAnimationFrame(function () { document.body.classList.remove('no-anim'); }); });
 })();
 </script>
 </body>
