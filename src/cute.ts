@@ -1,7 +1,7 @@
 // CUTE: plugin pemotong audio.
 //   canvas waveform + seleksi (seret untuk memilih, seret tepi untuk mengubah), Play / Pause, drag and drop file audio, dan tombol tutup.
 //   Tahap 2: ikon grip di header = seret hasil seleksi (atau seluruh audio kalau tidak ada seleksi) ke plugin DERIZ (jadi sample) atau ke timeline (jadi track Audio clip).
-// Kartunya ada di halaman Plugin pada panel efek (fx-rack.ts); jendelanya dibuka dari kartu itu. Gaya sendiri: kartu datar "kaca gelap" dengan aksen mint (beda dari faceplate logam 3D milik MPCS).
+// Kartunya ada di halaman Plugin pada panel efek (fx-rack.ts); jendelanya dibuka dari kartu itu. Gaya: saudara DERIZ (faceplate miring 3D, layar kaca, LED) tapi bahan "enamel teal" bertepi bevel tebal, judul timbul, tombol cembung.
 
 import { ACCEPT as AUDIO_ACCEPT, isAudio } from './audio-upload-card';
 import { encodeWavFloatMulti } from './wav';
@@ -87,6 +87,18 @@ function build(): void {
   let S: Session | null = null, sel: Sel | null = null, W = 0, H = 0, dpr = 1;
   let ac: AudioContext | null = null, src: AudioBufferSourceNode | null = null, playing = false, playPos = 0, t0 = 0, endAt = 0, raf = 0;
   let loadTok = 0, statT = 0;
+
+  // ---------- efek 3D: jendela miring tipis mengikuti kursor (mouse saja, mati di atas canvas / saat drag / reduced-motion), kilau mengikuti arah cahaya ----------
+  const untilt = (): void => { win.classList.remove('is-tilting'); win.style.setProperty('--rx', '0deg'); win.style.setProperty('--ry', '0deg'); win.style.setProperty('--mx', '50%'); win.style.setProperty('--my', '0%'); };
+  el.addEventListener('pointermove', e => {
+    if (reduce || e.pointerType !== 'mouse') return;
+    if (e.buttons || (e.target as Element).closest('.cute__stage')) { untilt(); return; }
+    const r = win.getBoundingClientRect(), px = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), py = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
+    win.classList.add('is-tilting');
+    win.style.setProperty('--ry', ((px - .5) * 5).toFixed(2) + 'deg'); win.style.setProperty('--rx', ((.5 - py) * 4).toFixed(2) + 'deg');
+    win.style.setProperty('--mx', (px * 100).toFixed(1) + '%'); win.style.setProperty('--my', (py * 100).toFixed(1) + '%');
+  });
+  el.addEventListener('pointerleave', untilt);
 
   // ---------- status (layar LCD) ----------
   const info = (): void => {

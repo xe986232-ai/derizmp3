@@ -1541,19 +1541,19 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     applyAudio(cur);
   }
 
-  // ---------- DERIZ: card miring 3D mengikuti kursor + kilau mengikuti arah cahaya (mouse saja; mati saat reduced-motion / drag garis start) ----------
+  // ---------- DERIZ + CUTE: card miring 3D mengikuti kursor + kilau mengikuti arah cahaya (mouse saja; mati saat reduced-motion / drag garis start) ----------
   const untilt = (c: HTMLElement): void => { c.classList.remove('is-tilting'); c.style.setProperty('--rx', '0deg'); c.style.setProperty('--ry', '0deg'); c.style.setProperty('--mx', '50%'); c.style.setProperty('--my', '0%'); };
   onRoots('pointermove', e => {
     if (reduce || e.pointerType !== 'mouse' || sd) return;
-    const card = (e.target as Element).closest<HTMLElement>('.fxc--deriz');
-    document.querySelectorAll<HTMLElement>('.fxc--deriz.is-tilting').forEach(c => { if (c !== card) untilt(c); });
+    const card = (e.target as Element).closest<HTMLElement>('.fxc--deriz, .fxc--cute');
+    document.querySelectorAll<HTMLElement>('.fxc--deriz.is-tilting, .fxc--cute.is-tilting').forEach(c => { if (c !== card) untilt(c); });
     if (!card || card.closest('.derizov')) return;   // di overlay tidak miring (mengganggu saat main keyboard)
     const r = card.getBoundingClientRect(), px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
     card.classList.add('is-tilting');
     card.style.setProperty('--ry', ((px - .5) * 7).toFixed(2) + 'deg'); card.style.setProperty('--rx', ((.5 - py) * 5).toFixed(2) + 'deg');
     card.style.setProperty('--mx', (px * 100).toFixed(1) + '%'); card.style.setProperty('--my', (py * 100).toFixed(1) + '%');
   });
-  onRoots('pointerleave', () => document.querySelectorAll<HTMLElement>('.fxc--deriz.is-tilting').forEach(untilt));
+  onRoots('pointerleave', () => document.querySelectorAll<HTMLElement>('.fxc--deriz.is-tilting, .fxc--cute.is-tilting').forEach(untilt));
 
   onRoots('click', e => {
     const t = e.target as Element, card = t.closest<HTMLElement>('.fxc');

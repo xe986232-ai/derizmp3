@@ -1566,64 +1566,98 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mpcs.is-full .mpcs__play{width:34px;height:34px}
 .mpcs.is-full .mpcs__play svg{width:16px;height:16px}
 @media (prefers-reduced-motion:reduce){.mpcs__dlm{animation:none}.mpcs__win{transform:none!important;transition:none!important}.mpcs__busy i{animation:none;width:100%}.mpcs__up,.mpcs__play,.mpcs__close,.mpcs__full,.mpcs__dl,.mpcs__drag,.mpcs__knob,.mpcs__zb,.mpcs__zoom,.mpcs__ph::before{transition:none}}
-/* ---------- CUTE: pemotong audio (kartu di panel efek + jendela). Faceplate logam seperti MPCS, aksen teal ---------- */
-.fxc--cute{padding:12px 14px 12px 16px;background-image:linear-gradient(90deg,rgba(45,212,191,.2),transparent 60%)}
-.fxc--cute .fxc__title{font-family:'Syncopate',system-ui,sans-serif;font-size:14px;font-weight:700;letter-spacing:.3em}
-.fxc--cute .fxc__led{background:radial-gradient(circle at 36% 30%,#fff 0 8%,#c8fff6 30%,#2dd4bf 70%,#0b5e56 100%);box-shadow:0 0 8px rgba(45,212,191,.55)}
-/* CUTE: gaya datar "kaca gelap" (beda dari MPCS yang logam sikat 3D): kartu navy pekat, sudut besar, garis tipis, tombol pil mint, tanpa baut / tekstur / miring */
+/* ---------- CUTE: pemotong audio (kartu di panel efek + jendela). Saudara DERIZ: faceplate yang sama (miring 3D, layar kaca, LED), tapi bahannya "enamel teal" bertepi bevel tebal,
+   judul timbul (extrude) bukan ukiran, tombol cembung yang bisa ditekan, tanpa baut ---------- */
+.fxc--cute{--rx:0deg;--ry:0deg;--mx:50%;--my:0%;padding:12px 14px 12px 16px;transform:perspective(760px) rotateX(var(--rx)) rotateY(var(--ry));transition:transform .45s var(--ease-out),box-shadow .3s ease;
+  background-color:#123238;
+  background-image:
+    radial-gradient(200px 130px at var(--mx) var(--my),rgba(200,255,248,.14),transparent 70%),
+    linear-gradient(180deg,rgba(255,255,255,.09) 0,rgba(255,255,255,.02) 38%,transparent 39%),
+    linear-gradient(160deg,#1f4f56 0%,#143a41 46%,#0b222a 100%);
+  box-shadow:inset 2px 2px 0 rgba(200,255,248,.3),inset -2px -2px 0 rgba(0,0,0,.55),inset 0 0 0 1px rgba(0,0,0,.35),0 3px 0 #061418,0 16px 28px -12px rgba(0,0,0,.7)}
+.fxc--cute.is-tilting{transition:transform .1s linear,box-shadow .3s ease}
+.fxc--cute:hover{box-shadow:inset 2px 2px 0 rgba(200,255,248,.38),inset -2px -2px 0 rgba(0,0,0,.55),inset 0 0 0 1px rgba(0,0,0,.35),0 4px 0 #061418,0 22px 34px -12px rgba(0,0,0,.75)}
+.fxc--cute .fxc__title{font-family:'Syncopate',system-ui,sans-serif;font-size:14px;font-weight:700;letter-spacing:.3em;color:#dffff9;
+  text-shadow:0 1px 0 #5eead4,0 2px 0 #2aa896,0 3px 0 #17695e,0 4px 0 #0c3d37,0 6px 8px rgba(0,0,0,.55)}   /* huruf timbul: lapisan tebal teal di bawah huruf */
+.fxc--cute .fxc__led{width:14px;height:14px;background:radial-gradient(circle at 36% 30%,#fff 0 7%,#9af5e6 30%,#2dd4bf 62%,#0b5e56 100%);
+  box-shadow:0 0 11px rgba(45,212,191,.7),inset 0 -1px 2px rgba(0,0,0,.45),0 0 0 2px #061418,0 0 0 3px rgba(200,255,248,.2)}
+.fxc--cute .fxc__open,.fxc--cute .fxc__more{color:#a9d9d2;background:radial-gradient(circle at 36% 28%,#2b5d63 0%,#173f46 60%,#0e2a30 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2),inset 0 -1px 2px rgba(0,0,0,.55),0 0 0 2px #061418}
+.fxc--cute .fxc__open:hover,.fxc--cute .fxc__more:hover,.fxc--cute .fxc__more[aria-expanded="true"]{color:#fff;background:radial-gradient(circle at 36% 28%,#37747b 0%,#1d4e56 60%,#123238 100%)}
+@media (prefers-reduced-motion:reduce){.fxc--cute{transform:none!important;transition:none!important}}
+
 .cute{position:fixed;inset:0;z-index:220;display:grid;place-items:center;padding:max(12px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom))}
 .cute[hidden]{display:none}
-.cute__back{position:absolute;inset:0;background:rgba(6,10,18,.55);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
-.cute__win{--accent:#5eead4;--ink:#e8f1ff;--mute:#8a9ab5;--line:rgba(148,170,210,.16);--rx:0deg;--ry:0deg;--mx:50%;--my:0%;
-  position:relative;display:flex;flex-direction:column;width:min(480px,100%);height:min(250px,100%);border-radius:20px;overflow:hidden;outline:none;color:var(--ink);
+.cute__back{position:absolute;inset:0;background:rgba(4,12,16,.55);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.cute__win{--accent:#5eead4;--accent-soft:rgba(94,234,212,.3);--ink:#e6fffb;--mute:#8fb7b2;--line:rgba(0,0,0,.5);--rx:0deg;--ry:0deg;--mx:50%;--my:0%;
+  position:relative;display:flex;flex-direction:column;width:min(480px,100%);height:min(250px,100%);border-radius:22px;overflow:hidden;outline:none;color:var(--ink);
   font-family:'Plus Jakarta Sans',system-ui,sans-serif;
-  background:linear-gradient(180deg,#141b2b 0%,#0e1422 100%);border:1px solid var(--line);
-  transition:box-shadow .3s ease;
-  box-shadow:0 24px 60px -16px rgba(0,0,0,.75),0 0 0 1px rgba(0,0,0,.4)}
-.cute__win.is-tilting{transition:box-shadow .3s ease}
-.cute__win.is-drop{box-shadow:0 0 0 2px var(--accent),0 24px 60px -16px rgba(0,0,0,.75)}
+  transform:perspective(900px) rotateX(var(--rx)) rotateY(var(--ry));transition:transform .45s var(--ease-out),box-shadow .3s ease;
+  background-color:#123238;
+  background-image:
+    radial-gradient(240px 160px at var(--mx) var(--my),rgba(200,255,248,.13),transparent 70%),
+    repeating-linear-gradient(90deg,rgba(255,255,255,.012) 0 1px,transparent 1px 3px),
+    linear-gradient(160deg,#21555c 0%,#143a41 44%,#0a2027 100%);
+  /* bevel tebal: tepi kiri-atas terang, kanan-bawah gelap, lalu garis pemisah tipis ke dalam; lapisan luar = ketebalan pelat + bayangan jatuh */
+  box-shadow:inset 3px 3px 0 rgba(200,255,248,.32),inset -3px -3px 0 rgba(0,0,0,.5),inset 0 0 0 4px rgba(0,0,0,.18),inset 0 0 0 5px rgba(200,255,248,.06),0 4px 0 #061418,0 28px 60px -16px rgba(0,0,0,.8)}
+.cute__win.is-tilting{transition:transform .1s linear,box-shadow .3s ease}
+.cute__win.is-drop{box-shadow:inset 3px 3px 0 rgba(200,255,248,.32),inset -3px -3px 0 rgba(0,0,0,.5),0 0 0 2px var(--accent),0 0 22px var(--accent-soft),0 28px 60px -16px rgba(0,0,0,.8)}
 .cute__win>:not(.cute__glass){position:relative;z-index:1}
-.cute__glass{display:none}
-.cute__head{display:flex;align-items:center;gap:10px;flex:none;min-height:44px;padding:8px 12px 8px 16px;z-index:5;border-bottom:1px solid var(--line)}
-.cute__led{flex:none;width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px rgba(94,234,212,.18),0 0 10px rgba(94,234,212,.7);transition:box-shadow .3s ease,background .3s ease,opacity .3s ease}
-.cute__win.is-off .cute__led{background:#41506b;box-shadow:none;opacity:.8}
-.cute__title{font-size:13px;font-weight:800;letter-spacing:.16em;line-height:1;color:var(--ink)}
-.cute__lcd{flex:1;min-width:0;max-width:260px;margin:0 auto;display:flex;align-items:center;justify-content:center;height:26px;padding:0 12px;border-radius:999px;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px var(--line)}
-.cute__stat{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c9d6ee;font-size:11.5px;font-weight:600;font-variant-numeric:tabular-nums}
-.cute__close,.cute__drag{display:grid;place-items:center;flex:none;width:28px;height:28px;padding:0;border:0;border-radius:50%;color:var(--mute);cursor:pointer;-webkit-tap-highlight-color:transparent;
-  background:rgba(255,255,255,.06);transition:color .18s ease,background .18s ease,transform .15s ease}
+.cute__glass{position:absolute;inset:0;z-index:4;pointer-events:none;border-radius:inherit;
+  background:linear-gradient(158deg,rgba(255,255,255,.1) 0,rgba(255,255,255,.02) 30%,transparent 31%),radial-gradient(150% 130% at 50% 50%,transparent 60%,rgba(0,0,0,.28) 100%)}   /* kilau kaca di atas pelat */
+.cute__head{display:flex;align-items:center;gap:10px;flex:none;min-height:46px;padding:9px 14px 8px 20px;z-index:5;
+  background:linear-gradient(180deg,rgba(255,255,255,.1),rgba(255,255,255,0) 60%);
+  border-bottom:1px solid rgba(0,0,0,.55);box-shadow:0 1px 0 rgba(200,255,248,.12)}   /* alur: garis gelap + garis terang di bawahnya */
+.cute__led{flex:none;width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 36% 30%,#fff 0 7%,#9af5e6 30%,var(--accent) 62%,#0b5e56 100%);
+  box-shadow:0 0 11px var(--accent),inset 0 -1px 2px rgba(0,0,0,.45),0 0 0 2px #061418,0 0 0 3px rgba(200,255,248,.2);transition:box-shadow .3s ease,background .3s ease}
+.cute__win.is-off .cute__led{background:radial-gradient(circle at 36% 30%,#6a8a8c 0 6%,#2f4a4e 45%,#16282c 100%);box-shadow:inset 0 -1px 2px rgba(0,0,0,.6),0 0 0 2px #061418,0 0 0 3px rgba(255,255,255,.1)}
+.cute__title{font-family:'Syncopate',system-ui,sans-serif;font-size:13px;font-weight:700;letter-spacing:.3em;line-height:1.2;color:#dffff9;
+  text-shadow:0 1px 0 #5eead4,0 2px 0 #2aa896,0 3px 0 #17695e,0 4px 0 #0c3d37,0 6px 8px rgba(0,0,0,.55)}
+.cute__win.is-off .cute__title{color:#7fa9a6;text-shadow:0 1px 0 #3a6a68,0 2px 0 #24474a,0 3px 0 #122a2e,0 5px 6px rgba(0,0,0,.5)}
+.cute__lcd{flex:1;min-width:0;max-width:260px;margin:0 auto;display:flex;align-items:center;justify-content:center;height:28px;padding:0 14px;border-radius:999px;
+  background:linear-gradient(180deg,#02100f,#082421);
+  box-shadow:inset 0 3px 7px rgba(0,0,0,.85),inset 0 0 0 1px rgba(0,0,0,.6),0 1px 0 rgba(200,255,248,.18),0 0 0 2px #061418}   /* layar cekung bertepi bevel */
+.cute__stat{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#aef7ea;text-shadow:0 0 8px rgba(94,234,212,.5);font-size:11.5px;font-weight:600;font-variant-numeric:tabular-nums}
+.cute__close,.cute__drag{display:grid;place-items:center;flex:none;width:28px;height:28px;padding:0;border:0;border-radius:50%;color:#a9d9d2;cursor:pointer;-webkit-tap-highlight-color:transparent;
+  background:radial-gradient(circle at 36% 28%,#2f6168 0%,#194650 60%,#0e2a30 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -2px 3px rgba(0,0,0,.55),0 2px 0 #061418,0 0 0 2px #061418;   /* tombol cembung */
+  transition:color .18s ease,box-shadow .18s ease,transform .12s ease}
 .cute__lcd+.cute__drag,.cute__lcd+.cute__close,.cute__drag+.cute__close{margin-left:0}
-.cute__close:hover,.cute__drag:hover:not(:disabled){color:#07201c;background:var(--accent)}
-.cute__close:active,.cute__drag:active:not(:disabled){transform:scale(.9)}
-.cute__close:focus-visible,.cute__drag:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cute__close:hover,.cute__drag:hover:not(:disabled){color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),inset 0 -2px 3px rgba(0,0,0,.55),0 2px 0 #061418,0 0 0 2px #061418,0 0 0 3px var(--accent),0 0 12px var(--accent-soft)}
+.cute__close:active,.cute__drag:active:not(:disabled){transform:translateY(2px);box-shadow:inset 0 2px 5px rgba(0,0,0,.7),0 0 0 2px #061418}
+.cute__close:focus-visible,.cute__drag:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .cute__drag{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
 .cute__drag:disabled{cursor:default;opacity:.35}
 .cute.is-dragout .cute__win,.cute.is-dragout .cute__back{opacity:0;transition:opacity .12s ease}
 .cute__ghost{position:fixed;left:0;top:0;z-index:240;width:40px;height:40px;display:grid;place-items:center;border-radius:50%;color:#07201c;pointer-events:none;will-change:transform;
-  background:var(--accent,#5eead4);box-shadow:0 6px 18px rgba(0,0,0,.5),0 0 0 3px rgba(94,234,212,.3)}
+  background:radial-gradient(circle at 36% 28%,#c8fff6 0%,var(--accent,#5eead4) 55%,#1fa090 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.6),inset 0 -2px 3px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.5),0 0 0 3px rgba(94,234,212,.3)}
 .cute__ghost svg{width:18px;height:18px}
-.cute__ghost.is-hot{box-shadow:0 6px 18px rgba(0,0,0,.5),0 0 0 3px #fff,0 0 18px rgba(94,234,212,.9)}
-.cute__mid{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;padding:12px 14px 6px}
-.cute__stage{position:relative;flex:1;min-height:70px;border-radius:12px;overflow:hidden;background:#0a0f1b;box-shadow:inset 0 0 0 1px var(--line)}
-.cute__stage::after{display:none}
+.cute__ghost.is-hot{box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 6px 18px rgba(0,0,0,.5),0 0 0 3px #fff,0 0 18px rgba(94,234,212,.9)}
+.cute__mid{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;padding:14px 18px 8px}
+.cute__stage{position:relative;flex:1;min-height:70px;border-radius:12px;overflow:hidden;background:radial-gradient(120% 100% at 50% 50%,#0d2a2d 0%,#040e12 100%);
+  box-shadow:inset 0 3px 10px rgba(0,0,0,.85),inset 0 0 0 1px rgba(0,0,0,.6),0 1px 0 rgba(200,255,248,.2),0 0 0 2px #061418,0 0 0 3px rgba(200,255,248,.1)}   /* layar cekung: bayangan dalam + bingkai bevel */
+.cute__stage::after{content:"";position:absolute;inset:0;z-index:4;pointer-events:none;border-radius:inherit;
+  background:linear-gradient(158deg,rgba(255,255,255,.1) 0,rgba(255,255,255,.02) 36%,transparent 37%),radial-gradient(130% 120% at 50% 50%,transparent 55%,rgba(0,0,0,.4) 100%)}
 .cute__cv{position:absolute;inset:0;display:block;touch-action:none;cursor:crosshair}
-.cute__drop{position:absolute;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:16px;border:1.5px dashed rgba(138,154,181,.4);border-radius:10px;margin:8px;inset:0;width:calc(100% - 16px);height:calc(100% - 16px);
-  background:transparent;color:#c9d6ee;font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:border-color .2s ease,background .2s ease,color .2s ease}
+.cute__drop{position:absolute;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:16px;border:1.5px dashed rgba(143,183,178,.45);border-radius:10px;margin:8px;inset:0;width:calc(100% - 16px);height:calc(100% - 16px);
+  background:transparent;color:#bfeee6;font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:border-color .2s ease,background .2s ease,color .2s ease}
 .cute__drop[hidden]{display:none}
 .cute__drop span{font-size:13px;font-weight:700}
 .cute__drop small{font-size:11px;color:var(--mute)}
 .cute__drop:hover,.cute__win.is-drop .cute__drop{border-color:var(--accent);background:rgba(94,234,212,.08);color:#fff}
 .cute__drop:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .cute__drop.is-shake{animation:uplShake .3s ease}
-.cute__bar{display:flex;align-items:center;justify-content:center;flex:none;padding:6px 14px 12px;z-index:2}
-.cute__play{display:grid;place-items:center;flex:none;width:44px;height:36px;padding:0;border:0;border-radius:999px;color:#07201c;cursor:pointer;-webkit-tap-highlight-color:transparent;
-  background:var(--accent);box-shadow:0 4px 14px -4px rgba(94,234,212,.6);transition:transform .12s ease,box-shadow .2s ease,background .2s ease}
-.cute__play svg{display:block;width:18px;height:18px}
-.cute__play:hover:not(:disabled){box-shadow:0 6px 18px -4px rgba(94,234,212,.85)}
-.cute__play:active:not(:disabled){transform:scale(.94)}
-.cute__play.is-on{background:#fff}
-.cute__play:disabled{opacity:.35;cursor:default;box-shadow:none}
-.cute__play:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.cute__bar{display:flex;align-items:center;justify-content:center;flex:none;padding:8px 18px 14px;z-index:2}
+.cute__play{display:grid;place-items:center;flex:none;width:52px;height:38px;padding:0;border:0;border-radius:999px;color:#06312b;cursor:pointer;-webkit-tap-highlight-color:transparent;
+  background:linear-gradient(180deg,#b6fff2 0%,#5eead4 48%,#27b8a4 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.75),inset 0 -2px 3px rgba(0,0,0,.2),0 3px 0 #0b5e56,0 0 0 2px #061418,0 8px 14px -4px rgba(0,0,0,.6);   /* tombol pil cembung dengan "tebal" di bawah */
+  transition:transform .1s ease,box-shadow .1s ease,background .2s ease}
+.cute__play svg{display:block;width:18px;height:18px;filter:drop-shadow(0 1px 0 rgba(255,255,255,.5))}
+.cute__play:hover:not(:disabled){background:linear-gradient(180deg,#d2fff7 0%,#7cf1de 48%,#33c9b3 100%)}
+.cute__play:active:not(:disabled){transform:translateY(3px);box-shadow:inset 0 2px 4px rgba(0,0,0,.35),0 0 0 2px #061418}
+.cute__play.is-on{background:linear-gradient(180deg,#ffffff 0%,#e4fffb 55%,#b5ece3 100%)}
+.cute__play:disabled{opacity:.4;cursor:default;box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 0 0 2px #061418;filter:saturate(.5)}
+.cute__play:focus-visible{outline:2px solid #fff;outline-offset:4px}
 @media (prefers-reduced-motion:reduce){.cute__win{transform:none!important;transition:none!important}.cute__drop.is-shake{animation:none}}
 /* ===== Export audio (panel menu + overlay progres) ===== */
 .mp__expbtn{position:relative;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:14px;border:0;border-radius:14px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;
