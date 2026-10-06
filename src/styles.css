@@ -151,8 +151,8 @@ button{font:inherit;color:inherit;cursor:pointer}
 .trkcard__arm[aria-checked="true"]{background:#fff;color:#16161d;border-color:#fff}
 .trkcard__arm:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .trkcard__arm{display:flex;align-items:center;justify-content:center;flex:none;padding:0;line-height:1;font-size:13px;font-weight:600;text-align:center}
-/* knob pan sejajar tepat di bawah tombol titik tiga (tengah 26px vs 28px) */
-.trkcard__ctrl-in{margin-right:-1px;padding-right:0}
+/* tombol S (26px) sejajar tepat di bawah tombol titik tiga (26px); knob pan di kiri */
+.trkcard__ctrl-in{margin-right:0;padding-right:0}
 .ico-btn{padding:0;flex:none;width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:50%}
 .ico-btn .ico{display:block;flex:none}
 .ico-btn .ico svg{display:block}
