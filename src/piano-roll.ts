@@ -18,7 +18,6 @@ interface State { notes: Note[]; nextId: number; }
 export interface NoteData { p: number; s: number; l: number; sl?: boolean; v?: number; }   // bentuk nada yang disimpan / dimainkan
 type Tool = 'draw' | 'select' | 'erase' | 'pan';
 
-import { slideSource, glideBeats } from './note-slide';
 import { VEL_MIN, velOf, velAlpha } from './velocity';
 const P_MIN = 24, P_MAX = 108, ROWS = P_MAX - P_MIN + 1;   // C1..C8
 const KEY_W = 64, RULER_H = 32, BEATS_PER_BAR = 4;
@@ -270,14 +269,7 @@ function drawGrid(zoomOnly = false) {
     c.globalAlpha = 1;
   }
   for (const n of st.notes) if (visible(n)) drawNoteBody(c, n, sx, sy, selected.has(n.id));
-  for (const n of st.notes) {   // jalur luncuran: dari tinggi nada sumber ke tinggi nada slide
-    if (!n.sl) continue;
-    const src = slideSource(st.notes, n); if (!src) continue;
-    const x0 = n.s * ppb - sx, x1 = (n.s + glideBeats(n)) * ppb - sx;
-    if (x1 < 0 || x0 > vw) continue;
-    c.strokeStyle = noteTheme().sel; c.lineWidth = 1.5; c.beginPath();
-    c.moveTo(x0, (P_MAX - src.p + 0.5) * rowH - sy); c.lineTo(x1, (P_MAX - n.p + 0.5) * rowH - sy); c.stroke();
-  }
+  // (garis jalur luncuran slide dari nada sumber ke nada slide sengaja tidak digambar; bunyi luncurannya tetap, lihat note-slide.ts)
   for (const n of st.notes) {
     if (!selected.has(n.id) || !visible(n)) continue;   // bulatan panjang/pendek hanya di note yang dipilih
     let k = 1;
