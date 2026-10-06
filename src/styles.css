@@ -1588,7 +1588,7 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 
 .cute{position:fixed;inset:0;z-index:220;display:grid;place-items:center;padding:max(12px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom))}
 .cute[hidden]{display:none}
-.cute__back{position:absolute;inset:0;background:rgba(4,12,16,.55);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.cute__back{position:absolute;inset:0;background:rgba(4,12,16,.55)}
 .cute__win{--accent:#5eead4;--accent-soft:rgba(94,234,212,.3);--ink:#e6fffb;--mute:#8fb7b2;--line:rgba(0,0,0,.5);--rx:0deg;--ry:0deg;--mx:50%;--my:0%;
   position:relative;display:flex;flex-direction:column;width:min(480px,100%);height:min(250px,100%);border-radius:22px;overflow:hidden;outline:none;color:var(--ink);
   font-family:'Plus Jakarta Sans',system-ui,sans-serif;
