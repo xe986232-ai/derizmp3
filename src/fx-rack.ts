@@ -1095,7 +1095,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     if (fx.type === 'reverb') paintRv(card, fx);
   };
 
-  const openMg = (): void => { if (owns('mgchord')) openMgchord(); else lockedNotice('MGCHORD'); };   // versi full: MGCHORD hanya untuk yang sudah membeli (Shop Plugin)
+  const openMg = (): void => { if (owns('mgchord')) openMgchord(); else lockedNotice('MGCHORD'); };   // versi full: MGCHORD hanya untuk yang sudah membeli (Manage Plugin)
   function addEffect(type: FxType): void {
     if (!cur) return;
     if (type === 'mgchord' && !owns('mgchord')) { lockedNotice('MGCHORD'); return; }

@@ -1,4 +1,4 @@
-// Halaman "Shop Plugin" di Menu (kategori sejajar Project / Export / Pengaturan).
+// Halaman "Manage Plugin" di Menu (kategori sejajar Project / Export / Pengaturan).
 // Plugin gratis / bawaan = status "Terpasang". Plugin berbayar (entitlements.ts PAID, sekarang MGCHORD) di build full: "Dimiliki" kalau
 // token plugin sudah ditebus. Alur: tombol "Beli" + konfirmasi -> server membuat token otomatis (dikunci ke akun ini) dan masuk dashboard admin
 // -> status "Menunggu token dari admin" -> pembeli meminta token ke admin -> "Tebus token" (hanya akun yang memesan yang bisa menebus).
@@ -40,11 +40,11 @@ const IC_CHEV = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" str
 // Tombol kategori di halaman utama Menu
 export const SHOP_CAT =
   '<button type="button" class="mp__cat mp__item" style="--i:3" data-go="shop">' + IC_SHOP +
-  '<span class="mp__cat__t"><b>Shop Plugin</b><small>Daftar plugin &amp; efek</small></span>' + IC_CHEV + '</button>';
+  '<span class="mp__cat__t"><b>Manage Plugin</b><small>Daftar plugin &amp; efek</small></span>' + IC_CHEV + '</button>';
 
-// Halaman Shop Plugin (data-page="shop", memakai sistem halaman Menu: ada tombol kembali)
+// Halaman Manage Plugin (data-page="shop", memakai sistem halaman Menu: ada tombol kembali)
 export const SHOP_PAGE =
-  '<section class="mp__page shop" data-page="shop" aria-label="Shop Plugin" hidden>' +
+  '<section class="mp__page shop" data-page="shop" aria-label="Manage Plugin" hidden>' +
     '<div class="shop__filter mp__item" style="--i:1" role="radiogroup" aria-label="Jenis plugin">' +
       '<button type="button" class="shop__chip is-on" role="radio" aria-checked="true" data-shopf="all">Semua</button>' +
       '<button type="button" class="shop__chip" role="radio" aria-checked="false" data-shopf="instrument">Instrumen</button>' +

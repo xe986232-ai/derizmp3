@@ -2010,7 +2010,7 @@ body:has(.pr.is-open) .tut-btn,body.tut-on .tut-btn{opacity:0;pointer-events:non
 .mp__prim--bad{margin-top:0;background:rgba(255,122,138,.14);color:#ff7a8a}
 .mp__pmsg{min-height:18px;margin-top:8px}
 
-/* ===== Menu > Shop Plugin (flat: warna solid + garis tipis, tanpa bayangan / glow / gradasi) ===== */
+/* ===== Menu > Manage Plugin (flat: warna solid + garis tipis, tanpa bayangan / glow / gradasi) ===== */
 .shop__filter{display:flex;gap:6px}
 .shop__chip{flex:1;height:34px;padding:0 10px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);font:inherit;font-size:13px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 .shop__chip:hover{color:var(--text)}

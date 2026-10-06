@@ -1,4 +1,4 @@
-// /api/shop : kepemilikan plugin berbayar (Shop Plugin).
+// /api/shop : kepemilikan plugin berbayar (Manage Plugin).
 //  GET                              -> { owned: ['mgchord', ...], pending: [...] } plugin berbayar yang dimiliki / sudah dipesan (menunggu token dari admin)
 //  POST { action: 'buy', plugin }   -> pesan plugin: server membuat token OTOMATIS (source 'order', buyer_id = akun ini) dan menyimpannya terenkripsi.
 //                                      Token TIDAK dikirim ke pembeli; muncul di dashboard admin, pembeli memintanya ke admin. -> { ok, pending, owned }
@@ -35,7 +35,7 @@ export async function POST(req: Request): Promise<Response> {
       if (!pending.includes(plugin)) {   // belum ada pesanan: buat token otomatis, kunci ke akun ini
         const token = newPluginToken(), th = await hashToken(token);
         try {
-          await rest('plugin_licenses', { method: 'POST', body: { token_hash: th, token_enc: await seal(token, th), plugin, source: 'order', buyer_id: uid, note: 'Pesanan dari Shop Plugin' } });
+          await rest('plugin_licenses', { method: 'POST', body: { token_hash: th, token_enc: await seal(token, th), plugin, source: 'order', buyer_id: uid, note: 'Pesanan dari Manage Plugin' } });
         } catch (e) {   // dua tekanan Beli bersamaan: indeks unik menolak yang kedua; kalau pesanan sudah ada anggap sukses
           pending = await pendingPlugins(uid);
           if (!pending.includes(plugin)) throw e;

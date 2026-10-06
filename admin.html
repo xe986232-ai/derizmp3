@@ -105,14 +105,14 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   </section>
 
   <section class="card">
-    <h2>Token plugin (Shop Plugin)</h2>
+    <h2>Token plugin (Manage Plugin)</h2>
     <div class="form" style="grid-template-columns:1fr 1fr 2fr auto">
       <div><label for="pPlugin">Plugin</label><select id="pPlugin"></select></div>
       <div><label for="pCount">Jumlah</label><input id="pCount" type="number" min="1" max="500" value="1" inputmode="numeric"></div>
       <div><label for="pNote">Catatan</label><input id="pNote" maxlength="200" placeholder="mis. Order #1201 Budi"></div>
       <button class="btn" id="pGo">Buat</button>
     </div>
-    <p class="hint">Satu token = satu plugin untuk satu akun, seumur hidup. Token juga dibuat otomatis saat pembeli menekan Beli di Shop Plugin (badge &ldquo;Pesanan baru&rdquo;, terkunci ke akun pemesan): setelah pembayaran beres, serahkan token lewat ikon mata/salin. Token manual dari form ini bisa ditebus akun mana pun. Pembeli menebusnya di Menu &rarr; Shop Plugin. Mencabut token langsung mengunci plugin itu di akun pembeli saat aplikasinya memeriksa lagi.</p>
+    <p class="hint">Satu token = satu plugin untuk satu akun, seumur hidup. Token juga dibuat otomatis saat pembeli menekan Beli di Manage Plugin (badge &ldquo;Pesanan baru&rdquo;, terkunci ke akun pemesan): setelah pembayaran beres, serahkan token lewat ikon mata/salin. Token manual dari form ini bisa ditebus akun mana pun. Pembeli menebusnya di Menu &rarr; Manage Plugin. Mencabut token langsung mengunci plugin itu di akun pembeli saat aplikasinya memeriksa lagi.</p>
     <p class="err" id="pErr" role="alert"></p>
     <section class="list" id="plist" style="margin-top:10px"></section>
   </section>

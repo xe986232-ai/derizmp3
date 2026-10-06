@@ -1,4 +1,4 @@
-// Kepemilikan plugin berbayar (Shop Plugin, versi full). Server menyimpan token plugin yang sudah ditebus (/api/shop).
+// Kepemilikan plugin berbayar (Manage Plugin, versi full). Server menyimpan token plugin yang sudah ditebus (/api/shop).
 // Di build demo / dev semua plugin dianggap terbuka (fungsi owns() selalu true), perilaku lama tidak berubah.
 // CATATAN: ini gembok di sisi aplikasi (UI). Kodenya masih ada di bundle; pemisahan chunk berotorisasi adalah tahap berikutnya.
 import { FULL } from './account';
@@ -58,7 +58,7 @@ export async function buyPlugin(plugin: string): Promise<{ ok: true } | { ok: fa
   } catch { return { ok: false, error: 'Tidak bisa terhubung ke server.' }; }
 }
 
-// Minta Menu membuka halaman Shop Plugin (didengarkan menu-panel).
+// Minta Menu membuka halaman Manage Plugin (didengarkan menu-panel).
 export const openShop = (): void => { document.dispatchEvent(new CustomEvent('shop:open')); };
 
 // Pemberitahuan kecil: plugin belum dimiliki -> tawarkan ke Shop.
@@ -67,7 +67,7 @@ export function lockedNotice(name: string): void {
   const d = document.createElement('div');
   d.id = 'plg-lock'; d.className = 'svov'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true'); d.setAttribute('aria-label', name + ' belum dimiliki');
   d.innerHTML = '<div class="svov__back"></div><div class="svov__card"><h3 class="svov__title">' + name + ' belum dimiliki</h3>' +
-    '<p class="plg__txt">Plugin ini dijual terpisah. Buka Shop Plugin untuk membeli atau menebus token.</p>' +
+    '<p class="plg__txt">Plugin ini dijual terpisah. Buka Manage Plugin untuk membeli atau menebus token.</p>' +
     '<div class="plg__row"><button type="button" class="plg__btn plg__btn--ghost" data-x="close">Tutup</button><button type="button" class="plg__btn" data-x="shop">Buka Shop</button></div></div>';
   const close = (): void => { d.remove(); document.removeEventListener('keydown', onKey, true); };
   const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };

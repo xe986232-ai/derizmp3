@@ -5,10 +5,10 @@
 //  POST { action: 'create', count, devices, days, note }       buat token (token asli hanya dikirim SEKALI di respons ini)
 //  POST { action: 'revoke' | 'restore' | 'reset_devices' | 'delete', id }
 //  POST { action: 'update', id, note?, max_devices?, extend_days?, duration_days? }
-//  POST { action: 'p_create', plugin, count, note }            buat token PLUGIN (Shop Plugin), token asli hanya dikirim sekali
+//  POST { action: 'p_create', plugin, count, note }            buat token PLUGIN (Manage Plugin), token asli hanya dikirim sekali
 //  POST { action: 'p_reveal' | 'p_revoke' | 'p_restore' | 'p_delete', id }   kelola token plugin (p_delete hanya yang belum ditebus)
 //  POST { action: 'p_update', id, note }                        ubah catatan token plugin
-// Token plugin juga dibuat OTOMATIS saat pembeli menekan Beli di Shop Plugin (/api/shop 'buy', source 'order', buyer_id terisi):
+// Token plugin juga dibuat OTOMATIS saat pembeli menekan Beli di Manage Plugin (/api/shop 'buy', source 'order', buyer_id terisi):
 // muncul di daftar token plugin dengan nama akun pembeli; admin menyerahkan tokennya (ikon mata/salin) dan hanya akun itu yang bisa menebus.
 //  POST { action: 'reveal', id }           buka token asli satu lisensi (untuk ikon mata / tombol salin di dashboard)
 // id = token_hash. Token asli disimpan TERENKRIPSI (AES-GCM, kunci turunan SESSION_SECRET) di kolom token_enc, tidak pernah ikut

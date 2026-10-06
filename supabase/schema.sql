@@ -45,7 +45,7 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 values ('avatars', 'avatars', false, 262144, array['image/jpeg', 'image/webp', 'image/png'])
 on conflict (id) do nothing;
 
--- ===== Token plugin (Shop Plugin, jalur manual). Sudah dijalankan sebagai migration "plugin_licenses". =====
+-- ===== Token plugin (Manage Plugin, jalur manual). Sudah dijalankan sebagai migration "plugin_licenses". =====
 -- 1 baris = 1 token untuk 1 plugin. Saat ditebus pembeli, user_id terisi = akun itu BERHAK memakai plugin tersebut.
 -- source: 'token' (ditebus), 'gift' / 'order' disiapkan untuk pemberian manual atau pembayaran otomatis nanti.
 create table if not exists public.plugin_licenses (
@@ -65,7 +65,7 @@ create unique index if not exists plugin_licenses_user_plugin_uq
 create index if not exists plugin_licenses_user_idx on public.plugin_licenses (user_id);
 alter table public.plugin_licenses enable row level security;
 
--- ===== Pesanan dari Shop Plugin (tombol Beli). Sudah dijalankan sebagai migration "plugin_licenses_buyer_lock". =====
+-- ===== Pesanan dari Manage Plugin (tombol Beli). Sudah dijalankan sebagai migration "plugin_licenses_buyer_lock". =====
 -- Saat pembeli menekan Beli + konfirmasi, server membuat token otomatis (source = 'order') dan mengisi buyer_id = akun pemesan.
 -- Token tidak dikirim ke pembeli; admin melihatnya di dashboard lalu menyerahkannya. Hanya buyer_id yang bisa menebus (user_id baru terisi saat ditebus).
 alter table public.plugin_licenses add column if not exists buyer_id uuid references auth.users(id) on delete cascade;

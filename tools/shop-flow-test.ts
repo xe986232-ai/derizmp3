@@ -1,4 +1,4 @@
-// Uji alur Shop Plugin (tebus token plugin) dengan Supabase TIRUAN (di memori). Jalankan: npx tsx tools/shop-flow-test.ts
+// Uji alur Manage Plugin (tebus token plugin) dengan Supabase TIRUAN (di memori). Jalankan: npx tsx tools/shop-flow-test.ts
 process.env.SUPABASE_URL = 'http://sb.test'; process.env.SUPABASE_SERVICE_KEY = 'svc'; process.env.SUPABASE_ANON_KEY = 'anon'; process.env.SESSION_SECRET = 'sec-xyz';
 import { hashToken } from '../server/supabase';
 import { COOKIE, signSession } from '../server/session';

@@ -126,7 +126,7 @@ export function initMenuPanel(): MenuPanel {
             '<p class="mp__hint">Memutar project dari bar 1 sampai akhir isi timeline lalu merekamnya, jadi lama export sama dengan durasi lagu. Tab jangan ditutup atau dipindah.</p>' +
           '</div>' +
         '</section>' +
-        // kategori Shop Plugin (halaman di shop-page.ts)
+        // kategori Manage Plugin (halaman di shop-page.ts)
         SHOP_PAGE +
         // kategori Pengaturan
         '<section class="mp__page" data-page="settings" aria-label="Pengaturan" hidden>' +
@@ -334,7 +334,7 @@ export function initMenuPanel(): MenuPanel {
 
   // ===== Halaman kategori (home / project / export / settings) =====
   initShopPage(panel);
-  const TITLES: Record<string, string> = {home: 'Menu', project: 'Project', export: 'Export', shop: 'Shop Plugin', settings: 'Pengaturan', profile: 'Profil'};
+  const TITLES: Record<string, string> = {home: 'Menu', project: 'Project', export: 'Export', shop: 'Manage Plugin', settings: 'Pengaturan', profile: 'Profil'};
   const pages = [...panel.querySelectorAll<HTMLElement>('.mp__page')];
   const titleEl = panel.querySelector('.mp__title') as HTMLElement;
   const backBtn = panel.querySelector('.mp__back') as HTMLButtonElement;
