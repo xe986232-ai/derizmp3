@@ -37,7 +37,7 @@ eq('C minor = C D# G', voice(triadAt(0, 'Minor'), defaultVoicing()).map(n => n.p
 eq('triad ikut oktaf: octave 1 = C4, octave 3 = C6', [voice(triadAt(0, 'Major', 1), defaultVoicing()).map(n => n.p), voice(triadAt(2, 'Minor', 3), defaultVoicing()).map(n => n.p)], [[60, 64, 67], [86, 89, 93]]);
 eq('triad names', [triadAt(0, 'Major').name, triadAt(1, 'Minor').name], ['C', 'C#m']);
 
-// ---- style susunan nada (pola dari contoh MIDI Indian Beat) ----
+// ---- style susunan nada (pola buatan sendiri) ----
 eq('Block + 11 pola', STYLES.length, 12);
 eq('Stab tepat di bawah Block', STYLES.slice(0, 2), ['Block', 'Stab']);
 const v3 = defaultVoicing(), bar = [{ deg: 0, beats: 4 }], two = [{ deg: 0, beats: 4 }, { deg: 3, beats: 4 }];
@@ -48,7 +48,7 @@ for (const sty of STYLES) {
   eq('style ' + sty + ': nada valid, di dalam chordnya', ok, true);
   eq('style ' + sty + ': tidak melewati akhir bar (maks 1e-6)', n.every(x => x.s + x.l <= (x.slot + 1) * 4 + 1e-6), true);
 }
-// contoh MIDI: F# minor, chord F#m - D - A - E (derajat i VI III VII), tiap chord 1 bar. Pluck harus sama dengan bar 1 / bar 7 contoh.
+// F# minor, chord F#m - D - A - E (derajat i VI III VII), tiap chord 1 bar. Pluck harus sama dengan bar 1 / bar 7 pola.
 const fsm = S({ root: 6, scale: 'Minor' }), prog = [0, 5, 2, 6].map(deg => ({ deg, beats: 4 }));
 const pl = buildNotes(fsm, prog, v3, rh('Pluck')), at = (b: number) => pl.filter(n => n.slot === b);
 eq('Pluck F#m = F#4 C#5 F#5 A5 F#5', at(0).map(n => n.p), [66, 73, 78, 81, 78]);
@@ -74,7 +74,7 @@ eq('Tresillo ketukan 0: tiga nada disapu naik 0.02', buildNotes(S(), bar, v3, rh
 eq('Block disapu halus naik', buildNotes(S(), bar, v3, rh('Block')).map(n => +n.s.toFixed(3)), [0, 0.02, 0.04]);
 eq('Block tetap berakhir di akhir chord', buildNotes(S(), bar, v3, rh('Block')).every(n => Math.abs(n.s + n.l - 4) < 1e-9), true);
 eq('humanize tidak menggeser nada tunggal Pluck', buildNotes(S(), bar, v3, rh('Pluck')).map(n => n.s), [0, 0.5, 1, 1.5, 3]);
-// contoh MIDI New Song 159: C minor, pukulan C4 D#4 G4 di offbeat 0.5 / 1.5 / 2.5 / 3.5, 1/16
+// C minor, pukulan C4 D#4 G4 di offbeat 0.5 / 1.5 / 2.5 / 3.5, 1/16
 const stab = buildNotes(S({ scale: 'Minor' }), bar, v3, rh('Stab'));
 eq('Stab C minor = C4 D#4 G4 x 4 offbeat', stab.map(n => n.p), [60, 63, 67, 60, 63, 67, 60, 63, 67, 60, 63, 67]);
 eq('Stab di offbeat', [...new Set(stab.map(n => Math.floor(n.s * 2) / 2))], [0.5, 1.5, 2.5, 3.5]);

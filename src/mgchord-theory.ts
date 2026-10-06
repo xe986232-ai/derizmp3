@@ -130,14 +130,14 @@ export function randomProgression(totalBeats: number, rnd: () => number = Math.r
 
 // ---------- gaya main (style): susunan nada per bar ----------
 // Block = semua nada chord bunyi bersamaan. Style lain = TABEL pola satu bar (4 ketukan) di PATTERNS di bawah, diulang tiap bar selama chord berjalan.
-// Pola diambil dari contoh MIDI "Indian Beat": nada dipetik jarang + sinkop (ketukan 0, 0.5, 1, 1.5, 3), tersebar di dua oktaf, ditahan sampai akhir bar, velocity naik turun.
+// Pola buatan sendiri: nada dipetik jarang + sinkop (ketukan 0, 0.5, 1, 1.5, 3), tersebar di dua oktaf, ditahan sampai akhir bar, velocity naik turun.
 export type PlayStyle = 'Block' | 'Stab' | 'Pluck' | 'Pad Run' | 'Turun' | 'Tangga' | 'Tresillo' | 'Dholak' | 'Tisra' | 'Pad Pluck' | 'Bell' | 'Roll';
 export const STYLES: PlayStyle[] = ['Block', 'Stab', 'Pluck', 'Pad Run', 'Turun', 'Tangga', 'Tresillo', 'Dholak', 'Tisra', 'Pad Pluck', 'Bell', 'Roll'];
 export const STYLE_INFO: Record<PlayStyle, { label: string; desc: string }> = {
   Block: { label: 'Block', desc: 'Polos: semua nada chord ditahan sepanjang chord (disapu sangat halus supaya natural)' },
-  Stab: { label: 'Stab', desc: 'Pukulan chord utuh pendek (1/16) di tiap offbeat: ketukan 0.5, 1.5, 2.5, 3.5 (dari contoh New Song 159)' },
-  Pluck: { label: 'Pluck', desc: 'Pola contoh Indian Beat: akar, kuint, oktaf, terts atas, oktaf (ketukan 0, 0.5, 1, 1.5, 3), ditahan sampai akhir bar' },
-  'Pad Run': { label: 'Pad Run', desc: 'Pola contoh Indian Beat bagian 2: akar + kuint ditahan, lalu lari nada naik-turun di dua ketukan terakhir' },
+  Stab: { label: 'Stab', desc: 'Pukulan chord utuh pendek (1/16) di tiap offbeat: ketukan 0.5, 1.5, 2.5, 3.5' },
+  Pluck: { label: 'Pluck', desc: 'Petikan sinkop: akar, kuint, oktaf, terts atas, oktaf (ketukan 0, 0.5, 1, 1.5, 3), ditahan sampai akhir bar' },
+  'Pad Run': { label: 'Pad Run', desc: 'Lanjutan Pluck: akar + kuint ditahan, lalu lari nada naik-turun di dua ketukan terakhir' },
   Turun: { label: 'Turun', desc: 'Kebalikan Pluck: mulai dari nada tinggi, turun ke akar, ditahan sampai akhir bar' },
   Tangga: { label: 'Tangga', desc: 'Nada naik bertahap (1/8) dan menumpuk ditahan, seperti tangga' },
   Tresillo: { label: 'Tresillo', desc: 'Tiga pukulan chord utuh sinkopasi 3 + 3 + 2 (ketukan 0, 1.5, 3)' },
@@ -153,7 +153,7 @@ export interface OutNote { p: number; s: number; l: number; v: number; slot: num
 
 // Satu nada dalam pola satu bar: at = ketukan (0..4), i = urutan nada chord dari bawah (0 akar, 1 terts, 2 kuint, 3 akar +1 oktaf, 4 terts +1 oktaf, 5 kuint +1 oktaf, 6 akar +2 oktaf, ...),
 // len = panjang (ketukan; angka besar = ditahan sampai akhir bar, otomatis dipotong di akhir bar / chord), v = velocity 0..1 (mutlak, tidak ikut voicing).
-// Contoh: chord F#m + Pluck = F#4 C#5 F#5 A5 F#5, C minor + Stab = C4 D#4 G4 (persis contoh MIDI).
+// Contoh: chord F#m + Pluck = F#4 C#5 F#5 A5 F#5, C minor + Stab = C4 D#4 G4 (sesuai pola).
 interface Ev { at: number; i: number; len: number; v: number }
 const H = 4;   // ditahan sampai akhir bar
 const P = (rows: [number, number, number, number][]): Ev[] => rows.map(([at, i, len, v]) => ({ at, i, len, v }));   // [at, i, len, v]
@@ -163,7 +163,7 @@ const T3 = [3, 5, 6, 7, 6, 5, 3, 5, 6, 7, 6, 5, 4, 5, 6, 8, 6, 5];
 // (`DEMO ? {} : {...}` dilipat bundler jadi `{}`). Di build penuh dan di Node (tes) __DEMO__ tidak ada / false, jadi semua pola ada.
 const DEMO = typeof __DEMO__ !== 'undefined' && __DEMO__;
 const PATTERNS_OPEN: Partial<Record<PlayStyle, Ev[]>> = {
-  Stab: P([0.5, 1.5, 2.5, 3.5].flatMap(at => stack(at, [3, 4, 5], 0.25, [0.8, 0.8, 0.8]))),   // contoh MIDI: C minor = C4 D#4 G4 dipukul serentak di offbeat, 1/16, velocity ~0.8
+  Stab: P([0.5, 1.5, 2.5, 3.5].flatMap(at => stack(at, [3, 4, 5], 0.25, [0.8, 0.8, 0.8]))),   // C minor = C4 D#4 G4 dipukul serentak di offbeat, 1/16, velocity ~0.8
   Pluck: P([[0, 3, H, 0.8], [0.5, 5, H, 0.5], [1, 6, H, 0.72], [1.5, 7, H, 0.36], [3, 6, H, 0.46]]),
 };
 const PATTERNS_FULL: Partial<Record<PlayStyle, Ev[]>> = DEMO ? {} : {
