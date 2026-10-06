@@ -374,7 +374,8 @@ html[data-theme="jembut"] .lane{background-image:
 .kbd__btn:active{transform:scale(.88)}
 .kbd__btn:disabled{opacity:.35;cursor:default;transform:none}
 .kbd__btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.keyboardkeyboardcontroller{position:relative;flex:none;height:var(--kh);margin:0 auto;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+.keyboardkeyboardcontroller{position:relative;flex:none;height:var(--kh);margin:0 auto;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+.keyboardkeyboardcontroller *{-webkit-touch-callout:none;-webkit-user-drag:none}
 .keyboardkeyboardcontroller .scrollable{position:absolute;top:0;left:0;height:100%;width:3534px;transition:transform .38s var(--ease-out)}
 .keyboardkeyboardcontroller.no-anim .scrollable{transition:none}
 .keyboardkeyboardcontroller .keys{position:relative;height:100%}
