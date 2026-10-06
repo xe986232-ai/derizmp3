@@ -1,20 +1,20 @@
 // Halaman "Shop Plugin" di Menu (kategori sejajar Project / Export / Pengaturan).
 // Tahap 1: hanya halamannya. Katalog = plugin yang sudah ada di aplikasi (status "Terpasang"); belum ada pembelian / unduhan.
-// Gaya flat: warna solid + garis tipis, tanpa bayangan / glow / gradasi (lihat blok ".shop" di styles.css).
+// Kartu bergaya bevel (tepi atas terang, tepi bawah gelap, gambar masuk seperti layar), lihat blok ".shop" di styles.css.
 
 type ShopKind = 'instrument' | 'effect';
-interface ShopItem { name: string; kind: ShopKind; desc: string; img: string }
+interface ShopItem { name: string; kind: ShopKind; desc: string; img: string; ar: string }
 
 const CATALOG: ShopItem[] = [
-  { name: 'DERIZ', kind: 'instrument', desc: 'Sampler: upload audio, mainkan dari keyboard atau piano roll, atur Speed, Pitch, dan Volume.', img: 'deriz' },
-  { name: 'MPCS', kind: 'instrument', desc: 'Manual Pitch Correct Sample: edit pitch sample dengan blok nada, seret naik atau turun.', img: 'mpcs' },
-  { name: 'MGCHORD', kind: 'instrument', desc: 'Pembuat chord progression: pilih Key, Length, Sound, dan Style strum.', img: 'mgchord' },
-  { name: 'Supersaw', kind: 'instrument', desc: 'Synth supersaw dengan Detune, Mix, filter, dan envelope.', img: 'supersaw' },
-  { name: 'Reverb', kind: 'effect', desc: 'Gema ruang: Mix, Size, Pre-Delay, Tone, dan Low Cut.', img: 'reverb' },
-  { name: 'Equalizer', kind: 'effect', desc: 'EQ 5 band dengan grafik respons dan level Output.', img: 'equalizer' },
-  { name: 'Filter', kind: 'effect', desc: 'Low-pass dan high-pass dalam satu knob Cutoff, plus Reso.', img: 'filter' },
-  { name: 'De-esser', kind: 'effect', desc: 'Meredam desis (sibilance) pada vokal: Freq, Thresh, Amount.', img: 'deesser' },
-  { name: 'Delay', kind: 'effect', desc: 'Delay stereo dengan panel sendiri.', img: 'delay' },
+  { name: 'DERIZ', kind: 'instrument', desc: 'Sampler: upload audio, mainkan dari keyboard atau piano roll, atur Speed, Pitch, dan Volume.', img: 'deriz', ar: '720/465' },
+  { name: 'MPCS', kind: 'instrument', desc: 'Manual Pitch Correct Sample: edit pitch sample dengan blok nada, seret naik atau turun.', img: 'mpcs', ar: '720/400' },
+  { name: 'MGCHORD', kind: 'instrument', desc: 'Pembuat chord progression: pilih Key, Length, Sound, dan Style strum.', img: 'mgchord', ar: '720/419' },
+  { name: 'Supersaw', kind: 'instrument', desc: 'Synth supersaw dengan Detune, Mix, filter, dan envelope.', img: 'supersaw', ar: '720/467' },
+  { name: 'Reverb', kind: 'effect', desc: 'Gema ruang: Mix, Size, Pre-Delay, Tone, dan Low Cut.', img: 'reverb', ar: '1/1' },
+  { name: 'Equalizer', kind: 'effect', desc: 'EQ 5 band dengan grafik respons dan level Output.', img: 'equalizer', ar: '4/5' },
+  { name: 'Filter', kind: 'effect', desc: 'Low-pass dan high-pass dalam satu knob Cutoff, plus Reso.', img: 'filter', ar: '720/467' },
+  { name: 'De-esser', kind: 'effect', desc: 'Meredam desis (sibilance) pada vokal: Freq, Thresh, Amount.', img: 'deesser', ar: '720/467' },
+  { name: 'Delay', kind: 'effect', desc: 'Delay stereo dengan panel sendiri.', img: 'delay', ar: '720/436' },
 ];
 
 const KIND_LABEL: Record<ShopKind, string> = { instrument: 'Instrumen', effect: 'Efek' };
@@ -42,10 +42,10 @@ export const SHOP_PAGE =
     '<ul class="shop__list mp__item" style="--i:2">' +
       CATALOG.map(p =>
         '<li class="shop__item" data-kind="' + p.kind + '">' +
-          '<div class="shop__art"><img src="' + IMG_BASE + p.img + '.webp" alt="Tampilan plugin ' + esc(p.name) + '" loading="lazy" decoding="async"></div>' +
+          '<div class="shop__art" style="aspect-ratio:' + p.ar + '"><img src="' + IMG_BASE + p.img + '.webp" alt="Tampilan plugin ' + esc(p.name) + '" loading="lazy" decoding="async"></div>' +
           '<div class="shop__top"><b class="shop__name">' + esc(p.name) + '</b><span class="shop__tag">' + KIND_LABEL[p.kind] + '</span></div>' +
           '<p class="shop__desc">' + esc(p.desc) + '</p>' +
-          '<span class="shop__state">Terpasang</span>' +
+          '<span class="shop__state"><i aria-hidden="true"></i>Terpasang</span>' +
         '</li>').join('') +
     '</ul>' +
     '<p class="mp__hint mp__item shop__more" style="--i:3">Plugin tambahan belum tersedia. Yang baru akan muncul di halaman ini.</p>' +
