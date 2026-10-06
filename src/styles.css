@@ -92,7 +92,8 @@ button{font:inherit;color:inherit;cursor:pointer}
   --bevel:inset 0 1px 0 rgba(255,255,255,.07),inset 0 -1px 0 rgba(0,0,0,.25),0 1px 3px rgba(0,0,0,.3);
   --bevel-hover:inset 0 1px 0 rgba(255,255,255,.11),inset 0 -1px 0 rgba(0,0,0,.25),0 6px 16px rgba(0,0,0,.3);
 }
-.tracklist{background:var(--bg);border-right:0}
+/* baris atas kolom track (setinggi ruler, 48px) disamakan warna & garis bawahnya dengan ruler, jadi tombol panah dan ruler terlihat satu bar yang menyambung */
+.tracklist{background:linear-gradient(var(--line),var(--line)) 0 47px/100% 1px no-repeat,linear-gradient(var(--tl-ruler),var(--tl-ruler)) 0 0/100% 48px no-repeat,var(--bg);border-right:0}
 .timeline-controls-header-wrapper{background:var(--tl-ruler);border-bottom:1px solid var(--line)}
 .trackheader-container{padding:4px 4px 0;border:0}
 .trackheader,.trackheader--selected{background:var(--card);border-radius:16px;overflow:hidden;height:100%}
