@@ -374,7 +374,7 @@ function eqKnobsHtml(d: EffectDef, fx: Fx): string {
 }
 function eqHtml(fx: Fx, d: EffectDef): string {
   const sel = bandOf(fx);
-  // satu panel (gaya soothe2): grafik di atas, bar band + knob di bawah, semuanya di dalam kartu
+  // satu panel: grafik di atas, bar band + knob di bawah, semuanya di dalam kartu
   return `<div class="eq"><div class="eq__graph"><canvas class="eq__cv" role="img" aria-label="Grafik respons Equalizer dengan spektrum audio: seret titik untuk mengatur frekuensi dan gain"></canvas>` +
     `<div class="eq__bar" style="--c:${EQ_COLORS[sel]}">` +
     `<div class="eq__bands" role="tablist" aria-label="Band Equalizer">${EQ_BANDS.map((b, i) =>

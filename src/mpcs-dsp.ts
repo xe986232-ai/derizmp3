@@ -1,11 +1,11 @@
 // MPCS (Manual Pitch Correct Sample): inti DSP, murni (tanpa DOM / Web Audio) supaya bisa dites di Node dan nanti diganti WASM tanpa menyentuh UI.
-// Alur ala Melodyne: analyze() sekali (pitch pYIN + segmentasi nada), lalu render() ulang tiap kali nada diedit.
+// Alur: analyze() sekali (pitch pYIN + segmentasi nada), lalu render() ulang tiap kali nada diedit.
 //   analyze : mono -> kurva pitch per frame (f0) + daftar nada
 //             - pYIN: tiap frame menghasilkan beberapa kandidat F0 (bukan satu ambang tetap), HMM + Viterbi memilih jalur yang mulus
 //             - segmentasi dengan hysteresis (Schmitt trigger) + envelope energi pendek untuk nada berulang
 //   render  : nada yang bersambung dirender sebagai satu rangkaian TD-PSOLA dengan rasio geser yang berubah mulus di zona transisi
 //             (tidak ada "tangga" di perbatasan nada); titik pitch dipilih dengan pruning + korelasi lokal, grain ditaruh fraksional
-// Acuan: Mauch & Dixon (pYIN), Colotte & Laprie (pitch marking PSOLA), Smuts (hysteresis, metrik evaluasi), DAFx-2023 (dynamic pitch warping), alur transisi ala Melodyne.
+// Acuan: Mauch & Dixon (pYIN), Colotte & Laprie (pitch marking PSOLA), Smuts (hysteresis, metrik evaluasi), DAFx-2023 (dynamic pitch warping).
 
 export interface PitchTrack {
   sr: number;
@@ -23,11 +23,11 @@ export interface Note {
   man?: boolean;        // target diatur tangan (seret / panah): selalu dikoreksi penuh, tidak ikut knob Center, tidak disentuh snapTargets
 }
 
-// Tiga knob global ala NewTone (semua 0..1):
+// Tiga knob global (semua 0..1):
 //   center     : seberapa jauh pitch pusat tiap nada ditarik ke targetnya (semiton terdekat). 0 = pitch asli, 1 = tepat di target
 //   variation  : sisa variasi alami di dalam nada (drift lambat + vibrato). 1 = asli, 0 = datar (pitch tetap di pusat nada)
 //   transition : cara pindah antar nada bersambung. 0.5 = bawaan: luncuran alami penyanyi dipertahankan.
-//                ke 0 : luncuran asli dibuang, pindah nada makin tajam (2 ms = lompat robotik ala hard-tune)
+//                ke 0 : luncuran asli dibuang, pindah nada makin tajam (2 ms = lompat robotik)
 //                ke 1 : luncuran asli diganti luncuran sintetis yang makin lebar (300 ms = legato panjang)
 export interface Controls { center: number; variation: number; transition: number }
 export const DEFAULT_CONTROLS: Controls = { center: 0, variation: 1, transition: 0.5 };

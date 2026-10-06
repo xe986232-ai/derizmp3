@@ -143,7 +143,7 @@ applyUiPalette();
 window.addEventListener('derizmp3:ui', () => { applyUiPalette(); schedule(); });
 const soft = (hex: string, a: number): string => { const k = hexRgb(hex); return 'rgba(' + k[0] + ',' + k[1] + ',' + k[2] + ',' + a + ')'; };
 
-// Warna nada: pastel (campuran warna track + putih) dengan garis tepi gelap & teks gelap, seperti nada hijau muda di FL Studio
+// Warna nada: pastel (campuran warna track + putih) dengan garis tepi gelap & teks gelap
 const hexRgb = (h: string): number[] => { const m = h.replace('#', ''), f = m.length === 3 ? m.split('').map(x => x + x).join('') : m, n = parseInt(f, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 const mixRgb = (a: number[], b: number[], t: number): string => 'rgb(' + a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(',') + ')';
 let noteTh = { c: '', fill: '', sel: '', text: '' };

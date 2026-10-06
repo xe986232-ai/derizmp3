@@ -1,4 +1,4 @@
-// MPCS (Manual Pitch Correct Sample): jendela editor pitch ala Melodyne, bergaya plugin DERIZ (faceplate logam 3D). Tahap 1 (starter):
+// MPCS (Manual Pitch Correct Sample): jendela editor pitch manual, bergaya plugin DERIZ (faceplate logam 3D). Tahap 1 (starter):
 //   upload audio -> analisis di Worker -> blok nada di piano roll -> seret blok ke atas / bawah (snap semiton) -> knob Trans / Variation / Center -> putar hasil.
 // Dibuka lewat tombol + di halaman Plugin pada panel efek (pilih "MPCS"); tidak ada kartunya di daftar efek.
 // Inti DSP ada di mpcs-dsp.ts (murni), jalan di mpcs-worker.ts.
@@ -32,7 +32,7 @@ const BLACK = new Set([1, 3, 6, 8, 10]);
 const noteName = (m: number): string => { const r = Math.round(m); return NAMES[((r % 12) + 12) % 12] + (Math.floor(r / 12) - 1); };
 const fmtShift = (s: number): string => { const c = Math.round(s * 100); return (c > 0 ? '+' : '') + (Math.abs(c) % 100 === 0 ? c / 100 + ' st' : c + ' ct'); };
 
-// Tiga knob global ala NewTone. Markup & kelas sama dengan knob efek (fx-rack.ts) supaya gayanya menyatu dengan DAW.
+// Tiga knob global (Center / Variation / Transition). Markup & kelas sama dengan knob efek (fx-rack.ts) supaya gayanya menyatu dengan DAW.
 const knobSvg = '<svg viewBox="0 0 36 36" aria-hidden="true" class="circular-chart">' +
   '<path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" stroke-dasharray="75, 100" class="circle-bg" style="transform-origin:18px 18px;transform:rotate(225deg)"></path>' +
   '<path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" stroke-dashoffset="0" stroke-dasharray="0 100" class="circle accent-on" style="transform:rotate(225deg)"></path>' +

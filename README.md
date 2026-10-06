@@ -30,7 +30,7 @@ Kode: `src/automation.ts` (data kurva + editor), `src/fx-rack.ts` (`lastTouched`
 ## MPCS: knob Center / Variation / Transition
 Tampilan plugin: panel magenta logam sikat (header + bar kontrol), panel tengah perak berisi editor piano roll berbingkai hitam, layar LCD hitam untuk status, miring 3D tipis mengikuti kursor. Bar kontrol hanya berisi tombol Upload audio, tiga knob (Trans, Variation, Center), dan tombol Play / Pause; Snap / Reset, Hasil / Asli, Drift / Vibrato, zoom, dan ekspor WAV tidak ada di UI. Nada otomatis di-snap ke semiton terdekat saat audio dimuat. Ukuran kartu menyesuaikan HP (landscape 560x330, portrait lebih tinggi dengan knob di baris sendiri). Kode UI: `src/mpcs.ts` + blok "MPCS" di `src/styles.css`.
 
-Tiga knob global di toolbar MPCS, fungsinya meniru NewTone dan semuanya ikut dirender (bukan hiasan). Nilai dikirim ke Worker lewat `ctl`, dan garis oranye di editor memakai kurva yang sama dengan yang didengar (`shiftCurve`).
+Tiga knob global di toolbar MPCS semuanya ikut dirender (bukan hiasan). Nilai dikirim ke Worker lewat `ctl`, dan garis oranye di editor memakai kurva yang sama dengan yang didengar (`shiftCurve`).
 
 | Knob | Bawaan | Fungsi |
 |---|---|---|

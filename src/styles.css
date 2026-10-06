@@ -1745,7 +1745,7 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .mt__scale{position:absolute;left:calc(var(--u)*20);width:calc(var(--u)*20);top:0;height:100%}
 .mt__scale span{position:absolute;left:0;right:0;top:calc(var(--u)*var(--y));transform:translateY(-50%);text-align:center;font-size:calc(var(--u)*11);font-weight:700;color:#f4f4f6;line-height:1}
 
-/* ---------- Equalizer (gaya soothe2): grafik + spektrum hidup di atas, bar band + knob di dalam panel yang sama ---------- */
+/* ---------- Equalizer: grafik + spektrum hidup di atas, bar band + knob di dalam panel yang sama ---------- */
 .eq{display:flex;flex-direction:column;padding:10px 0 4px}
 .eq__graph{position:relative;display:flex;flex-direction:column;border-radius:16px;overflow:hidden;background:#b7c8da;box-shadow:inset 0 0 0 1px rgba(255,255,255,.4),0 6px 18px rgba(0,0,0,.35)}
 .eq__cv{display:block;width:100%;height:190px;touch-action:none;cursor:crosshair;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
