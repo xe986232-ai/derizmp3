@@ -119,6 +119,9 @@ Object.assign(plugs[1], { user_id: 'uid-1', claimed_at: new Date().toISOString()
 const pl2 = await (await get(C)).json() as { plugins: any[] };
 ok('GET: token ditebus menampilkan email pemilik', pl2.plugins.find((x) => x.claimed)?.email === 'a@x.id');
 ok('p_delete token ditebus ditolak 409', (await post({ action: 'p_delete', id: plugs[1].token_hash }, C)).status === 409 && plugs.length === 2);
+ok('p_update mengubah catatan', (await post({ action: 'p_update', id: plugs[1].token_hash, note: 'Budi lunas' }, C)).status === 200 && plugs[1].note === 'Budi lunas');
+ok('p_update tanpa note 400', (await post({ action: 'p_update', id: plugs[1].token_hash }, C)).status === 400);
+ok('p_update id tak ada 404', (await post({ action: 'p_update', id: 'c'.repeat(64), note: 'x' }, C)).status === 404);
 ok('p_revoke mencabut', (await post({ action: 'p_revoke', id: plugs[1].token_hash }, C)).status === 200 && plugs[1].status === 'revoked');
 ok('p_restore mengaktifkan lagi', (await post({ action: 'p_restore', id: plugs[1].token_hash }, C)).status === 200 && plugs[1].status === 'active');
 ok('p_delete token belum ditebus', (await post({ action: 'p_delete', id: pid }, C)).status === 200 && plugs.length === 1);

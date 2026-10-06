@@ -7,6 +7,7 @@
 //  POST { action: 'update', id, note?, max_devices?, extend_days?, duration_days? }
 //  POST { action: 'p_create', plugin, count, note }            buat token PLUGIN (Shop Plugin), token asli hanya dikirim sekali
 //  POST { action: 'p_reveal' | 'p_revoke' | 'p_restore' | 'p_delete', id }   kelola token plugin (p_delete hanya yang belum ditebus)
+//  POST { action: 'p_update', id, note }                        ubah catatan token plugin
 //  POST { action: 'reveal', id }           buka token asli satu lisensi (untuk ikon mata / tombol salin di dashboard)
 // id = token_hash. Token asli disimpan TERENKRIPSI (AES-GCM, kunci turunan SESSION_SECRET) di kolom token_enc, tidak pernah ikut
 // dalam daftar GET; hanya aksi 'reveal' (wajib sesi admin) yang membukanya. Token yang dibuat sebelum fitur ini hanya punya hash.
@@ -131,6 +132,11 @@ export async function POST(req: Request): Promise<Response> {
       if (!cur.token_enc) return json({ error: 'Token ini tidak punya salinan terenkripsi.' }, 404);
       const token = await unseal(cur.token_enc, cur.token_hash);
       return token ? json({ ok: true, token }) : json({ error: 'Token tidak bisa dibuka. Kemungkinan SESSION_SECRET di server pernah diganti.' }, 500);
+    }
+    if (b.action === 'p_update') {
+      if (!('note' in b)) return json({ error: 'Tidak ada yang diubah.' }, 400);
+      const r = await rest<unknown[]>('plugin_licenses?' + q, { method: 'PATCH', returnRows: true, body: { note: clean(b.note) } });
+      return r.length ? json({ ok: true }) : json({ error: 'Token plugin tidak ditemukan.' }, 404);
     }
     if (b.action === 'p_revoke' || b.action === 'p_restore') {
       try {

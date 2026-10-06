@@ -140,7 +140,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   <h2 id="eTitle">Ubah lisensi</h2>
   <div class="fields">
     <div><label for="eNote">Catatan</label><input id="eNote" maxlength="200"></div>
-    <div><label for="eDev">Maks perangkat</label><input id="eDev" type="number" min="1" max="20" inputmode="numeric"></div>
+    <div id="eDevW"><label for="eDev">Maks perangkat</label><input id="eDev" type="number" min="1" max="20" inputmode="numeric"></div>
     <div id="eExtW"><label for="eExt">Perpanjang (hari)</label><input id="eExt" type="number" min="1" max="3650" placeholder="kosong = tidak diubah" inputmode="numeric"></div>
     <div id="eDurW"><label for="eDur">Masa berlaku (hari, kosong = seumur hidup)</label><input id="eDur" type="number" min="1" max="3650" inputmode="numeric"></div>
   </div>
@@ -303,7 +303,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     if (!sel.options.length) sel.innerHTML = pluginIds.map(function (x) { return '<option value="' + esc(x) + '">' + esc(x.toUpperCase()) + '</option>'; }).join('');
     $('plist').innerHTML = plugins.length ? plugins.map(function (l) {
       var st = pState(l), shown = !!tokenShown[l.token_hash];
-      var acts = (l.status === 'revoked' ? '<button class="ghost" data-pa="p_restore" data-id="' + l.token_hash + '">Aktifkan</button>' : '<button class="ghost danger" data-pa="p_revoke" data-id="' + l.token_hash + '">Cabut</button>') +
+      var acts = '<button class="ghost" data-pa="p_edit" data-id="' + l.token_hash + '">Ubah</button>' + (l.status === 'revoked' ? '<button class="ghost" data-pa="p_restore" data-id="' + l.token_hash + '">Aktifkan</button>' : '<button class="ghost danger" data-pa="p_revoke" data-id="' + l.token_hash + '">Cabut</button>') +
         (!l.claimed ? '<button class="ghost danger" data-pa="p_delete" data-id="' + l.token_hash + '">Hapus</button>' : '');
       var tok = l.has_token ? '<div class="tok"><span class="tk' + (shown ? ' on' : '') + '">' + esc(shown ? tokenCache[l.token_hash] : 'PLG-••••-••••-••••-••••') + '</span>' +
         '<button type="button" class="ib" data-pa="p_eye" data-id="' + l.token_hash + '" aria-label="' + (shown ? 'Sembunyikan token' : 'Tampilkan token') + '">' + (shown ? ICON_EYE_OFF : ICON_EYE) + '</button>' +
@@ -325,6 +325,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   $('plist').addEventListener('click', async function (e) {
     var b = e.target.closest('button[data-pa]'); if (!b) return;
     var a = b.dataset.pa, id = b.dataset.id;
+    if (a === 'p_edit') return openPluginEdit(id);
     if (a === 'p_eye' || a === 'p_copy') {
       b.disabled = true;
       try {
@@ -344,17 +345,24 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   // ubah
   function openEdit(id) {
     var l = data.filter(function (x) { return x.token_hash === id; })[0]; if (!l) return;
-    editing = l; $('eErr').textContent = '';
+    editing = l; $('eErr').textContent = ''; $('eDevW').hidden = false;
     $('eTitle').textContent = 'Ubah #' + id.slice(0, 8);
     $('eNote').value = l.note || ''; $('eDev').value = l.max_devices; $('eExt').value = ''; $('eDur').value = l.duration_days || '';
     $('eExtW').hidden = !l.expires_at; $('eDurW').hidden = l.claimed;
     $('dEdit').showModal();
   }
+  function openPluginEdit(id) {
+    var l = plugins.filter(function (x) { return x.token_hash === id; })[0]; if (!l) return;
+    editing = { token_hash: id, plugin: true }; $('eErr').textContent = '';
+    $('eTitle').textContent = 'Ubah token ' + l.plugin.toUpperCase() + ' #' + id.slice(0, 8);
+    $('eNote').value = l.note || ''; $('eDevW').hidden = true; $('eExtW').hidden = true; $('eDurW').hidden = true;
+    $('dEdit').showModal();
+  }
   $('eCancel').addEventListener('click', function () { $('dEdit').close(); });
   $('eSave').addEventListener('click', async function () {
-    var l = editing, body = { action: 'update', id: l.token_hash, note: $('eNote').value, max_devices: $('eDev').value };
-    if (!$('eExtW').hidden && $('eExt').value) body.extend_days = $('eExt').value;
-    if (!$('eDurW').hidden) body.duration_days = $('eDur').value || null;
+    var l = editing, body = l.plugin ? { action: 'p_update', id: l.token_hash, note: $('eNote').value } : { action: 'update', id: l.token_hash, note: $('eNote').value, max_devices: $('eDev').value };
+    if (!l.plugin && !$('eExtW').hidden && $('eExt').value) body.extend_days = $('eExt').value;
+    if (!l.plugin && !$('eDurW').hidden) body.duration_days = $('eDur').value || null;
     $('eSave').disabled = true; $('eErr').textContent = '';
     try { await api('POST', body); $('dEdit').close(); toast('Disimpan'); await load(); }
     catch (e) { $('eErr').textContent = e.message; }
