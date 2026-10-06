@@ -72,26 +72,27 @@ button{font:inherit;color:inherit;cursor:pointer}
 /* garis grid digambar per-track, sama persis dengan tick di ruler: bar, ketukan (1/4), 1/16 */
 .lane{height:var(--lane);border-bottom:1px solid var(--line);
   background-image:
-    linear-gradient(90deg,rgba(255,255,255,.16) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(255,255,255,var(--beat-a,.07)) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(255,255,255,var(--sub-a,0)) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(255,255,255,var(--mid-a,0)) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(255,255,255,var(--fine-a,0)) 1px,transparent 1px);
+    linear-gradient(90deg,rgba(var(--tl-grid),.16) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(var(--tl-grid),var(--beat-a,.07)) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(var(--tl-grid),var(--sub-a,0)) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(var(--tl-grid),var(--mid-a,0)) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(var(--tl-grid),var(--fine-a,0)) 1px,transparent 1px);
   background-size:var(--bar) 100%,calc(var(--bar) / 4) 100%,calc(var(--bar) / 16) 100%,calc(var(--bar) / 32) 100%,calc(var(--bar) / 64) 100%}
-.lane.alt{background-color:rgba(255,255,255,.02)}
+.lane.alt{background-color:rgba(255,92,158,.025)}
 .playhead{position:absolute;top:-20px;left:-4px;z-index:4;pointer-events:none;color:#ff5a6e;transform:translateX(0);will-change:translate}
 .playhead-body{position:absolute;left:4px;top:20px;bottom:0;width:1px;background:currentColor;height:100vh}
 .playhead-head svg{display:block;fill:currentColor}
 /* ===== Tampilan utama ===== */
 :root{
-  --bg:#13131a;--panel:#13131a;--card:#25252f;--line:#2b2b37;--text:#f2f2f6;--muted:#b9b9c9;
-  --accent:#5b3de8;--accent-soft:rgba(91,61,232,.28);--lane:72px;
+  --bg:#0f0d13;--panel:#0f0d13;--card:#25252f;--line:#2a2233;--text:#f2f2f6;--muted:#b9b9c9;
+  --accent:#ff5c9e;--accent-soft:rgba(255,92,158,.26);--lane:72px;
+  --tl-ruler:#19151f;--tl-grid:166,140,206;--tl-play:#2dd4bf;
   --background-tinted-base:#25252f;--background-tinted-press:#1d1d26;
   --bevel:inset 0 1px 0 rgba(255,255,255,.07),inset 0 -1px 0 rgba(0,0,0,.25),0 1px 3px rgba(0,0,0,.3);
   --bevel-hover:inset 0 1px 0 rgba(255,255,255,.11),inset 0 -1px 0 rgba(0,0,0,.25),0 6px 16px rgba(0,0,0,.3);
 }
 .tracklist{background:var(--bg);border-right:0}
-.timeline-controls-header-wrapper{background:var(--bg);border-bottom:1px solid var(--line)}
+.timeline-controls-header-wrapper{background:var(--tl-ruler);border-bottom:1px solid var(--line)}
 .trackheader-container{padding:4px 4px 0;border:0}
 .trackheader,.trackheader--selected{background:var(--card);border-radius:16px;overflow:hidden;height:100%}
 .trackheader__border-left{width:5px;background:var(--accent)}
@@ -125,7 +126,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .addtrack{margin:4px;width:calc(100% - 8px);height:44px;justify-content:center;gap:8px;border:0;border-radius:16px;background:#1f1f29;color:var(--text);font-size:15px;font-weight:600}
 .addtrack:hover{background:#262633;color:var(--text)}
 .addtrack .app-icon{width:16px!important;height:16px!important}
-.playhead{color:#e8e8ee}
+.playhead{color:var(--tl-play)}
 .trackheader,.trackheader--selected{box-shadow:none}   /* track tidak terpilih: polos, tanpa outline */
 .trackheader{background-color:#1f1f27}                 /* warna card polos */
 .trackheader--selected{background-color:var(--card)}   /* #25252f */
@@ -893,8 +894,8 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 @media (prefers-reduced-motion:reduce){.pr__more svg,.pr__sw,.pr__sw::after{transition:none!important}}
 
 /* area utama: penggaris atas, piano kiri, grid (scroll native) */
-.pr__main{position:relative;flex:1;min-height:0;display:grid;grid-template-columns:64px minmax(0,1fr);grid-template-rows:32px minmax(0,1fr);background:#101016}
-.pr__corner{background:#1e1e26;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.pr__main{position:relative;flex:1;min-height:0;display:grid;grid-template-columns:64px minmax(0,1fr);grid-template-rows:32px minmax(0,1fr);background:#0f0d13}
+.pr__corner{background:#19151f;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
 .pr__phclip{position:absolute;left:64px;right:0;top:0;bottom:0;overflow:hidden;pointer-events:none;z-index:6}
 .pr__ph{position:absolute;top:0;bottom:0;left:-4px;width:9px;color:#e8e8ee;visibility:hidden;will-change:translate}
 .pr__ph svg{position:absolute;top:6px;left:0;display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
@@ -902,14 +903,14 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .pr__ruler,.pr__keys{display:block;align-self:start;justify-self:start}
 .pr__keys{touch-action:none;cursor:pointer;-webkit-user-select:none;user-select:none}
 .pr__ruler{touch-action:none;cursor:pointer;-webkit-user-select:none;user-select:none}
-.pr__scroll{background:#101016;position:relative;overflow:auto;display:grid;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#3a3a4a transparent}
+.pr__scroll{background:#0f0d13;position:relative;overflow:auto;display:grid;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#3a3a4a transparent}
 .pr__space{grid-area:1/1;pointer-events:none}
 .pr__clip{grid-area:1/1;position:sticky;top:0;left:0;overflow:hidden;align-self:start;justify-self:start;touch-action:none}
 .pr__grid{position:absolute;top:0;left:0;display:block;touch-action:none;-webkit-user-select:none;user-select:none;transform-origin:0 0;will-change:transform}
 .pr__gridbg{position:absolute;top:0;left:0;display:block;pointer-events:none;transform-origin:0 0;will-change:transform}   /* lapis latar grid (baris + garis): di bawah lapis nada, tidak menerima sentuhan */
 
 /* panel Velocity: hanya batang velocity (tanpa strip judul, supaya grid tidak menyempit); tombol buka/tutup = panah kecil di kanan bawah */
-.pr__vel{flex:none;background:#101016}
+.pr__vel{flex:none;background:#0f0d13}
 .pr__velbody{display:none;position:relative;height:clamp(48px,18vh,84px);overflow:hidden;border-top:1px solid var(--line)}
 .pr__vel.is-open .pr__velbody{display:block}
 .pr__velc{position:absolute;top:0;left:0;display:block;touch-action:none;-webkit-user-select:none;user-select:none;cursor:ns-resize}

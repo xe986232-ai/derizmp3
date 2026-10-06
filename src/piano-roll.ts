@@ -117,12 +117,12 @@ function fit(c: HTMLCanvasElement, w: number, h: number, cap = 8) {
 
 // garis vertikal bertingkat: bar > ketukan > 1/2 > 1/4 > 1/8
 // Latar: warna semula. Garis grid & penggaris bukan putih lagi, tapi biru-ungu lembut (satu rona dengan latar) supaya tidak bertabrakan dengan nada.
-const GRID = '138,143,200';   // rgb dasar garis grid
+const GRID = '166,140,206';   // rgb dasar garis grid
 const gl = (a: number): string => 'rgba(' + GRID + ',' + a + ')';
 const PR = {
-  bg: '#101016', rowWhite: '#1f1f29', rowBlack: '#17171e', beyond: '#101016', hover: gl(0.07),
+  bg: '#0f0d13', rowWhite: '#1b1722', rowBlack: '#15121b', beyond: '#0f0d13', hover: gl(0.07),
   rowLine: gl(0.07), octLine: gl(0.3),
-  ruler: '#1e1e26', rulerLine: '#2c2c3d', rulerText: '#d9dcf2', rulerTick1: '#7f84b4', rulerTick2: '#4f5382', rulerTick3: '#363a5c', dim: '#7f84b4'
+  ruler: '#19151f', rulerLine: '#2a2233', rulerText: '#e6dcf5', rulerTick1: '#8f7fb0', rulerTick2: '#5e5280', rulerTick3: '#3d3358', dim: '#8f7fb0'
 };
 const LEVELS: Array<[number, number]> = [[4, 0.34], [1, 0.17], [0.5, 0.1], [0.25, 0.07], [0.125, 0.05]];
 const LEVEL_FILL = LEVELS.map(l => gl(l[1]));

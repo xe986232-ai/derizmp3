@@ -86,20 +86,20 @@ function paintRuler(force) {
   const b0 = Math.max(0, Math.floor(x0 / BAR_W) - 1), b1 = Math.min(BARS, Math.ceil(x1 / BAR_W) + 1);
   for (let b = b0; b < b1; b++) {
     const bx = b * BAR_W;
-    g.fillStyle = '#8a8a9a';
+    g.fillStyle = '#9486ad';
     if (b % every === 0) { g.font = '11px system-ui, sans-serif'; g.fillRect(bx + .5, 24, 1, 24); g.fillText(b + 1, bx + 4, 38); }
     else g.fillRect(bx + .5, 38, 1, 10);
     for (let j = step; j < 64; j += step) {
       const x = bx + j * BAR_W / 64;
       if (x < x0 - 60 || x > x1 + 60) continue;
       const h = j % 16 === 0 ? 10 : j % 4 === 0 ? 5 : j % 2 === 0 ? 3 : 2;
-      g.fillStyle = h >= 10 ? '#8a8a9a' : '#6f6f80';
+      g.fillStyle = h >= 10 ? '#9486ad' : '#6f6385';
       g.fillRect(x + .5, 48 - h, 1, h);
       if (j % 16 === 0 && BAR_W >= 240) {            // label ketukan: 3.2 = bar 3 ketukan 2
-        g.fillStyle = '#6f6f80'; g.font = '10px system-ui, sans-serif';
+        g.fillStyle = '#6f6385'; g.font = '10px system-ui, sans-serif';
         g.fillText((b + 1) + '.' + (j / 16 + 1), x + 4, 38);
       } else if (j % 4 === 0 && BAR_W >= 1280) {      // label 1/16: 3.2.4
-        g.fillStyle = '#585868'; g.font = '9px system-ui, sans-serif';
+        g.fillStyle = '#5a4f70'; g.font = '9px system-ui, sans-serif';
         g.fillText((b + 1) + '.' + (((j / 16) | 0) + 1) + '.' + ((j % 16) / 4 + 1), x + 3, 38);
       }
     }
@@ -203,7 +203,7 @@ const initKnobs = root => root.querySelectorAll('.knob-input').forEach(el => {
   render();
 });
 // Menu titik tiga: Delete & Color
-const COLORS = ['#5b3de8','#2f7bff','#14b8a6','#3fbf5f','#ff9f1c','#ff4d8d','#ef4444','#facc15'];
+const COLORS = ['#ff5c9e','#a66cff','#5b8ff3','#2dd4bf','#3fbf5f','#f2b632','#ff8a4c','#ef4444'];
 let menu = null, sub = null, menuBtn = null;
 function fadeOut(el) {
   el.style.pointerEvents = 'none';
