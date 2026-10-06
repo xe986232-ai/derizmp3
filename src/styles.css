@@ -2149,3 +2149,8 @@ html[data-ui="mono"] .pr__corner{background:#18181b}
 .mp__lic{margin-top:6px;font-size:12px}
 .mp__lic summary{cursor:pointer}
 .mp__lic p{margin:6px 0 0}
+
+/* knob pan di kartu track: disc putih solid + garis gelap (datar, tanpa busur) */
+.trkcard__pan .circle-bg,.trkcard__pan .circle,.trkcard__pan .circle-inner-stroke{display:none}
+.trkcard__pan .circle-inner{fill:#f1f1f5;transform-origin:18px 18px;transform:scale(1.16)}
+.trkcard__pan .knob-pos{stroke:#16161d;stroke-width:3.2}
