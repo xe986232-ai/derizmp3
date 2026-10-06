@@ -3,7 +3,7 @@
 // CATATAN: ini gembok di sisi aplikasi (UI). Kodenya masih ada di bundle; pemisahan chunk berotorisasi adalah tahap berikutnya.
 import { FULL } from './account';
 
-export const PAID = ['mgchord'] as const;   // harus sama dengan server/plugins.ts
+export const PAID: readonly string[] = [];   // kosong: MGCHORD sekarang gratis (harus sama dengan server/plugins.ts)
 const KEY = 'mx_plg';
 const GRACE_MS = 7 * 24 * 3600 * 1000;      // salinan lokal boleh dipakai offline paling lama 7 hari sejak dikonfirmasi server
 
