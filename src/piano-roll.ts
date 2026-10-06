@@ -569,6 +569,25 @@ export function setPianoRollPlayhead(beats: number, motion?: {perSec: number; de
 // ---------- sinkron ke timeline: isi note ditampilkan mini di dalam pattern ----------
 let onChange: ((id: string) => void) | null = null, notified = '';
 export const setPianoRollChangeHandler = (fn: (id: string) => void) => { onChange = fn; };
+
+// ---------- preview suara: nada berbunyi lewat instrumen pemilik piano roll (DERIZ / Supersaw) saat ditambah atau digeser ----------
+// main.ts yang tahu instrumen mana yang sedang diedit; piano roll hanya memberi tahu nada (MIDI) mana yang harus bunyi / dilepas.
+export interface PianoRollPreview { on(midi: number): void; off(midi: number): void; }
+let pv: PianoRollPreview | null = null, pvMidi = -1, pvTimer = 0;
+const PV_TAP_MS = 380;   // tap / panah keyboard: bunyi singkat lalu dilepas sendiri (tidak ada jari yang menahan)
+export const setPianoRollPreviewHandler = (h: PianoRollPreview | null) => { pv = h; };
+function pvStop() {
+  window.clearTimeout(pvTimer); pvTimer = 0;
+  if (pvMidi >= 0) { const m = pvMidi; pvMidi = -1; pv?.off(m); }
+}
+// hold = true: bunyi sampai pvStop() (jari / mouse masih menahan); pitch sama tidak dibunyikan ulang. false: bunyi singkat lalu lepas sendiri.
+function pvPlay(m: number, hold = true) {
+  if (!pv) return;
+  if (hold && m === pvMidi) return;
+  pvStop();   // geser naik / turun: nada sebelumnya dilepas, nada di baris baru langsung bunyi
+  pvMidi = m; pv.on(m);
+  if (!hold) pvTimer = window.setTimeout(pvStop, PV_TAP_MS);
+}
 // Tap / seret di penggaris (atas) = pindahkan playhead ke posisi itu. beats = ketukan dari awal pattern; final = jari/klik dilepas.
 let onSeek: ((beats: number, final: boolean) => void) | null = null;
 export const setPianoRollSeekHandler = (fn: (beats: number, final: boolean) => void) => { onSeek = fn; };
@@ -786,6 +805,7 @@ function nudge(dB: number, dP: number) {
   if (!dB && !dP) return;
   pushUndo();
   for (const n of sel) { n.s += dB; n.p += dP; }
+  if (dP) pvPlay(sel[0].p, false);   // panah atas / bawah: dengarkan nada di baris barunya
   schedule();
 }
 
@@ -857,6 +877,7 @@ function hitHandle(cx: number, cy: number): Note | null {
 function commit() { if (g && !g.pushed) { pushUndo(g.snap0); g.pushed = true; } }
 
 function cancelGesture() {
+  pvStop();
   if (g) clearTimeout(g.timer);
   if (g && g.pushed) { st.notes = JSON.parse(g.snap0) as Note[]; undoStack.pop(); }
   g = null; updateUI(); schedule();
@@ -903,6 +924,7 @@ function onDown(e: PointerEvent) {
     if (!selected.has(h.n.id)) { if (!e.shiftKey) selected.clear(); selected.add(h.n.id); }
     rememberNote(h.n);   // klik nada: nada berikutnya meniru panjang, slide, dan velocity nada ini
     g = {...base, kind: 'move', anchor: {...h.n}, orig: st.notes.filter(n => selected.has(n.id)).map(n => ({...n}))};
+    pvPlay(h.n.p);   // pegang nada = langsung terdengar; digeser naik / turun, suaranya ikut pindah baris
     updateUI(); schedule(); return;
   }
   if (t === 'select') {                         // area kosong: marquee
@@ -978,7 +1000,7 @@ function onMove(e: PointerEvent) {
     else if (!g.desel) {                                              // mouse / pen: pasang nada, seret ke kanan = nada panjang
       selected.clear();
       const n = addNoteAt(g.x0, g.y0);
-      if (n) { g.kind = 'new'; g.anchor = n; g.changed = true; updateUI(); schedule(); }
+      if (n) { g.kind = 'new'; g.anchor = n; g.changed = true; pvPlay(n.p); updateUI(); schedule(); }
     }
   }
   switch (g.kind) {
@@ -1005,6 +1027,7 @@ function onMove(e: PointerEvent) {
       if (!g.changed && (dB || dP)) { commit(); g.changed = true; }
       if (!g.refs) g.refs = g.orig!.map(o => st.notes.find(q => q.id === o.id));   // sekali per gesture, bukan find() per nada per gerakan
       g.orig!.forEach((o, i) => { const n = g!.refs![i]; if (n) { n.s = o.s + dB; n.p = o.p + dP; } });
+      if (g.moved) pvPlay(a0.p + dP);   // geser naik / turun: nada di baris yang baru langsung bunyi (geser kanan / kiri saja tidak membunyikan ulang)
       schedule(); break;
     }
     case 'resize': {
@@ -1039,12 +1062,13 @@ function onUp(e: PointerEvent) {
   if (ptrs.size < 2) { const was = !!pinch; pinch = null; if (was && zoomPend) { window.clearTimeout(zoomEndT); commitZoom(); } }
   if (g && g.id === e.pointerId) {
     clearTimeout(g.timer);
+    pvStop();   // jari / mouse dilepas: nada yang sedang ditahan ikut dilepas
     if (g.kind === 'tapdraw' && !g.moved && e.type === 'pointerup') {
       if (g.desel) { selected.clear(); }          // ada seleksi: tap kosong cuma melepas seleksi
       else {
         selected.clear();
         const n = addNoteAt(g.x0, g.y0);
-        if (n) lastLen = n.l;
+        if (n) { lastLen = n.l; pvPlay(n.p, false); }   // tap = pasang nada: bunyi singkat
       }
     }
     if ((g.kind === 'move' || g.kind === 'resize') && g.moved) barOff = true;   // habis drag note: jangan tampilkan menu
@@ -1290,6 +1314,7 @@ export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.
   if (!root) { root = build(); host.appendChild(root); }
   const key = opts.id || opts.track + '/' + opts.pattern;
   if (key !== curKey) { undoStack = []; redoStack = []; selected = new Set(); }
+  pvStop();   // pindah pattern / VST: lepas nada preview yang masih bunyi
   curKey = key;
   st = states.get(key) || {notes: [], nextId: 1};
   states.set(key, st);
@@ -1320,7 +1345,7 @@ export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.
 
 export function closePianoRoll() {
   if (!root || root.hidden) return;
-  closeMenu();
+  closeMenu(); pvStop();
   window.clearTimeout(notifyT); notifyChange();   // kirim perubahan yang masih tertunda (debounce selama drag)
   const r = root; r.classList.remove('is-open'); g = null; vg = null; ptrs.clear(); pinch = null; phStop(); phSig = ''; window.clearTimeout(zoomEndT); zoomPend = null; gridXf('');
   setTimeout(() => { if (!r.classList.contains('is-open')) r.hidden = true; }, 200);

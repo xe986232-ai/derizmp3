@@ -33,7 +33,7 @@ import { velAlpha } from './velocity';
 import { DEMO, LIMITS, demoNotice, demoMount } from './demo';
 import { initTutorial } from './tutorial';
 const demoTrackFull = (ins) => { if (!DEMO) return false; const cs = [...document.querySelectorAll('.trackheader-container')]; if (cs.length >= LIMITS.tracks) { demoNotice('track'); return true; } if (ins === 'DERIZ' && cs.filter(c => c.dataset.ins === 'DERIZ').length >= LIMITS.deriz) { demoNotice('deriz'); return true; } if (ins === 'DERIZ' && fxRack.derizCount() >= LIMITS.derizPlugins) { demoNotice('derizplug'); return true; } return false; };   // DEMO: batas jumlah track / DERIZ
-import { openPianoRoll, closePianoRoll, isPianoRollOpen, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollSeekHandler, getNoteColor, setNoteColor, getPianoRollNotes, setPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, clearPianoRollNotes, PR_BEATS } from './piano-roll';
+import { openPianoRoll, closePianoRoll, isPianoRollOpen, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollPreviewHandler, setPianoRollSeekHandler, getNoteColor, setNoteColor, getPianoRollNotes, setPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, clearPianoRollNotes, PR_BEATS } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 registerSW();   // PWA: bisa di-install & jalan offline (aktif pada hasil build)
 startLicenseGuard();   // build full: verifikasi lisensi ke server (tidak ada efek di build demo / dev)
@@ -707,6 +707,7 @@ function deletePattern() {
 }
 // Tombol "Edit": pattern instrumen -> buka piano roll; pattern audio clip (tidak punya nada) -> tetap ganti nama seperti sebelumnya
 let prSeq = 0, prStartBar = 0;   // prStartBar: posisi awal pattern yang sedang dibuka di piano roll (dalam bar), supaya playhead-nya relatif
+let prvTarget = null;   // instrumen yang dibunyikan piano roll saat nada ditambah / digeser: {track, fx}; fx = id DERIZ (null = DERIZ pertama track / Supersaw)
 function editPattern() {
   const el = selPat; if (!el) return;
   if (el.dataset.auId) return openAutoEdit(el);   // Automation Clip: buka editor kurva
@@ -720,6 +721,7 @@ function openEdit(el, keepView = false) {
   const nm = document.getElementById('track-name-' + id);
   if (!el.dataset.prId) el.dataset.prId = 'pat' + (++prSeq);   // kunci supaya nada piano roll tersimpan per pattern
   prStartBar = pl(el) / BAR_W;
+  prvTarget = {track: id, fx: hasSynth(id) ? null : fxRack.derizIds(id)[0] ?? null};   // sama dengan pemilik editKey(el)
   openPianoRoll({
     id: editKey(el),
     ghosts: patGhosts(el, editKey(el)),
@@ -753,6 +755,7 @@ function enterPatternAs(el, fxId, keepView = false) {
   if (!el.dataset.prId) el.dataset.prId = 'pat' + (++prSeq);
   const nm = document.getElementById('track-name-' + track), cont = document.querySelector('.trackheader-container[data-track="' + track + '"]');
   prStartBar = pl(el) / BAR_W;
+  prvTarget = {track, fx: fxId};   // nada di piano roll ini milik DERIZ fxId
   openPianoRoll({
     id: patKey(el.dataset.prId, fxId, lane.dataset.track),
     ghosts: patGhosts(el, patKey(el.dataset.prId, fxId, lane.dataset.track)),
@@ -1046,6 +1049,22 @@ const keyElOf = m => kbdKeys.querySelector('[data-midi="' + m + '"]');
 function press(m) { noteOn(m); const k = keyElOf(m); if (k) { k.classList.add('pressed'); k.classList.remove('unpressed'); } }
 function release(m) { noteOff(m); const k = keyElOf(m); if (k) { k.classList.remove('pressed'); k.classList.add('unpressed'); } }
 function releaseAll() { [...voices.keys()].forEach(release); pointerNotes.clear(); kbdDown.clear(); }
+
+// --- preview piano roll: nada yang ditambah / digeser langsung bunyi lewat instrumen pemilik piano roll (DERIZ = sample-nya, Supersaw = synth-nya) ---
+// Terpisah dari keyboard bawah (tidak butuh dock terbuka) dan tidak ikut menyalakan tuts di keyboard.
+const prvVoices = new Map();   // midi -> {synth} | {deriz}
+setPianoRollPreviewHandler({
+  on(m) {
+    const t = prvTarget; if (!t || prvVoices.has(m)) return;
+    if (hasSynth(t.track)) { const ctx = audio(); prvVoices.set(m, {synth: startVoice(ctx, master, t.track, m, ctx.currentTime)}); }
+    else if (fxRack.hasDeriz(t.track)) { audio(); prvVoices.set(m, {deriz: fxRack.derizOn(t.track, m, t.fx ?? undefined)}); }
+  },
+  off(m) {
+    const v = prvVoices.get(m); if (!v) return;
+    prvVoices.delete(m);
+    if ('synth' in v) releaseVoice(v.synth, actx.currentTime); else fxRack.derizOff(v.deriz);
+  }
+});
 
 // --- tuts: pakai markup .keyboardkeyboardcontroller; oktaf = geser translateX, tuts di luar jendela dinonaktifkan ---
 const kbdScroll = kbdKeys.querySelector('.scrollable');
