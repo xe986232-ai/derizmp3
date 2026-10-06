@@ -25,6 +25,11 @@ create table if not exists public.devices (
 alter table public.licenses enable row level security;
 alter table public.devices  enable row level security;
 
+-- ===== Token terenkripsi untuk dashboard admin (ikon mata + salin). Migration "licenses_token_enc". =====
+-- Berisi token asli yang dienkripsi AES-GCM oleh server (kunci turunan SESSION_SECRET), bukan teks polos.
+-- null = token dibuat sebelum kolom ini ada (hanya hash yang tersimpan, tidak bisa dipulihkan).
+alter table public.licenses add column if not exists token_enc text;
+
 -- ===== Profil pembeli (nama + foto). Sudah dijalankan sebagai migration "profiles_and_avatars". =====
 create table if not exists public.profiles (
   user_id           uuid primary key references auth.users(id) on delete cascade,

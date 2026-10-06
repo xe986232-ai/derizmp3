@@ -48,6 +48,14 @@ button{font:inherit;cursor:pointer}
 .note{color:var(--muted);word-break:break-word}
 .meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;color:var(--muted);font-size:12px}
 .meta b{color:var(--text);font-weight:600}
+.tok{display:flex;align-items:center;gap:4px;padding:3px 4px 3px 11px;border-radius:11px;border:1px solid var(--line);background:var(--bg)}
+.tok .tk{flex:1;min-width:0;font:12.5px ui-monospace,Menlo,Consolas,monospace;letter-spacing:.03em;word-break:break-all;color:var(--muted)}
+.tok .tk.on{color:var(--text);user-select:all}
+.tok .tk.na{font:12px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;letter-spacing:0}
+.ib{display:grid;place-items:center;width:30px;height:30px;border:0;border-radius:50%;background:none;color:var(--muted)}
+.ib:hover{background:rgba(255,255,255,.08);color:var(--text)}
+.ib:disabled{opacity:.5;cursor:default}
+.ib svg{width:17px;height:17px;pointer-events:none}
 .acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
 .empty{padding:26px;text-align:center;color:var(--muted)}
 dialog{width:min(440px,calc(100% - 28px));border:0;border-radius:18px;background:var(--card);color:var(--text);box-shadow:var(--bevel),0 20px 60px rgba(0,0,0,.6);padding:16px}
@@ -92,7 +100,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
       <div><label for="cNote">Catatan</label><input id="cNote" maxlength="200" placeholder="mis. Order #1201 Budi"></div>
       <button class="btn" id="cGo">Buat</button>
     </div>
-    <p class="hint">Masa berlaku dihitung sejak token diaktifkan pembeli. Token asli hanya tampil sekali setelah dibuat (database hanya menyimpan hash).</p>
+    <p class="hint">Masa berlaku dihitung sejak token diaktifkan pembeli. Token disimpan terenkripsi di database; lihat atau salin lagi kapan saja lewat ikon mata di kartu lisensi.</p>
     <p class="err" id="cErr" role="alert"></p>
   </section>
 
@@ -108,7 +116,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
 
 <dialog id="dTok">
   <h2>Token baru</h2>
-  <p class="warn">Simpan sekarang. Token asli tidak bisa dilihat lagi setelah jendela ini ditutup.</p>
+  <p class="warn">Salin dan kirim ke pembeli. Token juga tetap bisa dilihat lagi nanti lewat ikon mata di kartu lisensinya.</p>
   <textarea id="tokOut" rows="8" readonly></textarea>
   <div class="dact" style="margin-top:12px">
     <button class="ghost" id="tCopy">Salin semua</button><button class="ghost" id="tCsv">Unduh CSV</button><button class="btn" id="tClose">Selesai</button>
@@ -133,7 +141,12 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var data = [], qHash = '', editing = null, lastTokens = [];
+  var tokenCache = {}, tokenShown = {};   // id -> token asli (hanya di memori halaman ini) / id -> sedang ditampilkan
   var LABEL = { active: 'Aktif', unused: 'Belum dipakai', expired: 'Berakhir', revoked: 'Dicabut' };
+  var MASK = 'MLVX-••••-••••-••••-••••';
+  var ICON_EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  var ICON_EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.9 17.9A10.4 10.4 0 0 1 12 19c-6.4 0-10-7-10-7a18.3 18.3 0 0 1 4.1-5M9.9 5.2A9.7 9.7 0 0 1 12 5c6.4 0 10 7 10 7a18.5 18.5 0 0 1-2.2 3.2M1 1l22 22"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
+  var ICON_COPY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function fmt(d) { return d ? new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'; }
@@ -182,9 +195,16 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
         (l.status === 'revoked' ? '<button class="ghost" data-a="restore" data-id="' + l.token_hash + '">Aktifkan</button>' : '<button class="ghost danger" data-a="revoke" data-id="' + l.token_hash + '">Cabut</button>') +
         (n ? '<button class="ghost" data-a="reset_devices" data-id="' + l.token_hash + '">Reset perangkat</button>' : '') +
         (!l.claimed ? '<button class="ghost danger" data-a="delete" data-id="' + l.token_hash + '">Hapus</button>' : '');
+      var shown = !!tokenShown[l.token_hash] && !!tokenCache[l.token_hash];
+      var tokRow = l.has_token
+        ? '<div class="tok"><span class="tk' + (shown ? ' on' : '') + '" aria-label="Token lisensi">' + (shown ? esc(tokenCache[l.token_hash]) : MASK) + '</span>' +
+          '<button type="button" class="ib" data-a="eye" data-id="' + l.token_hash + '" aria-pressed="' + shown + '" aria-label="' + (shown ? 'Sembunyikan token' : 'Tampilkan token') + '" title="' + (shown ? 'Sembunyikan token' : 'Tampilkan token') + '">' + (shown ? ICON_EYE_OFF : ICON_EYE) + '</button>' +
+          '<button type="button" class="ib" data-a="copy" data-id="' + l.token_hash + '" aria-label="Salin token" title="Salin token">' + ICON_COPY + '</button></div>'
+        : '<div class="tok"><span class="tk na">Token tidak tersimpan (dibuat sebelum fitur ini, hanya hash)</span></div>';
       return '<article class="item"><div class="row1"><span class="id">#' + l.token_hash.slice(0, 8) + '</span><span class="badge b-' + s + '">' + LABEL[s] + '</span></div>' +
         '<div class="who">' + esc(l.email || '(belum dipakai)') + '</div>' +
         (l.note ? '<div class="note">' + esc(l.note) + '</div>' : '') +
+        tokRow +
         '<div class="meta"><span>Perangkat: <b>' + n + '/' + l.max_devices + '</b></span><span>Berakhir: <b>' + (l.expires_at ? fmt(l.expires_at) : (l.claimed ? 'seumur hidup' : (l.duration_days ? l.duration_days + ' hari' : 'seumur hidup'))) + '</b></span>' +
         '<span>Dibuat: <b>' + fmt(l.created_at) + '</b></span><span>' + (l.claimed ? 'Dipakai: <b>' + fmt(l.claimed_at) + '</b>' : '') + '</span>' +
         (last ? '<span style="grid-column:1/-1">Terakhir aktif: <b>' + fmt(last) + '</b></span>' : '') + '</div>' +
@@ -199,7 +219,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     catch (er) { $('lerr').textContent = er.message; }
     $('lgo').disabled = false;
   });
-  $('logout').addEventListener('click', async function () { try { await api('POST', { action: 'logout' }); } catch (e) {} data = []; showLogin(); });
+  $('logout').addEventListener('click', async function () { try { await api('POST', { action: 'logout' }); } catch (e) {} data = []; tokenCache = {}; tokenShown = {}; showLogin(); });
   $('reload').addEventListener('click', function () { load().then(function () { toast('Dimuat ulang'); }); });
 
   // cari / filter (token yang ditempel di-hash di browser lalu dicocokkan dengan id)
@@ -230,11 +250,30 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   });
   $('tClose').addEventListener('click', function () { $('tokOut').value = ''; lastTokens = []; $('dTok').close(); });
 
+  // token asli: diminta ke server hanya saat mata / salin ditekan, lalu disimpan di memori halaman
+  async function getToken(id) {
+    if (tokenCache[id]) return tokenCache[id];
+    var j = await api('POST', { action: 'reveal', id: id });
+    tokenCache[id] = j.token; return j.token;
+  }
+  async function copyText(t) {
+    try { await navigator.clipboard.writeText(t); }
+    catch (e) { var ta = document.createElement('textarea'); ta.value = t; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0'; document.body.appendChild(ta); ta.select(); var ok = document.execCommand('copy'); document.body.removeChild(ta); if (!ok) throw e; }
+  }
+
   // aksi pada kartu
   $('list').addEventListener('click', async function (e) {
     var b = e.target.closest('button[data-a]'); if (!b) return;
     var a = b.dataset.a, id = b.dataset.id;
     if (a === 'edit') return openEdit(id);
+    if (a === 'eye' || a === 'copy') {
+      b.disabled = true;
+      try {
+        if (a === 'eye') { if (tokenShown[id]) delete tokenShown[id]; else { await getToken(id); tokenShown[id] = true; } render(); }
+        else { await copyText(await getToken(id)); toast('Token disalin'); b.disabled = false; }
+      } catch (er) { toast(er.message || 'Gagal menyalin', true); b.disabled = false; }
+      return;
+    }
     var msg = { revoke: 'Cabut lisensi ini? Pembeli akan terkunci paling lambat saat aplikasi memeriksa lagi.', reset_devices: 'Kosongkan semua slot perangkat lisensi ini?', delete: 'Hapus token yang belum dipakai ini? Tidak bisa dibatalkan.' }[a];
     if (msg && !confirm(msg)) return;
     b.disabled = true;

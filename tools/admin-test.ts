@@ -41,13 +41,36 @@ const cr = await post({ action: 'create', count: 3, devices: 2, days: 30, note: 
 ok('create 3 token format MLVX-XXXX-XXXX-XXXX-XXXX', cr.status === 200 && cj.tokens.length === 3 && cj.tokens.every((t) => /^MLVX(-[2-9A-HJ-NP-Z]{4}){4}$/.test(t)));
 ok('token unik', new Set(cj.tokens).size === 3);
 ok('hash di database cocok dengan hashToken (token bisa dipakai di /api/session)', licenses[0].token_hash === await hashToken(cj.tokens[0]) && licenses[0].duration_days === 30 && licenses[0].note === 'Order #1');
-ok('token asli tidak tersimpan di database', !JSON.stringify(licenses).includes(cj.tokens[0]));
+ok('token asli tidak tersimpan sebagai teks polos di database', !JSON.stringify(licenses).includes(cj.tokens[0]) && licenses.every((l: any) => typeof l.token_enc === 'string' && l.token_enc.length > 20));
+ok('ciphertext beda tiap token', new Set(licenses.map((l: any) => l.token_enc)).size === licenses.length);
 const lifetime = await (await post({ action: 'create', count: 1, devices: 1 }, C)).json() as { tokens: string[] };
 ok('tanpa hari = seumur hidup (null)', licenses[3].duration_days === null && !!lifetime.tokens[0]);
 
 const list = await (await get(C)).json() as { licenses: any[] };
 ok('list 4 lisensi, tanpa user_id bocor', list.licenses.length === 4 && list.licenses.every((l) => l.user_id === undefined && l.claimed === false));
+ok('list: has_token true, token_enc / token asli tidak ikut dikirim', list.licenses.every((l) => l.has_token === true && l.token_enc === undefined) && !JSON.stringify(list).includes(cj.tokens[0]));
 const id = licenses[0].token_hash;
+
+// ikon mata / salin: aksi reveal
+ok('reveal tanpa login 401', (await post({ action: 'reveal', id }, '')).status === 401);
+ok('reveal id ngawur 400', (await post({ action: 'reveal', id: 'x' }, C)).status === 400);
+ok('reveal id tidak ada 404', (await post({ action: 'reveal', id: 'a'.repeat(64) }, C)).status === 404);
+const rv = await post({ action: 'reveal', id }, C); const rj = await rv.json() as { token: string };
+ok('reveal mengembalikan token asli yang sama + no-store', rv.status === 200 && rj.token === cj.tokens[0] && rv.headers.get('cache-control') === 'no-store');
+ok('reveal token ke-2 dan ke-3 juga cocok', (await (await post({ action: 'reveal', id: licenses[1].token_hash }, C)).json() as { token: string }).token === cj.tokens[1] && (await (await post({ action: 'reveal', id: licenses[2].token_hash }, C)).json() as { token: string }).token === cj.tokens[2]);
+const swapped = licenses[1].token_enc; (licenses[1] as any).token_enc = licenses[0].token_enc;
+ok('ciphertext dipindah ke baris lain tidak bisa dibuka (AAD = hash)', (await post({ action: 'reveal', id: licenses[1].token_hash }, C)).status === 500);
+(licenses[1] as any).token_enc = swapped;
+const saved = (licenses[3] as any).token_enc; (licenses[3] as any).token_enc = null;
+ok('token lama tanpa token_enc: reveal 404, list has_token false', (await post({ action: 'reveal', id: licenses[3].token_hash }, C)).status === 404 && (await (await get(C)).json() as { licenses: any[] }).licenses.some((l) => l.has_token === false));
+(licenses[3] as any).token_enc = saved;
+// SESSION_SECRET diganti: login ulang dengan rahasia baru, token lama tidak bisa dibuka (galat jelas, tidak bocor)
+const secSaved = process.env.SESSION_SECRET; process.env.SESSION_SECRET = 'sec-lain';
+const C2 = (await post({ action: 'login', password: 'adm-pass-123' })).headers.getSetCookie().map((x) => x.split(';')[0]).join('; ');
+const rv2 = await post({ action: 'reveal', id }, C2);
+ok('SESSION_SECRET berubah: reveal gagal 500 dengan pesan, tanpa token', rv2.status === 500 && !JSON.stringify(await rv2.json()).includes(cj.tokens[0]));
+process.env.SESSION_SECRET = secSaved;
+ok('SESSION_SECRET dikembalikan: reveal normal lagi', (await post({ action: 'reveal', id }, C)).status === 200);
 ok('revoke', (await post({ action: 'revoke', id }, C)).status === 200 && licenses[0].status === 'revoked');
 ok('restore', (await post({ action: 'restore', id }, C)).status === 200 && licenses[0].status === 'active');
 ok('id ngawur 400', (await post({ action: 'revoke', id: 'x' }, C)).status === 400);

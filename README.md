@@ -175,7 +175,7 @@ Alur: pembeli menerima token → buka `/login` → tab *Aktifkan token* → buat
 
 **Cara kerja pengamannya**
 - `middleware.ts` (jalan di server Vercel SEBELUM file dikirim): tanpa cookie sesi bertanda tangan, kode aplikasi tidak pernah sampai ke browser. Hanya `/login`, manifest, dan ikon yang publik.
-- `api/session.ts` (login + aktivasi token), `api/me.ts` (cek lisensi berkala), `api/logout.ts`. Database: Supabase (`supabase/schema.sql`), token disimpan sebagai hash.
+- `api/session.ts` (login + aktivasi token), `api/me.ts` (cek lisensi berkala), `api/logout.ts`. Database: Supabase (`supabase/schema.sql`), token dicocokkan lewat hash; salinan terenkripsi (`token_enc`) hanya dipakai dashboard admin.
 - `src/license.ts`: aplikasi yang sudah ter-cache (PWA) tetap lapor ke `/api/me` tiap 30 menit. Dicabut = cache dihapus dan keluar; offline maksimal 7 hari.
 - Batas perangkat (bawaan 2) dihitung per akun lewat cookie `mx_d`. Slot tidak dibebaskan saat logout.
 
@@ -205,7 +205,9 @@ Pasang di Vercel (project full), tambahkan env:
 - `ADMIN_PASSWORD` : password masuk dashboard (pakai yang panjang dan acak)
 - `SESSION_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` : sudah ada untuk sistem lisensi
 
-Lalu buka `https://domain-kamu/admin`. Sesi admin 8 jam (cookie `mx_a`, HttpOnly, beda rahasia dari sesi pembeli). Token asli hanya tampil sekali saat dibuat karena database hanya menyimpan hash.
+Lalu buka `https://domain-kamu/admin`. Sesi admin 8 jam (cookie `mx_a`, HttpOnly, beda rahasia dari sesi pembeli).
+
+**Token di kartu lisensi.** Tiap kartu menampilkan token tersembunyi (`MLVX-••••-••••-••••-••••`). Ikon mata menampilkan / menyembunyikannya, ikon salin menyalin token ke clipboard (tanpa perlu ditampilkan). Token disimpan terenkripsi (AES-GCM, kunci turunan `SESSION_SECRET`) di kolom `licenses.token_enc` (`supabase/schema.sql`), tidak pernah ikut dalam daftar `GET /api/admin`; server baru membukanya lewat aksi `reveal` (wajib sesi admin) saat ikon ditekan. Catatan: mengganti `SESSION_SECRET` membuat token tersimpan tidak bisa dibuka lagi (kartu menampilkan galat), dan token yang dibuat sebelum fitur ini hanya punya hash sehingga tidak bisa dipulihkan. `npm run license -- create` (CLI) tetap hanya menyimpan hash.
 
 Kode: `admin.html` (UI), `api/admin.ts` (API), tes: `npx tsx tools/admin-test.ts`.
 
