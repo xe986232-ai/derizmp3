@@ -412,6 +412,7 @@ export function initMenuPanel(): MenuPanel {
   };
 
   btn.addEventListener('click', () => apply(!open, true));
+  document.addEventListener('shop:open', () => { apply(true, true); go('shop'); });   // dari pemberitahuan "plugin belum dimiliki" (entitlements.ts)
 
   document.addEventListener('pointerdown', e => {
     if (!open) return;

@@ -13,6 +13,8 @@ import { openMpcs } from './mpcs';
 
 // MGCHORD disembunyikan dari daftar plugin (belum siap dipublikasikan). Cara menambahkannya: di tab Plugin, tekan-tahan tombol "+" sekitar 1,5 detik.
 import { openMgchord } from './mgchord';
+import { owns, lockedNotice } from './entitlements';
+import { FULL } from './account';
 import { DEMO, LIMITS, demoNotice } from './demo';
 import { isAudio, ACCEPT as AUDIO_ACCEPT } from './audio-upload-card';
 import { setSupersaw, detuneCents, cutoffHz, attackSec, decaySec, releaseSec } from './synth-engine';
@@ -934,7 +936,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     const have = new Set(fxs().map(f => f.type));
     // halaman Plugin: hanya DERIZ (boleh banyak; Supersaw otomatis ada di track synth). Halaman Effect: Reverb, EQ, Filter, dll.
     // halaman Plugin: DERIZ (boleh banyak) dan MPCS (satu per track; Supersaw otomatis ada di track synth). Halaman Effect: Reverb, EQ, Filter, dll.
-    const choices = EFFECTS.filter(d => page === 'plugin' ? d.type === 'deriz' || d.type === 'mpcs' : !d.synth);
+    const choices = EFFECTS.filter(d => page === 'plugin' ? d.type === 'deriz' || d.type === 'mpcs' || (FULL && d.type === 'mgchord' && owns('mgchord')) : !d.synth);   // MGCHORD muncul di daftar hanya untuk pemiliknya (build full)
     const el = document.createElement('div');
     el.className = 'fx-pick';
     el.setAttribute('role', 'menu');
@@ -979,7 +981,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     if (page !== 'plugin' || !cur || addBtn.disabled) return;
     holdT = window.setTimeout(() => {
       held = true; holdT = 0; closePicker();
-      if (fxs().some(f => f.type === 'mgchord')) openMgchord(); else addEffect('mgchord');
+      if (fxs().some(f => f.type === 'mgchord')) openMg(); else addEffect('mgchord');
     }, 1500);
   });
   addBtn.addEventListener('pointerup', holdStop);
@@ -1093,8 +1095,10 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     if (fx.type === 'reverb') paintRv(card, fx);
   };
 
+  const openMg = (): void => { if (owns('mgchord')) openMgchord(); else lockedNotice('MGCHORD'); };   // versi full: MGCHORD hanya untuk yang sudah membeli (Shop Plugin)
   function addEffect(type: FxType): void {
     if (!cur) return;
+    if (type === 'mgchord' && !owns('mgchord')) { lockedNotice('MGCHORD'); return; }
     if (DEMO && type === 'deriz' && derizCount() >= LIMITS.derizPlugins) { demoNotice('derizplug'); return; }   // DEMO: batas jumlah plugin DERIZ
     const d = defOf(type), v: Record<string, number> = {};
     d.params.forEach(p => { v[p.key] = p.def; });
@@ -1111,7 +1115,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     card.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
     openAuto();
     if (type === 'mpcs') openMpcs();   // langsung terbuka, seperti DERIZ
-    if (type === 'mgchord') openMgchord();
+    if (type === 'mgchord') openMgchord();   // sudah lolos pemeriksaan kepemilikan di atas
   }
 
   function openAuto(): void {
@@ -1547,7 +1551,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     const ob = t.closest<HTMLButtonElement>('.dly__opt'); if (ob) { setOpt(card, ob); return; }   // tombol mode Delay (Ø, Ping Pong, Dual, sumber tempo, Link)
     if (t.closest('.dly__sum')) { openOverlay(card); return; }
     if (t.closest('.fxc__mp')) { openMpcs(); return; }
-    if (t.closest('.fxc__mg')) { openMgchord(); return; }
+    if (t.closest('.fxc__mg')) { openMg(); return; }
     if (t.closest('.fxc__pop')) { if (ovOpen?.card === card) closeOverlay(); else openOverlay(card); return; }
     if (t.closest('.deriz__up, .deriz__swap')) { card.querySelector<HTMLInputElement>('.deriz__file')!.click(); return; }
     const pat = t.closest<HTMLButtonElement>('.fxc__pat');

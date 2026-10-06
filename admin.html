@@ -104,6 +104,19 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     <p class="err" id="cErr" role="alert"></p>
   </section>
 
+  <section class="card">
+    <h2>Token plugin (Shop Plugin)</h2>
+    <div class="form" style="grid-template-columns:1fr 1fr 2fr auto">
+      <div><label for="pPlugin">Plugin</label><select id="pPlugin"></select></div>
+      <div><label for="pCount">Jumlah</label><input id="pCount" type="number" min="1" max="500" value="1" inputmode="numeric"></div>
+      <div><label for="pNote">Catatan</label><input id="pNote" maxlength="200" placeholder="mis. Order #1201 Budi"></div>
+      <button class="btn" id="pGo">Buat</button>
+    </div>
+    <p class="hint">Satu token = satu plugin untuk satu akun, seumur hidup. Pembeli menebusnya di Menu &rarr; Shop Plugin. Mencabut token langsung mengunci plugin itu di akun pembeli saat aplikasinya memeriksa lagi.</p>
+    <p class="err" id="pErr" role="alert"></p>
+    <section class="list" id="plist" style="margin-top:10px"></section>
+  </section>
+
   <div class="bar">
     <input id="q" type="search" placeholder="Cari email, catatan, atau tempel token" autocomplete="off">
     <select id="flt" aria-label="Filter status">
@@ -140,7 +153,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
-  var data = [], qHash = '', editing = null, lastTokens = [];
+  var data = [], plugins = [], pluginIds = [], lastPlugin = '', qHash = '', editing = null, lastTokens = [];
   var tokenCache = {}, tokenShown = {};   // id -> token asli (hanya di memori halaman ini) / id -> sedang ditampilkan
   var LABEL = { active: 'Aktif', unused: 'Belum dipakai', expired: 'Berakhir', revoked: 'Dicabut' };
   var MASK = 'MLVX-••••-••••-••••-••••';
@@ -171,7 +184,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   function showApp() { $('loginView').hidden = true; $('app').hidden = false; }
 
   async function load() {
-    try { var j = await api('GET'); data = j.licenses; showApp(); render(); }
+    try { var j = await api('GET'); data = j.licenses; plugins = j.plugins || []; pluginIds = j.plugin_ids || []; showApp(); render(); renderPlugins(); }
     catch (e) { if (/Belum masuk/.test(e.message)) showLogin(); else { showLogin(); $('lerr').textContent = e.message; } }
   }
 
@@ -219,7 +232,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     catch (er) { $('lerr').textContent = er.message; }
     $('lgo').disabled = false;
   });
-  $('logout').addEventListener('click', async function () { try { await api('POST', { action: 'logout' }); } catch (e) {} data = []; tokenCache = {}; tokenShown = {}; showLogin(); });
+  $('logout').addEventListener('click', async function () { try { await api('POST', { action: 'logout' }); } catch (e) {} data = []; plugins = []; tokenCache = {}; tokenShown = {}; showLogin(); });
   $('reload').addEventListener('click', function () { load().then(function () { toast('Dimuat ulang'); }); });
 
   // cari / filter (token yang ditempel di-hash di browser lalu dicocokkan dengan id)
@@ -235,7 +248,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     $('cErr').textContent = ''; $('cGo').disabled = true;
     try {
       var j = await api('POST', { action: 'create', count: $('cCount').value, devices: $('cDev').value, days: $('cDays').value || null, note: $('cNote').value });
-      lastTokens = j.tokens; $('tokOut').value = j.tokens.join('\n'); $('dTok').showModal(); $('tokOut').select();
+      lastTokens = j.tokens; lastPlugin = ''; $('tokOut').value = j.tokens.join('\n'); $('dTok').showModal(); $('tokOut').select();
       $('cNote').value = ''; await load();
     } catch (e) { $('cErr').textContent = e.message; }
     $('cGo').disabled = false;
@@ -244,11 +257,12 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     try { await navigator.clipboard.writeText($('tokOut').value); toast('Token disalin'); } catch (e) { $('tokOut').select(); document.execCommand('copy'); toast('Token disalin'); }
   });
   $('tCsv').addEventListener('click', function () {
+    if (lastPlugin) { var pc = 'token,plugin\n' + lastTokens.map(function (t) { return t + ',' + lastPlugin; }).join('\n') + '\n'; var pa = document.createElement('a'); pa.href = URL.createObjectURL(new Blob([pc], { type: 'text/csv' })); pa.download = 'token-plugin-' + new Date().toISOString().slice(0, 10) + '.csv'; pa.click(); setTimeout(function () { URL.revokeObjectURL(pa.href); }, 1000); return; }
     var note = $('cNote').value, days = $('cDays').value || '', dev = $('cDev').value;
     var csv = 'token,max_perangkat,hari\n' + lastTokens.map(function (t) { return t + ',' + dev + ',' + days; }).join('\n') + '\n';
     var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'token-melvox-' + new Date().toISOString().slice(0, 10) + '.csv'; a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
   });
-  $('tClose').addEventListener('click', function () { $('tokOut').value = ''; lastTokens = []; $('dTok').close(); });
+  $('tClose').addEventListener('click', function () { $('tokOut').value = ''; lastTokens = []; lastPlugin = ''; $('dTok').close(); });
 
   // token asli: diminta ke server hanya saat mata / salin ditekan, lalu disimpan di memori halaman
   async function getToken(id) {
@@ -278,6 +292,52 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     if (msg && !confirm(msg)) return;
     b.disabled = true;
     try { await api('POST', { action: a, id: id }); toast({ revoke: 'Dicabut', restore: 'Diaktifkan', reset_devices: 'Perangkat dikosongkan', delete: 'Dihapus' }[a]); await load(); }
+    catch (er) { toast(er.message, true); b.disabled = false; }
+  });
+
+  // ---- token plugin ----
+  var PLABEL = { active: 'Aktif', unused: 'Belum ditebus', revoked: 'Dicabut' };
+  function pState(l) { return l.status === 'revoked' ? 'revoked' : (l.claimed ? 'active' : 'unused'); }
+  function renderPlugins() {
+    var sel = $('pPlugin');
+    if (!sel.options.length) sel.innerHTML = pluginIds.map(function (x) { return '<option value="' + esc(x) + '">' + esc(x.toUpperCase()) + '</option>'; }).join('');
+    $('plist').innerHTML = plugins.length ? plugins.map(function (l) {
+      var st = pState(l), shown = !!tokenShown[l.token_hash];
+      var acts = (l.status === 'revoked' ? '<button class="ghost" data-pa="p_restore" data-id="' + l.token_hash + '">Aktifkan</button>' : '<button class="ghost danger" data-pa="p_revoke" data-id="' + l.token_hash + '">Cabut</button>') +
+        (!l.claimed ? '<button class="ghost danger" data-pa="p_delete" data-id="' + l.token_hash + '">Hapus</button>' : '');
+      var tok = l.has_token ? '<div class="tok"><span class="tk' + (shown ? ' on' : '') + '">' + esc(shown ? tokenCache[l.token_hash] : 'PLG-••••-••••-••••-••••') + '</span>' +
+        '<button type="button" class="ib" data-pa="p_eye" data-id="' + l.token_hash + '" aria-label="' + (shown ? 'Sembunyikan token' : 'Tampilkan token') + '">' + (shown ? ICON_EYE_OFF : ICON_EYE) + '</button>' +
+        '<button type="button" class="ib" data-pa="p_copy" data-id="' + l.token_hash + '" aria-label="Salin token">' + ICON_COPY + '</button></div>' : '';
+      return '<article class="item"><div class="row1"><span class="id">' + esc(l.plugin.toUpperCase()) + '</span><span class="badge b-' + st + '">' + PLABEL[st] + '</span></div>' +
+        '<div class="who">' + esc(l.email || '(belum ditebus)') + '</div>' + (l.note ? '<div class="note">' + esc(l.note) + '</div>' : '') +
+        '<div class="meta"><span>Dibuat <b>' + fmt(l.created_at) + '</b></span><span>Ditebus <b>' + fmt(l.claimed_at) + '</b></span></div>' + tok + '<div class="acts">' + acts + '</div></article>';
+    }).join('') : '<div class="empty">Belum ada token plugin.</div>';
+  }
+  $('pGo').addEventListener('click', async function () {
+    $('pErr').textContent = ''; $('pGo').disabled = true;
+    try {
+      var j = await api('POST', { action: 'p_create', plugin: $('pPlugin').value, count: $('pCount').value, note: $('pNote').value });
+      lastTokens = j.tokens; lastPlugin = $('pPlugin').value; $('tokOut').value = j.tokens.join('\n'); $('dTok').showModal(); $('tokOut').select();
+      $('pNote').value = ''; await load();
+    } catch (e) { $('pErr').textContent = e.message; }
+    $('pGo').disabled = false;
+  });
+  $('plist').addEventListener('click', async function (e) {
+    var b = e.target.closest('button[data-pa]'); if (!b) return;
+    var a = b.dataset.pa, id = b.dataset.id;
+    if (a === 'p_eye' || a === 'p_copy') {
+      b.disabled = true;
+      try {
+        if (!tokenCache[id]) { var j = await api('POST', { action: 'p_reveal', id: id }); tokenCache[id] = j.token; }
+        if (a === 'p_eye') { if (tokenShown[id]) delete tokenShown[id]; else tokenShown[id] = true; renderPlugins(); }
+        else { await copyText(tokenCache[id]); toast('Token disalin'); b.disabled = false; }
+      } catch (er) { toast(er.message || 'Gagal', true); b.disabled = false; }
+      return;
+    }
+    var msg = { p_revoke: 'Cabut token plugin ini? Plugin langsung terkunci di akun pembeli saat aplikasinya memeriksa lagi.', p_delete: 'Hapus token yang belum ditebus ini? Tidak bisa dibatalkan.' }[a];
+    if (msg && !confirm(msg)) return;
+    b.disabled = true;
+    try { await api('POST', { action: a, id: id }); toast({ p_revoke: 'Dicabut', p_restore: 'Diaktifkan', p_delete: 'Dihapus' }[a]); await load(); }
     catch (er) { toast(er.message, true); b.disabled = false; }
   });
 

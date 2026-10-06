@@ -1,21 +1,31 @@
 // Halaman "Shop Plugin" di Menu (kategori sejajar Project / Export / Pengaturan).
-// Tahap 1: hanya halamannya. Katalog = plugin yang sudah ada di aplikasi (status "Terpasang"); belum ada pembelian / unduhan.
+// Plugin gratis / bawaan = status "Terpasang". Plugin berbayar (entitlements.ts PAID, sekarang MGCHORD) di build full: "Dimiliki" kalau
+// token plugin sudah ditebus, selain itu tombol "Beli token" (ke penjual) + "Tebus token". Tahap manual: token dibuat admin di /admin.
 // Kartu bergaya bevel (tepi atas terang, tepi bawah gelap, gambar masuk seperti layar), lihat blok ".shop" di styles.css.
 
+import { FULL } from './account';
+import { isPaid, onEntitlements, owns, redeemPlugin } from './entitlements';
+
 type ShopKind = 'instrument' | 'effect';
-interface ShopItem { name: string; kind: ShopKind; desc: string; img: string; ar: string }
+interface ShopItem { id: string; name: string; kind: ShopKind; desc: string; img: string; ar: string }
 
 const CATALOG: ShopItem[] = [
-  { name: 'DERIZ', kind: 'instrument', desc: 'Sampler: upload audio, mainkan dari keyboard atau piano roll, atur Speed, Pitch, dan Volume.', img: 'deriz', ar: '720/465' },
-  { name: 'MPCS', kind: 'instrument', desc: 'Manual Pitch Correct Sample: edit pitch sample dengan blok nada, seret naik atau turun.', img: 'mpcs', ar: '720/400' },
-  { name: 'MGCHORD', kind: 'instrument', desc: 'Pembuat chord progression: pilih Key, Length, Sound, dan Style strum.', img: 'mgchord', ar: '720/419' },
-  { name: 'Supersaw', kind: 'instrument', desc: 'Synth supersaw dengan Detune, Mix, filter, dan envelope.', img: 'supersaw', ar: '720/467' },
-  { name: 'Reverb', kind: 'effect', desc: 'Gema ruang: Mix, Size, Pre-Delay, Tone, dan Low Cut.', img: 'reverb', ar: '1/1' },
-  { name: 'Equalizer', kind: 'effect', desc: 'EQ 5 band dengan grafik respons dan level Output.', img: 'equalizer', ar: '4/5' },
-  { name: 'Filter', kind: 'effect', desc: 'Low-pass dan high-pass dalam satu knob Cutoff, plus Reso.', img: 'filter', ar: '720/467' },
-  { name: 'De-esser', kind: 'effect', desc: 'Meredam desis (sibilance) pada vokal: Freq, Thresh, Amount.', img: 'deesser', ar: '720/467' },
-  { name: 'Delay', kind: 'effect', desc: 'Delay stereo dengan panel sendiri.', img: 'delay', ar: '720/436' },
+  { id: 'deriz', name: 'DERIZ', kind: 'instrument', desc: 'Sampler: upload audio, mainkan dari keyboard atau piano roll, atur Speed, Pitch, dan Volume.', img: 'deriz', ar: '720/465' },
+  { id: 'mpcs', name: 'MPCS', kind: 'instrument', desc: 'Manual Pitch Correct Sample: edit pitch sample dengan blok nada, seret naik atau turun.', img: 'mpcs', ar: '720/400' },
+  { id: 'mgchord', name: 'MGCHORD', kind: 'instrument', desc: 'Pembuat chord progression: pilih Key, Length, Sound, dan Style strum.', img: 'mgchord', ar: '720/419' },
+  { id: 'supersaw', name: 'Supersaw', kind: 'instrument', desc: 'Synth supersaw dengan Detune, Mix, filter, dan envelope.', img: 'supersaw', ar: '720/467' },
+  { id: 'reverb', name: 'Reverb', kind: 'effect', desc: 'Gema ruang: Mix, Size, Pre-Delay, Tone, dan Low Cut.', img: 'reverb', ar: '1/1' },
+  { id: 'equalizer', name: 'Equalizer', kind: 'effect', desc: 'EQ 5 band dengan grafik respons dan level Output.', img: 'equalizer', ar: '4/5' },
+  { id: 'filter', name: 'Filter', kind: 'effect', desc: 'Low-pass dan high-pass dalam satu knob Cutoff, plus Reso.', img: 'filter', ar: '720/467' },
+  { id: 'deesser', name: 'De-esser', kind: 'effect', desc: 'Meredam desis (sibilance) pada vokal: Freq, Thresh, Amount.', img: 'deesser', ar: '720/467' },
+  { id: 'delay', name: 'Delay', kind: 'effect', desc: 'Delay stereo dengan panel sendiri.', img: 'delay', ar: '720/436' },
 ];
+
+// Harga tampil di kartu (isi kalau mau menampilkan harga, mis. { mgchord: 'Rp 49.000' }); kosong = tanpa harga.
+const PRICE: Record<string, string> = {};
+// Tautan "Beli token" (mis. https://wa.me/62812xxxxxxx?text=Mau%20beli%20MGCHORD). Diisi lewat env build VITE_SHOP_CONTACT_URL; kosong = tombol disembunyikan.
+const CONTACT = String(import.meta.env.VITE_SHOP_CONTACT_URL || '');
+const SAFE_CONTACT = /^https:\/\//.test(CONTACT) ? CONTACT : '';
 
 const KIND_LABEL: Record<ShopKind, string> = { instrument: 'Instrumen', effect: 'Efek' };
 const esc = (t: string): string => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
@@ -41,11 +51,11 @@ export const SHOP_PAGE =
     '</div>' +
     '<ul class="shop__list mp__item" style="--i:2">' +
       CATALOG.map(p =>
-        '<li class="shop__item" data-kind="' + p.kind + '">' +
+        '<li class="shop__item" data-kind="' + p.kind + '" data-plugin="' + p.id + '">' +
           '<div class="shop__art" style="aspect-ratio:' + p.ar + '"><img src="' + IMG_BASE + p.img + '.webp" alt="Tampilan plugin ' + esc(p.name) + '" loading="lazy" decoding="async"></div>' +
           '<div class="shop__top"><b class="shop__name">' + esc(p.name) + '</b><span class="shop__tag">' + KIND_LABEL[p.kind] + '</span></div>' +
           '<p class="shop__desc">' + esc(p.desc) + '</p>' +
-          '<span class="shop__state"><i aria-hidden="true"></i>Terpasang</span>' +
+          (FULL && isPaid(p.id) ? '<div class="shop__act" data-act="' + p.id + '"></div>' : '<span class="shop__state"><i aria-hidden="true"></i>Terpasang</span>') +
         '</li>').join('') +
     '</ul>' +
     '<p class="mp__hint mp__item shop__more" style="--i:3">Plugin tambahan belum tersedia. Yang baru akan muncul di halaman ini.</p>' +
@@ -61,4 +71,48 @@ export function initShopPage(panel: HTMLElement): void {
   };
   chips.forEach(c => c.addEventListener('click', () => apply(c.dataset.shopf as string)));
   apply('all');
+  if (FULL) initPaid(panel);
+}
+
+// ---- Plugin berbayar: status Dimiliki / tombol Beli + Tebus ----
+function initPaid(panel: HTMLElement): void {
+  const paint = (): void => panel.querySelectorAll<HTMLElement>('.shop__act').forEach(el => {
+    const id = el.dataset.act as string, name = CATALOG.find(c => c.id === id)?.name || id;
+    if (owns(id)) { el.innerHTML = '<span class="shop__state"><i aria-hidden="true"></i>Dimiliki</span>'; return; }
+    el.innerHTML = (PRICE[id] ? '<b class="shop__price">' + esc(PRICE[id]) + '</b>' : '<span class="shop__price shop__price--lock">Berbayar</span>') +
+      (SAFE_CONTACT ? '<a class="plg__btn plg__btn--ghost" href="' + esc(SAFE_CONTACT) + '" target="_blank" rel="noopener noreferrer" aria-label="Beli token ' + esc(name) + '">Beli token</a>' : '') +
+      '<button type="button" class="plg__btn" data-redeem="' + id + '">Tebus token</button>';
+  });
+  paint();
+  onEntitlements(paint);
+  panel.addEventListener('click', e => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-redeem]');
+    if (b) openRedeem(b.dataset.redeem as string);
+  });
+}
+
+function openRedeem(id: string): void {
+  if (document.getElementById('plg-redeem')) return;
+  const name = CATALOG.find(c => c.id === id)?.name || id;
+  const d = document.createElement('div');
+  d.id = 'plg-redeem'; d.className = 'svov'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true'); d.setAttribute('aria-label', 'Tebus token ' + name);
+  d.innerHTML = '<div class="svov__back"></div><form class="svov__card" autocomplete="off"><h3 class="svov__title">Tebus token ' + esc(name) + '</h3>' +
+    '<p class="plg__txt">Tempel token plugin dari penjual. Satu token berlaku untuk satu akun.</p>' +
+    '<input class="plg__in" name="t" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="64" placeholder="PLG-XXXX-XXXX-XXXX-XXXX" aria-label="Token plugin" required>' +
+    '<p class="plg__err" role="alert"></p>' +
+    '<div class="plg__row"><button type="button" class="plg__btn plg__btn--ghost" data-x="close">Batal</button><button type="submit" class="plg__btn">Tebus</button></div></form>';
+  const input = d.querySelector<HTMLInputElement>('.plg__in')!, err = d.querySelector<HTMLElement>('.plg__err')!, go = d.querySelector<HTMLButtonElement>('[type="submit"]')!;
+  const close = (): void => { d.remove(); document.removeEventListener('keydown', onKey, true); };
+  const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+  d.addEventListener('click', e => { const t = e.target as HTMLElement; if (t.classList.contains('svov__back') || t.dataset.x === 'close') close(); });
+  d.querySelector('form')!.addEventListener('submit', async e => {
+    e.preventDefault();
+    err.textContent = ''; go.disabled = true; go.textContent = 'Memeriksa…';
+    const r = await redeemPlugin(input.value.trim());
+    if (r.ok) { d.querySelector('.svov__card')!.innerHTML = '<h3 class="svov__title">' + esc(name) + ' aktif</h3><p class="plg__txt">Plugin sudah bisa dipakai. Tambahkan lewat tab Plugin (tombol +).</p><div class="plg__row"><button type="button" class="plg__btn" data-x="close">Selesai</button></div>'; return; }
+    err.textContent = r.error; go.disabled = false; go.textContent = 'Tebus'; input.focus(); input.select();
+  });
+  document.addEventListener('keydown', onKey, true);
+  document.body.appendChild(d);
+  input.focus();
 }

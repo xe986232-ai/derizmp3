@@ -3,12 +3,22 @@ process.env.SUPABASE_URL = 'http://sb.test'; process.env.SUPABASE_SERVICE_KEY = 
 import { hashToken } from '../server/supabase';
 
 type L = { token_hash: string; status: string; user_id: string | null; email: string | null; max_devices: number; duration_days: number | null; expires_at: string | null; note: string | null; created_at: string; claimed_at: string | null };
-const licenses: L[] = []; let devices: { token_hash: string; device_id: string; last_seen: string; created_at: string }[] = [];
+const licenses: L[] = []; const plugs: any[] = []; let devices: { token_hash: string; device_id: string; last_seen: string; created_at: string }[] = [];
 const real = globalThis.fetch; const J = (d: unknown, s = 200) => new Response(JSON.stringify(d), { status: s });
 globalThis.fetch = (async (input: any, init: any = {}) => {
   const u = new URL(String(input)); const body = init.body ? JSON.parse(init.body) : undefined; const m = init.method || 'GET';
   const p = u.pathname.replace('/rest/v1/', ''); const q = (k: string) => u.searchParams.get(k)?.replace(/^(eq|is)\./, '');
   const ret = (rows: unknown[]) => (String(init.headers?.Prefer).includes('representation') ? J(rows) : new Response(null, { status: 204 }));
+  if (p === 'plugin_licenses') {
+    if (m === 'POST') { plugs.push(...body.map((b: any) => ({ user_id: null, status: 'active', source: 'token', claimed_at: null, created_at: new Date().toISOString(), ...b }))); return new Response(null, { status: 201 }); }
+    const rows = plugs.filter((r) => (!q('token_hash') || r.token_hash === q('token_hash')) && (!q('user_id') || (q('user_id') === 'null' ? r.user_id === null : r.user_id === q('user_id'))));
+    if (m === 'PATCH') { rows.forEach((r) => Object.assign(r, body)); return ret(rows); }
+    if (m === 'DELETE') { rows.forEach((r) => plugs.splice(plugs.indexOf(r), 1)); return ret(rows); }
+    return J(rows);
+  }
+  if (p === 'licenses' && u.searchParams.get('user_id')?.startsWith('in.')) {   // pencarian email pemilik token plugin
+    const ids = u.searchParams.get('user_id')!.slice(4, -1).split(','); return J(licenses.filter((r) => r.user_id && ids.includes(r.user_id)).map((r) => ({ user_id: r.user_id, email: r.email })));
+  }
   if (p === 'licenses') {
     if (m === 'POST') { licenses.push(...body.map((b: any) => ({ user_id: null, email: null, status: 'active', expires_at: null, claimed_at: null, created_at: new Date().toISOString(), ...b }))); return new Response(null, { status: 201 }); }
     const rows = licenses.filter((r) => (!q('token_hash') || r.token_hash === q('token_hash')) && (!q('user_id') || (q('user_id') === 'null' ? r.user_id === null : r.user_id === q('user_id'))));
@@ -92,5 +102,26 @@ ok('list: claimed + perangkat (id dipendekkan)', lu.claimed === true && lu.devic
 ok('hapus token yang sudah dipakai ditolak 409', (await post({ action: 'delete', id: used.token_hash }, C)).status === 409 && licenses.includes(used));
 ok('reset perangkat', (await post({ action: 'reset_devices', id: used.token_hash }, C)).status === 200 && devices.length === 0);
 ok('hapus token belum dipakai', (await post({ action: 'delete', id }, C)).status === 200 && licenses.length === 3);
+// ---- token plugin ----
+ok('tanpa login: p_create 401', (await post({ action: 'p_create', plugin: 'mgchord', count: 1 })).status === 401);
+ok('p_create plugin tak dikenal 400', (await post({ action: 'p_create', plugin: 'nggak-ada', count: 1 }, C)).status === 400);
+ok('p_create jumlah ngawur 400', (await post({ action: 'p_create', plugin: 'mgchord', count: 0 }, C)).status === 400);
+const pr = await post({ action: 'p_create', plugin: 'mgchord', count: 2, note: 'Order #9' }, C); const pj = await pr.json() as { tokens: string[] };
+ok('p_create 2 token format PLG-XXXX-XXXX-XXXX-XXXX', pr.status === 200 && pj.tokens.length === 2 && pj.tokens.every((t) => /^PLG(-[2-9A-HJ-NP-Z]{4}){4}$/.test(t)));
+ok('hash token plugin cocok dengan hashToken (bisa ditebus di /api/shop)', plugs[0].token_hash === await hashToken(pj.tokens[0]) && plugs[0].plugin === 'mgchord' && plugs[0].note === 'Order #9');
+ok('token plugin asli tidak tersimpan polos', !JSON.stringify(plugs).includes(pj.tokens[0]) && plugs.every((x) => typeof x.token_enc === 'string' && x.token_enc.length > 20));
+const pid = plugs[0].token_hash;
+const prv = await (await post({ action: 'p_reveal', id: pid }, C)).json() as { token: string };
+ok('p_reveal membuka token asli', prv.token === pj.tokens[0]);
+const pl1 = await (await get(C)).json() as { plugins: any[]; plugin_ids: string[] };
+ok('GET: daftar plugin + id plugin berbayar, tanpa user_id / token_enc bocor', pl1.plugins.length === 2 && pl1.plugin_ids.includes('mgchord') && pl1.plugins.every((x) => x.user_id === undefined && x.token_enc === undefined && x.claimed === false && x.has_token === true));
+Object.assign(plugs[1], { user_id: 'uid-1', claimed_at: new Date().toISOString() });
+const pl2 = await (await get(C)).json() as { plugins: any[] };
+ok('GET: token ditebus menampilkan email pemilik', pl2.plugins.find((x) => x.claimed)?.email === 'a@x.id');
+ok('p_delete token ditebus ditolak 409', (await post({ action: 'p_delete', id: plugs[1].token_hash }, C)).status === 409 && plugs.length === 2);
+ok('p_revoke mencabut', (await post({ action: 'p_revoke', id: plugs[1].token_hash }, C)).status === 200 && plugs[1].status === 'revoked');
+ok('p_restore mengaktifkan lagi', (await post({ action: 'p_restore', id: plugs[1].token_hash }, C)).status === 200 && plugs[1].status === 'active');
+ok('p_delete token belum ditebus', (await post({ action: 'p_delete', id: pid }, C)).status === 200 && plugs.length === 1);
+ok('p_revoke id tak ada 404', (await post({ action: 'p_revoke', id: 'b'.repeat(64) }, C)).status === 404);
 ok('logout menghapus cookie', (await post({ action: 'logout' }, C)).headers.getSetCookie().join().includes('Max-Age=0'));
 console.log(fail ? `\n${fail} GAGAL` : '\nSemua lulus'); process.exit(fail ? 1 : 0);

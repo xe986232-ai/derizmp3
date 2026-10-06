@@ -44,3 +44,23 @@ alter table public.profiles enable row level security;
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('avatars', 'avatars', false, 262144, array['image/jpeg', 'image/webp', 'image/png'])
 on conflict (id) do nothing;
+
+-- ===== Token plugin (Shop Plugin, jalur manual). Sudah dijalankan sebagai migration "plugin_licenses". =====
+-- 1 baris = 1 token untuk 1 plugin. Saat ditebus pembeli, user_id terisi = akun itu BERHAK memakai plugin tersebut.
+-- source: 'token' (ditebus), 'gift' / 'order' disiapkan untuk pemberian manual atau pembayaran otomatis nanti.
+create table if not exists public.plugin_licenses (
+  token_hash text primary key,                 -- sha256(token); token asli tidak disimpan
+  plugin     text not null check (plugin ~ '^[a-z0-9_-]{1,32}$'),
+  status     text not null default 'active' check (status in ('active', 'revoked')),
+  source     text not null default 'token' check (source in ('token', 'gift', 'order')),
+  user_id    uuid references auth.users(id) on delete cascade,
+  token_enc  text,                             -- token asli terenkripsi (sama seperti licenses.token_enc)
+  note       text,
+  created_at timestamptz not null default now(),
+  claimed_at timestamptz
+);
+-- satu akun hanya boleh punya satu entitlement AKTIF per plugin (yang dicabut tidak menghalangi token baru)
+create unique index if not exists plugin_licenses_user_plugin_uq
+  on public.plugin_licenses (user_id, plugin) where user_id is not null and status = 'active';
+create index if not exists plugin_licenses_user_idx on public.plugin_licenses (user_id);
+alter table public.plugin_licenses enable row level security;
