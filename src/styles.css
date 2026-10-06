@@ -411,7 +411,8 @@ html[data-theme="jembut"] .lane{background-image:
 .addtrack span:last-child{display:block;max-width:160px;overflow:hidden;white-space:nowrap;transition:max-width .38s var(--ease-out),opacity .2s ease}
 .tracklist--collapsed .addtrack{gap:0}
 .tracklist--collapsed .addtrack span:last-child{max-width:0;opacity:0}
-.panel-toggle{position:absolute;top:6px;right:14px;width:36px;height:36px;border-radius:50%;border:0;background:#1f1f29;color:var(--text);display:grid;place-items:center;z-index:2;
+/* tombol panah dikunci ke tepi KIRI kolom (left:14px), bukan kanan: lebar kolom berubah 282px <-> 64px, tapi tepi kirinya diam, jadi tombol tidak ikut bergeser */
+.panel-toggle{position:absolute;top:6px;left:14px;width:36px;height:36px;border-radius:50%;border:0;background:#1f1f29;color:var(--text);display:grid;place-items:center;z-index:2;
   transition:background-color .2s ease,transform .25s var(--ease-spring)}
 .panel-toggle:hover{background:#2b2b37;transform:scale(1.08)}
 .panel-toggle:active{transform:scale(.92)}
