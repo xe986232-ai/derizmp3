@@ -14,7 +14,7 @@ export const DRUM_KIT: readonly DrumPad[] = [
   { id: 'clap', name: 'Clap', midi: 39 },
   { id: 'rim', name: 'Rim', midi: 37 },
   { id: 'chat', name: 'Hat', midi: 42 },
-  { id: 'ohat', name: 'Open Hat', midi: 46 },
+  { id: 'ohat', name: 'Open', midi: 46 },
   { id: 'tom', name: 'Tom', midi: 45 },
   { id: 'crash', name: 'Crash', midi: 49 }
 ];

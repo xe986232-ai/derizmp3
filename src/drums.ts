@@ -47,7 +47,7 @@ function build(): void {
   el.innerHTML =
     '<div class="drm__back"></div>' +
     '<div class="drm__win" role="dialog" aria-modal="true" aria-label="Drums" tabindex="-1">' +
-      `<header class="drm__head"><button type="button" class="drm__play" aria-label="Putar" title="Play / Pause">${ICON_PLAY}</button><span class="drm__title">DRUMS</span><span class="drm__stat" role="status" aria-live="polite"></span>` +
+      `<header class="drm__head"><button type="button" class="drm__play" aria-label="Putar" title="Play / Pause">${ICON_PLAY}</button><span class="drm__title">DRUMS</span><i class="drm__led" aria-hidden="true"></i><span class="drm__stat" role="status" aria-live="polite"></span>` +
         `<button type="button" class="drm__btn" data-x="grow" title="Tambah 1 bar di akhir pattern">+ Bar</button>` +
         `<button type="button" class="drm__btn" data-x="clear" title="Hapus semua hit di pattern ini">Clear</button>` +
         `<button type="button" class="drm__close" aria-label="Tutup Drums">${ICON_CLOSE}</button></header>` +
@@ -66,7 +66,7 @@ function build(): void {
   const body = el.querySelector<HTMLElement>('.drm__body')!;
 
   labels.innerHTML = DRUM_KIT.map(d => `<div class="drm__lab"><button type="button" class="drm__name" data-m="${d.midi}" title="Dengarkan ${d.name}">${d.name}</button>` +
-    `<input type="range" class="drm__vol" min="0" max="100" step="1" value="${Math.round(PAD_DEF * 100)}" data-id="${d.id}" aria-label="Volume ${d.name}" title="Volume ${d.name}"></div>`).join('');
+    `<input type="range" class="drm__vol" min="0" max="100" step="1" value="${Math.round(PAD_DEF * 100)}" style="--p:${Math.round(PAD_DEF * 100)}%" data-id="${d.id}" aria-label="Volume ${d.name}" title="Volume ${d.name}"></div>`).join('');
   const playBtn = el.querySelector<HTMLButtonElement>('.drm__play')!;
   const syncPlay = (): void => {
     const on = !!bridge?.playing();
@@ -74,6 +74,19 @@ function build(): void {
   };
   syncPlayFn = syncPlay;
   playBtn.addEventListener('click', () => { bridge?.toggle(); syncPlay(); });
+
+  // efek 3D: card miring tipis mengikuti kursor (mouse saja, mati di atas grid / saat menekan / reduced-motion), kilau mengikuti arah cahaya
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const untilt = (): void => { win.classList.remove('is-tilting'); win.style.setProperty('--rx', '0deg'); win.style.setProperty('--ry', '0deg'); win.style.setProperty('--mx', '50%'); win.style.setProperty('--my', '0%'); };
+  el.addEventListener('pointermove', e => {
+    if (reduce || e.pointerType !== 'mouse') return;
+    if (e.buttons || (e.target as Element).closest('.drm__body')) { untilt(); return; }
+    const r = win.getBoundingClientRect(), px = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), py = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
+    win.classList.add('is-tilting');
+    win.style.setProperty('--ry', ((px - .5) * 5).toFixed(2) + 'deg'); win.style.setProperty('--rx', ((.5 - py) * 4).toFixed(2) + 'deg');
+    win.style.setProperty('--mx', (px * 100).toFixed(1) + '%'); win.style.setProperty('--my', (py * 100).toFixed(1) + '%');
+  });
+  el.addEventListener('pointerleave', untilt);
 
   let bars = 0, view: DrumsView | null = null;
 
@@ -91,12 +104,12 @@ function build(): void {
       grid.style.setProperty('--steps', String(nb * PER_BAR));
       grid.innerHTML = DRUM_KIT.map(d => {
         let r = `<div class="drm__row" role="row" data-m="${d.midi}">`;
-        for (let k = 0; k < nb * PER_BAR; k++) r += `<button type="button" class="drm__c${k % 16 === 0 ? ' is-bar' : k % 4 === 0 ? ' is-beat' : ''}" role="gridcell" data-k="${k}" aria-label="${d.name} step ${k + 1}" aria-pressed="false"></button>`;
+        for (let k = 0; k < nb * PER_BAR; k++) r += `<button type="button" class="drm__c${k % 16 === 0 ? ' is-bar' : ''}${(k >> 2) % 2 ? ' is-alt' : ''}" role="gridcell" data-k="${k}" aria-label="${d.name} step ${k + 1}" aria-pressed="false"></button>`;
         return r + '</div>';
       }).join('');
     }
     const pads = bridge ? bridge.pads() : {};
-    labels.querySelectorAll<HTMLInputElement>('.drm__vol').forEach(r => { r.value = String(Math.round((pads[r.dataset.id!] ?? PAD_DEF) * 100)); });
+    labels.querySelectorAll<HTMLInputElement>('.drm__vol').forEach(r => { r.value = String(Math.round((pads[r.dataset.id!] ?? PAD_DEF) * 100)); r.style.setProperty('--p', r.value + '%'); });
     syncPlay();
     grid.querySelectorAll<HTMLElement>('.drm__row').forEach(row => {
       const m = +row.dataset.m!;
@@ -147,7 +160,7 @@ function build(): void {
     e.preventDefault(); setStep(+(c.parentElement as HTMLElement).dataset.m!, +c.dataset.k!, !c.classList.contains('is-on'));
   });
   labels.addEventListener('click', e => { const b = (e.target as Element).closest<HTMLElement>('.drm__name'); if (b && bridge) bridge.hit(+b.dataset.m!); });
-  labels.addEventListener('input', e => { const r = e.target as HTMLInputElement; if (r.classList.contains('drm__vol') && bridge) bridge.setPad(r.dataset.id!, +r.value / 100); });
+  labels.addEventListener('input', e => { const r = e.target as HTMLInputElement; if (r.classList.contains('drm__vol') && bridge) { r.style.setProperty('--p', r.value + '%'); bridge.setPad(r.dataset.id!, +r.value / 100); } });
   labels.addEventListener('change', e => { const r = e.target as HTMLInputElement; if (r.classList.contains('drm__vol') && bridge) { const m = DRUM_KIT.find(d => d.id === r.dataset.id)?.midi; if (m !== undefined) bridge.hit(m); } });   // lepas slider: dengarkan hasilnya
 
   el.querySelector<HTMLElement>('[data-x="clear"]')!.addEventListener('click', () => {
