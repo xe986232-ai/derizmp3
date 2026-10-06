@@ -1516,10 +1516,13 @@ let posBars = 0, playing = false, playRaf = 0, startPos = 0, startCtx = 0, nextB
 // walau main thread sibuk membunyikan banyak nada. Animasi dibuat dari jam audio (startPos / startCtx) dan dibuat ulang saat
 // play / seek / ganti tempo (scheduleClips), zoom timeline (BAR_W berubah), atau piano roll dibuka.
 let phAnim = null, phAnimBarW = 0, phHeld = false;
+// Waktu yang SEDANG TERDENGAR: actx.currentTime adalah jam penjadwalan, suara baru keluar speaker setelah outputLatency
+// (besar karena latencyHint 'playback', apalagi Bluetooth). Tanpa kompensasi ini playhead sudah jalan sementara suara masih tertinggal.
+const audibleNow = () => actx.currentTime - (actx.outputLatency || actx.baseLatency || 0);
 function stopPhAnim() { if (phAnim) { phAnim.cancel(); phAnim = null; } }
 function startPhAnim() {
   stopPhAnim(); phHeld = false;
-  const now = actx.currentTime, wait = Math.max(0, startCtx - now);
+  const now = audibleNow(), wait = Math.max(0, startCtx - now);
   const pos = startPos + Math.max(0, now - startCtx) / SEC_PER_BAR, left = BARS - pos;
   phAnimBarW = BAR_W;
   phEl.style.translate = (pos * BAR_W) + 'px 0';
@@ -1536,7 +1539,7 @@ function syncTransportUI() {
 // Posisi playhead dihitung dari jam AudioContext (bukan jam rAF), jadi selalu sinkron dengan suara audio clip
 function tick() {
   if (!playing) return;
-  posBars = startPos + Math.max(0, actx.currentTime - startCtx) / SEC_PER_BAR;
+  posBars = startPos + Math.max(0, audibleNow() - startCtx) / SEC_PER_BAR;
   if (posBars >= BARS) { posBars = BARS; pausePlay(); return; }
   if (!phHeld && BAR_W !== phAnimBarW) startPhAnim();   // zoom timeline: lebar bar berubah -> buat ulang animasi (timeline tidak auto-scroll mengikuti playhead)
   const b = Math.floor(posBars * 4 + 1e-6);   // titik ketukan di panel metronome + kedip tombol M
@@ -1643,7 +1646,7 @@ function startPlay() {
 }
 function pausePlay() {
   holdSpec(false);
-  if (playing) posBars = Math.min(BARS, startPos + Math.max(0, actx.currentTime - startCtx) / SEC_PER_BAR);   // posisi terakhir dari jam audio (playhead bergerak lewat animasi, bukan lewat tick)
+  if (playing) posBars = Math.min(BARS, startPos + Math.max(0, audibleNow() - startCtx) / SEC_PER_BAR);   // posisi terakhir (yang terdengar) dari jam audio (playhead bergerak lewat animasi, bukan lewat tick)
   playing = false; cancelAnimationFrame(playRaf); playRaf = 0; stopClips(actx); stopAllSynth(actx); fxRack.derizStop(); synthQ = []; clearInterval(metroTimer); metroTimer = 0; metroCancel(actx, true); metroUI.beat(-1); syncTransportUI(); phHeld = false; renderStatic();
 }
 const togglePlay = () => playing ? pausePlay() : startPlay();
