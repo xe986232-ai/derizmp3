@@ -138,7 +138,7 @@ function applyAudio(track: string): void {
   setFilter(track, fl ? { on: fl.on, cutoff: fl.v.cutoff, reso: fl.v.reso } : null);
   setDeesser(track, ds ? { on: ds.on, freq: ds.v.freq, thresh: ds.v.thresh, amount: ds.v.amount } : null);
   setDelay(track, dl ? { on: dl.on, ...(dl.v as Omit<DelayParams, 'on'>) } : null);
-  setDrums(track, dr ? { on: dr.on, level: dr.v.level, tune: dr.v.tune, decay: dr.v.decay } : null);
+  setDrums(track, dr ? { on: dr.on, level: dr.v.level, tune: dr.v.tune, decay: dr.v.decay, pads: Object.fromEntries(Object.entries(dr.v).filter(([k]) => k.startsWith('pad_')).map(([k, x]) => [k.slice(4), x])) } : null);
   setSupersaw(track, s ? { on: s.on, detune: s.v.detune, mix: s.v.mix, level: s.v.level, cutoff: s.v.cutoff, reso: s.v.reso, attack: s.v.attack, decay: s.v.decay, sustain: s.v.sustain, release: s.v.release } : null);
 }
 
@@ -505,6 +505,8 @@ export interface FxRack {
   drop(track: string): void;          // track dihapus: buang efeknya
   addInstrument(track: string, type: 'supersaw' | 'deriz' | 'drums'): void;   // track synth baru: pasang plugin instrumennya (kartu di paling atas)
   closePicker(instant?: boolean): void;
+  drumsPads(track: string): Record<string, number> | null;   // volume per alat plugin Drums di track ini (kunci = id alat); null = track tanpa Drums
+  setDrumsPad(track: string, id: string, v: number): void;   // atur volume satu alat (0..1); ikut tersimpan di project
   hasDeriz(track: string): boolean;   // track punya plugin DERIZ yang menyala dan sudah berisi audio
   derizPlay(track: string, midi: number, when: number, dur: number, glides?: Array<{ when: number; to: number; dur: number }>, fxId?: number, vel?: number): void;   // nada terjadwal dari piano roll (when = waktu AudioContext); fxId kosong = DERIZ pertama yang menyala
   derizSchedule(list: Array<{ track: string; midi: number; when: number; dur: number; glides?: Array<{ when: number; to: number; dur: number }>; fxId?: number; vel?: number }>): void;   // seluruh nada DERIZ satu Play dikirim sekali ke worklet (jam audio yang menjalankan); garis play dibuat lewat derizHeadPump
@@ -1779,6 +1781,14 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
       if (cur === track) { closePicker(true); closeMenu(true); hideTip(); closeOverlay(true, true); ro.disconnect(); cur = null; addBtn.disabled = true; list.replaceChildren(); layout(false); }
     },
     addInstrument,
+    drumsPads(track: string): Record<string, number> | null {
+      const fx = (racks.get(track) ?? []).find(f => f.type === 'drums'); if (!fx) return null;
+      return Object.fromEntries(Object.entries(fx.v).filter(([k]) => k.startsWith('pad_')).map(([k, x]) => [k.slice(4), x]));
+    },
+    setDrumsPad(track: string, id: string, v: number): void {
+      const fx = (racks.get(track) ?? []).find(f => f.type === 'drums'); if (!fx) return;
+      fx.v['pad_' + id] = Math.max(0, Math.min(1, v)); applyAudio(track);
+    },
     closePicker,
     hasDeriz: track => !!derizOf(track),
     derizPlay, derizSchedule, derizHeadPump, derizOn, derizOff, derizStop, derizWarm,

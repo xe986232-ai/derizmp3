@@ -3,7 +3,7 @@
 // perubahan langsung ditulis ke nada pattern (piano roll), jadi pola bisa disalin, dipanjangkan, dan disimpan bersama project seperti pattern biasa.
 // Kartunya ada di halaman Plugin pada panel efek (fx-rack.ts); jendelanya dibuka dari kartu itu.
 
-import { DRUM_KIT } from './drums-audio';
+import { DRUM_KIT, PAD_DEF } from './drums-audio';
 import { dragWindow } from './win-drag';
 
 export interface DrumNote { p: number; s: number; l: number; v?: number }
@@ -17,6 +17,12 @@ export interface DrumsBridge {
   grow(): boolean;
   /** Bunyikan satu hit (audisi). */
   hit(midi: number): void;
+  /** Volume per alat (kunci = id alat, 0..1) milik track pattern yang dipilih. */
+  pads(): Record<string, number>;
+  setPad(id: string, v: number): void;
+  /** Transport: sedang play? / play-pause. */
+  playing(): boolean;
+  toggle(): void;
 }
 let bridge: DrumsBridge | null = null;
 export const setDrumsBridge = (b: DrumsBridge): void => { bridge = b; };
@@ -24,12 +30,16 @@ export const setDrumsBridge = (b: DrumsBridge): void => { bridge = b; };
 const STEP = 0.25;                 // beat per step (1/16)
 const PER_BAR = 16;
 const MAX_BARS = 8;
+const ICON_PLAY = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5.14v13.72a1 1 0 0 0 1.52.85l11-6.86a1 1 0 0 0 0-1.7l-11-6.86A1 1 0 0 0 8 5.14z" fill="currentColor"/></svg>';
+const ICON_PAUSE = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="6" y="5" width="4.5" height="14" rx="1.2" fill="currentColor"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2" fill="currentColor"/></svg>';
 const ICON_CLOSE = '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 
 let root: HTMLElement | null = null, openFn: (() => void) | null = null, refreshFn: (() => void) | null = null;
 
 export function openDrums(): void { if (!root) build(); openFn?.(); }
-export function drumsRefresh(): void { if (root && !root.hidden) refreshFn?.(); }   // pattern terpilih berubah / nada berubah dari luar
+export function drumsRefresh(): void { if (root && !root.hidden) refreshFn?.(); }
+let syncPlayFn: (() => void) | null = null;
+export function drumsSyncPlay(): void { syncPlayFn?.(); }   // transport berubah (play / pause): ikon tombol di jendela ikut   // pattern terpilih berubah / nada berubah dari luar
 
 function build(): void {
   const el = document.createElement('div');
@@ -37,7 +47,7 @@ function build(): void {
   el.innerHTML =
     '<div class="drm__back"></div>' +
     '<div class="drm__win" role="dialog" aria-modal="true" aria-label="Drums" tabindex="-1">' +
-      `<header class="drm__head"><i class="drm__led" aria-hidden="true"></i><span class="drm__title">DRUMS</span><span class="drm__stat" role="status" aria-live="polite"></span>` +
+      `<header class="drm__head"><button type="button" class="drm__play" aria-label="Putar" title="Play / Pause">${ICON_PLAY}</button><span class="drm__title">DRUMS</span><span class="drm__stat" role="status" aria-live="polite"></span>` +
         `<button type="button" class="drm__btn" data-x="grow" title="Tambah 1 bar di akhir pattern">+ Bar</button>` +
         `<button type="button" class="drm__btn" data-x="clear" title="Hapus semua hit di pattern ini">Clear</button>` +
         `<button type="button" class="drm__close" aria-label="Tutup Drums">${ICON_CLOSE}</button></header>` +
@@ -55,7 +65,15 @@ function build(): void {
   const msg = el.querySelector<HTMLElement>('.drm__msg')!;
   const body = el.querySelector<HTMLElement>('.drm__body')!;
 
-  labels.innerHTML = DRUM_KIT.map(d => `<button type="button" class="drm__lab" data-m="${d.midi}" title="Dengarkan ${d.name}">${d.name}</button>`).join('');
+  labels.innerHTML = DRUM_KIT.map(d => `<div class="drm__lab"><button type="button" class="drm__name" data-m="${d.midi}" title="Dengarkan ${d.name}">${d.name}</button>` +
+    `<input type="range" class="drm__vol" min="0" max="100" step="1" value="${Math.round(PAD_DEF * 100)}" data-id="${d.id}" aria-label="Volume ${d.name}" title="Volume ${d.name}"></div>`).join('');
+  const playBtn = el.querySelector<HTMLButtonElement>('.drm__play')!;
+  const syncPlay = (): void => {
+    const on = !!bridge?.playing();
+    playBtn.innerHTML = on ? ICON_PAUSE : ICON_PLAY; playBtn.setAttribute('aria-label', on ? 'Jeda' : 'Putar'); playBtn.classList.toggle('is-on', on);
+  };
+  syncPlayFn = syncPlay;
+  playBtn.addEventListener('click', () => { bridge?.toggle(); syncPlay(); });
 
   let bars = 0, view: DrumsView | null = null;
 
@@ -77,6 +95,9 @@ function build(): void {
         return r + '</div>';
       }).join('');
     }
+    const pads = bridge ? bridge.pads() : {};
+    labels.querySelectorAll<HTMLInputElement>('.drm__vol').forEach(r => { r.value = String(Math.round((pads[r.dataset.id!] ?? PAD_DEF) * 100)); });
+    syncPlay();
     grid.querySelectorAll<HTMLElement>('.drm__row').forEach(row => {
       const m = +row.dataset.m!;
       row.querySelectorAll<HTMLElement>('.drm__c').forEach(c => {
@@ -125,7 +146,9 @@ function build(): void {
     const c = (e.target as Element).closest<HTMLElement>('.drm__c'); if (!c) return;
     e.preventDefault(); setStep(+(c.parentElement as HTMLElement).dataset.m!, +c.dataset.k!, !c.classList.contains('is-on'));
   });
-  labels.addEventListener('click', e => { const b = (e.target as Element).closest<HTMLElement>('.drm__lab'); if (b && bridge) bridge.hit(+b.dataset.m!); });
+  labels.addEventListener('click', e => { const b = (e.target as Element).closest<HTMLElement>('.drm__name'); if (b && bridge) bridge.hit(+b.dataset.m!); });
+  labels.addEventListener('input', e => { const r = e.target as HTMLInputElement; if (r.classList.contains('drm__vol') && bridge) bridge.setPad(r.dataset.id!, +r.value / 100); });
+  labels.addEventListener('change', e => { const r = e.target as HTMLInputElement; if (r.classList.contains('drm__vol') && bridge) { const m = DRUM_KIT.find(d => d.id === r.dataset.id)?.midi; if (m !== undefined) bridge.hit(m); } });   // lepas slider: dengarkan hasilnya
 
   el.querySelector<HTMLElement>('[data-x="clear"]')!.addEventListener('click', () => {
     if (!view || !bridge) return;

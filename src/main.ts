@@ -23,7 +23,7 @@ import { initMenuPanel, setProjectIO } from './menu-panel';
 import { dbgRun, dbgZoom } from './audio-debug';
 import { mpcsExport, mpcsImport } from './mpcs';
 import { setMgchordBridge, mgchordExport, mgchordImport } from './mgchord';
-import { setDrumsBridge, drumsRefresh, openDrums } from './drums';
+import { setDrumsBridge, drumsRefresh, drumsSyncPlay, openDrums } from './drums';
 import { drumRow, DRUM_KIT } from './drums-audio';
 import { setExportIO } from './export-audio';
 import { hasSynth, isDrumsTrack, startVoice, releaseVoice, playNote, stopAllSynth } from './synth-engine';
@@ -1399,6 +1399,10 @@ setMgchordBridge({
       handleSide(el); renderPatNotes(el); patBarPlace();
       return true;
     },
+    pads() { const el = drumsPat(); return el ? fxRack.drumsPads(el.parentElement.dataset.track) || {} : {}; },
+    setPad(id, v) { const el = drumsPat(); if (el) fxRack.setDrumsPad(el.parentElement.dataset.track, id, v); },
+    playing: () => playing,
+    toggle: () => togglePlay(),
     hit(m) { const el = drumsPat(); if (!el) return; const ctx = audio(); startVoice(ctx, master, el.parentElement.dataset.track, m, ctx.currentTime); }
   });
 }
@@ -1577,6 +1581,7 @@ function renderPlayhead() { if (playing && !phHeld) startPhAnim(); else renderSt
 function syncTransportUI() {
   btnPlay.setAttribute('aria-label', playing ? 'Jeda' : 'Putar');
   btnPlay.querySelector('use').setAttribute('href', playing ? '#pause-icon' : '#play-icon');
+  drumsSyncPlay();   // tombol play di jendela Drums ikut berubah
 }
 // Posisi playhead dihitung dari jam AudioContext (bukan jam rAF), jadi selalu sinkron dengan suara audio clip
 function tick() {

@@ -5,7 +5,7 @@
 import { trackInput } from './audio-engine';
 import { velGain } from './velocity';
 
-export interface DrumsParams { on: boolean; level: number; tune: number; decay: number }   // semua 0..1
+export interface DrumsParams { on: boolean; level: number; tune: number; decay: number; pads?: Record<string, number> }   // semua 0..1; pads = volume per alat (kunci = DrumPad.id, kosong = 0.8)
 
 export interface DrumPad { id: string; name: string; midi: number }
 export const DRUM_KIT: readonly DrumPad[] = [
@@ -25,6 +25,9 @@ export const drumRow = (midi: number): number => {
   if (i >= 0) return i;
   return midi === 35 ? 0 : midi === 40 ? 1 : midi === 44 ? 4 : midi === 57 ? 7 : 6;
 };
+
+export const PAD_DEF = 0.8;
+export const padMul = (v: number): number => { const x = Math.max(0, Math.min(1, v)); return x * x / (PAD_DEF * PAD_DEF); };   // 0.8 = 1x (standar), 1.0 = ~1.56x, 0 = senyap
 
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 export const drumLevel = (v: number): number => clamp01(v) * clamp01(v) * 1.6;      // 0.8 ≈ 1.0 (level standar, sama dengan Supersaw)
@@ -74,7 +77,7 @@ export function playDrum(ctx: AudioContext, dest: AudioNode, track: string, midi
   if (!p.on) return;
   const out = ctx.createGain(), t = Math.max(when, ctx.currentTime);
   out.gain.value = 1; out.connect(trackInput(ctx, dest, track));
-  const c: Ctl = { ctx, out, t, g: drumLevel(p.level) * velGain(vel) * 0.9, tune: drumTuneSemis(p.tune), dec: drumDecayMul(p.decay) };
+  const c: Ctl = { ctx, out, t, g: drumLevel(p.level) * padMul(p.pads?.[DRUM_KIT[drumRow(midi)].id] ?? PAD_DEF) * velGain(vel) * 0.9, tune: drumTuneSemis(p.tune), dec: drumDecayMul(p.decay) };
   const k = Math.pow(2, c.tune / 12);
   let tail = 0.6;
   switch (midi) {
