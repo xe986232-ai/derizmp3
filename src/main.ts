@@ -3,6 +3,7 @@ import '@fontsource/syncopate/700.css';   // font judul plugin DERIZ (dibundel, 
 import '@fontsource/plus-jakarta-sans/latin-400.css';   // font gelembung tutorial (dibundel, tidak butuh internet)
 import '@fontsource/plus-jakarta-sans/latin-600.css';
 import '@fontsource/plus-jakarta-sans/latin-700.css';
+import './no-context-menu';   // tutup menu klik-tahan / klik kanan bawaan browser
 import { openAudioUploadCard, trackAudioFiles } from './audio-upload-card';
 import { initEffectsPanel } from './effects-panel';
 import { initTrackMeters } from './track-meters';
