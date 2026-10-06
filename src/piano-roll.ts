@@ -117,7 +117,7 @@ function fit(c: HTMLCanvasElement, w: number, h: number, cap = 8) {
 
 // garis vertikal bertingkat: bar > ketukan > 1/2 > 1/4 > 1/8
 // Latar: warna semula. Garis grid & penggaris bukan putih lagi, tapi biru-ungu lembut (satu rona dengan latar) supaya tidak bertabrakan dengan nada.
-const GRID = '166,140,206';   // rgb dasar garis grid
+let GRID = '166,140,206';   // rgb dasar garis grid
 const gl = (a: number): string => 'rgba(' + GRID + ',' + a + ')';
 const PR = {
   bg: '#0f0d13', rowWhite: '#1b1722', rowBlack: '#15121b', beyond: '#0f0d13', hover: gl(0.07),
@@ -126,6 +126,20 @@ const PR = {
 };
 const LEVELS: Array<[number, number]> = [[4, 0.34], [1, 0.17], [0.5, 0.1], [0.25, 0.07], [0.125, 0.05]];
 const LEVEL_FILL = LEVELS.map(l => gl(l[1]));
+// Tema UI: Ink Rose (bawaan) / Mono Graphite. Warna canvas diganti di tempat, lalu digambar ulang lewat event dari menu.
+const UI_PR = {
+  ink:  { g: '166,140,206', bg: '#0f0d13', rowWhite: '#1b1722', rowBlack: '#15121b', ruler: '#19151f', rulerLine: '#2a2233', rulerText: '#e6dcf5', t1: '#8f7fb0', t2: '#5e5280', t3: '#3d3358' },
+  mono: { g: '200,200,212', bg: '#101012', rowWhite: '#1b1b1f', rowBlack: '#151517', ruler: '#18181b', rulerLine: '#2d2d33', rulerText: '#e5e5ea', t1: '#8a8a9a', t2: '#5c5c68', t3: '#3c3c46' }
+};
+function applyUiPalette(): void {
+  const u = UI_PR[document.documentElement.dataset.ui === 'mono' ? 'mono' : 'ink'];
+  GRID = u.g;
+  Object.assign(PR, { bg: u.bg, beyond: u.bg, rowWhite: u.rowWhite, rowBlack: u.rowBlack, hover: gl(0.07), rowLine: gl(0.07), octLine: gl(0.3),
+    ruler: u.ruler, rulerLine: u.rulerLine, rulerText: u.rulerText, rulerTick1: u.t1, rulerTick2: u.t2, rulerTick3: u.t3, dim: u.t1 });
+  LEVELS.forEach((l, i) => { LEVEL_FILL[i] = gl(l[1]); });
+}
+applyUiPalette();
+window.addEventListener('derizmp3:ui', () => { applyUiPalette(); schedule(); });
 const soft = (hex: string, a: number): string => { const k = hexRgb(hex); return 'rgba(' + k[0] + ',' + k[1] + ',' + k[2] + ',' + a + ')'; };
 
 // Warna nada: pastel (campuran warna track + putih) dengan garis tepi gelap & teks gelap, seperti nada hijau muda di FL Studio

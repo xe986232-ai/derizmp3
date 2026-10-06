@@ -80,32 +80,35 @@ function paintRuler(force) {
   else { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, nw, nh); }
   canvas.style.left = x0 + 'px'; canvas.style.width = (x1 - x0) + 'px';
   g.setTransform(d, 0, 0, d, -x0 * d, 0);
+  const mono = document.documentElement.dataset.ui === 'mono';
+  const RA = mono ? '#8a8a9a' : '#9486ad', RB = mono ? '#6a6a76' : '#6f6385', RC = mono ? '#52525c' : '#5a4f70';   // warna tick ruler per tema UI
   const every = BAR_W < 28 ? 4 : BAR_W < 50 ? 2 : 1;
   const beat = BAR_W >= 56, sub = BAR_W >= 160, mid = BAR_W >= 640, fine = BAR_W >= 1280;
   const step = fine ? 1 : mid ? 2 : sub ? 4 : beat ? 16 : 64;   // dalam satuan 1/64 bar
   const b0 = Math.max(0, Math.floor(x0 / BAR_W) - 1), b1 = Math.min(BARS, Math.ceil(x1 / BAR_W) + 1);
   for (let b = b0; b < b1; b++) {
     const bx = b * BAR_W;
-    g.fillStyle = '#9486ad';
+    g.fillStyle = RA;
     if (b % every === 0) { g.font = '11px system-ui, sans-serif'; g.fillRect(bx + .5, 24, 1, 24); g.fillText(b + 1, bx + 4, 38); }
     else g.fillRect(bx + .5, 38, 1, 10);
     for (let j = step; j < 64; j += step) {
       const x = bx + j * BAR_W / 64;
       if (x < x0 - 60 || x > x1 + 60) continue;
       const h = j % 16 === 0 ? 10 : j % 4 === 0 ? 5 : j % 2 === 0 ? 3 : 2;
-      g.fillStyle = h >= 10 ? '#9486ad' : '#6f6385';
+      g.fillStyle = h >= 10 ? RA : RB;
       g.fillRect(x + .5, 48 - h, 1, h);
       if (j % 16 === 0 && BAR_W >= 240) {            // label ketukan: 3.2 = bar 3 ketukan 2
-        g.fillStyle = '#6f6385'; g.font = '10px system-ui, sans-serif';
+        g.fillStyle = RB; g.font = '10px system-ui, sans-serif';
         g.fillText((b + 1) + '.' + (j / 16 + 1), x + 4, 38);
       } else if (j % 4 === 0 && BAR_W >= 1280) {      // label 1/16: 3.2.4
-        g.fillStyle = '#5a4f70'; g.font = '9px system-ui, sans-serif';
+        g.fillStyle = RC; g.font = '9px system-ui, sans-serif';
         g.fillText((b + 1) + '.' + (((j / 16) | 0) + 1) + '.' + ((j % 16) / 4 + 1), x + 3, 38);
       }
     }
   }
 }
 sizeRuler(); paintRuler();
+window.addEventListener('derizmp3:ui', () => paintRuler(true));   // ganti Tema UI: ruler digambar ulang
 const initRec = root => root.querySelectorAll('.trackheader__rec-mode-button').forEach(btn => {
   btn.addEventListener('click', () => {
     const on = btn.getAttribute('aria-checked') === 'true';

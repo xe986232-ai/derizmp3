@@ -1236,6 +1236,8 @@ body:has(.pr.is-open) .menu-btn{opacity:0;pointer-events:none;transform:scale(.8
 .mp__sw--default{background:#fff}
 .mp__sw--black{background:#000}
 .mp__sw--tdefault{background:linear-gradient(135deg,#25252f 50%,#5b3de8 50%)}   /* contoh warna tiap theme */
+.mp__sw--tink{background:linear-gradient(135deg,#0f0d13 50%,#ff5c9e 50%)}
+.mp__sw--tmono{background:linear-gradient(135deg,#101012 50%,#e5e5ea 50%)}
 .mp__sw--tjembut{background:linear-gradient(135deg,#13131a 50%,#000 50%)}
 .mp__sw--w1,.mp__sw--w2{width:20px;border-radius:3px;border:0}   /* ikon mini: satu batang / dua batang */
 .mp__sw--w1{background:linear-gradient(#fff,#fff) 0 4px/100% 6px no-repeat}
@@ -2123,3 +2125,11 @@ body:has(.pr.is-open) .tut-btn,body.tut-on .tut-btn{opacity:0;pointer-events:non
 .plg__in{width:100%;height:40px;padding:0 12px;border-radius:12px;border:1px solid var(--line);background:rgba(0,0,0,.2);color:var(--text);font:13px ui-monospace,Menlo,Consolas,monospace;letter-spacing:.04em;text-transform:uppercase}
 .plg__err{min-height:18px;margin:8px 0 0;font-size:12.5px;color:#ff7a8a}
 .plg__row{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+
+/* ===== Tema UI "Mono Graphite": hampir monokrom, warna muncul dari klip & aksen ===== */
+html[data-ui="mono"]{--bg:#101012;--panel:#101012;--line:#2d2d33;--card:#232327;--tl-ruler:#18181b;--tl-grid:200,200,212;--tl-play:#ff5c9e}
+html[data-ui="mono"] .trackheader{background-color:#1b1b1f}
+html[data-ui="mono"] .trackheader--selected{background-color:var(--card)}
+html[data-ui="mono"] .lane.alt{background-color:rgba(255,255,255,.02)}
+html[data-ui="mono"] .pr__main,html[data-ui="mono"] .pr__scroll,html[data-ui="mono"] .pr__vel{background:#101012}
+html[data-ui="mono"] .pr__corner{background:#18181b}
