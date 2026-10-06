@@ -78,6 +78,7 @@ button{font:inherit;color:inherit;cursor:pointer}
     linear-gradient(90deg,rgba(var(--tl-grid),var(--mid-a,0)) 1px,transparent 1px),
     linear-gradient(90deg,rgba(var(--tl-grid),var(--fine-a,0)) 1px,transparent 1px);
   background-size:var(--bar) 100%,calc(var(--bar) / 4) 100%,calc(var(--bar) / 16) 100%,calc(var(--bar) / 32) 100%,calc(var(--bar) / 64) 100%}
+.lane{border-bottom:1px solid rgba(var(--tl-grid),.16)}   /* garis pemisah track: warna sama dengan garis bar vertikal */
 .lane.alt{background-color:rgba(255,92,158,.025)}
 .playhead{position:absolute;top:-20px;left:-4px;z-index:4;pointer-events:none;color:#ff5a6e;transform:translateX(0);will-change:translate}
 .playhead-body{position:absolute;left:4px;top:20px;bottom:0;width:1px;background:currentColor;height:100vh}
