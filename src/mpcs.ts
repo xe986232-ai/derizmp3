@@ -246,16 +246,63 @@ function build(): void {
   const ro = new ResizeObserver(() => { if (!el.hidden) layout(); });
   ro.observe(stage);
 
+  // Tuts MPCS: gaya "Ivory Capsule" (sama dengan piano roll): rel kiri gelap, tuts putih gading berujung kapsul, tuts hitam ebony berkilap
+  // pendek di atasnya; tuts putih mengisi barisnya + setengah baris tuts hitam di sebelahnya. Tuts yang diratakan (lit) menyala pink.
+  const capsulePath = (c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void => {
+    c.beginPath(); c.moveTo(x, y); c.lineTo(x + w - r, y); c.arcTo(x + w, y, x + w, y + r, r);
+    c.lineTo(x + w, y + h - r); c.arcTo(x + w, y + h, x + w - r, y + h, r); c.lineTo(x, y + h); c.closePath();
+  };
   function drawKeys(): void {
     gk.setTransform(dpr, 0, 0, dpr, 0, 0); gk.clearRect(0, 0, 44, viewH);
     if (!S) return;
-    const off = scroll.scrollTop, hl = flatAt();   // hl: tuts tempat semua nada sedang diratakan (menyala)
-    for (let m = S.lo; m <= S.hi; m++) {
-      const y = (S.hi - m) * rowH - off, pc = ((m % 12) + 12) % 12, lit = m === hl;
-      if (y > viewH || y + rowH < 0) continue;
-      gk.fillStyle = lit ? '#ff5c9e' : BLACK.has(pc) ? '#111118' : '#d9d9e4'; gk.fillRect(0, y, 44, rowH);
-      if (rowH >= 13 || pc === 0 || lit) { gk.fillStyle = lit ? '#fff' : BLACK.has(pc) ? '#8a8a9a' : '#33333f'; gk.font = '600 9px system-ui,sans-serif'; gk.textBaseline = 'middle'; gk.fillText(noteName(m), 6, y + rowH / 2); }
+    const s = S, off = scroll.scrollTop, hl = flatAt();   // hl: tuts tempat semua nada sedang diratakan (menyala)
+    const RAIL = 5, WL = 44 - RAIL - 1, BL = 28, PINK = '#ff5c9e';
+    const pcOf = (m: number): number => ((m % 12) + 12) % 12;
+    const yOf = (m: number): number => (s.hi - m) * rowH - off;
+    gk.fillStyle = '#13131a'; gk.fillRect(0, 0, 44, viewH);
+    const rail = gk.createLinearGradient(0, 0, RAIL, 0); rail.addColorStop(0, '#30303f'); rail.addColorStop(1, '#1a1a23');
+    gk.fillStyle = rail; gk.fillRect(0, 0, RAIL, viewH);
+    const iv = gk.createLinearGradient(RAIL, 0, RAIL + WL, 0); iv.addColorStop(0, '#ece6da'); iv.addColorStop(0.5, '#fffdf9'); iv.addColorStop(1, '#d6d0c2');
+    const eb = gk.createLinearGradient(RAIL, 0, RAIL + BL, 0); eb.addColorStop(0, '#454553'); eb.addColorStop(0.55, '#1b1b23'); eb.addColorStop(1, '#08080c');
+    const hinge = gk.createLinearGradient(RAIL, 0, RAIL + 10, 0); hinge.addColorStop(0, 'rgba(0,0,0,.28)'); hinge.addColorStop(1, 'rgba(0,0,0,0)');
+    const visible = (y: number): boolean => y < viewH + rowH && y + rowH * 2 > 0;
+    // 1) tuts putih
+    for (let m = s.lo; m <= s.hi; m++) {
+      if (BLACK.has(pcOf(m))) continue;
+      const y = yOf(m); if (!visible(y)) continue;
+      const up = m + 1 <= s.hi && BLACK.has(pcOf(m + 1)), dn = m - 1 >= s.lo && BLACK.has(pcOf(m - 1));
+      const top = y + (up ? -rowH / 2 : 0) + 0.5, bot = y + rowH + (dn ? rowH / 2 : 0) - 0.5, h = bot - top, lit = m === hl;
+      const x = RAIL + (lit ? 1 : 0), w = WL - (lit ? 1 : 0), r = Math.min(h / 2, 5);
+      gk.save(); if (lit) { gk.shadowColor = 'rgba(255,92,158,.6)'; gk.shadowBlur = 8; }
+      capsulePath(gk, x, top, w, h, r); gk.fillStyle = lit ? PINK : iv; gk.fill(); gk.restore();
+      gk.save(); capsulePath(gk, x, top, w, h, r); gk.clip();
+      const sh = gk.createLinearGradient(0, top, 0, bot); sh.addColorStop(0, lit ? 'rgba(255,255,255,.25)' : 'rgba(255,255,255,.55)'); sh.addColorStop(0.4, 'rgba(255,255,255,0)'); sh.addColorStop(1, 'rgba(0,0,0,.1)');
+      gk.fillStyle = sh; gk.fillRect(x, top, w, h); gk.fillStyle = hinge; gk.fillRect(x, top, 10, h);
+      gk.fillStyle = 'rgba(0,0,0,.18)'; gk.fillRect(x, bot - 1, w, 1);
+      gk.restore();
     }
+    // 2) tuts hitam
+    for (let m = s.lo; m <= s.hi; m++) {
+      if (!BLACK.has(pcOf(m))) continue;
+      const y = yOf(m) + 1; if (!visible(y)) continue;
+      const h = rowH - 2, lit = m === hl, x = RAIL + (lit ? 1 : 0), w = BL - (lit ? 1 : 0), r = Math.min(h / 2.2, 5);
+      gk.save(); gk.shadowColor = lit ? 'rgba(255,92,158,.65)' : 'rgba(0,0,0,.55)'; gk.shadowBlur = lit ? 8 : 5; gk.shadowOffsetX = lit ? 0 : 2; gk.shadowOffsetY = lit ? 0 : 1;
+      capsulePath(gk, x, y, w, h, r); gk.fillStyle = lit ? PINK : eb; gk.fill(); gk.restore();
+      gk.save(); capsulePath(gk, x, y, w, h, r); gk.clip();
+      gk.fillStyle = 'rgba(255,255,255,.2)'; gk.fillRect(x + 2, y + 0.5, w - 6, 1);
+      const gl = gk.createLinearGradient(x, 0, x + w, 0); gl.addColorStop(0, 'rgba(255,255,255,.16)'); gl.addColorStop(1, 'rgba(255,255,255,0)');
+      gk.fillStyle = gl; gk.fillRect(x + 1, y + h * 0.2, w - 3, Math.max(1.5, h * 0.2));
+      gk.restore();
+    }
+    // 3) nama nada
+    gk.font = '600 9px system-ui,sans-serif'; gk.textBaseline = 'middle'; gk.textAlign = 'left';
+    for (let m = s.lo; m <= s.hi; m++) {
+      const y = yOf(m), p = pcOf(m), lit = m === hl;
+      if (!(rowH >= 13 || p === 0 || lit) || y > viewH || y + rowH < 0) continue;
+      gk.fillStyle = lit ? '#fff' : BLACK.has(p) ? '#b6bad8' : '#4a4d6e';
+      gk.fillText(noteName(m), RAIL + 4, y + rowH / 2 + 0.5);
+    }
+    gk.fillStyle = '#2c2c3d'; gk.fillRect(43, 0, 1, viewH);
   }
 
   // peta seluruh sample: bentuk amplitudo + posisi nada + kotak jendela yang sedang terlihat. Ketuk / seret buat pindah.

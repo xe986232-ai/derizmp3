@@ -8,6 +8,7 @@
 
 import { setReverb, setEq, setFilter, setDeesser, setDelay, delayLevels, reverbSeconds, reverbPreSec, reverbToneHz, reverbLowHz, eqDb, EQ_BANDS, eqHz, eqFreqV, eqQ, eqQV, EQ_RANGE_DB, eqSpectrum, EQ_FFT_BINS, filterMode, filterHz, deesserHz, deesserThr, deesserMaxDb, decodeStandalone, trackInput } from './audio-engine';
 import { DerizSynth } from './deriz-synth';
+import { ivkKey } from './ivory-keys';
 import { dbgSched, dbgSent, dbgSpec } from './audio-debug';
 import { openMpcs } from './mpcs';
 import { openCute } from './cute';
@@ -192,7 +193,7 @@ function derizHtml(fx: Fx): string {
     `<div class="deriz__vol">${dKnob(fx, 'volume')}</div>` +
     `<div class="deriz__nav${z && z.zoom > 1.001 ? '' : ' is-idle'}" aria-hidden="true"><i class="deriz__thumb"${z ? ` style="left:${(z.view * 100).toFixed(3)}%;width:${(100 / z.zoom).toFixed(3)}%"` : ''}></i></div>` +
     `<button type="button" class="deriz__swap"${z ? '' : ' hidden'}>Ganti</button></div>` +
-    `<div class="deriz__kb"><div class="keyboardkeyboardcontroller deriz__keys"><div class="keys"></div></div></div>` +
+    `<div class="deriz__kb"><div class="ivk deriz__keys"><div class="ivk__keys"></div></div></div>` +
     `<input type="file" class="deriz__file" accept="${AUDIO_ACCEPT}" hidden></div></div>`;
 }
 
@@ -640,17 +641,17 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   const kbCard = (): HTMLElement | null => ovOpen?.card ?? null;
   const kbKeyEl = (m: number): HTMLElement | null => kbCard()?.querySelector<HTMLElement>(`.deriz__keys [data-midi="${m}"]`) ?? null;
   function buildKb(card: HTMLElement): void {
-    const keys = card.querySelector<HTMLElement>('.deriz__keys .keys'); if (!keys || keys.childElementCount) return;
+    const keys = card.querySelector<HTMLElement>('.deriz__keys .ivk__keys'); if (!keys || keys.childElementCount) return;
     const w = 100 / NW;   // lebar satu tuts putih (%): keyboard selalu pas selebar kartu
     let h = '';
     for (let i = 0; i < NW; i++) {
       const m = KBASE + Math.floor(i / 7) * 12 + WPC[i % 7];
-      h += `<button type="button" tabindex="-1" class="whitekey unhighlighted${i % 7 === 0 ? ' pitch-visible' : ''} unpressed" data-midi="${m}" aria-label="${m}" style="left:${(i * w).toFixed(4)}%;width:calc(${w.toFixed(4)}% - 1px)"><span class="pitch-label">C${Math.floor(m / 12) - 1}</span></button>`;
+      h += ivkKey(m, `left:${(i * w).toFixed(4)}%;width:calc(${w.toFixed(4)}% - 1px)`);
     }
     for (let i = 0; i < NW - 1; i++) {
       if (!BLK.includes(i % 7)) continue;
       const m = KBASE + Math.floor(i / 7) * 12 + WPC[i % 7] + 1;
-      h += `<button type="button" tabindex="-1" class="blackkey unhighlighted unpressed" data-midi="${m}" aria-label="${m}" style="left:calc(${((i + 1) * w).toFixed(4)}% - ${(w * 0.31).toFixed(4)}%);width:${(w * 0.62).toFixed(4)}%"></button>`;
+      h += ivkKey(m, `left:calc(${((i + 1) * w).toFixed(4)}% - ${(w * 0.31).toFixed(4)}%);width:${(w * 0.62).toFixed(4)}%`);
     }
     keys.innerHTML = h;
   }
@@ -831,16 +832,16 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     headEnd(v.id);
     for (const e of synths.values()) e.s?.noteOff(v.id);
   }
-  const kbPress = (m: number): void => { kbOn(m); const k = kbKeyEl(m); if (k) { k.classList.add('pressed'); k.classList.remove('unpressed'); } };
-  const kbRelease = (m: number): void => { kbOff(m); const k = kbKeyEl(m); if (k) { k.classList.remove('pressed'); k.classList.add('unpressed'); } };
+  const kbPress = (m: number): void => { kbOn(m); const k = kbKeyEl(m); if (k) k.classList.add('is-down'); };
+  const kbRelease = (m: number): void => { kbOff(m); const k = kbKeyEl(m); if (k) k.classList.remove('is-down'); };
   function kbReleaseAll(): void {
     [...kbVoices.keys()].forEach(kbRelease);
-    kbCard()?.querySelectorAll('.deriz__keys .pressed').forEach(k => { k.classList.remove('pressed'); k.classList.add('unpressed'); });
+    kbCard()?.querySelectorAll('.deriz__keys .is-down').forEach(k => k.classList.remove('is-down'));
     kbPtr.clear(); kbKeysDown.clear();
   }
-  const kbKeyAt = (x: number, y: number): HTMLElement | null => document.elementFromPoint(x, y)?.closest<HTMLElement>('.deriz__keys .whitekey, .deriz__keys .blackkey') ?? null;
+  const kbKeyAt = (x: number, y: number): HTMLElement | null => document.elementFromPoint(x, y)?.closest<HTMLElement>('.deriz__keys .ivk__w, .deriz__keys .ivk__b') ?? null;
   ov.addEventListener('pointerdown', e => {
-    const k = (e.target as Element).closest<HTMLElement>('.deriz__keys .whitekey, .deriz__keys .blackkey'); if (!k || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const k = (e.target as Element).closest<HTMLElement>('.deriz__keys .ivk__w, .deriz__keys .ivk__b'); if (!k || (e.pointerType === 'mouse' && e.button !== 0)) return;
     e.preventDefault(); k.closest<HTMLElement>('.deriz__keys')!.setPointerCapture(e.pointerId);
     const m = +k.dataset.midi!; kbPtr.set(e.pointerId, m); kbPress(m);
   });

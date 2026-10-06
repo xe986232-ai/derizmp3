@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { ivkDock, ivkSetCaps } from './ivory-keys';
 import '@fontsource/syncopate/700.css';   // font judul plugin DERIZ (dibundel, tidak butuh internet)
 import '@fontsource/plus-jakarta-sans/latin-400.css';   // font gelembung tutorial (dibundel, tidak butuh internet)
 import '@fontsource/plus-jakarta-sans/latin-600.css';
@@ -948,8 +949,9 @@ lanesEl.addEventListener('dblclick', e => {   // klik dua kali badan Automation 
 // ===== Keyboard virtual =====
 const kbdEl = document.getElementById('kbd'), kbdKeys = document.getElementById('kbdKeys'), kbdTitle = document.getElementById('kbdTitle');
 const kbdOctLabel = document.getElementById('kbdOctLabel'), kbdOctDown = document.getElementById('kbdOctDown'), kbdOctUp = document.getElementById('kbdOctUp');
-const KEY_W = 68, WK = 66, BK = 44, OCT_W = 7 * KEY_W, KB_C0 = 136, KB_END = 3534;   // ukuran dari markup keyboard
-const KSEL = '.whitekey, .blackkey';
+const IVKD = ivkDock();   // markup tuts A-1..C7 dibangun ivory-keys.ts (posisi px dihitung kode)
+const KEY_W = 68, WK = 66, BK = 44, OCT_W = 7 * KEY_W, KB_C0 = IVKD.c0, KB_END = IVKD.width;
+const KSEL = '.ivk__w, .ivk__b';
 // tombol komputer -> semitone dari C di oktaf dasar (susunan ZXCVBNM,. dan QWERTYUIOP)
 const KMAP = {z:0,s:1,x:2,d:3,c:4,v:5,g:6,b:7,h:8,n:9,j:10,m:11,',':12,l:13,'.':14,'1':15,q:16,w:17,'3':18,e:19,'4':20,r:21,'5':22,t:23,y:24,'7':25,u:26,'8':27,i:28,o:29,'0':30,p:31};
 let kbdCont = null, kbdOct = 3, kbdN = 0;
@@ -1047,8 +1049,8 @@ function noteOff(m) {
   v.o1.stop(t + .5); v.o2.stop(t + .5);
 }
 const keyElOf = m => kbdKeys.querySelector('[data-midi="' + m + '"]');
-function press(m) { noteOn(m); const k = keyElOf(m); if (k) { k.classList.add('pressed'); k.classList.remove('unpressed'); } }
-function release(m) { noteOff(m); const k = keyElOf(m); if (k) { k.classList.remove('pressed'); k.classList.add('unpressed'); } }
+function press(m) { noteOn(m); const k = keyElOf(m); if (k) k.classList.add('is-down'); }
+function release(m) { noteOff(m); const k = keyElOf(m); if (k) k.classList.remove('is-down'); }
 function releaseAll() { [...voices.keys()].forEach(release); pointerNotes.clear(); kbdDown.clear(); }
 
 // --- preview piano roll: nada yang ditambah / digeser langsung bunyi lewat instrumen pemilik piano roll (DERIZ = sample-nya, Supersaw = synth-nya) ---
@@ -1067,15 +1069,11 @@ setPianoRollPreviewHandler({
   }
 });
 
-// --- tuts: pakai markup .keyboardkeyboardcontroller; oktaf = geser translateX, tuts di luar jendela dinonaktifkan ---
-const kbdScroll = kbdKeys.querySelector('.scrollable');
-const NOTE_PC = {C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11};
-const keyBtns = [...kbdKeys.querySelectorAll(KSEL)].map(el => {
-  const m = /pitch-([A-G])(b?)(-?\d+)/.exec(el.className);
-  const midi = 12 + 12 * +m[3] + NOTE_PC[m[1]] - (m[2] ? 1 : 0);
-  el.dataset.midi = midi; el.tabIndex = -1;
-  return {el, left: parseFloat(el.style.left), w: el.classList.contains('blackkey') ? BK : WK};
-});
+// --- tuts: markup dibangun ivory-keys.ts; oktaf = geser translateX, tuts di luar jendela dinonaktifkan ---
+const kbdScroll = kbdKeys.querySelector('.ivk__scroll');
+kbdKeys.querySelector('.ivk__keys').innerHTML = IVKD.html;
+kbdScroll.style.width = IVKD.width + 'px';
+const keyBtns = [...kbdKeys.querySelectorAll(KSEL)].map(el => ({el, left: parseFloat(el.style.left), w: el.classList.contains('ivk__b') ? BK : WK}));
 const whitesFit = () => Math.max(7, Math.floor(kbdEl.clientWidth / KEY_W) || Math.floor(innerWidth / KEY_W));
 function buildKeys(instant) {
   const nW = whitesFit(), W = nW * KEY_W - 2, maxOct = Math.max(0, Math.floor((KB_END - KB_C0 - W) / OCT_W));
@@ -1091,6 +1089,7 @@ function buildKeys(instant) {
   });
   if (instant) { kbdKeys.offsetWidth; kbdKeys.classList.remove('no-anim'); }
   kbdOctLabel.textContent = 'C' + kbdOct;
+  ivkSetCaps(kbdKeys, baseMidi(), KMAP);   // huruf tombol komputer di tuts mengikuti oktaf
   kbdOctDown.disabled = kbdOct <= 0; kbdOctUp.disabled = kbdOct >= maxOct;
 }
 
