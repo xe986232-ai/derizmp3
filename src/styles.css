@@ -2017,13 +2017,15 @@ body:has(.pr.is-open) .tut-btn,body.tut-on .tut-btn{opacity:0;pointer-events:non
 .shop__chip.is-on{background:var(--accent);border-color:var(--accent);color:#fff}
 .shop__chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .shop__list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
-.shop__item{display:flex;flex-direction:column;gap:6px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+.shop__item{display:flex;flex-direction:column;gap:8px;padding:10px 10px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+.shop__item>:not(.shop__art){padding:0 4px}
 .shop__item[hidden]{display:none}
 .shop__top{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.shop__name{font-size:14px;font-weight:700;color:var(--text)}
+.shop__top{margin-top:2px}
+.shop__name{font-size:15px;font-weight:700;color:var(--text)}
 .shop__tag{flex:none;padding:2px 8px;border:1px solid var(--line);border-radius:999px;font-size:11px;font-weight:600;color:var(--muted)}
 .shop__desc{margin:0;font-size:13px;line-height:1.4;color:var(--muted)}
 .shop__state{align-self:flex-start;margin-top:2px;font-size:12px;font-weight:600;color:var(--accent)}
 .shop__more{text-align:center}
-.shop__art{display:flex;align-items:center;justify-content:center;aspect-ratio:16/10;overflow:hidden;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
-.shop__art img{display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}
+.shop__art{position:relative;aspect-ratio:4/3;border-radius:8px;background:var(--bg);overflow:hidden}
+.shop__art img{position:absolute;inset:12px;width:calc(100% - 24px);height:calc(100% - 24px);object-fit:contain}
