@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { ivkDock, ivkSetCaps } from './ivory-keys';
+import { uiTheme, syncTrackColors } from './ui-theme';
 import '@fontsource/syncopate/700.css';   // font judul plugin DERIZ (dibundel, tidak butuh internet)
 import '@fontsource/plus-jakarta-sans/latin-400.css';   // font gelembung tutorial (dibundel, tidak butuh internet)
 import '@fontsource/plus-jakarta-sans/latin-600.css';
@@ -80,8 +81,8 @@ function paintRuler(force) {
   else { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, nw, nh); }
   canvas.style.left = x0 + 'px'; canvas.style.width = (x1 - x0) + 'px';
   g.setTransform(d, 0, 0, d, -x0 * d, 0);
-  const mono = document.documentElement.dataset.ui === 'mono';
-  const RA = mono ? '#8a8a9a' : '#9486ad', RB = mono ? '#6a6a76' : '#6f6385', RC = mono ? '#52525c' : '#5a4f70';   // warna tick ruler per tema UI
+  const ut = uiTheme();   // warna tick ruler per tema UI
+  const RA = ut === 'mono' ? '#8a8a9a' : ut === 'classic' ? '#8c8c9e' : '#9486ad', RB = ut === 'mono' ? '#6a6a76' : ut === 'classic' ? '#717183' : '#6f6385', RC = ut === 'mono' ? '#52525c' : ut === 'classic' ? '#5a5a6b' : '#5a4f70';
   const every = BAR_W < 28 ? 4 : BAR_W < 50 ? 2 : 1;
   const beat = BAR_W >= 56, sub = BAR_W >= 160, mid = BAR_W >= 640, fine = BAR_W >= 1280;
   const step = fine ? 1 : mid ? 2 : sub ? 4 : beat ? 16 : 64;   // dalam satuan 1/64 bar
@@ -207,6 +208,7 @@ const initKnobs = root => root.querySelectorAll('.knob-input').forEach(el => {
 });
 // Menu titik tiga: Delete & Color
 const COLORS = ['#ff5c9e','#a66cff','#5b8ff3','#2dd4bf','#3fbf5f','#f2b632','#ff8a4c','#ef4444'];
+syncTrackColors(COLORS); window.addEventListener('derizmp3:ui', () => syncTrackColors(COLORS));   // set warna mengikuti Tema UI
 let menu = null, sub = null, menuBtn = null;
 function fadeOut(el) {
   el.style.pointerEvents = 'none';

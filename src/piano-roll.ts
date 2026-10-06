@@ -19,6 +19,7 @@ export interface NoteData { p: number; s: number; l: number; sl?: boolean; v?: n
 type Tool = 'draw' | 'select' | 'erase' | 'pan';
 
 import { VEL_MIN, velOf, velAlpha } from './velocity';
+import { uiTheme, syncTrackColors } from './ui-theme';
 const P_MIN = 24, P_MAX = 108, ROWS = P_MAX - P_MIN + 1;   // C1..C8
 const KEY_W = 64, RULER_H = 32, BEATS_PER_BAR = 4;
 // Panjang grid (bar) bisa diatur di Pengaturan: 4..50, bawaan 15. Disimpan di browser; tidak pernah lebih pendek dari nada terjauh.
@@ -129,10 +130,11 @@ const LEVEL_FILL = LEVELS.map(l => gl(l[1]));
 // Tema UI: Ink Rose (bawaan) / Mono Graphite. Warna canvas diganti di tempat, lalu digambar ulang lewat event dari menu.
 const UI_PR = {
   ink:  { g: '166,140,206', bg: '#0f0d13', rowWhite: '#1b1722', rowBlack: '#15121b', ruler: '#19151f', rulerLine: '#2a2233', rulerText: '#e6dcf5', t1: '#8f7fb0', t2: '#5e5280', t3: '#3d3358' },
-  mono: { g: '200,200,212', bg: '#101012', rowWhite: '#1b1b1f', rowBlack: '#151517', ruler: '#18181b', rulerLine: '#2d2d33', rulerText: '#e5e5ea', t1: '#8a8a9a', t2: '#5c5c68', t3: '#3c3c46' }
+  mono: { g: '200,200,212', bg: '#101012', rowWhite: '#1b1b1f', rowBlack: '#151517', ruler: '#18181b', rulerLine: '#2d2d33', rulerText: '#e5e5ea', t1: '#8a8a9a', t2: '#5c5c68', t3: '#3c3c46' },
+  classic: { g: '142,147,205', bg: '#111119', rowWhite: '#1f1f2a', rowBlack: '#171720', ruler: '#1f1f29', rulerLine: '#2d2d3f', rulerText: '#dcdff5', t1: '#8186b8', t2: '#52578a', t3: '#393d60' }
 };
 function applyUiPalette(): void {
-  const u = UI_PR[document.documentElement.dataset.ui === 'mono' ? 'mono' : 'ink'];
+  const u = UI_PR[uiTheme()];
   GRID = u.g;
   Object.assign(PR, { bg: u.bg, beyond: u.bg, rowWhite: u.rowWhite, rowBlack: u.rowBlack, hover: gl(0.07), rowLine: gl(0.07), octLine: gl(0.3),
     ruler: u.ruler, rulerLine: u.rulerLine, rulerText: u.rulerText, rulerTick1: u.t1, rulerTick2: u.t2, rulerTick3: u.t3, dim: u.t1 });
@@ -1188,6 +1190,7 @@ function setTool(t: Tool) {
 // card 1: View + Note Key  ->  klik View: card 2 (Color + Style)  ->  klik Color: card 3 (pilihan warna)
 let showNoteNames = false;   // Note Key: tampilkan nama semua nada (C, C#, D, D#, ...) di keyboard kiri; mati = hanya C
 const PR_COLORS = ['#5b3de8', '#2f7bff', '#14b8a6', '#3fbf5f', '#ff9f1c', '#ff4d8d', '#ef4444', '#facc15'];   // sama dengan pilihan warna track di mixer
+syncTrackColors(PR_COLORS); window.addEventListener('derizmp3:ui', () => syncTrackColors(PR_COLORS));   // set warna mengikuti Tema UI (sama dengan COLORS di main.ts)
 const CHEV = '<svg class="track-menu__chev" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M6.045 20.89a1.164 1.164 0 0 0 1.639.174l5.05-4.079 5.048-4.078a1.164 1.164 0 0 0 0-1.813l-5.049-4.078-5.049-4.078A1.165 1.165 0 1 0 6.22 4.75l4.488 3.625L15.196 12l-4.488 3.625L6.22 19.25a1.166 1.166 0 0 0-.175 1.64Z"/></svg>';
 const mico = (d: string) => '<svg class="pr__mico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
 const MICO = {

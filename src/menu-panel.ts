@@ -132,9 +132,10 @@ export function initMenuPanel(): MenuPanel {
         '<section class="mp__page" data-page="settings" aria-label="Pengaturan" hidden>' +
           '<div class=\"mp__card mp__item mp__set\" style=\"--i:0\">' +
             '<div class=\"mp__sub\"><span>Tema UI</span></div>' +
-            '<div class=\"mp__seg\" role=\"radiogroup\" aria-label=\"Tema UI\">' +
+            '<div class=\"mp__seg mp__seg--wrap\" role=\"radiogroup\" aria-label=\"Tema UI\">' +
               '<button type=\"button\" class=\"mp__segbtn\" role=\"radio\" data-uitheme=\"ink\"><i class=\"mp__sw mp__sw--tink\"></i>Ink Rose</button>' +
               '<button type=\"button\" class=\"mp__segbtn\" role=\"radio\" data-uitheme=\"mono\"><i class=\"mp__sw mp__sw--tmono\"></i>Mono Graphite</button>' +
+              '<button type=\"button\" class=\"mp__segbtn\" role=\"radio\" data-uitheme=\"classic\"><i class=\"mp__sw mp__sw--tclassic\"></i>Classic</button>' +
             '</div>' +
           '</div>' +
           '<div class="mp__card mp__item mp__set" style="--i:1">' +
@@ -218,9 +219,9 @@ export function initMenuPanel(): MenuPanel {
   const UI_KEY = 'derizmp3.ui';
   const uiBtns = [...panel.querySelectorAll<HTMLButtonElement>('[data-uitheme]')];
   const setUi = (v: string, save: boolean): void => {
-    const val = v === 'mono' ? 'mono' : 'ink';
+    const val = v === 'mono' || v === 'classic' ? v : 'ink';
     document.documentElement.dataset.ui = val;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', val === 'mono' ? '#101012' : '#0f0d13');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', val === 'mono' ? '#101012' : val === 'classic' ? '#14141c' : '#0f0d13');
     uiBtns.forEach(b => { const on = b.dataset.uitheme === val; b.classList.toggle('is-on', on); b.setAttribute('aria-checked', String(on)); });
     window.dispatchEvent(new CustomEvent('derizmp3:ui'));   // ruler & piano roll (canvas) menggambar ulang dengan warna baru
     if (save) { try { localStorage.setItem(UI_KEY, val); } catch { /* penyimpanan diblokir: tetap berlaku sampai halaman ditutup */ } }
