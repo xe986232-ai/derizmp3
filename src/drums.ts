@@ -4,7 +4,6 @@
 // Kartunya ada di halaman Plugin pada panel efek (fx-rack.ts); jendelanya dibuka dari kartu itu.
 
 import { DRUM_KIT, PAD_DEF } from './drums-audio';
-import { dragWindow } from './win-drag';
 
 export interface DrumNote { p: number; s: number; l: number; v?: number }
 export interface DrumsView { notes: DrumNote[]; beats: number; label: string }
@@ -30,24 +29,20 @@ export const setDrumsBridge = (b: DrumsBridge): void => { bridge = b; };
 const STEP = 0.25;                 // beat per step (1/16)
 const PER_BAR = 16;
 const MAX_BARS = 8;
-const ICON_PLAY = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5.14v13.72a1 1 0 0 0 1.52.85l11-6.86a1 1 0 0 0 0-1.7l-11-6.86A1 1 0 0 0 8 5.14z" fill="currentColor"/></svg>';
-const ICON_PAUSE = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="6" y="5" width="4.5" height="14" rx="1.2" fill="currentColor"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2" fill="currentColor"/></svg>';
 const ICON_CLOSE = '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 
 let root: HTMLElement | null = null, openFn: (() => void) | null = null, refreshFn: (() => void) | null = null;
 
 export function openDrums(): void { if (!root) build(); openFn?.(); }
 export function drumsRefresh(): void { if (root && !root.hidden) refreshFn?.(); }
-let syncPlayFn: (() => void) | null = null;
-export function drumsSyncPlay(): void { syncPlayFn?.(); }   // transport berubah (play / pause): ikon tombol di jendela ikut   // pattern terpilih berubah / nada berubah dari luar
+export function drumsSyncPlay(): void { /* play / pause dikontrol dari card transport di bawah; tidak ada tombol play di jendela */ }
 
 function build(): void {
   const el = document.createElement('div');
   el.className = 'drm'; el.hidden = true;
   el.innerHTML =
-    '<div class="drm__back"></div>' +
-    '<div class="drm__win" role="dialog" aria-modal="true" aria-label="Drums" tabindex="-1">' +
-      `<header class="drm__head"><button type="button" class="drm__play" aria-label="Putar" title="Play / Pause">${ICON_PLAY}</button><span class="drm__title">DRUMS</span><i class="drm__led" aria-hidden="true"></i><span class="drm__stat" role="status" aria-live="polite"></span>` +
+    '<div class="drm__win" role="dialog" aria-label="Drums" tabindex="-1">' +
+      `<header class="drm__head"><span class="drm__title">DRUMS</span><i class="drm__led" aria-hidden="true"></i><span class="drm__stat" role="status" aria-live="polite"></span>` +
         `<button type="button" class="drm__btn" data-x="grow" title="Tambah 1 bar di akhir pattern">+ Bar</button>` +
         `<button type="button" class="drm__btn" data-x="clear" title="Hapus semua hit di pattern ini">Clear</button>` +
         `<button type="button" class="drm__close" aria-label="Tutup Drums">${ICON_CLOSE}</button></header>` +
@@ -55,7 +50,6 @@ function build(): void {
       '<p class="drm__msg" hidden></p>' +
     '</div>';
   document.body.appendChild(el);
-  dragWindow({ root: el, move: el.querySelector<HTMLElement>('.drm__win')!, handle: '.drm__head' });
   root = el;
 
   const win = el.querySelector<HTMLElement>('.drm__win')!;
@@ -64,30 +58,21 @@ function build(): void {
   const grid = el.querySelector<HTMLElement>('.drm__grid')!;
   const msg = el.querySelector<HTMLElement>('.drm__msg')!;
   const body = el.querySelector<HTMLElement>('.drm__body')!;
+  win.style.setProperty('--n', String(DRUM_KIT.length));
+
+  // full screen, tapi batas bawahnya tepat di atas card transport (play / pause); card itu tetap bisa dipakai untuk mengontrol Drums
+  const dock = document.getElementById('dockCard');
+  const fit = (): void => {
+    const h = window.innerHeight, r = dock ? dock.getBoundingClientRect() : null;
+    const top = r && r.height > 0 && r.top < h ? r.top : h;
+    el.style.setProperty('--drm-b', Math.max(0, Math.round(h - top)) + 'px');
+  };
+  window.addEventListener('resize', fit);
+  window.visualViewport?.addEventListener('resize', fit);
+  if (dock && 'ResizeObserver' in window) { const ro = new ResizeObserver(fit); ro.observe(dock); ro.observe(document.body); const kb = document.getElementById('kbd'); if (kb) ro.observe(kb); }   // tinggi keyboard / card berubah (diseret atau panel ditutup): batas bawah ikut
 
   labels.innerHTML = DRUM_KIT.map(d => `<div class="drm__lab"><button type="button" class="drm__name" data-m="${d.midi}" title="Dengarkan ${d.name}">${d.name}</button>` +
     `<input type="range" class="drm__vol" min="0" max="100" step="1" value="${Math.round(PAD_DEF * 100)}" style="--p:${Math.round(PAD_DEF * 100)}%" data-id="${d.id}" aria-label="Volume ${d.name}" title="Volume ${d.name}"></div>`).join('');
-  const playBtn = el.querySelector<HTMLButtonElement>('.drm__play')!;
-  const syncPlay = (): void => {
-    const on = !!bridge?.playing();
-    playBtn.innerHTML = on ? ICON_PAUSE : ICON_PLAY; playBtn.setAttribute('aria-label', on ? 'Jeda' : 'Putar'); playBtn.classList.toggle('is-on', on);
-  };
-  syncPlayFn = syncPlay;
-  playBtn.addEventListener('click', () => { bridge?.toggle(); syncPlay(); });
-
-  // efek 3D: card miring tipis mengikuti kursor (mouse saja, mati di atas grid / saat menekan / reduced-motion), kilau mengikuti arah cahaya
-  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const untilt = (): void => { win.classList.remove('is-tilting'); win.style.setProperty('--rx', '0deg'); win.style.setProperty('--ry', '0deg'); win.style.setProperty('--mx', '50%'); win.style.setProperty('--my', '0%'); };
-  el.addEventListener('pointermove', e => {
-    if (reduce || e.pointerType !== 'mouse') return;
-    if (e.buttons || (e.target as Element).closest('.drm__body')) { untilt(); return; }
-    const r = win.getBoundingClientRect(), px = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), py = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
-    win.classList.add('is-tilting');
-    win.style.setProperty('--ry', ((px - .5) * 5).toFixed(2) + 'deg'); win.style.setProperty('--rx', ((.5 - py) * 4).toFixed(2) + 'deg');
-    win.style.setProperty('--mx', (px * 100).toFixed(1) + '%'); win.style.setProperty('--my', (py * 100).toFixed(1) + '%');
-  });
-  el.addEventListener('pointerleave', untilt);
-
   let bars = 0, view: DrumsView | null = null;
 
   // ---------- gambar grid dari nada pattern ----------
@@ -110,7 +95,6 @@ function build(): void {
     }
     const pads = bridge ? bridge.pads() : {};
     labels.querySelectorAll<HTMLInputElement>('.drm__vol').forEach(r => { r.value = String(Math.round((pads[r.dataset.id!] ?? PAD_DEF) * 100)); r.style.setProperty('--p', r.value + '%'); });
-    syncPlay();
     grid.querySelectorAll<HTMLElement>('.drm__row').forEach(row => {
       const m = +row.dataset.m!;
       row.querySelectorAll<HTMLElement>('.drm__c').forEach(c => {
@@ -177,12 +161,11 @@ function build(): void {
   // ---------- buka / tutup ----------
   const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
   const close = (): void => { el.hidden = true; document.removeEventListener('keydown', onKey, true); };
-  el.querySelector('.drm__back')!.addEventListener('click', close);
   el.querySelector('.drm__close')!.addEventListener('click', close);
   el.addEventListener('keydown', e => e.stopPropagation()); el.addEventListener('keyup', e => e.stopPropagation());   // pintasan DAW (Space, panah) tidak ikut jalan
   openFn = (): void => {
     if (!el.hidden) { win.focus({ preventScroll: true }); return; }
-    el.hidden = false; paint();
+    el.hidden = false; fit(); paint();
     document.addEventListener('keydown', onKey, true);
     win.focus({ preventScroll: true });
   };
