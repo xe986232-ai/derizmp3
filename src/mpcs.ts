@@ -8,6 +8,7 @@ import { DEFAULT_CONTROLS, shiftCurve, snapTargets, toMono, type Controls, type 
 import { encodeWavFloat } from './wav';
 import { DEMO, LIMITS, demoTrim, demoMarked, demoNotice } from './demo';
 import { encodeMp3Mono, encodeWav16Mono, saveBlob, type SaveFormat } from './mpcs-save';
+import { dragWindow } from './win-drag';
 
 const svg = (inner: string, size = 18): string =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
@@ -146,6 +147,7 @@ function build(): void {
       `<input type="file" class="mpcs__file" accept="${AUDIO_ACCEPT}" hidden>` +
     '</div>';
   document.body.appendChild(el);
+  dragWindow({ root: el, move: el.querySelector<HTMLElement>('.mpcs__win')!, handle: '.mpcs__head' });   // jendela bisa digeser lewat header
   root = el;
 
   const win = el.querySelector<HTMLElement>('.mpcs__win')!;

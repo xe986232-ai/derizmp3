@@ -5,6 +5,7 @@
 // Inti teori ada di mgchord-theory.ts (murni, dites lewat tools/mgchord-test.ts).
 
 import { DEMO, LIMITS, demoNotice } from './demo';
+import { dragWindow } from './win-drag';
 import { createMaster, loadPiano, voiceTone, VOICES, type Voice } from './mgchord-audio';
 import {
   NOTE_NAMES, PRESETS, SCALES, STYLES, STYLE_INFO,
@@ -142,6 +143,7 @@ function build(): void {
     `<aside class="mgc__kbd" aria-label="Keyboard"><div class="mgc__kbt"><div class="mgc__cd" data-dd="range"><button type="button" class="mgc__cdb" aria-haspopup="listbox" aria-expanded="false" aria-label="Pilih rentang keyboard"><span></span></button></div></div><div class="mgc__kb" role="group">${kbMarkup(kbLo())}</div></aside>` +
     '</div>';
   document.body.appendChild(el);
+  dragWindow({ root: el, move: el.querySelector<HTMLElement>('.mgc__wrap')!, handle: '.mgc__head' });   // jendela bisa digeser lewat header
   root = el;
 
   const win = el.querySelector<HTMLElement>('.mgc__win')!;

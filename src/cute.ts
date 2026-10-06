@@ -5,6 +5,7 @@
 
 import { ACCEPT as AUDIO_ACCEPT, isAudio } from './audio-upload-card';
 import { encodeWavFloatMulti } from './wav';
+import { dragWindow } from './win-drag';
 
 const svg = (inner: string, size = 18): string =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
@@ -72,6 +73,7 @@ function build(): void {
       `<input type="file" class="cute__file" accept="${AUDIO_ACCEPT}" hidden>` +
     '</div>';
   document.body.appendChild(el);
+  dragWindow({ root: el, move: el.querySelector<HTMLElement>('.cute__win')!, handle: '.cute__head' });   // jendela bisa digeser lewat header
   root = el;
 
   const win = el.querySelector<HTMLElement>('.cute__win')!;

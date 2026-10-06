@@ -2207,3 +2207,7 @@ body.is-pdragging,body.is-pdragging *{cursor:grabbing!important;user-select:none
 .trkcard__vol .slider:active::-webkit-slider-thumb{transform:scaleY(1.2);background:#fff}
 .trkcard__vol .slider:hover::-moz-range-thumb{transform:scaleY(1.1)}
 .trkcard__vol .slider:active::-moz-range-thumb{transform:scaleY(1.2);background:#fff}
+
+/* ===== Jendela plugin bisa digeser lewat header (src/win-drag.ts); touch-action:none supaya geser jari tidak men-scroll halaman ===== */
+.derizov__win .fxc__head,.mpcs__head,.cute__head,.mgc__head{touch-action:none;cursor:grab}
+.is-winmove,.is-winmove :is(.fxc__head,.mpcs__head,.cute__head,.mgc__head){cursor:grabbing!important;-webkit-user-select:none;user-select:none}

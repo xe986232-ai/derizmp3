@@ -15,6 +15,7 @@ import { openCute } from './cute';
 
 // MGCHORD disembunyikan dari daftar plugin (belum siap dipublikasikan). Cara menambahkannya: di tab Plugin, tekan-tahan tombol "+" sekitar 1,5 detik.
 import { openMgchord } from './mgchord';
+import { dragWindow } from './win-drag';
 import { owns, lockedNotice } from './entitlements';
 import { FULL } from './account';
 import { DEMO, LIMITS, demoNotice } from './demo';
@@ -539,6 +540,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     '<div class="derizov__slot"></div></div>';
   document.body.appendChild(ov);
   const ovWin = ov.querySelector<HTMLElement>('.derizov__win')!, ovSlot = ov.querySelector<HTMLElement>('.derizov__slot')!;
+  dragWindow({ root: ov, move: ovWin, handle: '.fxc__head' });   // jendela DERIZ / EQ / Reverb / Delay bisa digeser lewat header
   function onRoots<K extends keyof HTMLElementEventMap>(type: K, fn: (e: HTMLElementEventMap[K]) => void, opt?: boolean | AddEventListenerOptions): void {
     list.addEventListener(type, fn as EventListener, opt); ov.addEventListener(type, fn as EventListener, opt);
   }
