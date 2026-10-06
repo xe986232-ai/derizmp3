@@ -2,7 +2,8 @@
 // Plugin gratis / bawaan = status "Terpasang". Plugin berbayar (entitlements.ts PAID, sekarang MGCHORD) di build full: "Dimiliki" kalau
 // token plugin sudah ditebus. Alur: tombol "Beli" + konfirmasi -> server membuat token otomatis (dikunci ke akun ini) dan masuk dashboard admin
 // -> status "Menunggu token dari admin" -> pembeli meminta token ke admin -> "Tebus token" (hanya akun yang memesan yang bisa menebus).
-// Kartu bergaya bevel (tepi atas terang, tepi bawah gelap, gambar masuk seperti layar), lihat blok ".shop" di styles.css.
+// Dua tab: "Plugin saya" (bawaan/gratis + berbayar yang sudah dimiliki) dan "Shop" (berbayar yang belum dimiliki: Beli / Tebus token).
+// Plugin pindah dari Shop ke Plugin saya begitu tokennya ditebus. Tampilan memakai kelas menu yang sama (mp__seg/mp__segbtn, mp__card), lihat blok ".shop" di styles.css.
 
 import { FULL } from './account';
 import { buyPlugin, isPaid, isPending, onEntitlements, owns, redeemPlugin } from './entitlements';
@@ -40,39 +41,64 @@ const IC_CHEV = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" str
 // Tombol kategori di halaman utama Menu
 export const SHOP_CAT =
   '<button type="button" class="mp__cat mp__item" style="--i:3" data-go="shop">' + IC_SHOP +
-  '<span class="mp__cat__t"><b>Manage Plugin</b><small>Daftar plugin &amp; efek</small></span>' + IC_CHEV + '</button>';
+  '<span class="mp__cat__t"><b>Manage Plugin</b><small>Plugin saya &amp; Shop</small></span>' + IC_CHEV + '</button>';
 
 // Halaman Manage Plugin (data-page="shop", memakai sistem halaman Menu: ada tombol kembali)
 export const SHOP_PAGE =
   '<section class="mp__page shop" data-page="shop" aria-label="Manage Plugin" hidden>' +
-    '<div class="shop__filter mp__item" style="--i:1" role="radiogroup" aria-label="Jenis plugin">' +
-      '<button type="button" class="shop__chip is-on" role="radio" aria-checked="true" data-shopf="all">Semua</button>' +
-      '<button type="button" class="shop__chip" role="radio" aria-checked="false" data-shopf="instrument">Instrumen</button>' +
-      '<button type="button" class="shop__chip" role="radio" aria-checked="false" data-shopf="effect">Efek</button>' +
+    '<div class="mp__seg mp__item" style="--i:1" role="radiogroup" aria-label="Bagian plugin">' +
+      '<button type="button" class="mp__segbtn is-on" role="radio" aria-checked="true" data-shopt="mine">Plugin saya<span class="shop__n" data-n="mine"></span></button>' +
+      '<button type="button" class="mp__segbtn" role="radio" aria-checked="false" data-shopt="shop">Shop<span class="shop__n" data-n="shop"></span></button>' +
     '</div>' +
-    '<ul class="shop__list mp__item" style="--i:2">' +
+    '<div class="mp__seg shop__kinds mp__item" style="--i:2" role="radiogroup" aria-label="Jenis plugin">' +
+      '<button type="button" class="mp__segbtn is-on" role="radio" aria-checked="true" data-shopf="all">Semua</button>' +
+      '<button type="button" class="mp__segbtn" role="radio" aria-checked="false" data-shopf="instrument">Instrumen</button>' +
+      '<button type="button" class="mp__segbtn" role="radio" aria-checked="false" data-shopf="effect">Efek</button>' +
+    '</div>' +
+    '<ul class="shop__list mp__item" style="--i:3">' +
       CATALOG.map(p =>
-        '<li class="shop__item" data-kind="' + p.kind + '" data-plugin="' + p.id + '">' +
+        '<li class="shop__item mp__card" data-kind="' + p.kind + '" data-plugin="' + p.id + '">' +
           '<div class="shop__art" style="aspect-ratio:' + p.ar + '"><img src="' + IMG_BASE + p.img + '.webp" alt="Tampilan plugin ' + esc(p.name) + '" loading="lazy" decoding="async"></div>' +
           '<div class="shop__top"><b class="shop__name">' + esc(p.name) + '</b><span class="shop__tag">' + KIND_LABEL[p.kind] + '</span></div>' +
           '<p class="shop__desc">' + esc(p.desc) + '</p>' +
           (FULL && isPaid(p.id) ? '<div class="shop__act" data-act="' + p.id + '"></div>' : '<span class="shop__state"><i aria-hidden="true"></i>Terpasang</span>') +
         '</li>').join('') +
     '</ul>' +
-    '<p class="mp__hint mp__item shop__more" style="--i:3">Plugin tambahan belum tersedia. Yang baru akan muncul di halaman ini.</p>' +
+    '<p class="mp__hint shop__empty" hidden></p>' +
   '</section>';
 
-// Filter Semua / Instrumen / Efek (hanya menyembunyikan kartu; tidak menyimpan apa pun)
+// Tab Plugin saya / Shop + filter Semua / Instrumen / Efek (hanya menyembunyikan kartu; tidak menyimpan apa pun).
+// Plugin "saya" = bawaan/gratis atau berbayar yang sudah ditebus; sisanya (berbayar, belum dimiliki) ada di Shop.
+const isMine = (id: string): boolean => !(FULL && isPaid(id)) || owns(id);
+
 export function initShopPage(panel: HTMLElement): void {
+  const tabs = [...panel.querySelectorAll<HTMLButtonElement>('[data-shopt]')];
   const chips = [...panel.querySelectorAll<HTMLButtonElement>('[data-shopf]')];
   const items = [...panel.querySelectorAll<HTMLElement>('.shop__item')];
-  const apply = (f: string): void => {
-    chips.forEach(c => { const on = c.dataset.shopf === f; c.classList.toggle('is-on', on); c.setAttribute('aria-checked', String(on)); });
-    items.forEach(it => { it.hidden = f !== 'all' && it.dataset.kind !== f; });
+  const empty = panel.querySelector<HTMLElement>('.shop__empty')!;
+  let tab = 'mine', kind = 'all';
+  const apply = (): void => {
+    tabs.forEach(c => { const on = c.dataset.shopt === tab; c.classList.toggle('is-on', on); c.setAttribute('aria-checked', String(on)); });
+    chips.forEach(c => { const on = c.dataset.shopf === kind; c.classList.toggle('is-on', on); c.setAttribute('aria-checked', String(on)); });
+    const n = { mine: 0, shop: 0 };
+    let shown = 0;
+    items.forEach(it => {
+      const mine = isMine(it.dataset.plugin as string);
+      n[mine ? 'mine' : 'shop']++;
+      const show = (tab === 'mine') === mine && (kind === 'all' || it.dataset.kind === kind);
+      it.hidden = !show; if (show) shown++;
+    });
+    panel.querySelectorAll<HTMLElement>('[data-n]').forEach(el => { el.textContent = String(n[el.dataset.n as 'mine' | 'shop']); });
+    empty.hidden = shown > 0;
+    if (shown === 0) empty.textContent = tab === 'shop'
+      ? (FULL ? 'Semua plugin berbayar sudah kamu miliki. Yang baru akan muncul di Shop.' : 'Belum ada plugin yang dijual. Yang baru akan muncul di Shop.')
+      : 'Belum ada plugin di jenis ini.';
   };
-  chips.forEach(c => c.addEventListener('click', () => apply(c.dataset.shopf as string)));
-  apply('all');
+  tabs.forEach(c => c.addEventListener('click', () => { tab = c.dataset.shopt as string; apply(); }));
+  chips.forEach(c => c.addEventListener('click', () => { kind = c.dataset.shopf as string; apply(); }));
   if (FULL) initPaid(panel);
+  onEntitlements(apply);   // setelah token ditebus, kartu pindah dari Shop ke Plugin saya
+  apply();
 }
 
 // ---- Plugin berbayar: status Dimiliki / tombol Beli + Tebus ----
