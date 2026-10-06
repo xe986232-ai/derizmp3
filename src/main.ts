@@ -23,8 +23,9 @@ import { initMenuPanel, setProjectIO } from './menu-panel';
 import { dbgRun, dbgZoom } from './audio-debug';
 import { mpcsExport, mpcsImport } from './mpcs';
 import { setMgchordBridge, mgchordExport, mgchordImport } from './mgchord';
+import { setDrumsBridge, drumsRefresh } from './drums';
 import { setExportIO } from './export-audio';
-import { hasSynth, startVoice, releaseVoice, playNote, stopAllSynth } from './synth-engine';
+import { hasSynth, isDrumsTrack, startVoice, releaseVoice, playNote, stopAllSynth } from './synth-engine';
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
 import { initTransportMore } from './transport-more';
@@ -476,6 +477,7 @@ function selectPattern(el) {
   selPat = el;
   if (el) { handleSide(el); el.classList.add('is-selected'); }
   patBarShow(el);
+  drumsRefresh();   // jendela Drums (kalau terbuka) ikut menampilkan pattern yang baru dipilih
   syncRecFocus();   // Record Mode: blur lane lain hanya saat ada pattern terpilih
 }
 document.addEventListener('pointerup', () => { if (selPat) setTimeout(() => selPat && handleSide(selPat), 330); });
@@ -1361,9 +1363,41 @@ setMgchordBridge({
     return {ok: true, msg};
   }
 });
+// Drums: step sequencer membaca / menulis nada pattern yang sedang dipilih di timeline (track harus punya plugin Drums)
+{
+  const drumsPat = () => { const el = selPat && selPat.isConnected ? selPat : (lastPat && lastPat.isConnected ? lastPat : null); return el && !el.dataset.clip && !el.dataset.auId && isDrumsTrack(el.parentElement.dataset.track) ? el : null; };
+  setDrumsBridge({
+    get() {
+      const el = selPat && selPat.isConnected ? selPat : (lastPat && lastPat.isConnected ? lastPat : null);
+      if (!el) return 'Pilih dulu sebuah pattern di track Drums di timeline.';
+      if (el.dataset.clip || el.dataset.auId) return 'Pattern ini bukan pattern nada. Pilih pattern di track Drums.';
+      const lt = el.parentElement.dataset.track;
+      if (!isDrumsTrack(lt)) return 'Pattern ini bukan milik track Drums. Pilih pattern di track yang punya plugin Drums.';
+      if (!el.dataset.prId) el.dataset.prId = 'pat' + (++prSeq);
+      return {notes: getPianoRollNotes(editKey(el)).map(n => ({p: n.p, s: n.s, l: n.l, ...(n.v !== undefined ? {v: n.v} : {})})), beats: pw(el) / BAR_W * 4, label: document.getElementById('track-name-' + lt).textContent};
+    },
+    set(notes) {
+      const el = drumsPat(); if (!el) return;
+      if (isPianoRollOpen()) closePianoRoll();   // supaya piano roll tidak menyimpan nada lama
+      setPianoRollNotes(editKey(el), notes);
+      renderPatNotes(el); patBarPlace();
+    },
+    grow() {
+      const el = drumsPat(); if (!el) return false;
+      const lane = el.parentElement, left = pl(el);
+      let room = W - left;   // jangan menabrak pattern berikutnya di lane yang sama
+      lane.querySelectorAll('.pattern').forEach(o => { if (o !== el && pl(o) > left + 1 && pl(o) - left < room) room = pl(o) - left; });
+      if (room < pw(el) + BAR_W - 1) return false;
+      el.style.width = (pw(el) + BAR_W) + 'px';
+      handleSide(el); renderPatNotes(el); patBarPlace();
+      return true;
+    },
+    hit(m) { const el = drumsPat(); if (!el) return; const ctx = audio(); startVoice(ctx, master, el.parentElement.dataset.track, m, ctx.currentTime); }
+  });
+}
 // ===== Menu "Tambahkan track" =====
 const INSTRUMENTS = [
-  {n:'Audio clip', c:'#14b8a6'}, {n:'Supersaw', c:'#5b3de8'}, {n:'DERIZ', c:'#22c7e8'}
+  {n:'Audio clip', c:'#14b8a6'}, {n:'Supersaw', c:'#5b3de8'}, {n:'DERIZ', c:'#22c7e8'}, {n:'Drums', c:'#f59e0b'}
 ];
 let addMenu = null, addBtn = null;
 let trackSeq = Math.max(1, ...[...document.querySelectorAll('.trkcard-wrap')].map(c => +c.dataset.track));
@@ -1428,6 +1462,7 @@ function addTrack(t) {
   initRec(cont); initSliders(cont); initKnobs(cont); initMore(cont);
   cont.querySelector('.trkcard__lead').title = panelCollapsed() ? 'Buka panel track' : 'Tutup panel track';
   if (t.n === 'Supersaw') fxRack.addInstrument(id, 'supersaw');   // plugin synth otomatis muncul di panel efek track ini
+  if (t.n === 'Drums') fxRack.addInstrument(id, 'drums');   // plugin Drums (step sequencer) otomatis muncul di panel efek track ini
   if (t.n === 'DERIZ') fxRack.addInstrument(id, 'deriz');   // plugin DERIZ (spektrogram + upload audio) juga otomatis muncul di track ini
   selectTrack(cont);
   if (!REDUCE) {

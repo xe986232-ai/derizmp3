@@ -5,6 +5,7 @@
 import { trackInput } from './audio-engine';
 import { velGain } from './velocity';
 import { getMasterPitch, onMasterPitch } from './master-pitch';
+import { playDrum, type DrumsParams } from './drums-audio';
 
 export interface SupersawParams {
   on: boolean;
@@ -13,7 +14,12 @@ export interface SupersawParams {
 }
 
 const params = new Map<string, SupersawParams>();
-export const hasSynth = (track: string): boolean => params.has(track);
+const drums = new Map<string, DrumsParams>();   // track yang punya plugin Drums: nadanya dibunyikan sebagai hit drum (bukan Supersaw)
+export const hasSynth = (track: string): boolean => params.has(track) || drums.has(track);   // Drums ikut dihitung: pattern track-nya dijadwalkan lewat jalur yang sama
+export const isDrumsTrack = (track: string): boolean => drums.has(track);
+export function setDrums(track: string, p: DrumsParams | null): void {   // null = track ini tidak punya plugin Drums
+  if (p) drums.set(track, { ...p }); else drums.delete(track);
+}
 
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 const expMap = (v: number, min: number, max: number): number => min * Math.pow(max / min, clamp01(v));
@@ -44,6 +50,8 @@ const live = new Set<Voice>();
 const MAX_VOICES = 28;
 
 export function startVoice(ctx: AudioContext, dest: AudioNode, track: string, midi: number, when: number, vel?: number): Voice | null {
+  const dr = drums.get(track);
+  if (dr) { playDrum(ctx, dest, track, midi, when, vel, dr); return null; }   // Drums: hit sekali tembak, tidak ada voice yang perlu dilepas
   const p = params.get(track);
   if (!p || !p.on) return null;
   while (live.size >= MAX_VOICES) {   // terlalu banyak voice sekaligus membebani thread audio (7 saw per voice): curi voice yang sudah dilepas / paling lama
