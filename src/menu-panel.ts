@@ -374,9 +374,11 @@ export function initMenuPanel(): MenuPanel {
   const backBtn = panel.querySelector('.mp__back') as HTMLButtonElement;
   const bodyEl = panel.querySelector('.mp__body') as HTMLElement;
   let view = 'home';
+  let refreshProjects: () => void = () => { /* diisi setelah daftar project dibuat */ };
   const go = (v: string): void => {
     if (v === view) return;
     view = v;
+    if (v === 'project') refreshProjects();   // selalu baca ulang daftar project saat halaman Project dibuka
     pages.forEach(pg => { pg.hidden = pg.dataset.page !== v; });
     titleEl.textContent = TITLES[v] || 'Menu';
     backBtn.hidden = v === 'home';
@@ -474,17 +476,38 @@ export function initMenuPanel(): MenuPanel {
   const emptyEl = panel.querySelector('.mp__empty') as HTMLElement;
   const say = (m: string, ms?: number) => io ? io.toast(m, ms) : undefined;
 
+  // Daftar dibaca ulang tiap halaman Project dibuka (bukan cuma sekali saat app mulai). Gagal baca = daftar lama dipertahankan +
+  // tombol "Coba lagi" (dan coba otomatis beberapa kali), bukan langsung dianggap kosong.
+  const EMPTY_TXT = 'Belum ada project tersimpan.';
+  let refSeq = 0, refRetry = 0, refTimer = 0;
   const refresh = async (): Promise<void> => {
-    let items: Array<{name: string; savedAt: number}> = [];
-    try { items = await listProjects(); } catch { /* IndexedDB tidak tersedia */ }
+    const my = ++refSeq;
+    clearTimeout(refTimer);
+    let items: Array<{name: string; savedAt: number}>;
+    try { items = await listProjects(); }
+    catch (err) {
+      console.error(err);
+      if (my !== refSeq) return;
+      if (refRetry < 3) { refRetry++; refTimer = window.setTimeout(() => { void refresh(); }, 1200 * refRetry); }
+      if (!filesEl.children.length) {
+        emptyEl.hidden = false;
+        emptyEl.innerHTML = 'Daftar project belum bisa dibaca dari penyimpanan browser. <button type="button" class="mp__imp" data-retry>Coba lagi</button>';
+      }
+      return;
+    }
+    if (my !== refSeq) return;   // ada pembacaan yang lebih baru: abaikan hasil lama
+    refRetry = 0;
+    emptyEl.textContent = EMPTY_TXT;
     emptyEl.hidden = items.length > 0;
     filesEl.innerHTML = items.map((p, i) =>
       '<li class="mp__file" data-n="' + esc(p.name) + '" style="--i:' + i + '">' +
-        '<button type="button" class="mp__open" data-act="open"><b>' + esc(p.name) + '</b><small>' + fmtDate(p.savedAt) + '</small></button>' +
+        '<button type="button" class="mp__open" data-act="open"><b>' + esc(p.name) + '</b><small>' + (p.savedAt ? fmtDate(p.savedAt) : '') + '</small></button>' +
         '<button type="button" class="mp__ico" data-act="dl" aria-label="Unduh .json" title="Unduh .json">' + IC_DL + '</button>' +
         '<button type="button" class="mp__ico" data-act="del" aria-label="Hapus project" title="Hapus">' + IC_DEL + '</button>' +
       '</li>').join('');
   };
+  emptyEl.addEventListener('click', e => { if ((e.target as HTMLElement).closest('[data-retry]')) { refRetry = 0; void refresh(); } });
+  refreshProjects = () => { refRetry = 0; void refresh(); };
   onIo = () => { void refresh(); };
   void refresh();
 
@@ -609,7 +632,8 @@ export function initMenuPanel(): MenuPanel {
   filesEl.addEventListener('click', async e => {
     const btn = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
     const li = btn && btn.closest('.mp__file') as HTMLElement | null;
-    if (!btn || !li || !io) return;
+    if (!btn || !li) return;
+    if (!io) { say('Project belum siap, coba lagi sebentar'); refreshProjects(); return; }
     const name = li.dataset.n as string, act = btn.dataset.act;
     try {
       if (act === 'open') {

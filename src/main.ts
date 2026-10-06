@@ -2130,7 +2130,8 @@ async function projectRestore(rec) {
   setNoteColor(typeof d.nc === 'string' ? d.nc : null);   // warna nada piano roll (pilihan Color) ikut tersimpan di file project
   if (d.bars > BARS) growTimeline(Math.min(MAX_BARS, d.bars));
   const trMap = {}, pending = [], pendingAuto = [];
-  for (const t of d.tracks) {
+  for (const t of d.tracks || []) {
+    t.name = t.name || t.ins || 'Track'; t.vol = Number.isFinite(+t.vol) && t.vol !== null && t.vol !== '' ? +t.vol : 100;   // project lama / rusak: nama & volume tidak boleh jadi "undefined"
     addTrack({n: t.ins, c: t.color || COLORS[0]});
     const id = String(trackSeq); trMap[t.id] = id;
     const cont = document.querySelector('.trkcard-wrap[data-track="' + id + '"]'), lane = lanesEl.querySelector('.lane[data-track="' + id + '"]');
@@ -2146,9 +2147,9 @@ async function projectRestore(rec) {
     });
     if (t.fx && t.fx.length) fxRack.fxImport(id, t.fx);   // Reverb / EQ / Filter / Supersaw: jenis, nyala, nilai knob
     if (t.off) cont.querySelector('.trkcard__power').click();
-    for (const p of t.pats) {
+    for (const p of t.pats || []) {
       const el = createPattern(lane, {start: p.s * BAR_W, width: p.w * BAR_W}, p.c && clipMap[p.c] ? {clip: clipMap[p.c], off: p.o || 0} : null);
-      el.querySelector('.pattern__title').textContent = p.t;
+      el.querySelector('.pattern__title').textContent = p.t == null ? '' : p.t;
       if (p.a) pendingAuto.push({el, a: p.a});
       if (p.n || p.x) { el.dataset.prId = 'pat' + (++prSeq); pending.push({el, p}); }
     }
