@@ -208,3 +208,11 @@ Pasang di Vercel (project full), tambahkan env:
 Lalu buka `https://domain-kamu/admin`. Sesi admin 8 jam (cookie `mx_a`, HttpOnly, beda rahasia dari sesi pembeli). Token asli hanya tampil sekali saat dibuat karena database hanya menyimpan hash.
 
 Kode: `admin.html` (UI), `api/admin.ts` (API), tes: `npx tsx tools/admin-test.ts`.
+
+## Profil pembeli (versi full)
+Pembeli punya nama tampilan dan foto profil. Tampil sebagai kartu di paling atas panel menu (kanan atas); ketuk untuk membuka halaman **Profil**: ganti / hapus foto, ubah nama, lihat email, dan **Keluar dari akun**. Nama juga bisa diisi (opsional) saat aktivasi token di halaman login.
+
+- Data: tabel `profiles` (nama, versi foto) + bucket privat `avatars` di Supabase Storage, satu file per akun (`avatars/<user_id>`). SQL ada di `supabase/schema.sql`.
+- Foto dipotong persegi dan diperkecil jadi 256x256 JPEG di browser sebelum diunggah (batas server 256 KB; jenis file dicek dari isinya). Bucket privat: foto hanya bisa dilihat lewat `/api/avatar` oleh pemilik yang sedang masuk.
+- Kode: `api/profile.ts`, `api/avatar.ts`, `api/_auth.ts`, `src/account.ts`, bagian "Profil" di `src/menu-panel.ts` + `src/styles.css`. Tes: `npx tsx tools/profile-test.ts`.
+- Hanya build full. Build demo tidak memuat kode ini.

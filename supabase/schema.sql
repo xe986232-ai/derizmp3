@@ -24,3 +24,18 @@ create table if not exists public.devices (
 
 alter table public.licenses enable row level security;
 alter table public.devices  enable row level security;
+
+-- ===== Profil pembeli (nama + foto). Sudah dijalankan sebagai migration "profiles_and_avatars". =====
+create table if not exists public.profiles (
+  user_id           uuid primary key references auth.users(id) on delete cascade,
+  display_name      text check (display_name is null or char_length(display_name) <= 40),
+  avatar_updated_at timestamptz,            -- null = belum punya foto; dipakai juga sebagai versi cache
+  updated_at        timestamptz not null default now()
+);
+alter table public.profiles enable row level security;
+
+-- Bucket foto PRIVAT, maks 256 KB, hanya gambar. Tanpa policy storage = hanya kunci service (server) yang bisa akses;
+-- foto disajikan lewat /api/avatar setelah sesi diperiksa. Satu file per pengguna: avatars/<user_id>.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('avatars', 'avatars', false, 262144, array['image/jpeg', 'image/webp', 'image/png'])
+on conflict (id) do nothing;
