@@ -2025,3 +2025,5 @@ body:has(.pr.is-open) .tut-btn,body.tut-on .tut-btn{opacity:0;pointer-events:non
 .shop__desc{margin:0;font-size:13px;line-height:1.4;color:var(--muted)}
 .shop__state{align-self:flex-start;margin-top:2px;font-size:12px;font-weight:600;color:var(--accent)}
 .shop__more{text-align:center}
+.shop__art{overflow:hidden;border:1px solid var(--line);border-radius:8px}
+.shop__art svg{display:block;width:100%;height:auto}
