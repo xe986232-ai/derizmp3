@@ -1,8 +1,10 @@
-// CUTE: plugin pemotong audio. Tahap 1 (hanya kartu / jendela, fungsi potong menyusul):
+// CUTE: plugin pemotong audio.
 //   canvas waveform + seleksi (seret untuk memilih, seret tepi untuk mengubah), Play / Pause, drag and drop file audio, dan tombol tutup.
-// Kartunya ada di halaman Plugin pada panel efek (fx-rack.ts); jendelanya dibuka dari kartu itu. Gaya mengikuti MPCS (faceplate logam 3D), warna aksen teal.
+//   Tahap 2: ikon grip di header = seret hasil seleksi (atau seluruh audio kalau tidak ada seleksi) ke plugin DERIZ (jadi sample) atau ke timeline (jadi track Audio clip).
+// Kartunya ada di halaman Plugin pada panel efek (fx-rack.ts); jendelanya dibuka dari kartu itu. Gaya sendiri: kartu datar "kaca gelap" dengan aksen mint (beda dari faceplate logam 3D milik MPCS).
 
 import { ACCEPT as AUDIO_ACCEPT, isAudio } from './audio-upload-card';
+import { encodeWavFloatMulti } from './wav';
 
 const svg = (inner: string, size = 18): string =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
@@ -115,8 +117,8 @@ function build(): void {
     g.font = '600 9px system-ui,sans-serif'; g.textBaseline = 'bottom';
     for (let t = 0; t <= S.dur + 1e-6; t += step) {
       const x = Math.round(xOf(t)) + .5;
-      g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(x - .5, 0, 1, H);
-      g.fillStyle = 'rgba(190,235,228,.55)'; g.fillText(t >= 60 ? fmt(t).slice(0, -2) : t.toFixed(step < 1 ? 1 : 0) + 's', x + 4, H - 3);
+      g.fillStyle = 'rgba(148,170,210,.1)'; g.fillRect(x - .5, 0, 1, H);
+      g.fillStyle = 'rgba(138,154,181,.8)'; g.fillText(t >= 60 ? fmt(t).slice(0, -2) : t.toFixed(step < 1 ? 1 : 0) + 's', x + 4, H - 3);
     }
     g.fillStyle = 'rgba(255,255,255,.1)'; g.fillRect(0, Math.round(mid), W, 1);
     // waveform: satu polygon solid (sisi atas kiri->kanan, sisi bawah kanan->kiri)
@@ -129,7 +131,7 @@ function build(): void {
       tops[x] = mid - Math.max(hi * norm, 0.004) * amp; bots[x] = mid - Math.min(lo * norm, -0.004) * amp;
     }
     const grad = g.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, '#d8fbf5'); grad.addColorStop(.5, '#8fe9dc'); grad.addColorStop(1, '#d8fbf5');
+    grad.addColorStop(0, '#9af5e6'); grad.addColorStop(.5, '#5eead4'); grad.addColorStop(1, '#9af5e6');
     g.fillStyle = grad; g.globalAlpha = sel ? .62 : 1;
     g.beginPath(); g.moveTo(0, bots[0]);
     for (let x = 0; x < cols; x++) g.lineTo(x + .5, bots[x]);
@@ -138,13 +140,13 @@ function build(): void {
     // seleksi: bagian terpilih menyala, tepi putih dengan pegangan kecil
     if (sel) {
       const x1 = xOf(sel.a), x2 = xOf(sel.b);
-      g.fillStyle = 'rgba(45,212,191,.3)'; g.fillRect(x1, 0, x2 - x1, H);
+      g.fillStyle = 'rgba(94,234,212,.16)'; g.fillRect(x1, 0, x2 - x1, H);
       g.save(); g.beginPath(); g.rect(x1, 0, x2 - x1, H); g.clip(); g.fillStyle = grad; g.globalAlpha = .55;
       g.beginPath(); g.moveTo(0, bots[0]);
       for (let x = 0; x < cols; x++) g.lineTo(x + .5, bots[x]);
       for (let x = cols - 1; x >= 0; x--) g.lineTo(x + .5, tops[x]);
       g.closePath(); g.fill(); g.restore();
-      g.fillStyle = '#fff'; g.fillRect(x1 - 1, 0, 2, H); g.fillRect(x2 - 1, 0, 2, H);
+      g.fillStyle = '#5eead4'; g.fillRect(x1 - 1, 0, 2, H); g.fillRect(x2 - 1, 0, 2, H);
       for (const x of [x1, x2]) { g.beginPath(); g.roundRect(x - 4, mid - 12, 8, 24, 3); g.fill(); }
     }
     // playhead
@@ -236,7 +238,7 @@ function build(): void {
       stopPlay(); stopSource();
       S = { name: f.name.replace(/\.[^.]+$/, ''), dur: buf.duration, buf, pk: buildPeaks(buf) };
       sel = null; playPos = 0; playing = false; setPlayUi(false);
-      playBtn.disabled = false; dragBtn.disabled = true; drop.hidden = true;
+      playBtn.disabled = false; dragBtn.disabled = false; drop.hidden = true;
       cv.style.cursor = 'crosshair';
       layout(); info();
     } catch (err) { console.error(err); if (tok === loadTok) flash('Gagal membaca audio'); }
@@ -247,17 +249,67 @@ function build(): void {
   el.addEventListener('dragleave', e => { if (!el.contains(e.relatedTarget as Node | null)) win.classList.remove('is-drop'); });
   el.addEventListener('drop', e => { e.preventDefault(); win.classList.remove('is-drop'); const f = e.dataTransfer?.files[0]; if (f) void load(f); });
 
-  // ---------- efek 3D: faceplate miring tipis mengikuti kursor (mouse saja, mati di atas canvas / saat drag / reduced-motion) ----------
-  const untilt = (): void => { win.classList.remove('is-tilting'); win.style.setProperty('--rx', '0deg'); win.style.setProperty('--ry', '0deg'); win.style.setProperty('--mx', '50%'); win.style.setProperty('--my', '0%'); };
-  el.addEventListener('pointermove', e => {
-    if (reduce || e.pointerType !== 'mouse') return;
-    if (e.buttons || (e.target as Element).closest('.cute__stage')) { untilt(); return; }
-    const r = win.getBoundingClientRect(), px = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), py = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
-    win.classList.add('is-tilting');
-    win.style.setProperty('--ry', ((px - .5) * 4).toFixed(2) + 'deg'); win.style.setProperty('--rx', ((.5 - py) * 3).toFixed(2) + 'deg');
-    win.style.setProperty('--mx', (px * 100).toFixed(1) + '%'); win.style.setProperty('--my', (py * 100).toFixed(1) + '%');
+  // ---------- seret hasil seleksi ke plugin DERIZ / timeline ----------
+  // Sama seperti MPCS: tahan ikon grip, jendela CUTE disembunyikan, hanya ikon yang melayang. Lepas di atas kanvas DERIZ = potongan jadi sample DERIZ;
+  // lepas di atas timeline = jadi track Audio clip baru. Keduanya lewat event yang sama dengan MPCS ('mpcs-sample' / 'mpcs-audioclip', ditangkap fx-rack.ts / main.ts).
+  const LIFT = 38;   // di layar sentuh ikon melayang di atas jari supaya tidak tertutup; titik jatuhnya = posisi ikon
+  const FADE = 0.003;   // detik: fade pendek di tepi potongan supaya tidak ada klik saat memotong di tengah gelombang
+  let dg: { id: number; x0: number; y0: number; touch: boolean; ghost: HTMLElement | null; over: HTMLElement | null; file: File | null } | null = null;
+
+  // potongan seleksi (atau seluruh audio kalau tidak ada seleksi) -> file WAV float, semua channel dipertahankan
+  function makeCut(): File | null {
+    if (!S) return null;
+    const b = S.buf, sr = b.sampleRate, n = b.length;
+    const i0 = sel ? Math.max(0, Math.min(n - 1, Math.round(sel.a * sr))) : 0;
+    const i1 = sel ? Math.max(i0 + 1, Math.min(n, Math.round(sel.b * sr))) : n;
+    const len = i1 - i0, fade = sel ? Math.min(Math.floor(FADE * sr), len >> 1) : 0;
+    const chs: Float32Array[] = [];
+    for (let c = 0; c < b.numberOfChannels; c++) {
+      const out = b.getChannelData(c).slice(i0, i1);
+      for (let k = 0; k < fade; k++) { const g2 = k / fade; out[k] *= g2; out[len - 1 - k] *= g2; }
+      chs.push(out);
+    }
+    return new File([encodeWavFloatMulti(chs, sr)], S.name + (sel ? '-CUTE' : '') + '.wav', { type: 'audio/wav' });
+  }
+  const stageAt = (x: number, y: number): HTMLElement | null => {
+    for (const n of document.elementsFromPoint(x, y)) { if (n.closest('.cute')) continue; return n.closest<HTMLElement>('.deriz__stage') ?? n.closest<HTMLElement>('.workspace'); }   // elemen pertama di bawah CUTE: kanvas DERIZ = jadi sample, timeline = jadi track audio clip baru
+    return null;
+  };
+  function dgMove(e: PointerEvent): void {
+    if (!dg || e.pointerId !== dg.id) return;
+    if (!dg.ghost) {
+      if (Math.hypot(e.clientX - dg.x0, e.clientY - dg.y0) < 8) return;   // di bawah 8 px = ketukan biasa, jendela belum disembunyikan
+      stopPlay();
+      const gh = document.createElement('div'); gh.className = 'cute__ghost'; gh.innerHTML = ICON.drag; document.body.appendChild(gh);
+      dg.ghost = gh; el.classList.add('is-dragout');
+      dg.file = makeCut();
+    }
+    e.preventDefault();
+    const p = { x: e.clientX, y: e.clientY - (dg.touch ? LIFT : 0) };
+    dg.ghost.style.transform = `translate(${p.x - 20}px,${p.y - 20}px)`;
+    const s = stageAt(p.x, p.y);
+    if (s !== dg.over) { dg.over?.classList.remove('is-over'); s?.classList.add('is-over'); dg.over = s; dg.ghost.classList.toggle('is-hot', !!s); }
+  }
+  function dgEnd(e: PointerEvent): void {
+    if (!dg || e.pointerId !== dg.id) return;
+    const d = dg; dg = null;
+    window.removeEventListener('pointermove', dgMove); window.removeEventListener('pointerup', dgEnd); window.removeEventListener('pointercancel', dgEnd);
+    if (!d.ghost) { flash('Tahan lalu seret ke DERIZ / timeline'); return; }   // ketukan tanpa geser
+    d.over?.classList.remove('is-over');
+    const p = { x: e.clientX, y: e.clientY - (d.touch ? LIFT : 0) }, target = e.type === 'pointerup' ? stageAt(p.x, p.y) : null;
+    d.ghost.remove(); el.classList.remove('is-dragout');
+    if (!target) { flash('Lepas di atas plugin DERIZ atau timeline'); return; }   // jatuh di tempat lain: jendela kembali
+    if (!d.file || !target.isConnected) { flash(d.file ? 'Plugin DERIZ sudah tidak ada' : 'Gagal memotong'); return; }
+    if (target.classList.contains('workspace')) document.dispatchEvent(new CustomEvent('mpcs-audioclip', { detail: { file: d.file, x: p.x } }));   // timeline: main.ts bikin track Audio clip baru, clip diletakkan di bar tempat dilepas
+    else target.dispatchEvent(new CustomEvent('mpcs-sample', { bubbles: true, detail: { file: d.file } }));
+    stopPlay(); el.hidden = true;   // hasil sudah terpasang: CUTE ditutup supaya terlihat
+  }
+  dragBtn.addEventListener('pointerdown', e => {
+    if (!S || dragBtn.disabled || dg) return;
+    e.preventDefault();
+    dg = { id: e.pointerId, x0: e.clientX, y0: e.clientY, touch: e.pointerType !== 'mouse', ghost: null, over: null, file: null };
+    window.addEventListener('pointermove', dgMove, { passive: false }); window.addEventListener('pointerup', dgEnd); window.addEventListener('pointercancel', dgEnd);
   });
-  el.addEventListener('pointerleave', untilt);
 
   // ---------- buka / tutup ----------
   el.addEventListener('keydown', e => {
@@ -270,7 +322,7 @@ function build(): void {
   el.querySelector('.cute__back')!.addEventListener('pointerdown', () => close());
 
   function close(): void {
-    stopPlay(); untilt();
+    stopPlay();
     const done = (): void => { el.hidden = true; };
     if (reduce) { done(); return; }
     el.querySelector('.cute__back')!.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, fill: 'forwards' });
