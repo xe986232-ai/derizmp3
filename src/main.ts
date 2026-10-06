@@ -138,7 +138,7 @@ const initSliders = root => root.querySelectorAll('.slider').forEach(sl => {
     const min = +sl.min, max = +sl.max, f = (+sl.value - min) / (max - min);
     panTip.textContent = Math.round(+sl.value) + '%';
     panTip.hidden = false;
-    const r = sl.getBoundingClientRect(), t = panTip.getBoundingClientRect(), TH = 13;
+    const r = sl.getBoundingClientRect(), t = panTip.getBoundingClientRect(), TH = 8;
     let left = r.left + TH / 2 + f * (r.width - TH) - t.width / 2;
     left = Math.max(8, Math.min(left, innerWidth - t.width - 8));
     let top = r.top - t.height - 8;

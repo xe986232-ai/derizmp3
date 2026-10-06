@@ -2193,3 +2193,17 @@ body.is-pdragging,body.is-pdragging *{cursor:grabbing!important;user-select:none
 .derizov.is-pdrag .derizov__win,.derizov.is-pdrag .derizov__back{opacity:0;transition:opacity .12s ease}
 #pianoRoll.is-drop{outline:3px dashed #22c7e8;outline-offset:-3px;box-shadow:inset 0 0 0 9999px rgba(34,199,232,.08)}
 @media (prefers-reduced-motion:reduce){.derizov.is-pdrag .derizov__win,.derizov.is-pdrag .derizov__back{transition:none}}
+
+/* ===== Slider volume mixer: gaya "garis tipis + thumb kotak" (opsi B) =====
+   Track 2px, isi pink sampai tengah thumb, tanda tipis di 100%, thumb kotak 8x20. Hanya slider volume di card track. */
+.trkcard__vol .slider{height:24px;background:linear-gradient(#8a8a9a,#8a8a9a) calc(66.667% - 1.2px) 50%/1px 12px no-repeat}
+.trkcard__vol .slider::-webkit-slider-runnable-track{height:2px;border-radius:1px;
+  background:linear-gradient(var(--accent),var(--accent)) 0 0/calc((100% - 8px) * var(--slider-progress-fraction,.667) + 4px) 2px no-repeat,#4a4a5a}
+.trkcard__vol .slider::-moz-range-track{height:2px;border-radius:1px;background:#4a4a5a}
+.trkcard__vol .slider::-moz-range-progress{height:2px;border-radius:1px;background:var(--accent)}
+.trkcard__vol .slider::-webkit-slider-thumb{width:8px;height:20px;margin-top:-9px;border-radius:3px;background:#f2f2f6;box-shadow:none}
+.trkcard__vol .slider::-moz-range-thumb{width:8px;height:20px;border-radius:3px;background:#f2f2f6;border:0}
+.trkcard__vol .slider:hover::-webkit-slider-thumb{transform:scaleY(1.1)}
+.trkcard__vol .slider:active::-webkit-slider-thumb{transform:scaleY(1.2);background:#fff}
+.trkcard__vol .slider:hover::-moz-range-thumb{transform:scaleY(1.1)}
+.trkcard__vol .slider:active::-moz-range-thumb{transform:scaleY(1.2);background:#fff}
