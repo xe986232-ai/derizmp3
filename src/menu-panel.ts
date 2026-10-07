@@ -284,6 +284,7 @@ export function initMenuPanel(): MenuPanel {
     const val = v === 'flat' ? 'flat' : 'soft';
     if (val === 'flat') document.documentElement.dataset.uistyle = 'flat'; else delete document.documentElement.dataset.uistyle;
     styleBtns.forEach(b => { const on = b.dataset.uistyle === val; b.classList.toggle('is-on', on); b.setAttribute('aria-checked', String(on)); });
+    window.dispatchEvent(new CustomEvent('derizmp3:ui'));   // ruler (canvas) menggambar ulang dengan warna gaya baru
     if (save) { try { localStorage.setItem(STYLE_KEY, val); } catch { /* penyimpanan diblokir: tetap berlaku sampai halaman ditutup */ } }
   };
   styleBtns.forEach(b => b.addEventListener('click', () => setUiStyle(b.dataset.uistyle as string, true)));

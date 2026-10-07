@@ -73,6 +73,19 @@ function sizeRuler() {
 }
 // Ruler hanya digambar untuk bagian yang terlihat (+ margin): canvas selebar W akan melewati batas browser saat zoom besar
 let rp = {x0: -1, x1: -1, bar: 0};
+// Warna tick ruler. Gaya Flat membaca token --flat-pl-tick-a/b/c dari CSS (satu sumber warna, tidak di-hardcode di sini); hasilnya disimpan
+// per kombinasi (gaya, tema) supaya getComputedStyle tidak dipanggil tiap repaint saat zoom / scroll.
+let rulerKey = '', rulerCols: [string, string, string] = ['#9486ad', '#6f6385', '#5a4f70'];
+function rulerColors(): [string, string, string] {
+  const root = document.documentElement, flat = root.dataset.uistyle === 'flat', ut = uiTheme(), key = (flat ? 'flat' : 'soft') + '/' + ut;
+  if (key === rulerKey) return rulerCols;
+  rulerKey = key;
+  if (flat) {
+    const cs = getComputedStyle(root), tk = (n: string, fb: string) => cs.getPropertyValue(n).trim() || fb;
+    rulerCols = [tk('--flat-pl-tick-a', '#677089'), tk('--flat-pl-tick-b', '#8d96ab'), tk('--flat-pl-tick-c', '#a9b1c3')];
+  } else rulerCols = ut === 'mono' ? ['#8a8a9a', '#6a6a76', '#52525c'] : ['#9486ad', '#6f6385', '#5a4f70'];
+  return rulerCols;
+}
 function paintRuler(force) {
   const cw = wsEl.clientWidth, off = tlEl.offsetLeft;
   const a0 = Math.max(0, wsEl.scrollLeft - off), a1 = Math.min(W, wsEl.scrollLeft - off + cw);
@@ -87,8 +100,7 @@ function paintRuler(force) {
   else { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, nw, nh); }
   canvas.style.left = x0 + 'px'; canvas.style.width = (x1 - x0) + 'px';
   g.setTransform(d, 0, 0, d, -x0 * d, 0);
-  const ut = uiTheme();   // warna tick ruler per tema UI
-  const RA = ut === 'mono' ? '#8a8a9a' : '#9486ad', RB = ut === 'mono' ? '#6a6a76' : '#6f6385', RC = ut === 'mono' ? '#52525c' : '#5a4f70';
+  const [RA, RB, RC] = rulerColors();   // warna tick ruler: per tema UI, atau token --flat-pl-tick-* saat Gaya UI Flat
   const every = BAR_W < 28 ? 4 : BAR_W < 50 ? 2 : 1;
   const beat = BAR_W >= 56, sub = BAR_W >= 160, mid = BAR_W >= 640, fine = BAR_W >= 1280;
   const step = fine ? 1 : mid ? 2 : sub ? 4 : beat ? 16 : 64;   // dalam satuan 1/64 bar
