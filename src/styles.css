@@ -1657,7 +1657,13 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .cute__drop:hover,.cute__win.is-drop .cute__drop{border-color:var(--accent);background:rgba(94,234,212,.08);color:#fff}
 .cute__drop:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .cute__drop.is-shake{animation:uplShake .3s ease}
-.cute__bar{display:flex;align-items:center;justify-content:center;flex:none;padding:8px 18px 14px;z-index:2}
+.cute__bar{display:flex;align-items:center;justify-content:center;gap:16px;flex:none;padding:8px 18px 14px;z-index:2}
+.cute__zbtn{display:grid;place-items:center;flex:none;width:38px;height:38px;padding:0;border:0;border-radius:50%;background:rgba(94,234,212,.1);color:#9af5e6;box-shadow:inset 0 0 0 1px rgba(94,234,212,.28);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .25s var(--ease-spring),background-color .2s ease,opacity .2s ease}
+.cute__zbtn:hover:not(:disabled){background:rgba(94,234,212,.2)}
+.cute__zbtn:active:not(:disabled){transform:scale(.9);transition-duration:.08s}
+.cute__zbtn:disabled{opacity:.3;cursor:default}
+.cute__zbtn:focus-visible{outline:2px solid #fff;outline-offset:3px}
+@media (prefers-reduced-motion:reduce){.cute__zbtn{transition:none}}
 .cute__play{display:grid;place-items:center;flex:none;width:52px;height:38px;padding:0;border:0;border-radius:999px;color:#06312b;cursor:pointer;-webkit-tap-highlight-color:transparent;
   background:linear-gradient(180deg,#b6fff2 0%,#5eead4 48%,#27b8a4 100%);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.75),inset 0 -2px 3px rgba(0,0,0,.2),0 3px 0 #0b5e56,0 0 0 2px #061418,0 8px 14px -4px rgba(0,0,0,.6);   /* tombol pil cembung dengan "tebal" di bawah */

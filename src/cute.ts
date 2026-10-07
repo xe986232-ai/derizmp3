@@ -13,6 +13,8 @@ const ICON = {
   up: svg('<path d="M12 16V5M7 10l5-5 5 5M5 19h14"/>', 22),
   play: svg('<path d="M8 5l12 7-12 7z" fill="currentColor" stroke="none"/>', 22),
   pause: svg('<rect x="6" y="5" width="4.5" height="14" rx="1.2" fill="currentColor" stroke="none"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2" fill="currentColor" stroke="none"/>', 22),
+  zout: svg('<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2M8 11h6"/>', 18),
+  zin: svg('<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2M8 11h6M11 8v6"/>', 18),
   close: svg('<path d="M6 6l12 12M18 6L6 18"/>', 12),
   drag: svg('<circle cx="9" cy="6" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.7" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.7" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.7" fill="currentColor" stroke="none"/>', 14)
 };
@@ -68,7 +70,7 @@ function build(): void {
         '<canvas class="cute__cv" role="img" aria-label="Waveform audio. Seret untuk memilih bagian"></canvas>' +
         `<button type="button" class="cute__drop">${ICON.up}<span>Drop audio di sini</span><small>atau ketuk untuk memilih file</small></button>` +
       '</div></div>' +
-      `<div class="cute__bar"><button type="button" class="cute__play" aria-label="Putar" disabled>${ICON.play}</button></div>` +
+      `<div class="cute__bar"><button type="button" class="cute__zbtn" data-z="out" aria-label="Zoom out" title="Zoom out (-)" disabled>${ICON.zout}</button><button type="button" class="cute__play" aria-label="Putar" disabled>${ICON.play}</button><button type="button" class="cute__zbtn" data-z="in" aria-label="Zoom in" title="Zoom in (+)" disabled>${ICON.zin}</button></div>` +
       '<div class="cute__glass" aria-hidden="true"></div>' +
       `<input type="file" class="cute__file" accept="${AUDIO_ACCEPT}" hidden>` +
     '</div>';
@@ -83,12 +85,14 @@ function build(): void {
   const drop = el.querySelector<HTMLButtonElement>('.cute__drop')!;
   const playBtn = el.querySelector<HTMLButtonElement>('.cute__play')!;
   const dragBtn = el.querySelector<HTMLButtonElement>('.cute__drag')!;
+  const zOut = el.querySelector<HTMLButtonElement>('[data-z="out"]')!, zIn = el.querySelector<HTMLButtonElement>('[data-z="in"]')!;
   const file = el.querySelector<HTMLInputElement>('.cute__file')!;
   const g = cv.getContext('2d')!;
 
   let S: Session | null = null, sel: Sel | null = null, W = 0, H = 0, dpr = 1;
   let ac: AudioContext | null = null, src: AudioBufferSourceNode | null = null, playing = false, playPos = 0, t0 = 0, endAt = 0, raf = 0;
   let loadTok = 0, statT = 0;
+  let vs = 0, ve = 0, viewRaf = 0;   // jendela tampilan (detik): bagian audio yang terlihat di canvas; zoom = mengecilkan rentang ini
 
   // ---------- efek 3D: jendela miring tipis mengikuti kursor (mouse saja, mati di atas canvas / saat drag / reduced-motion), kilau mengikuti arah cahaya ----------
   const untilt = (): void => { win.classList.remove('is-tilting'); win.style.setProperty('--rx', '0deg'); win.style.setProperty('--ry', '0deg'); win.style.setProperty('--mx', '50%'); win.style.setProperty('--my', '0%'); };
@@ -110,8 +114,40 @@ function build(): void {
   const flash = (msg: string): void => { stat.textContent = msg; clearTimeout(statT); statT = window.setTimeout(info, 2200); };
 
   // ---------- gambar ----------
-  const xOf = (t: number): number => (S ? (t / S.dur) * W : 0);
-  const tOf = (x: number): number => (S ? Math.max(0, Math.min(S.dur, (x / W) * S.dur)) : 0);
+  const xOf = (t: number): number => (S ? ((t - vs) / (ve - vs)) * W : 0);
+  const tOf = (x: number): number => (S ? Math.max(0, Math.min(S.dur, vs + (x / W) * (ve - vs))) : 0);
+
+  // ---------- zoom & geser tampilan ----------
+  const minSpan = (): number => (S ? Math.min(S.dur, 0.02) : 0);   // zoom terdalam: 20 ms selebar canvas
+  const clampView = (a: number, b: number): [number, number] => {
+    if (!S) return [0, 0];
+    const sp = Math.max(minSpan(), Math.min(S.dur, b - a)), na = Math.max(0, Math.min(S.dur - sp, a));
+    return [na, na + sp];
+  };
+  const syncZ = (): void => {
+    const on = !!S, sp = ve - vs;
+    zOut.disabled = !on || sp >= (S ? S.dur : 0) - 1e-6; zIn.disabled = !on || sp <= minSpan() + 1e-6;
+  };
+  function setView(a: number, b: number): void { [vs, ve] = clampView(a, b); syncZ(); draw(); }
+  function tweenView(a: number, b: number): void {   // zoom lewat tombol / pintasan: transisi halus ~180 ms
+    cancelAnimationFrame(viewRaf);
+    [a, b] = clampView(a, b);
+    if (reduce) { setView(a, b); return; }
+    const a0 = vs, b0 = ve, tt = performance.now();
+    const step = (now: number): void => { const u = Math.min(1, (now - tt) / 180), k = 1 - Math.pow(1 - u, 3); setView(a0 + (a - a0) * k, b0 + (b - b0) * k); if (u < 1) viewRaf = requestAnimationFrame(step); };
+    viewRaf = requestAnimationFrame(step);
+  }
+  const zoomAt = (fx: number, k: number, smooth: boolean): void => {   // fx: posisi 0..1 di canvas yang dijaga diam; k: rentang baru / lama
+    if (!S) return;
+    const sp0 = ve - vs, sp = Math.max(minSpan(), Math.min(S.dur, sp0 * k)), tc = vs + fx * sp0, a = tc - fx * sp;
+    if (smooth) tweenView(a, a + sp); else { cancelAnimationFrame(viewRaf); setView(a, a + sp); }
+  };
+  const zoomStep = (k: number): void => {
+    if (!S) return;
+    zoomAt(.5, k, true);
+    const z = S.dur / Math.max(minSpan(), Math.min(S.dur, (ve - vs) * k)); flash('Zoom ' + (z < 10 ? z.toFixed(1) : Math.round(z)) + '×');
+  };
+  zOut.addEventListener('click', () => zoomStep(2)); zIn.addEventListener('click', () => zoomStep(.5));
 
   function layout(): void {
     dpr = Math.min(2, devicePixelRatio || 1);
@@ -127,21 +163,30 @@ function build(): void {
     if (!S) return;
     const mid = H / 2, amp = H / 2 - 8;
     // grid waktu
-    const step = niceStep(S.dur / Math.max(2, W / 90));
+    const span = ve - vs, step = niceStep(span / Math.max(2, W / 90)), dec = step >= 1 ? 0 : Math.min(3, Math.ceil(-Math.log10(step) - 1e-9));
     g.font = '600 9px system-ui,sans-serif'; g.textBaseline = 'bottom';
-    for (let t = 0; t <= S.dur + 1e-6; t += step) {
-      const x = Math.round(xOf(t)) + .5;
+    for (let i = Math.ceil(vs / step - 1e-9); i * step <= ve + 1e-6; i++) {
+      const t = i * step, x = Math.round(xOf(t)) + .5, f = fmt(t);
       g.fillStyle = 'rgba(148,170,210,.1)'; g.fillRect(x - .5, 0, 1, H);
-      g.fillStyle = 'rgba(138,154,181,.8)'; g.fillText(t >= 60 ? fmt(t).slice(0, -2) : t.toFixed(step < 1 ? 1 : 0) + 's', x + 4, H - 3);
+      g.fillStyle = 'rgba(138,154,181,.8)'; g.fillText(t >= 60 ? f.slice(0, f.length - (dec ? 3 - dec : 4)) : t.toFixed(dec) + 's', x + 4, H - 3 - (span < S.dur - 1e-6 ? 5 : 0));
     }
     g.fillStyle = 'rgba(255,255,255,.1)'; g.fillRect(0, Math.round(mid), W, 1);
     // waveform: satu polygon solid (sisi atas kiri->kanan, sisi bawah kanan->kiri)
-    const { mn, mx, norm } = S.pk, nb = mn.length, cols = Math.max(1, Math.floor(W));
+    const { mn, mx, norm } = S.pk, nb = mn.length, cols = Math.max(1, Math.floor(W)), sr = S.buf.sampleRate, ns = S.buf.length;
+    const fine = (span / cols) * sr < (ns / nb) * 1.5;   // tampilan sudah lebih rapat dari bucket puncak: baca langsung dari sampel supaya tetap tajam saat di-zoom
+    const ab = S.buf, chs = fine ? Array.from({ length: ab.numberOfChannels }, (_, c) => ab.getChannelData(c)) : null;
     const tops = new Float32Array(cols), bots = new Float32Array(cols);
     for (let x = 0; x < cols; x++) {
-      const b0 = Math.min(nb - 1, Math.floor((x / cols) * nb)), b1 = Math.min(nb - 1, Math.max(b0, Math.ceil(((x + 1) / cols) * nb) - 1));
       let lo = 1, hi = -1;
-      for (let b = b0; b <= b1; b++) { if (mn[b] < lo) lo = mn[b]; if (mx[b] > hi) hi = mx[b]; }
+      if (chs) {
+        const s0 = Math.max(0, Math.floor((vs + (x / cols) * span) * sr)), e0 = Math.min(ns, Math.max(s0 + 1, Math.ceil((vs + ((x + 1) / cols) * span) * sr))), st = Math.max(1, Math.floor((e0 - s0) / 32));
+        for (const d of chs) for (let i = s0; i < e0; i += st) { const v = d[i]; if (v < lo) lo = v; if (v > hi) hi = v; }
+        if (lo > hi) { lo = 0; hi = 0; }
+      } else {
+        const f0 = ((vs + (x / cols) * span) / S.dur) * nb, f1 = ((vs + ((x + 1) / cols) * span) / S.dur) * nb;
+        const b0 = Math.min(nb - 1, Math.max(0, Math.floor(f0))), b1 = Math.min(nb - 1, Math.max(b0, Math.ceil(f1) - 1));
+        for (let b = b0; b <= b1; b++) { if (mn[b] < lo) lo = mn[b]; if (mx[b] > hi) hi = mx[b]; }
+      }
       tops[x] = mid - Math.max(hi * norm, 0.004) * amp; bots[x] = mid - Math.min(lo * norm, -0.004) * amp;
     }
     const grad = g.createLinearGradient(0, 0, 0, H);
@@ -165,12 +210,20 @@ function build(): void {
     }
     // playhead
     const px = Math.round(xOf(playPos));
-    g.fillStyle = '#fff'; g.shadowColor = 'rgba(255,255,255,.6)'; g.shadowBlur = 4; g.fillRect(px - 1, 0, 2, H); g.shadowBlur = 0;
-    g.beginPath(); g.moveTo(px - 6, 0); g.lineTo(px + 6, 0); g.lineTo(px, 8); g.closePath(); g.fill();
+    if (px >= -6 && px <= W + 6) {
+      g.fillStyle = '#fff'; g.shadowColor = 'rgba(255,255,255,.6)'; g.shadowBlur = 4; g.fillRect(px - 1, 0, 2, H); g.shadowBlur = 0;
+      g.beginPath(); g.moveTo(px - 6, 0); g.lineTo(px + 6, 0); g.lineTo(px, 8); g.closePath(); g.fill();
+    }
+    // bilah geser (hanya saat di-zoom): posisi + lebar jendela tampilan terhadap seluruh audio
+    if (span < S.dur - 1e-6) {
+      const tw = Math.max(24, (span / S.dur) * W), tx = (vs / S.dur) * W;
+      g.fillStyle = 'rgba(255,255,255,.1)'; g.beginPath(); g.roundRect(0, H - 6, W, 3, 1.5); g.fill();
+      g.fillStyle = 'rgba(154,245,230,.7)'; g.beginPath(); g.roundRect(Math.min(W - tw, tx), H - 7, tw, 5, 2.5); g.fill();
+    }
   }
 
   // ---------- seleksi di canvas ----------
-  type Drag = { kind: 'new'; anchor: number; x0: number } | { kind: 'edge'; fixed: number };
+  type Drag = { kind: 'new'; anchor: number; x0: number } | { kind: 'edge'; fixed: number } | { kind: 'pan' };
   let drag: Drag | null = null;
   const EDGE = 11;   // px: jarak sentuh ke tepi seleksi untuk mengubah ukurannya
   const localX = (e: PointerEvent): number => e.clientX - cv.getBoundingClientRect().left;
@@ -181,32 +234,68 @@ function build(): void {
     return da <= db ? 'a' : 'b';
   };
   cv.style.touchAction = 'none';
+  const SB_H = 14;   // px: tinggi area bilah geser di dasar canvas
+  const pts = new Map<number, number>();   // jari / pointer yang sedang menyentuh canvas (id -> x), untuk pinch zoom
+  let pinch: { d0: number; tc: number; sp: number } | null = null, selBackup: Sel | null = null, panGrab = 0;
+  const panTo = (x: number): void => { if (!S) return; const sp = ve - vs; setView((x / W) * S.dur, (x / W) * S.dur + sp); };
   cv.addEventListener('pointerdown', e => {
     if (!S) return;
-    const x = localX(e), edge = nearEdge(x);
+    const x = localX(e);
+    pts.set(e.pointerId, x); cv.setPointerCapture(e.pointerId); e.preventDefault();
+    if (pts.size === 2) {   // dua jari: pinch untuk zoom sekaligus geser; seleksi yang baru dimulai dibatalkan
+      if (drag) { sel = selBackup; drag = null; }
+      const [a, b] = [...pts.values()];
+      pinch = { d0: Math.max(10, Math.abs(a - b)), tc: tOf((a + b) / 2), sp: ve - vs };
+      cancelAnimationFrame(viewRaf); draw(); info(); return;
+    }
+    if (pts.size > 2) return;
+    cancelAnimationFrame(viewRaf);
+    if (ve - vs < S.dur - 1e-6 && e.clientY - cv.getBoundingClientRect().top > H - SB_H) {   // bilah geser di dasar
+      const tw = Math.max(24, ((ve - vs) / S.dur) * W), tx = (vs / S.dur) * W;
+      panGrab = x >= tx && x <= tx + tw ? x - tx : tw / 2;
+      drag = { kind: 'pan' }; panTo(x - panGrab); return;
+    }
+    const edge = nearEdge(x);
     if (playing) pausePlay();   // memilih bagian baru menghentikan putar (posisi tetap)
-    cv.setPointerCapture(e.pointerId); e.preventDefault();
+    selBackup = sel;
     if (edge && sel) drag = { kind: 'edge', fixed: edge === 'a' ? sel.b : sel.a };
     else drag = { kind: 'new', anchor: tOf(x), x0: x };
   });
   cv.addEventListener('pointermove', e => {
     if (!S) return;
     const x = localX(e);
+    if (pts.has(e.pointerId)) pts.set(e.pointerId, x);
+    if (pinch && pts.size >= 2) {
+      const [a, b] = [...pts.values()], d = Math.max(10, Math.abs(a - b)), sp = Math.max(minSpan(), Math.min(S.dur, (pinch.sp * pinch.d0) / d)), na = pinch.tc - (((a + b) / 2) / W) * sp;
+      setView(na, na + sp); return;
+    }
     if (!drag) { cv.style.cursor = nearEdge(x) ? 'ew-resize' : 'crosshair'; return; }
+    if (drag.kind === 'pan') { panTo(x - panGrab); return; }
     const t = tOf(x);
     if (drag.kind === 'new') { if (Math.abs(x - drag.x0) < 4 && !sel) return; sel = { a: Math.min(drag.anchor, t), b: Math.max(drag.anchor, t) }; }
     else sel = { a: Math.min(drag.fixed, t), b: Math.max(drag.fixed, t) };
     draw(); info();
   });
   const endDrag = (e: PointerEvent): void => {
+    pts.delete(e.pointerId);
+    if (pinch) { if (pts.size < 2) pinch = null; drag = null; return; }   // jari yang tersisa setelah pinch tidak memulai seleksi
     if (!drag || !S) { drag = null; return; }
     const d = drag; drag = null;
+    if (d.kind === 'pan') return;
     if (d.kind === 'new' && Math.abs(localX(e) - d.x0) < 4) { sel = null; playPos = d.anchor; }   // ketukan biasa: hapus seleksi dan taruh titik start di situ
     else if (sel && sel.b - sel.a < 0.01) { sel = null; }   // terlalu pendek: dianggap batal
     if (sel) playPos = Math.max(sel.a, Math.min(sel.b, playPos < sel.a || playPos > sel.b ? sel.a : playPos));
     draw(); info();
   };
   cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
+  // roda mouse / trackpad: gulir = zoom di sekitar kursor; Shift atau gulir mendatar = geser kiri-kanan; Ctrl (pinch trackpad) = zoom lebih cepat
+  cv.addEventListener('wheel', e => {
+    if (!S) return;
+    e.preventDefault(); cancelAnimationFrame(viewRaf);
+    const sp = ve - vs, px = e.deltaMode === 1 ? 16 : 1;
+    if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) { const d = (((e.deltaX || e.deltaY) * px) / W) * sp; setView(vs + d, ve + d); return; }
+    zoomAt((e.clientX - cv.getBoundingClientRect().left) / W, Math.exp(e.deltaY * px * (e.ctrlKey ? 0.006 : 0.002)), false);
+  }, { passive: false });
 
   // ---------- putar / jeda (seleksi kalau ada, kalau tidak seluruh audio) ----------
   const setPlayUi = (on: boolean): void => {
@@ -229,7 +318,8 @@ function build(): void {
     src.onended = () => { if (!playing) return; stopSource(); playing = false; playPos = lo; setPlayUi(false); draw(); };
     src.start(0, from, hi - from);
     playing = true; setPlayUi(true);
-    const tick = (): void => { if (!playing || !ac) return; playPos = Math.min(endAt, ac.currentTime - t0); draw(); raf = requestAnimationFrame(tick); };
+    const tick = (): void => { if (!playing || !ac) return; playPos = Math.min(endAt, ac.currentTime - t0); if (S && ve - vs < S.dur - 1e-6 && (playPos > ve || playPos < vs)) { const sp = ve - vs; [vs, ve] = clampView(playPos - sp * .1, playPos - sp * .1 + sp); }   // sedang di-zoom: tampilan ikut pindah saat playhead keluar layar
+      draw(); raf = requestAnimationFrame(tick); };
     raf = requestAnimationFrame(tick);
   }
   function pausePlay(): void {
@@ -251,7 +341,7 @@ function build(): void {
       if (tok !== loadTok) return;
       stopPlay(); stopSource();
       S = { name: f.name.replace(/\.[^.]+$/, ''), dur: buf.duration, buf, pk: buildPeaks(buf) };
-      sel = null; playPos = 0; playing = false; setPlayUi(false);
+      sel = null; playPos = 0; playing = false; setPlayUi(false); vs = 0; ve = S.dur; pts.clear(); pinch = null; syncZ();
       playBtn.disabled = false; dragBtn.disabled = false; drop.hidden = true;
       cv.style.cursor = 'crosshair';
       layout(); info();
@@ -329,6 +419,8 @@ function build(): void {
   el.addEventListener('keydown', e => {
     e.stopPropagation();   // pintasan DAW (Space, tuts keyboard) tidak ikut jalan selagi CUTE terbuka
     if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+    if ((e.key === '+' || e.key === '=') && S) { e.preventDefault(); zoomStep(.5); return; }
+    if ((e.key === '-' || e.key === '_') && S) { e.preventDefault(); zoomStep(2); return; }
     if (e.key === ' ' && !(e.target as Element).closest?.('button') && S) { e.preventDefault(); if (playing) pausePlay(); else void startPlay(); }
   });
   el.addEventListener('keyup', e => e.stopPropagation());
