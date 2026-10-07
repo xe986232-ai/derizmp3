@@ -24,6 +24,8 @@ export interface DrumsBridge {
   toggle(): void;
 }
 let bridge: DrumsBridge | null = null;
+/** Drums disembunyikan sementara: tidak muncul di menu "Tambahkan track" dan di tombol + panel efek. Kode dan project lama yang sudah punya track Drums tetap jalan. Ubah ke false untuk menampilkannya lagi. */
+export const DRUMS_HIDDEN = true;
 export const setDrumsBridge = (b: DrumsBridge): void => { bridge = b; };
 
 const STEP = 0.25;                 // beat per step (1/16)

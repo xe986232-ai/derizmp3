@@ -23,7 +23,7 @@ import { initMenuPanel, setProjectIO } from './menu-panel';
 import { dbgRun, dbgZoom } from './audio-debug';
 import { mpcsExport, mpcsImport } from './mpcs';
 import { setMgchordBridge, mgchordExport, mgchordImport } from './mgchord';
-import { setDrumsBridge, drumsRefresh, drumsSyncPlay, openDrums } from './drums';
+import { setDrumsBridge, drumsRefresh, drumsSyncPlay, openDrums, DRUMS_HIDDEN } from './drums';
 import { drumRow, DRUM_KIT } from './drums-audio';
 import { setExportIO } from './export-audio';
 import { hasSynth, isDrumsTrack, startVoice, releaseVoice, playNote, stopAllSynth } from './synth-engine';
@@ -1409,7 +1409,7 @@ setMgchordBridge({
 // ===== Menu "Tambahkan track" =====
 const INSTRUMENTS = [
   {n:'Audio clip', c:'#14b8a6'}, {n:'Supersaw', c:'#5b3de8'}, {n:'DERIZ', c:'#22c7e8'}, {n:'Drums', c:'#f59e0b'}
-];
+].filter(t => !(DRUMS_HIDDEN && t.n === 'Drums'));   // Drums disembunyikan (lihat DRUMS_HIDDEN di drums.ts)
 let addMenu = null, addBtn = null;
 let trackSeq = Math.max(1, ...[...document.querySelectorAll('.trkcard-wrap')].map(c => +c.dataset.track));
 function closeAddMenu(instant) {

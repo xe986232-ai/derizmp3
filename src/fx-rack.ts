@@ -12,7 +12,7 @@ import { ivkKey } from './ivory-keys';
 import { dbgSched, dbgSent, dbgSpec } from './audio-debug';
 import { openMpcs } from './mpcs';
 import { openCute } from './cute';
-import { openDrums } from './drums';
+import { openDrums, DRUMS_HIDDEN } from './drums';
 
 // MGCHORD gratis dan tampil di daftar plugin saat tombol "+" ditekan di tab Plugin (tekan-tahan "+" ~1,5 detik tetap jadi jalan pintas).
 import { openMgchord } from './mgchord';
@@ -959,7 +959,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     const have = new Set(fxs().map(f => f.type));
     // halaman Plugin: hanya DERIZ (boleh banyak; Supersaw otomatis ada di track synth). Halaman Effect: Reverb, EQ, Filter, dll.
     // halaman Plugin: DERIZ (boleh banyak) dan MPCS (satu per track; Supersaw otomatis ada di track synth). Halaman Effect: Reverb, EQ, Filter, dll.
-    const choices = EFFECTS.filter(d => page === 'plugin' ? d.type === 'deriz' || d.type === 'mpcs' || d.type === 'cute' || d.type === 'mgchord' || d.type === 'drums' : !d.synth);   // MGCHORD gratis: langsung ada di daftar tombol +
+    const choices = EFFECTS.filter(d => page === 'plugin' ? d.type === 'deriz' || d.type === 'mpcs' || d.type === 'cute' || d.type === 'mgchord' || (d.type === 'drums' && !DRUMS_HIDDEN) : !d.synth);   // MGCHORD gratis: langsung ada di daftar tombol +
     const el = document.createElement('div');
     el.className = 'fx-pick';
     el.setAttribute('role', 'menu');
