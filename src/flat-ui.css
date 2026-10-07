@@ -10,54 +10,39 @@
    TAHAP 1: channel mixer (kolom card track di kiri timeline + menu titik tiga track).
    TAHAP 2: playlist (latar area kerja, ruler, baris track) + grid (garis bar / ketukan / 1/16 ...). Clip / pattern belum diubah. */
 
-/* ---------- 0. Palet dasar Flat (dari src/palettes.ts: "Studio Netral" + Klasik/Redam untuk status) ----------
-   Hanya nilai mentah. Token --flat-* / --flat-pl-* di bawah merujuk ke sini; untuk ganti warna Flat cukup ubah baris ini atau pemetaan tokennya. */
-html[data-uistyle="flat"]{
-  --flat-pal-ink:#1C1D1F;      /* Studio: Hitam */
-  --flat-pal-grip:#55585D;     /* Studio: Grip */
-  --flat-pal-text:#8A8D92;     /* Studio: Teks */
-  --flat-pal-light:#C2C4C7;    /* Studio: Terang */
-  --flat-pal-paper:#E4E5E3;    /* Studio: Kertas */
-  --flat-pal-orange:#FF9F1A;   /* Studio: Oranye */
-  --flat-pal-rec:#FF3D71;      /* Studio: Rec */
-  --flat-pal-ok:#2F9E44;       /* Redam: Rimba */
-  --flat-pal-solo:#FFA529;     /* Klasik: Jingga */
-}
-
 /* ---------- 1. Token warna Flat (terang) ---------- */
 html[data-uistyle="flat"]{
   /* permukaan */
-  --flat-surface:color-mix(in srgb,var(--flat-pal-paper) 55%,var(--flat-pal-light));        /* dasar kolom mixer */
-  --flat-head:var(--flat-pal-paper);           /* strip atas (sejajar ruler) */
-  --flat-card:var(--flat-pal-paper);           /* card track */
-  --flat-card-hover:color-mix(in srgb,var(--flat-pal-paper) 78%,var(--flat-pal-light));     /* card track tidak terpilih saat disentuh */
-  --flat-line:var(--flat-pal-light);           /* garis pemisah 1px */
+  --flat-surface:#f3ece2;        /* dasar kolom mixer */
+  --flat-head:#eadfd0;           /* strip atas (sejajar ruler) */
+  --flat-card:#fffaf3;           /* card track */
+  --flat-card-hover:#f8f1e6;     /* card track tidak terpilih saat disentuh */
+  --flat-line:#dccfbd;           /* garis pemisah 1px */
   /* teks */
-  --flat-text:var(--flat-pal-ink);
-  --flat-muted:var(--flat-pal-grip);
-  --flat-on-accent:var(--flat-pal-ink);  /* glyph di atas aksen oranye (tombol nyala) */
-  --flat-on-color:var(--flat-pal-ink);       /* glyph di atas warna track yang terang */
+  --flat-text:#3a2e26;
+  --flat-muted:#8a7767;
+  --flat-on-color:#3a2e26;       /* glyph di atas warna track yang terang */
   /* kontrol (tombol, slider, knob) */
-  --flat-ctrl:color-mix(in srgb,var(--flat-pal-paper) 60%,var(--flat-pal-light));
-  --flat-ctrl-hover:color-mix(in srgb,var(--flat-pal-paper) 30%,var(--flat-pal-light));
-  --flat-ctrl-strong:var(--flat-pal-text);
-  --flat-ctrl-on:var(--flat-pal-orange);        /* tombol nyala (auto scroll) */
-  --flat-track:var(--flat-pal-light);          /* rel slider */
-  --flat-focus:var(--flat-pal-orange);
+  --flat-ctrl:#eadfd0;
+  --flat-ctrl-hover:#dfd1bd;
+  --flat-ctrl-strong:#cfbfa8;
+  --flat-ctrl-on:#e8703a;        /* tombol nyala (auto scroll) */
+  --flat-track:#d8c9b3;          /* rel slider */
+  --flat-focus:#e8703a;
   /* status */
-  --flat-accent:var(--flat-pal-orange);         /* cadangan jika track belum punya warna */
-  --flat-solo:var(--flat-pal-solo);
-  --flat-ok:var(--flat-pal-ok);
-  --flat-off:var(--flat-pal-light);
-  --flat-danger:var(--flat-pal-rec);
+  --flat-accent:#ef6a4c;         /* cadangan jika track belum punya warna */
+  --flat-solo:#f5b83d;
+  --flat-ok:#4fb06a;
+  --flat-off:#cfbfa8;
+  --flat-danger:#d9443a;
   /* meter level */
-  --flat-meter-bg:color-mix(in srgb,var(--flat-pal-paper) 60%,var(--flat-pal-light));
-  --flat-meter-empty:rgba(28,29,31,.12);
-  --flat-meter-ok:var(--flat-pal-ok);
-  --flat-meter-warn:var(--flat-pal-orange);
-  --flat-meter-clip:var(--flat-pal-rec);
+  --flat-meter-bg:#eadfd0;
+  --flat-meter-empty:rgba(58,46,38,.12);
+  --flat-meter-ok:#4fb06a;
+  --flat-meter-warn:#f5b83d;
+  --flat-meter-clip:#e5483a;
   /* bayangan (hanya untuk menu & drag) */
-  --flat-shadow:rgba(28,29,31,.18);
+  --flat-shadow:rgba(58,46,38,.18);
 }
 
 /* ---------- 2. Kolom channel mixer ---------- */
@@ -75,7 +60,7 @@ html[data-uistyle="flat"] .tracklist .panel-toggle{border-radius:0;background:va
 html[data-uistyle="flat"] .tracklist .panel-toggle:hover{background:var(--flat-ctrl-hover);transform:none}
 html[data-uistyle="flat"] .tracklist .panel-toggle:active{transform:none}
 html[data-uistyle="flat"] .tracklist .autoscroll-toggle{color:var(--flat-muted)}
-html[data-uistyle="flat"] .tracklist .autoscroll-toggle[aria-checked="true"]{color:var(--flat-on-accent);background:var(--flat-ctrl-on)}
+html[data-uistyle="flat"] .tracklist .autoscroll-toggle[aria-checked="true"]{color:#fff;background:var(--flat-ctrl-on)}
 
 /* ---------- 3. Card track ---------- */
 html[data-uistyle="flat"] .tracklist .trkcard,
@@ -170,23 +155,23 @@ html[data-uistyle="flat"] .mixer-menu .track-menu__swatch:focus-visible{border-c
 /* ---------- 5. Token warna Playlist & Grid (terang, terpisah dari token mixer) ---------- */
 html[data-uistyle="flat"]{
   /* permukaan */
-  --flat-pl-bg:color-mix(in srgb,var(--flat-pal-paper) 55%,var(--flat-pal-light));           /* latar area kerja (di bawah baris track terakhir / di luar ujung timeline) */
-  --flat-pl-lane:var(--flat-pal-paper);         /* baris track */
-  --flat-pl-lane-alt:color-mix(in srgb,var(--flat-pal-paper) 80%,var(--flat-pal-light));     /* baris track selang-seling */
-  --flat-pl-ruler:var(--flat-pal-paper);        /* strip ruler (48px, menyambung dengan strip atas mixer) */
-  --flat-pl-line:var(--flat-pal-light);         /* garis pemisah baris & garis bawah ruler */
+  --flat-pl-bg:#eee4d6;           /* latar area kerja (di bawah baris track terakhir / di luar ujung timeline) */
+  --flat-pl-lane:#fbf6ee;         /* baris track */
+  --flat-pl-lane-alt:#f4ecdf;     /* baris track selang-seling */
+  --flat-pl-ruler:#eadfd0;        /* strip ruler (48px, menyambung dengan strip atas mixer) */
+  --flat-pl-line:#dccfbd;         /* garis pemisah baris & garis bawah ruler */
   /* grid: bar = garis solid; ketukan, 1/16, dst = warna dasar (R,G,B) x alpha zoom (--beat-a, --sub-a, --mid-a, --fine-a) x gain */
-  --flat-pl-grid-bar:var(--flat-pal-light);     /* garis tiap bar */
-  --flat-pl-grid:28,29,31;        /* warna dasar garis ketukan & lebih halus (format R,G,B) */
+  --flat-pl-grid-bar:#cdbca4;     /* garis tiap bar */
+  --flat-pl-grid:58,46,38;        /* warna dasar garis ketukan & lebih halus (format R,G,B) */
   --flat-pl-grid-gain:3.6;        /* pengali alpha zoom: latar terang butuh garis lebih pekat daripada latar gelap */
   /* ruler (dibaca juga oleh main.ts untuk canvas) */
-  --flat-pl-tick-a:#55585D;       /* tick bar + angka */
-  --flat-pl-tick-b:#8A8D92;       /* tick ketukan + label ketukan */
-  --flat-pl-tick-c:#C2C4C7;       /* tick 1/16 + label 1/16 */
+  --flat-pl-tick-a:#8a7767;       /* tick bar + angka */
+  --flat-pl-tick-b:#a8957f;       /* tick ketukan + label ketukan */
+  --flat-pl-tick-c:#c2b29c;       /* tick 1/16 + label 1/16 */
   /* penunjuk */
-  --flat-pl-play:var(--flat-pal-rec);         /* playhead */
-  --flat-pl-focus:var(--flat-pal-orange);        /* baris target saat drop / seret */
-  --flat-pl-shadow:rgba(28,29,31,.18);
+  --flat-pl-play:#d9442e;         /* playhead */
+  --flat-pl-focus:#e8703a;        /* baris target saat drop / seret */
+  --flat-pl-shadow:rgba(58,46,38,.18);
 }
 
 /* ---------- 6. Latar playlist ---------- */
