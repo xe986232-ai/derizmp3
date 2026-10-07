@@ -1,5 +1,5 @@
 // SPECTRUM: plugin gelombang suara langsung (scope). Membaca keluaran master (persis yang terdengar), jadi apa pun yang diputar ikut tergambar.
-//   Kiri  : riwayat amplitudo yang bergulir (isi solid lavender + outline, ekor pluck meluruh halus)
+//   Kiri  : riwayat amplitudo yang bergulir (isi solid lavender tanpa outline, ekor pluck meluruh halus)
 //   Kanan : gelombang NYATA beberapa siklus terakhir, dikunci ke periode nada (nada rendah = lebar, tinggi = rapat) dan dikunci fase supaya diam di layar
 // Semua hitungan ada di spectrum-dsp.ts (murni, ada tesnya: tools/spectrum-test.ts); file ini hanya jendela + menggambar.
 // Kartunya ada di halaman Plugin pada panel efek (fx-rack.ts). Tampil sebagai strip solid selebar layar yang menempel di dasar (tanpa bingkai); tidak modal, jadi Space / pintasan DAW tetap jalan.
@@ -19,7 +19,7 @@ const SPLIT = 0.6;                // bagian kiri (riwayat) = 60% lebar, sisanya 
 const STEP = 0.5;                 // jarak titik gambar riwayat (px CSS): halus di layar HP beresolusi tinggi
 const SPEEDS = [{ k: 'slow', label: 'Lambat', pps: 90 }, { k: 'mid', label: 'Normal', pps: 170 }, { k: 'fast', label: 'Cepat', pps: 320 }];   // px per detik
 const SPEED_KEY = 'derizmp3.spectrum.speed';
-const FILL = '#b3a1f7', OUTLINE = '#f4f0ff';   // isi solid satu warna + garis tepi lebih terang (tanpa gradasi / glow)
+const FILL = '#b3a1f7', OUTLINE = '#f4f0ff';   // riwayat = isi solid tanpa outline; scope langsung = garis saja tanpa isi (tanpa gradasi / glow)
 
 let root: HTMLElement | null = null, openFn: (() => void) | null = null;
 export function openSpectrum(): void { if (!root) build(); openFn?.(); }
@@ -119,19 +119,12 @@ function build(): void {
       tops[p] = a; rts[p] = ar;
     }
     for (let p = 0; p < np; p++) { const a = Math.max(tops[p], 0.004); bots[p] = mid + a * amp; tops[p] = mid - a * amp; }
-    // isi solid satu warna + garis tepi (outline) di sisi atas dan bawah; tanpa gradasi, inti, atau glow
+    // riwayat: isi solid satu warna saja, tanpa outline (sama seperti referensi); tanpa gradasi, inti, atau glow
     g.fillStyle = FILL;
     g.beginPath(); g.moveTo(0, mid);
     for (let p = 0; p < np; p++) g.lineTo(Math.min(xs, p * STEP), tops[p]);
     for (let p = np - 1; p >= 0; p--) g.lineTo(Math.min(xs, p * STEP), bots[p]);
     g.closePath(); g.fill();
-    g.lineJoin = 'round'; g.lineWidth = 1.25; g.strokeStyle = OUTLINE;
-    g.beginPath();
-    for (let p = 0; p < np; p++) { const x = Math.min(xs, p * STEP); if (p) g.lineTo(x, tops[p]); else g.moveTo(x, tops[p]); }
-    g.stroke();
-    g.beginPath();
-    for (let p = 0; p < np; p++) { const x = Math.min(xs, p * STEP); if (p) g.lineTo(x, bots[p]); else g.moveTo(x, bots[p]); }
-    g.stroke();
     // tepi kiri memudar (gelombang "keluar" dari layar)
     g.save(); g.globalCompositeOperation = 'destination-out';
     const fade = g.createLinearGradient(0, 0, Math.min(36, xs * 0.2), 0); fade.addColorStop(0, 'rgba(0,0,0,1)'); fade.addColorStop(1, 'rgba(0,0,0,0)');
@@ -141,10 +134,7 @@ function build(): void {
     const m = trace.length;
     if (traceOk && live > 8) {
       const ls = gainL.scale, k = 1 / (m - 1);
-      g.beginPath();
-      for (let i = 0; i < m; i++) { const y = mid - clamp(trace[i] * ls, -1, 1) * amp * 0.96; if (i) g.lineTo(xs + i * k * live, y); else g.moveTo(xs, y); }
-      g.lineTo(W, mid); g.lineTo(xs, mid); g.closePath();
-      g.fillStyle = FILL; g.fill();
+      // scope langsung: hanya garis (tanpa isi)
       g.beginPath();
       for (let i = 0; i < m; i++) { const y = mid - clamp(trace[i] * ls, -1, 1) * amp * 0.96; if (i) g.lineTo(xs + i * k * live, y); else g.moveTo(xs, y); }
       g.lineJoin = 'round'; g.lineWidth = 1.5; g.strokeStyle = OUTLINE; g.stroke();
