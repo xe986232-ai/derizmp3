@@ -289,7 +289,12 @@ export function initMenuPanel(): MenuPanel {
   };
   styleBtns.forEach(b => b.addEventListener('click', () => setUiStyle(b.dataset.uistyle as string, true)));
   let styleSaved = 'soft', styleUnlocked = false;
-  try { styleSaved = localStorage.getItem(STYLE_KEY) || 'soft'; styleUnlocked = localStorage.getItem(STYLE_UNLOCK_KEY) === '1'; } catch { /* abaikan */ }
+  try {
+    styleSaved = localStorage.getItem(STYLE_KEY) || 'soft'; styleUnlocked = localStorage.getItem(STYLE_UNLOCK_KEY) === '1';
+    // cadangan kalau klik-tahan tidak jalan di suatu perangkat: buka aplikasi dengan ?uistyle=buka (atau ?uistyle=tutup untuk menyembunyikan lagi)
+    const uq = new URLSearchParams(location.search).get('uistyle');
+    if (uq === 'buka' || uq === 'tutup') { styleUnlocked = uq === 'buka'; localStorage.setItem(STYLE_UNLOCK_KEY, styleUnlocked ? '1' : '0'); }
+  } catch { /* abaikan */ }
   styleCard.hidden = !styleUnlocked;
   setUiStyle(styleSaved, false);
   // klik-tahan teks "Pengaturan" (± 0,7 detik) = tampilkan / sembunyikan kartu Gaya UI; lepas jari tetap membuka halaman Pengaturan seperti biasa
@@ -309,6 +314,8 @@ export function initMenuPanel(): MenuPanel {
   });
   setGo.addEventListener('pointermove', e => { if (styleHoldT && Math.hypot(e.clientX - styleHoldX, e.clientY - styleHoldY) > 10) styleHoldClear(); });
   ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => setGo.addEventListener(ev, styleHoldClear));
+  // di Android, tahan lama memicu menu konteks / seleksi teks bawaan browser yang membatalkan pointer (pointercancel) sebelum 0,7 detik; tahan itu dimatikan di tombol ini
+  setGo.addEventListener('contextmenu', e => e.preventDefault());
 
   // ===== Pengaturan: Waveform & bar color (disimpan di browser, diterapkan lewat atribut data-wf di <html>) =====
   const WF_KEY = 'derizmp3.wfColor';
