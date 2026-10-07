@@ -27,6 +27,7 @@ export const valueAt = (_id: string, _beat: number): number | undefined => undef
 export const setTarget = (_id: string, _target: AutoTargetRef | null): void => {};
 export const cloneClip = (_id: string): string => '';
 export const splitClip = (_id: string, _cut: number): string => '';
+export const shiftClip = (_id: string, _delta: number, _base?: AutoSaved): void => {};
 export const renderMini = (_el: HTMLElement, _id: string, _lenBeats: number): void => {};
 export const closeAutoEditor = (): void => {};
 export const openAutoEditor = (_o: AutoEditorOpts): void => {};

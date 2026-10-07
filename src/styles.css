@@ -304,8 +304,13 @@ button{font:inherit;color:inherit;cursor:pointer}
   transition:opacity .2s ease .06s,transform .45s var(--ease-spring) .06s,box-shadow .25s ease}
 .pattern.is-selected .pattern__handle:hover::before{transform:scale(1.15);transition-delay:0s}
 .pattern.is-resizing .pattern__handle::before,.pattern.is-selected .pattern__handle:active::before{transform:scale(1.25);transition-delay:0s;box-shadow:0 2px 8px rgba(0,0,0,.55),0 0 0 7px rgba(255,255,255,.25)}
-.pattern.handle-inside .pattern__handle{left:auto;right:0}
-.pattern.handle-inside .pattern__handle::before{left:auto;right:10px}
+.pattern.handle-inside .pattern__handle:not(.pattern__handle--l){left:auto;right:0}
+.pattern.handle-inside .pattern__handle:not(.pattern__handle--l)::before{left:auto;right:10px}
+/* handle KIRI (awal pattern): cermin handle kanan, di luar tepi kiri; mepet awal timeline pindah ke dalam */
+.pattern__handle--l{left:auto;right:100%}
+.pattern__handle--l::before{left:auto;right:6px;transform:translateX(12px) scale(.2)}
+.pattern.handle-inside-l .pattern__handle--l{right:auto;left:0}
+.pattern.handle-inside-l .pattern__handle--l::before{right:auto;left:10px}
 .pattern.is-resizing{cursor:ew-resize}
 .pattern.is-snapping{transition:width .22s var(--ease-out),filter .2s ease,transform .25s var(--ease-spring),background-color .45s var(--ease-inout)}
 

@@ -31,14 +31,14 @@ import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
 import { initTransportMore } from './transport-more';
 import { initPitchPanel, getMasterPitch, setMasterPitch } from './master-pitch';
-import { createClip, importClip, exportClip, cloneClip, splitClip, valueAt, getClip, renderMini, openAutoEditor } from './automation';
+import { createClip, importClip, exportClip, cloneClip, splitClip, shiftClip, valueAt, getClip, renderMini, openAutoEditor } from './automation';
 import { decodeFile, addBuffer, getBuffer, encodeWav, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
 import { slideSource, glideBeats } from './note-slide';
 import { velAlpha } from './velocity';
 import { DEMO, LIMITS, demoNotice, demoMount } from './demo';
 import { initTutorial } from './tutorial';
 const demoTrackFull = (ins) => { if (!DEMO) return false; const cs = [...document.querySelectorAll('.trkcard-wrap')]; if (cs.length >= LIMITS.tracks) { demoNotice('track'); return true; } if (ins === 'DERIZ' && cs.filter(c => c.dataset.ins === 'DERIZ').length >= LIMITS.deriz) { demoNotice('deriz'); return true; } if (ins === 'DERIZ' && fxRack.derizCount() >= LIMITS.derizPlugins) { demoNotice('derizplug'); return true; } return false; };   // DEMO: batas jumlah track / DERIZ
-import { openPianoRoll, closePianoRoll, isPianoRollOpen, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollPreviewHandler, setPianoRollSeekHandler, getNoteColor, setNoteColor, getPianoRollNotes, setPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, clearPianoRollNotes, PR_BEATS } from './piano-roll';
+import { openPianoRoll, closePianoRoll, isPianoRollOpen, setPianoRollPlayhead, setPianoRollChangeHandler, setPianoRollPreviewHandler, setPianoRollSeekHandler, getNoteColor, setNoteColor, getPianoRollNotes, setPianoRollNotes, copyPianoRollNotes, trimPianoRollNotes, shiftPianoRollNotes, pianoRollExtraKeys, dropPianoRollNotesOf, clearPianoRollNotes, PR_BEATS } from './piano-roll';
 // Tahap 1 (porting tanpa perubahan perilaku): logika dipindah apa adanya dari web-daw.html.
 registerSW();   // PWA: bisa di-install & jalan offline (aktif pada hasil build)
 startLicenseGuard();   // build full: verifikasi lisensi ke server (tidak ada efek di build demo / dev)
@@ -397,7 +397,7 @@ function createPattern(lane, sl, ci) {   // ci = {clip, off}: pattern ini adalah
   el.className = 'pattern';
   el.style.left = sl.start + 'px';
   el.style.width = sl.width + 'px';
-  el.innerHTML = '<div class="pattern__head"><span class="pattern__title"></span></div><div class="pattern__handle" aria-label="Panjangkan pattern"></div>';
+  el.innerHTML = '<div class="pattern__head"><span class="pattern__title"></span></div><div class="pattern__handle" aria-label="Panjangkan / pendekkan akhir pattern"></div><div class="pattern__handle pattern__handle--l" aria-label="Panjangkan / pendekkan awal pattern"></div>';
   el.querySelector('.pattern__title').textContent = nm ? nm.textContent : 'Track';
   if (ci) { el.dataset.clip = ci.clip; el.dataset.off = ci.off; if (ci.src) el.dataset.src = ci.src; if (ci.bpm) el.dataset.bpm = ci.bpm; }   // src = clip asli sebelum di-stretch, bpm = BPM yang diisi di menu Tempo
   lane.appendChild(el);
@@ -474,7 +474,7 @@ lanesEl.addEventListener('pointerdown', e => {
 
 // Seleksi pattern (outline putih) + resize lewat bulatan di kanan
 let selPat = null;
-function handleSide(el) { el.classList.toggle('handle-inside', pl(el) + pw(el) > W - 40); }
+function handleSide(el) { el.classList.toggle('handle-inside', pl(el) + pw(el) > W - 40); el.classList.toggle('handle-inside-l', pl(el) < 40); }   // bulatan resize kiri / kanan pindah ke dalam pattern kalau mepet ujung timeline
 let lastPat = null;   // pattern terakhir yang dipilih (dipakai menu titik tiga: klik tombolnya melepas pilihan, jadi perlu diingat)
 function selectPattern(el) {
   if (el) lastPat = el;
@@ -500,7 +500,7 @@ lanesEl.addEventListener('pointerdown', e => {
 document.addEventListener('pointerdown', e => { if (!e.target.closest('.pattern, .pat-bar, .pat-menu, .kbd')) selectPattern(null); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && selPat && !addCard) selectPattern(null); });
 lanesEl.addEventListener('pointerdown', e => {
-  const h = e.target.closest('.pattern__handle');
+  const h = e.target.closest('.pattern__handle:not(.pattern__handle--l)');
   if (!h || e.button > 0) return;
   e.preventDefault();
   const el = h.parentElement, lane = el.parentElement;
@@ -526,6 +526,52 @@ lanesEl.addEventListener('pointerdown', e => {
   h.addEventListener('pointermove', move);
   h.addEventListener('pointerup', end);
   h.addEventListener('pointercancel', end);
+});
+
+// Resize dari sisi KIRI (awal pattern): ujung kanan diam, isi pattern tetap di posisi waktunya.
+// Audio clip: offset ikut bergeser (tidak bisa ditarik lebih kiri dari awal audio). Nada piano roll & kurva Automation Clip digeser saat dilepas
+// (nada / titik yang jatuh sebelum awal baru dipotong, sama seperti "Bagi dua"); selama ditarik, nada mini digeser lewat CSS dan kurva digeser langsung.
+lanesEl.addEventListener('pointerdown', e => {
+  const h = e.target.closest('.pattern__handle--l');
+  if (!h || e.button > 0) return;
+  e.preventDefault();
+  const el = h.parentElement;
+  const s0 = pl(el), end = s0 + pw(el), STEP = snapStep(), MIN = BAR_W / 2;
+  const isClip = !!el.dataset.clip, off0 = +el.dataset.off || 0, auId = el.dataset.auId, base = auId ? exportClip(auId) : null;
+  let lo = 0;
+  otherPats(el).forEach(p => { const b = pl(p) + pw(p); if (b <= s0 + 1) lo = Math.max(lo, b); });   // batas kiri: pattern sebelumnya / awal timeline
+  if (isClip) lo = Math.max(lo, s0 - off0 / SEC_PER_BAR * BAR_W);                                    // audio clip: tidak boleh melewati awal audio
+  const clamp = v => Math.max(lo, Math.min(end - MIN, v));
+  const sx = e.clientX;
+  const apply = L => {
+    const d = L - s0;
+    el.style.left = L + 'px'; el.style.width = (end - L) + 'px';
+    if (isClip) el.dataset.off = Math.max(0, off0 + d / BAR_W * SEC_PER_BAR);
+    if (auId) shiftClip(auId, d / BAR_W * 4, base);
+    el.querySelectorAll('.pattern__notes svg').forEach(sv => { sv.style.transform = d ? 'translateX(' + (-d) + 'px)' : ''; });
+    handleSide(el);
+  };
+  h.setPointerCapture(e.pointerId);
+  el.classList.remove('is-snapping'); el.classList.add('is-resizing');
+  const move = ev => apply(clamp(s0 + ev.clientX - sx));
+  const done = () => {
+    h.removeEventListener('pointermove', move);
+    h.removeEventListener('pointerup', done);
+    h.removeEventListener('pointercancel', done);
+    el.classList.remove('is-resizing');
+    const L = clamp(snapOn ? Math.round(pl(el) / STEP) * STEP : pl(el));
+    apply(L);
+    el.querySelectorAll('.pattern__notes svg').forEach(sv => { sv.style.transform = ''; });
+    const dB = (L - s0) / BAR_W * 4;   // ketukan: + = awal dimajukan (memendek), - = awal dimundurkan (memanjang)
+    if (el.dataset.prId && Math.abs(dB) > 1e-6) {
+      const id = el.dataset.prId;
+      [id, ...pianoRollExtraKeys(id)].forEach(k => shiftPianoRollNotes(k, -dB));
+      renderPatNotes(el);
+    }
+  };
+  h.addEventListener('pointermove', move);
+  h.addEventListener('pointerup', done);
+  h.addEventListener('pointercancel', done);
 });
 
 

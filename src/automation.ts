@@ -66,6 +66,21 @@ export function splitClip(id: string, cut: number): string {
   return nid;
 }
 
+// Awal clip digeser `delta` ketukan (resize dari kiri): delta > 0 = awal dimajukan (bagian depan kurva dipotong, nilai di titik itu jadi titik awal),
+// delta < 0 = awal dimundurkan (nilai awal ditahan di bagian baru). `base` = titik asli sebelum gerakan dimulai (exportClip), supaya ditarik maju-mundur tetap akurat.
+export function shiftClip(id: string, delta: number, base?: AutoSaved): void {
+  const c = clips.get(id); if (!c) return;
+  if (base) c.pts = base.p.map(([x, y]) => ({ x, y }));
+  if (!c.pts.length) return;
+  if (delta > GAP) {
+    const at = valueAt(id, delta) ?? 0.5;
+    c.pts = [{ x: 0, y: at }, ...c.pts.filter(q => q.x > delta + GAP).map(q => ({ x: q.x - delta, y: q.y }))];
+  } else if (delta < -GAP) {
+    const e = -delta;
+    c.pts = [{ x: 0, y: c.pts[0].y }, ...c.pts.map(q => ({ x: q.x + e, y: q.y }))];
+  }
+}
+
 // ---------- gambar mini di dalam clip (timeline) ----------
 const SVGNS = 'http://www.w3.org/2000/svg';
 export function renderMini(el: HTMLElement, id: string, lenBeats: number): void {

@@ -751,6 +751,10 @@ export function trimPianoRollNotes(id: string, toBeat: number) {   // buang / po
   const x = states.get(id); if (!x) return;
   x.notes = x.notes.filter(n => n.s < toBeat - 1e-9).map(n => ({...n, l: Math.min(n.l, toBeat - n.s)}));
 }
+export function shiftPianoRollNotes(id: string, delta: number) {   // geser semua nada sebesar delta ketukan (awal pattern berpindah); yang jatuh sebelum ketukan 0 dipotong / dibuang
+  const x = states.get(id); if (!x) return;
+  x.notes = x.notes.map(n => ({...n, s: n.s + delta})).filter(n => n.s + n.l > 1e-9).map(n => n.s < 0 ? {...n, l: n.l + n.s, s: 0} : n);
+}
 
 // Zoom (pinch 2 jari / wheel) bisa memicu ratusan event per detik. Dulu tiap event menulis lebar ruang scroll + scrollLeft + scrollTop
 // langsung (beberapa layout paksa per event). Sekarang event hanya mencatat target; DOM ditulis SEKALI per frame di redraw().
