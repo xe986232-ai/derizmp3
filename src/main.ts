@@ -6,6 +6,7 @@ import '@fontsource/plus-jakarta-sans/latin-400.css';   // font gelembung tutori
 import '@fontsource/plus-jakarta-sans/latin-600.css';
 import '@fontsource/plus-jakarta-sans/latin-700.css';
 import './no-context-menu';   // tutup menu klik-tahan / klik kanan bawaan browser
+import './no-zoom';   // kunci zoom halaman (pinch, Ctrl + roda, Ctrl + / -)
 import { openAudioUploadCard, trackAudioFiles } from './audio-upload-card';
 import { initEffectsPanel } from './effects-panel';
 import { initTrackMeters } from './track-meters';

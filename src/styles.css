@@ -4,7 +4,7 @@
   --background-tinted-base:#252530;--background-tinted-press:#2f2f3d;
   --accent:#a66cff;--accent-soft:rgba(166,108,255,.16);--lane:64px;--bar:80px;
 }
-html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px);touch-action:pan-x pan-y;-webkit-text-size-adjust:100%;text-size-adjust:100%}   /* touch-action tanpa pinch-zoom / double-tap zoom; scroll tetap jalan */
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--text);font:13px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;overflow:hidden}
