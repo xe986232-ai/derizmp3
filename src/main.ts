@@ -1610,12 +1610,22 @@ let posBars = 0, playing = false, playRaf = 0, startPos = 0, startCtx = 0, nextB
 // walau main thread sibuk membunyikan banyak nada. Animasi dibuat dari jam audio (startPos / startCtx) dan dibuat ulang saat
 // play / seek / ganti tempo (scheduleClips), zoom timeline (BAR_W berubah), atau piano roll dibuka.
 let phAnim = null, phAnimBarW = 0, phHeld = false;
+let phJs = false;   // true: playhead digerakkan JS bareng scroll (Auto Scroll terkunci di tengah), bukan animasi CSS
 // Waktu yang SEDANG TERDENGAR: actx.currentTime adalah jam penjadwalan, suara baru keluar speaker setelah outputLatency
 // (besar karena latencyHint 'playback', apalagi Bluetooth). Tanpa kompensasi ini playhead sudah jalan sementara suara masih tertinggal.
 const audibleNow = () => actx.currentTime - (actx.outputLatency || actx.baseLatency || 0);
-function stopPhAnim() { if (phAnim) { phAnim.cancel(); phAnim = null; } }
+// actx.currentTime naik per blok besar (puluhan ms) sehingga kalau dipakai langsung, scroll jadi patah-patah. Jam halus: maju
+// mengikuti performance.now() tiap frame, lalu dikoreksi pelan ke jam audio (rata-rata tetap sinkron dengan suara, tanpa lompatan).
+let clkEst = 0, clkT = 0;
+function smoothAudible() {
+  const raw = audibleNow(), p = performance.now();
+  if (!clkT || Math.abs(raw - clkEst) > .15) clkEst = raw;   // pertama kali / lompat besar (seek, tempo): ikut jam audio langsung
+  else { clkEst += (p - clkT) / 1000; clkEst += (raw - clkEst) * .05; }
+  clkT = p; return clkEst;
+}
+function stopPhAnim() { if (phAnim) { phAnim.cancel(); phAnim = null; } phJs = false; }
 function startPhAnim() {
-  stopPhAnim(); phHeld = false;
+  stopPhAnim(); phHeld = false; clkT = 0;
   const now = audibleNow(), wait = Math.max(0, startCtx - now);
   const pos = startPos + Math.max(0, now - startCtx) / SEC_PER_BAR, left = BARS - pos;
   phAnimBarW = BAR_W;
@@ -1634,10 +1644,10 @@ function syncTransportUI() {
 // Posisi playhead dihitung dari jam AudioContext (bukan jam rAF), jadi selalu sinkron dengan suara audio clip
 function tick() {
   if (!playing) return;
-  posBars = startPos + Math.max(0, audibleNow() - startCtx) / SEC_PER_BAR;
+  posBars = startPos + Math.max(0, smoothAudible() - startCtx) / SEC_PER_BAR;
   if (posBars >= BARS) { posBars = BARS; pausePlay(); return; }
   followPlayhead();
-  if (!phHeld && BAR_W !== phAnimBarW) startPhAnim();   // zoom timeline: lebar bar berubah -> buat ulang animasi (timeline tidak auto-scroll mengikuti playhead)
+  if (!phHeld && !phJs && BAR_W !== phAnimBarW) startPhAnim();   // zoom timeline: lebar bar berubah -> buat ulang animasi (timeline tidak auto-scroll mengikuti playhead)
   const b = Math.floor(posBars * 4 + 1e-6);   // titik ketukan di panel metronome + kedip tombol M
   if (b !== lastBeat) { lastBeat = b; metroUI.beat(b % 4); if (metro.on) metroUI.flash(); }
   playRaf = requestAnimationFrame(tick);
@@ -1781,15 +1791,28 @@ autoScrollBtn.addEventListener('click', () => {
   toast('Auto scroll ' + (autoScroll ? 'nyala' : 'mati'));
 });
 syncAutoScrollUI();
+// Saat terkunci di tengah, playhead TIDAK lagi memakai animasi CSS (jam compositor beda dengan scroll di main thread -> posisi relatifnya bergetar).
+// Playhead dan scrollLeft dihitung dari satu nilai (posBars, jam halus) dan ditulis di frame yang sama, jadi playhead diam di layar dan timeline
+// yang bergulir. Offset scroll di-snap ke piksel fisik (browser membulatkannya) dan playhead mengikuti nilai yang sama, jadi tidak ada getar sub-piksel.
 function followPlayhead() {
-  if (!autoScroll || phHeld || performance.now() < userScrollUntil) return;
+  const idle = !autoScroll || phHeld || performance.now() < userScrollUntil;
+  if (idle) { if (phJs) startPhAnim(); return; }                                      // keluar dari mode kunci: animasi CSS jalan lagi dari posisi sekarang
   const off = tlEl.offsetLeft, vw = wsEl.clientWidth - off, cur = wsEl.scrollLeft;   // vw = lebar area playlist yang terlihat (tanpa panel track)
   const sx = posBars * BAR_W - cur;                                                   // posisi playhead di dalam area itu
-  if (sx < vw * FOLLOW_AT) return;                                                    // belum sampai tengah: playhead jalan sendiri
+  if (sx < vw * FOLLOW_AT && !phJs) return;                                           // belum sampai tengah: playhead jalan sendiri
   const target = Math.max(0, posBars * BAR_W - vw * FOLLOW_AT), d = target - cur;     // scrollLeft yang menaruh playhead tepat di titik kunci
-  if (Math.abs(d) < .5) return;
+  if (!REDUCE && Math.abs(d) >= 40) {                                                 // jauh (mis. Play dari posisi di kanan): menyusul halus
+    if (phJs) startPhAnim();
+    progScrollAt = performance.now();
+    wsEl.scrollTo({left: cur + d * .2, behavior: 'instant'});
+    return;
+  }
+  const dpr = window.devicePixelRatio || 1, maxS = Math.max(0, wsEl.scrollWidth - wsEl.clientWidth);
+  const sc = Math.min(maxS, Math.round(target * dpr) / dpr);
+  if (!phJs) { stopPhAnim(); phJs = true; }
   progScrollAt = performance.now();
-  wsEl.scrollTo({left: REDUCE || Math.abs(d) < 40 ? target : cur + d * .2, behavior: 'instant'});   // jauh (mis. Play dari posisi di kanan): menyusul halus; dekat: kunci persis
+  wsEl.scrollTo({left: sc, behavior: 'instant'});
+  phEl.style.translate = (target > maxS ? posBars * BAR_W : sc + vw * FOLLOW_AT) + 'px 0';   // di ujung timeline scroll mentok: playhead lanjut jalan sampai akhir
 }
 const userScrolled = () => { userScrollUntil = performance.now() + FOLLOW_PAUSE; };
 wsEl.addEventListener('wheel', userScrolled, {passive: true});
