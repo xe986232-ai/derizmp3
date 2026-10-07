@@ -13,36 +13,36 @@
 /* ---------- 1. Token warna Flat (terang) ---------- */
 html[data-uistyle="flat"]{
   /* permukaan */
-  --flat-surface:#eef1f6;        /* dasar kolom mixer */
-  --flat-head:#e3e8f0;           /* strip atas (sejajar ruler) */
-  --flat-card:#ffffff;           /* card track */
-  --flat-card-hover:#f6f8fb;     /* card track tidak terpilih saat disentuh */
-  --flat-line:#d3d9e4;           /* garis pemisah 1px */
+  --flat-surface:#f3ece2;        /* dasar kolom mixer */
+  --flat-head:#eadfd0;           /* strip atas (sejajar ruler) */
+  --flat-card:#fffaf3;           /* card track */
+  --flat-card-hover:#f8f1e6;     /* card track tidak terpilih saat disentuh */
+  --flat-line:#dccfbd;           /* garis pemisah 1px */
   /* teks */
-  --flat-text:#1d2433;
-  --flat-muted:#677089;
-  --flat-on-color:#1d2433;       /* glyph di atas warna track yang terang */
+  --flat-text:#3a2e26;
+  --flat-muted:#8a7767;
+  --flat-on-color:#3a2e26;       /* glyph di atas warna track yang terang */
   /* kontrol (tombol, slider, knob) */
-  --flat-ctrl:#e3e8f0;
-  --flat-ctrl-hover:#d3dbe8;
-  --flat-ctrl-strong:#c4cddc;
-  --flat-ctrl-on:#2f6bff;        /* tombol nyala (auto scroll) */
-  --flat-track:#c4cddc;          /* rel slider */
-  --flat-focus:#2f6bff;
+  --flat-ctrl:#eadfd0;
+  --flat-ctrl-hover:#dfd1bd;
+  --flat-ctrl-strong:#cfbfa8;
+  --flat-ctrl-on:#e8703a;        /* tombol nyala (auto scroll) */
+  --flat-track:#d8c9b3;          /* rel slider */
+  --flat-focus:#e8703a;
   /* status */
-  --flat-accent:#ff4f8b;         /* cadangan jika track belum punya warna */
-  --flat-solo:#ffc933;
-  --flat-ok:#21c06e;
-  --flat-off:#c4cddc;
-  --flat-danger:#e5384a;
+  --flat-accent:#ef6a4c;         /* cadangan jika track belum punya warna */
+  --flat-solo:#f5b83d;
+  --flat-ok:#4fb06a;
+  --flat-off:#cfbfa8;
+  --flat-danger:#d9443a;
   /* meter level */
-  --flat-meter-bg:#e3e8f0;
-  --flat-meter-empty:rgba(29,36,51,.12);
-  --flat-meter-ok:#21c06e;
-  --flat-meter-warn:#ffc933;
-  --flat-meter-clip:#ff4757;
+  --flat-meter-bg:#eadfd0;
+  --flat-meter-empty:rgba(58,46,38,.12);
+  --flat-meter-ok:#4fb06a;
+  --flat-meter-warn:#f5b83d;
+  --flat-meter-clip:#e5483a;
   /* bayangan (hanya untuk menu & drag) */
-  --flat-shadow:rgba(29,36,51,.16);
+  --flat-shadow:rgba(58,46,38,.18);
 }
 
 /* ---------- 2. Kolom channel mixer ---------- */
@@ -155,23 +155,23 @@ html[data-uistyle="flat"] .mixer-menu .track-menu__swatch:focus-visible{border-c
 /* ---------- 5. Token warna Playlist & Grid (terang, terpisah dari token mixer) ---------- */
 html[data-uistyle="flat"]{
   /* permukaan */
-  --flat-pl-bg:#e9edf4;           /* latar area kerja (di bawah baris track terakhir / di luar ujung timeline) */
-  --flat-pl-lane:#f7f9fc;         /* baris track */
-  --flat-pl-lane-alt:#eff2f8;     /* baris track selang-seling */
-  --flat-pl-ruler:#e3e8f0;        /* strip ruler (48px, menyambung dengan strip atas mixer) */
-  --flat-pl-line:#d3d9e4;         /* garis pemisah baris & garis bawah ruler */
+  --flat-pl-bg:#eee4d6;           /* latar area kerja (di bawah baris track terakhir / di luar ujung timeline) */
+  --flat-pl-lane:#fbf6ee;         /* baris track */
+  --flat-pl-lane-alt:#f4ecdf;     /* baris track selang-seling */
+  --flat-pl-ruler:#eadfd0;        /* strip ruler (48px, menyambung dengan strip atas mixer) */
+  --flat-pl-line:#dccfbd;         /* garis pemisah baris & garis bawah ruler */
   /* grid: bar = garis solid; ketukan, 1/16, dst = warna dasar (R,G,B) x alpha zoom (--beat-a, --sub-a, --mid-a, --fine-a) x gain */
-  --flat-pl-grid-bar:#c4cddc;     /* garis tiap bar */
-  --flat-pl-grid:29,36,51;        /* warna dasar garis ketukan & lebih halus (format R,G,B) */
+  --flat-pl-grid-bar:#cdbca4;     /* garis tiap bar */
+  --flat-pl-grid:58,46,38;        /* warna dasar garis ketukan & lebih halus (format R,G,B) */
   --flat-pl-grid-gain:3.6;        /* pengali alpha zoom: latar terang butuh garis lebih pekat daripada latar gelap */
   /* ruler (dibaca juga oleh main.ts untuk canvas) */
-  --flat-pl-tick-a:#677089;       /* tick bar + angka */
-  --flat-pl-tick-b:#8d96ab;       /* tick ketukan + label ketukan */
-  --flat-pl-tick-c:#a9b1c3;       /* tick 1/16 + label 1/16 */
+  --flat-pl-tick-a:#8a7767;       /* tick bar + angka */
+  --flat-pl-tick-b:#a8957f;       /* tick ketukan + label ketukan */
+  --flat-pl-tick-c:#c2b29c;       /* tick 1/16 + label 1/16 */
   /* penunjuk */
-  --flat-pl-play:#e5384a;         /* playhead */
-  --flat-pl-focus:#2f6bff;        /* baris target saat drop / seret */
-  --flat-pl-shadow:rgba(29,36,51,.16);
+  --flat-pl-play:#d9442e;         /* playhead */
+  --flat-pl-focus:#e8703a;        /* baris target saat drop / seret */
+  --flat-pl-shadow:rgba(58,46,38,.18);
 }
 
 /* ---------- 6. Latar playlist ---------- */
