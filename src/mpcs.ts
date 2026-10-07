@@ -1,5 +1,5 @@
 // MPCS (Manual Pitch Correct Sample): jendela editor pitch manual, bergaya plugin DERIZ (faceplate logam 3D). Tahap 1 (starter):
-//   upload audio -> analisis di Worker -> blok nada di piano roll -> seret blok ke atas / bawah (snap semiton) -> knob Trans / Variation / Center -> putar hasil.
+//   upload audio -> analisis di Worker -> blok nada di piano roll -> seret blok ke atas / bawah (snap semiton) -> knob Glide / Human / Lock -> putar hasil.
 // Dibuka lewat tombol + di halaman Plugin pada panel efek (pilih "MPCS"); tidak ada kartunya di daftar efek.
 // Inti DSP ada di mpcs-dsp.ts (murni), jalan di mpcs-worker.ts.
 
@@ -33,7 +33,7 @@ const BLACK = new Set([1, 3, 6, 8, 10]);
 const noteName = (m: number): string => { const r = Math.round(m); return NAMES[((r % 12) + 12) % 12] + (Math.floor(r / 12) - 1); };
 const fmtShift = (s: number): string => { const c = Math.round(s * 100); return (c > 0 ? '+' : '') + (Math.abs(c) % 100 === 0 ? c / 100 + ' st' : c + ' ct'); };
 
-// Tiga knob global (Center / Variation / Transition). Markup & kelas sama dengan knob efek (fx-rack.ts) supaya gayanya menyatu dengan DAW.
+// Tiga knob global (Lock = center, Human = variation, Glide = transition; nama kunci di kode tetap center / variation / transition). Markup & kelas sama dengan knob efek (fx-rack.ts) supaya gayanya menyatu dengan DAW.
 const knobSvg = '<svg viewBox="0 0 36 36" aria-hidden="true" class="circular-chart">' +
   '<path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" stroke-dasharray="75, 100" class="circle-bg" style="transform-origin:18px 18px;transform:rotate(225deg)"></path>' +
   '<path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" stroke-dashoffset="0" stroke-dasharray="0 100" class="circle accent-on" style="transform:rotate(225deg)"></path>' +
@@ -42,11 +42,11 @@ const knobSvg = '<svg viewBox="0 0 36 36" aria-hidden="true" class="circular-cha
   '<path d="M 18 7.5 L 18 12" class="knob-pos" style="transform:rotate(-135deg)"></path></svg>';
 type KnobKey = keyof Controls;
 const KNOBS: Record<KnobKey, { label: string; tip: string; bipolar?: boolean }> = {
-  transition: { label: 'Trans', bipolar: true, tip: 'Transition: cara pindah antar nada. 50% = luncuran asli dipertahankan. Ke kiri: makin tajam sampai lompat robotik. Ke kanan: makin legato (luncuran lebar). Klik dua kali = reset' },
-  variation: { label: 'Variation', tip: 'Variation: variasi alami di dalam nada (vibrato dan pitch yang goyang). 100% = asli, 0% = datar di pusat nada. Klik dua kali = reset' },
-  center: { label: 'Center', tip: 'Center: tarik pitch pusat tiap nada ke semiton terdekat. 0% = pitch asli, 100% = tepat di nada. Klik dua kali = reset' }
+  transition: { label: 'Glide', bipolar: true, tip: 'Glide: cara pindah antar nada. 50% = luncuran asli dipertahankan. Ke kiri: makin tajam sampai lompat robotik. Ke kanan: makin legato (luncuran lebar). Klik dua kali = reset' },
+  variation: { label: 'Human', tip: 'Human: variasi alami di dalam nada (vibrato dan pitch yang goyang). 100% = asli, 0% = datar di pusat nada. Klik dua kali = reset' },
+  center: { label: 'Lock', tip: 'Lock: tarik pitch pusat tiap nada ke semiton terdekat. 0% = pitch asli, 100% = tepat di nada. Klik dua kali = reset' }
 };
-const KNOB_KEYS: KnobKey[] = ['transition', 'variation', 'center'];   // urutan tampil: Trans, Variation, Center
+const KNOB_KEYS: KnobKey[] = ['transition', 'variation', 'center'];   // urutan tampil: Glide, Human, Lock
 const knobHtml = (k: KnobKey): string =>
   `<div class="mpcs__knob is-off" title="${KNOBS[k].tip}"><div class="knob fxk"><div class="knob-inner"><div role="slider" tabindex="0" class="knob-input" data-kn="${k}" aria-label="${KNOBS[k].label}" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${DEFAULT_CONTROLS[k]}"><div class="knobwheel">${knobSvg}</div></div></div></div>` +
   `<span class="mpcs__lbl">${KNOBS[k].label}</span><output>${Math.round(DEFAULT_CONTROLS[k] * 100)}%</output></div>`;
@@ -476,7 +476,7 @@ function build(): void {
       if (my !== loadTok) return;
       let notes: Note[] = r.notes; const pt: PitchTrack = r.pt;
       if (saved) { notes = saved.notes.map(n => ({ ...n })); kv = { ...DEFAULT_CONTROLS, ...saved.kv }; paintKnobs(); }   // project dibuka: pakai nada & knob hasil edit, bukan hasil analisis mentah
-      else { snapTargets(notes); resetKnobs(); }   // target = semiton terdekat (hysteresis); Center 0% jadi audio belum berubah sampai knob diputar
+      else { snapTargets(notes); resetKnobs(); }   // target = semiton terdekat (hysteresis); Lock 0% jadi audio belum berubah sampai knob diputar
       let lo = 48, hi = 72;
       if (saved && Number.isFinite(saved.lo) && Number.isFinite(saved.hi)) { lo = saved.lo; hi = saved.hi; }
       else if (notes.length) {
@@ -690,7 +690,7 @@ function build(): void {
     if (!drag.moved && Math.abs(dy) < 4) return;
     drag.moved = true;
     const t = Math.max(S.lo + 1, Math.min(S.hi - 1, drag.base + Math.round(dy / rowH)));
-    if (t !== S.notes[drag.i].target || !S.notes[drag.i].man) { S.notes[drag.i].target = t; S.notes[drag.i].man = true; edit(); }   // diseret tangan: dikoreksi penuh, di luar knob Center
+    if (t !== S.notes[drag.i].target || !S.notes[drag.i].man) { S.notes[drag.i].target = t; S.notes[drag.i].man = true; edit(); }   // diseret tangan: dikoreksi penuh, di luar knob Lock
   });
   const endDrag = (e: PointerEvent): void => {
     ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
