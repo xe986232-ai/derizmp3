@@ -51,10 +51,10 @@ function build(): void {
     '<div class="spec__win" role="img" aria-label="SPECTRUM: gelombang suara langsung dari keluaran master">' +
       '<div class="spec__stage"><canvas class="spec__cv" aria-hidden="true"></canvas></div>' +
     '</div>';
-  const bar = document.getElementById('dockBar');   // footer card transport
-  if (bar && bar.parentElement) bar.parentElement.insertBefore(el, bar); else document.body.appendChild(el);   // di alur layout, tepat di atas card transport: card tetap di dasar, strip ikut di atasnya tanpa hitungan posisi
+  document.body.appendChild(el);
   root = el;
 
+  const win = el.querySelector<HTMLElement>('.spec__win')!;
   const stage = el.querySelector<HTMLElement>('.spec__stage')!;
   const cv = el.querySelector<HTMLCanvasElement>('.spec__cv')!;
   const g = cv.getContext('2d')!;
@@ -171,25 +171,26 @@ function build(): void {
   const start = (): void => { cancelAnimationFrame(raf); lastTs = performance.now(); raf = requestAnimationFrame(frame); };
   const stop = (): void => { cancelAnimationFrame(raf); raf = 0; };
 
-  // ---------- posisi: elemen ini ada di alur layout tepat sebelum card transport (footer #dockBar), jadi card tetap menempel di bawah dan strip selalu persis di atasnya; tidak ada hitungan posisi ----------
+  // ---------- posisi: DIKUNCI di dasar layar (CSS: .spec{position:fixed;bottom:0}). Tidak ada hitungan posisi dari elemen lain, jadi tidak bisa pindah / nyangkut.
+  // Card transport (z-index 530) tetap menempel di dasar dan berada DI ATAS strip; strip ada di belakangnya, juga di dasar. ----------
 
-  // ---------- buka / tutup (dari saklar di Pengaturan): tinggi strip dianimasikan lewat CSS (class is-open) ----------
+  // ---------- buka / tutup (dari saklar di Pengaturan) ----------
   let closing = false;
-  const finish = (): void => { if (closing) { el.hidden = true; closing = false; } };
   closeFn = () => {
     if (el.hidden || closing) return;
     stop(); disconnect();
-    closing = true; el.classList.remove('is-open');
-    if (reduce) { finish(); return; }
-    const t = setTimeout(finish, 400);   // jaga-jaga kalau transitionend tidak datang
-    el.addEventListener('transitionend', () => { clearTimeout(t); finish(); }, { once: true });
+    const done = (): void => { el.hidden = true; closing = false; };
+    if (reduce) { done(); return; }
+    closing = true;
+    win.animate([{ transform: 'none' }, { transform: 'translateY(100%)' }], { duration: 180, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }).onfinish = () => { done(); el.getAnimations({ subtree: true }).forEach(a => a.cancel()); };
   };
   openFn = () => {
     if (!el.hidden && !closing) return;   // dinyalakan lagi saat animasi tutup masih jalan: batalkan tutupnya dan lanjut
     closing = false;
-    el.hidden = false; void el.offsetHeight;   // paksa reflow supaya transisi tinggi jalan dari 0
-    el.classList.add('is-open');
+    el.getAnimations({ subtree: true }).forEach(a => a.cancel());
+    el.hidden = false;
     connect(); resetState(); layout(); start();
+    if (!reduce) win.animate([{ transform: 'translateY(100%)' }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)' });
   };
   document.addEventListener('visibilitychange', () => { if (!el.hidden) { if (document.hidden) stop(); else { resetState(); start(); } } });
 }
