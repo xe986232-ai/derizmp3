@@ -60,7 +60,7 @@ const STEPS: Step[] = [
     text: 'Panah ini membuka dan menutup panel bawah. Di dalamnya ada keyboard virtual: mainkan lewat sentuhan atau keyboard komputer (baris Z–M dan Q–P), dengan tombol oktaf untuk menggeser rentang nada.' },
 
   { title: 'Panel Effects', scene: 'fx', targets: ['.fx__pages'], prefer: ['bottom', 'left'],
-    text: 'Panel di sisi kanan. Tab Plugin berisi instrumen (DERIZ, Supersaw, MPCS), tab Effect berisi efek seperti Reverb, EQ, Filter, De-esser, dan Delay. Isinya mengikuti track yang sedang dipilih.' },
+    text: 'Panel di sisi kanan. Tab Plugin berisi instrumen dan alat (DERIZ, Supersaw, MPCS, SPECTRUM), tab Effect berisi efek seperti Reverb, EQ, Filter, De-esser, dan Delay. Isinya mengikuti track yang sedang dipilih.' },
   { title: 'Tambah plugin atau efek', scene: 'fx', targets: ['#fxAdd'], prefer: ['bottom', 'left'],
     text: 'Tombol + menambahkan plugin atau efek ke track yang dipilih. DERIZ bisa dipasang beberapa kali, lewat tombol + atau Duplicate di titik tiga kartunya.' + (DEMO ? ` Di versi demo maksimal ${LIMITS.derizPlugins} plugin DERIZ.` : '') },
 
