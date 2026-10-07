@@ -107,9 +107,9 @@ export function initMenuPanel(): MenuPanel {
             '<p class="mp__hint">Ketuk: simpan sebagai project baru.<br>Tahan: simpan perubahan ke project yang sedang dibuka.</p>' +
           '</div>' +
           '<div class="mp__card mp__item" style="--i:2">' +
-            '<div class="mp__sub"><span>File project</span><button type="button" class="mp__imp">Buka .json</button></div>' +
+            '<div class="mp__sub"><span>File project</span><button type="button" class="mp__imp" data-impjson>Buka .json</button></div>' +
             '<ul class="mp__files"></ul><p class="mp__hint mp__empty">Belum ada project tersimpan.</p>' +
-            '<input type="file" class="mp__impfile" accept="application/json,.json" hidden>' +
+            '<input type="file" class="mp__impfile" hidden>' +
           '</div>' +
         '</section>' +
         // kategori Export
@@ -678,7 +678,7 @@ export function initMenuPanel(): MenuPanel {
     } catch (err) { console.error(err); say('Gagal memproses file project'); }
   });
   const impFile = panel.querySelector('.mp__impfile') as HTMLInputElement;
-  panel.querySelector('.mp__imp')!.addEventListener('click', () => { if (DEMO) { demoNotice('save'); return; } impFile.click(); });
+  panel.querySelector('[data-impjson]')!.addEventListener('click', () => { if (DEMO) { demoNotice('save'); return; } impFile.click(); });
   impFile.addEventListener('change', async () => {
     const f = impFile.files && impFile.files[0]; impFile.value = '';
     if (!f || !io) return;
@@ -687,7 +687,7 @@ export function initMenuPanel(): MenuPanel {
       await saveProject(rec); await refresh();
       await io.restore(rec); curName = rec.name;
       say('Project dibuka: ' + rec.name); apply(false, true);
-    } catch (err) { console.error(err); say('File project tidak valid'); }
+    } catch (err) { console.error(err); say('Gagal membuka file: ' + (err instanceof Error ? err.message : 'tidak valid')); }
   });
 
   apply(false, false);

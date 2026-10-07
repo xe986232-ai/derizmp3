@@ -1672,7 +1672,10 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 /* ---------- SPECTRUM: strip polos selebar layar, menempel di dasar (tanpa bingkai / tombol). Nyala-mati dan kecepatan ada di Pengaturan ---------- */
 .spec{position:fixed;left:0;right:0;bottom:0;z-index:220;pointer-events:none}   /* tidak modal: sentuhan tembus ke DAW */
 .spec[hidden]{display:none}
-.spec__win{position:relative;display:flex;flex-direction:column;width:100%;height:calc(clamp(64px,11vh,100px) + var(--spec-pad,env(safe-area-inset-bottom,0px)));padding-bottom:var(--spec-pad,env(safe-area-inset-bottom,0px));box-sizing:border-box;background:#0e0e14;border-top:1px solid rgba(255,255,255,.14)}
+body{box-sizing:border-box;transition:padding-bottom .24s var(--ease-out)}
+html.spec-on body{padding-bottom:clamp(64px,11vh,100px)}   /* pesan ruang untuk strip SPECTRUM (area aman bawah sudah ditanggung padding :root) */
+@media (prefers-reduced-motion:reduce){body{transition:none}}
+.spec__win{position:relative;display:flex;flex-direction:column;width:100%;height:calc(clamp(64px,11vh,100px) + env(safe-area-inset-bottom,0px));padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box;background:#0e0e14;border-top:1px solid rgba(255,255,255,.14)}
 .spec__stage{position:relative;flex:1;min-height:0}
 .spec__cv{position:absolute;inset:0;display:block;pointer-events:none}
 /* ===== Export audio (panel menu + overlay progres) ===== */

@@ -66,10 +66,18 @@ export async function recordToJson(rec: ProjectRecord): Promise<string> {
   for (const [k, b] of Object.entries(rec.clips)) clips[k] = await toDataUrl(b);
   return JSON.stringify({app: 'derizmp3', name: rec.name, savedAt: rec.savedAt, data: rec.data, clips});
 }
+// data URL -> Blob lewat atob (tanpa fetch('data:...'), yang bisa gagal di sebagian browser / kebijakan keamanan)
+function dataUrlToBlob(u: string): Blob {
+  const i = u.indexOf(',');
+  if (!u.startsWith('data:') || i < 0) throw new Error('data audio di file rusak');
+  const head = u.slice(5, i), bin = atob(u.slice(i + 1)), a = new Uint8Array(bin.length);
+  for (let n = 0; n < bin.length; n++) a[n] = bin.charCodeAt(n);
+  return new Blob([a], {type: head.split(';')[0] || 'audio/wav'});
+}
 export async function jsonToRecord(text: string): Promise<ProjectRecord> {
-  const j = JSON.parse(text);
+  const j = JSON.parse(text.replace(/^\uFEFF/, ''));   // BOM di awal file (editor / aplikasi file tertentu) tidak boleh bikin gagal
   if (j.app !== 'derizmp3' || !j.data) throw new Error('bukan file project derizmp3');
   const clips: Record<string, Blob> = {};
-  for (const [k, u] of Object.entries(j.clips || {})) clips[k] = await (await fetch(u as string)).blob();
+  for (const [k, u] of Object.entries(j.clips || {})) clips[k] = dataUrlToBlob(String(u));
   return {name: String(j.name || 'Project'), savedAt: Date.now(), data: j.data, clips};
 }

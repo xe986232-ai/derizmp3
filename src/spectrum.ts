@@ -171,21 +171,14 @@ function build(): void {
   const start = (): void => { cancelAnimationFrame(raf); lastTs = performance.now(); raf = requestAnimationFrame(frame); };
   const stop = (): void => { cancelAnimationFrame(raf); raf = 0; };
 
-  // ---------- posisi: di atas panel bawah (transport + keyboard) kalau terbuka; mentok dasar layar kalau panel bawah ditutup ----------
-  let tbar: HTMLElement | null = null, tro: ResizeObserver | null = null;
-  const dock = (): void => {
-    if (!tbar) { tbar = document.querySelector<HTMLElement>('.transportbar'); if (tbar) { tro = new ResizeObserver(dock); tro.observe(tbar); } }
-    const off = tbar ? Math.round(innerHeight - tbar.getBoundingClientRect().top) : 0, flush = off < 2;
-    el.style.bottom = (flush ? 0 : off) + 'px';
-    el.style.setProperty('--spec-pad', flush ? 'env(safe-area-inset-bottom,0px)' : '0px');   // area aman bawah sudah ditanggung panel bawah
-  };
-  addEventListener('resize', () => { if (!el.hidden) dock(); });
+  // ---------- posisi: DIKUNCI di dasar layar (CSS: .spec{bottom:0}); tidak ada lagi hitungan posisi dari card transport ----------
+  // Ruang strip dipesan lewat class html.spec-on (padding bawah body), jadi DAW naik ke atas strip dan tidak tertutup.
 
   // ---------- buka / tutup (dari saklar di Pengaturan) ----------
   let closing = false;
   closeFn = () => {
     if (el.hidden || closing) return;
-    stop(); disconnect();
+    stop(); disconnect(); document.documentElement.classList.remove('spec-on');
     const done = (): void => { el.hidden = true; closing = false; };
     if (reduce) { done(); return; }
     closing = true;
@@ -196,7 +189,8 @@ function build(): void {
     closing = false;
     el.getAnimations({ subtree: true }).forEach(a => a.cancel());
     el.hidden = false;
-    dock(); connect(); resetState(); layout(); start();
+    document.documentElement.classList.add('spec-on');
+    connect(); resetState(); layout(); start();
     if (!reduce) win.animate([{ transform: 'translateY(100%)' }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)' });
   };
   document.addEventListener('visibilitychange', () => { if (!el.hidden) { if (document.hidden) stop(); else { resetState(); start(); } } });
