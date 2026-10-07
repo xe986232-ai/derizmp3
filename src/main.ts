@@ -56,6 +56,8 @@ const wsEl = document.querySelector('.workspace'), tlEl = document.getElementByI
 let BAR_W = BAR_DEFAULT, W = BARS * BAR_W;
 const pl = el => parseFloat(el.style.left) || 0, pw = el => parseFloat(el.style.width) || 0;
 // Snap makin halus saat di-zoom besar (1/4 bar sampai 240px, lalu 1/16, 1/32, 1/64)
+let progScrollAt = 0;   // waktu terakhir timeline digeser oleh Auto Scroll: scroll semacam itu tidak boleh menutup menu yang sedang terbuka
+const isProgScroll = () => performance.now() - progScrollAt < 80;
 let snapOn = true;   // tombol Snap di toolbar pattern
 const snapStep = () => BAR_W / (BAR_W <= 240 ? 4 : BAR_W <= 640 ? 16 : BAR_W <= 1280 ? 32 : 64);
 const canvas = document.getElementById('axis');
@@ -339,7 +341,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && menu) { const b = menuBtn; closeMenu(); b && b.focus(); }
 });
 window.addEventListener('resize', closeMenu);
-window.addEventListener('scroll', closeMenu, true);
+window.addEventListener('scroll', () => { if (!isProgScroll()) closeMenu(); }, true);
 
 // Klik area kosong di timeline -> kartu "Add" -> pattern kosong
 const lanesEl = document.getElementById('lanes');
@@ -615,7 +617,7 @@ function patBarPlace() {
   patBar.style.left = left + 'px';
   patBar.style.top = (above < 0 ? lane.offsetTop + lane.offsetHeight + 8 : above) + 'px';   // track paling atas: toolbar turun ke bawah pattern
 }
-wsEl.addEventListener('scroll', () => { patBarPlace(); closePatMenu(); }, {passive: true});
+wsEl.addEventListener('scroll', () => { patBarPlace(); if (!isProgScroll()) closePatMenu(); }, {passive: true});
 // ===== Tempo audio clip: stretch (pitch tetap) supaya BPM clip mengikuti BPM project =====
 // Menu Tempo (tahan icon microphone): isi BPM asli clip, mis. vokal 126 di project 130 -> audio dipercepat 126/130 tanpa mengubah nada.
 // Hasil stretch = buffer baru (clip id baru); clip asli tetap disimpan (dataset.src) supaya stretch ulang selalu dari audio asli, bukan bertumpuk.
@@ -1593,7 +1595,7 @@ addTrackBtn.addEventListener('click', e => { e.stopPropagation(); addMenu ? clos
 document.addEventListener('click', e => { if (addMenu && !addMenu.contains(e.target)) closeAddMenu(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && addMenu) { const b = addBtn; closeAddMenu(); b && b.focus(); } });
 window.addEventListener('resize', closeAddMenu);
-window.addEventListener('scroll', closeAddMenu, true);
+window.addEventListener('scroll', () => { if (!isProgScroll()) closeAddMenu(); }, true);
 
 
 // ===== Transport: play / jeda, ke awal, mundur, maju, siklus, rekam =====
@@ -1736,7 +1738,7 @@ function startPlay() {
   if (posBars >= BARS) posBars = 0;
   startMark = posBars;   // titik start: tombol mundur akan kembali ke sini
   playing = true; holdSpec(true); scheduleClips(metro.countIn);
-  phWasVisible = true; if (autoScroll) showPlayhead();   // Auto Scroll: Play dari posisi di luar layar -> timeline langsung menyusul playhead
+  userScrollUntil = 0;   // Auto Scroll: Play selalu mengikuti playhead lagi (timeline menyusul kalau playhead di luar layar)
   playRaf = requestAnimationFrame(tick); syncTransportUI();
 }
 function pausePlay() {
@@ -1757,11 +1759,13 @@ function seekBy(d) {
 // Tombol mundur: kembali ke titik tempat terakhir kali Play dimulai; kalau sudah di sana (atau di sebelum itu), klik lagi = ke awal (bar 1)
 let startMark = 0;
 // ===== Auto Scroll playlist =====
-// Nyala: saat Play, begitu playhead melewati tepi kanan layar timeline digeser (halus) sampai playhead di ~30% lebar layar.
-// Hanya bereaksi kalau playhead tadinya terlihat lalu keluar lewat kanan: kalau pengguna sengaja menggulir menjauh, timeline tidak ditarik balik.
+// Nyala: timeline mengikuti playhead REAL-TIME. Playhead berjalan normal dari kiri sampai mencapai ~30% lebar layar timeline,
+// lalu "terkunci" di titik itu dan timeline yang bergulir tiap frame (posisi dari jam audio yang sama dengan playhead).
+// Kalau pengguna menggulir sendiri (wheel / sentuh), ikut-ikutan dijeda 2,5 detik lalu timeline menyusul lagi dengan halus.
 // Pilihan disimpan di localStorage (AUTOSCROLL_KEY); bawaan = nyala.
 const AUTOSCROLL_KEY = 'derizmp3.autoScroll';
-let autoScroll = true, phWasVisible = true;
+let autoScroll = true, userScrollUntil = 0;
+const FOLLOW_AT = .3, FOLLOW_PAUSE = 2500;   // letak playhead terkunci (porsi lebar layar timeline) dan lama jeda setelah pengguna menggulir
 try { autoScroll = localStorage.getItem(AUTOSCROLL_KEY) !== '0'; } catch { /* penyimpanan diblokir: bawaan nyala */ }
 const autoScrollBtn = document.getElementById('autoScrollToggle');
 function syncAutoScrollUI() {
@@ -1771,17 +1775,21 @@ function syncAutoScrollUI() {
 autoScrollBtn.addEventListener('click', () => {
   autoScroll = !autoScroll; syncAutoScrollUI();
   try { localStorage.setItem(AUTOSCROLL_KEY, autoScroll ? '1' : '0'); } catch { /* abaikan */ }
-  if (autoScroll) { phWasVisible = false; if (playing) showPlayhead(); }   // dinyalakan saat main: langsung susul playhead
+  userScrollUntil = 0;   // dinyalakan saat main: timeline langsung menyusul playhead
   toast('Auto scroll ' + (autoScroll ? 'nyala' : 'mati'));
 });
 syncAutoScrollUI();
 function followPlayhead() {
-  if (!autoScroll || phHeld) return;
-  const off = tlEl.offsetLeft, x = off + posBars * BAR_W, l = wsEl.scrollLeft, w = wsEl.clientWidth;
-  const right = l + w - 24, vis = x >= l + off + 8 && x <= right;
-  if (!vis && phWasVisible && x > right) wsEl.scrollTo({left: Math.max(0, x - w * .3), behavior: REDUCE ? 'instant' : 'smooth'});
-  phWasVisible = vis;
+  if (!autoScroll || phHeld || performance.now() < userScrollUntil) return;
+  const target = Math.max(0, posBars * BAR_W - (wsEl.clientWidth - tlEl.offsetLeft) * FOLLOW_AT);   // scrollLeft supaya playhead tepat di titik kunci
+  const cur = wsEl.scrollLeft, d = target - cur;
+  if (Math.abs(d) < .5) return;
+  progScrollAt = performance.now();
+  wsEl.scrollLeft = REDUCE || Math.abs(d) < 24 ? target : cur + d * .25;   // jauh (mis. baru selesai digulir sendiri): menyusul halus; dekat: kunci persis
 }
+const userScrolled = () => { userScrollUntil = performance.now() + FOLLOW_PAUSE; };
+wsEl.addEventListener('wheel', userScrolled, {passive: true});
+wsEl.addEventListener('touchmove', userScrolled, {passive: true});
 function showPlayhead() {   // geser timeline kalau playhead keluar dari layar
   const off = tlEl.offsetLeft, x = off + posBars * BAR_W, l = wsEl.scrollLeft, w = wsEl.clientWidth;
   if (x < l + off + 8 || x > l + w - 24) wsEl.scrollTo({left: Math.max(0, x - w * .3), behavior: REDUCE ? 'instant' : 'smooth'});
