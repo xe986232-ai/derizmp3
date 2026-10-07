@@ -2302,3 +2302,7 @@ body.is-pdragging,body.is-pdragging *{cursor:grabbing!important;user-select:none
 
 /* judul panel Menu dipakai untuk klik-tahan (buka/tutup Gaya UI): area tahan selebar header, tanpa seleksi teks / callout bawaan browser */
 .mp__title{flex:1;align-self:stretch;display:flex;align-items:center;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+
+/* tombol rahasia pindah Gaya UI (Default <-> Flat): tak terlihat, pojok kanan-bawah halaman utama Menu (area kosong di bawah daftar kategori); hanya aktif di halaman utama supaya tidak menutupi tombol di halaman lain */
+.mp__uisw{position:absolute;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 110px);width:64px;height:64px;padding:0;border:0;background:transparent;opacity:0;pointer-events:auto;z-index:3;cursor:default;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.mp__panel:has(.mp__page[data-page="home"][hidden]) .mp__uisw{display:none}

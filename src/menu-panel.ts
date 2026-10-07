@@ -317,6 +317,18 @@ export function initMenuPanel(): MenuPanel {
   // di Android, tahan lama memicu menu konteks / seleksi teks bawaan browser yang membatalkan pointer (pointercancel) sebelum 0,7 detik; tahan itu dimatikan di judul ini
   setGo.addEventListener('contextmenu', e => e.preventDefault());
 
+  // Tombol rahasia pindah Gaya UI (Default <-> Flat): tak terlihat, di pojok kanan-bawah halaman utama Menu (lihat .mp__uisw di styles.css).
+  // Sekali tap langsung ganti gaya, tanpa membuka kartu di Pengaturan. Disembunyikan dari pembaca layar dan tidak ikut urutan Tab.
+  const uiSw = document.createElement('button');
+  uiSw.type = 'button'; uiSw.className = 'mp__uisw'; uiSw.tabIndex = -1; uiSw.setAttribute('aria-hidden', 'true');
+  (panel.querySelector('.mp__panel') as HTMLElement).appendChild(uiSw);
+  uiSw.addEventListener('click', () => {
+    const next = document.documentElement.dataset.uistyle === 'flat' ? 'soft' : 'flat';
+    setUiStyle(next, true);
+    if (navigator.vibrate) { try { navigator.vibrate(18); } catch { /* abaikan */ } }
+    io && io.toast(next === 'flat' ? 'Gaya UI: Flat' : 'Gaya UI: Default', 1500);
+  });
+
   // ===== Pengaturan: Waveform & bar color (disimpan di browser, diterapkan lewat atribut data-wf di <html>) =====
   const WF_KEY = 'derizmp3.wfColor';
   const wfBtns = [...panel.querySelectorAll<HTMLButtonElement>('[data-wf]')];
