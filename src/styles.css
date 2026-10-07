@@ -2299,3 +2299,10 @@ body.is-pdragging,body.is-pdragging *{cursor:grabbing!important;user-select:none
 @media (max-height:460px){.drm__win{padding:calc(6px + env(safe-area-inset-top)) 14px 8px;gap:6px}.drm__labels{grid-template-rows:repeat(var(--n),minmax(22px,1fr))}.drm__grid{grid-template-rows:repeat(var(--n),minmax(22px,1fr))}.drm__c::after{inset:3px 2px}}
 
 /* Gaya UI "Flat" dipindah ke src/flat-ui.css (token warna --flat-* terpisah dari token default di file ini) */
+
+/* judul panel Menu dipakai untuk klik-tahan (buka/tutup Gaya UI): area tahan selebar header, tanpa seleksi teks / callout bawaan browser */
+.mp__title{flex:1;align-self:stretch;display:flex;align-items:center;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+
+/* tombol rahasia pindah Gaya UI (Default <-> Flat): tak terlihat, pojok kanan-bawah halaman utama Menu (area kosong di bawah daftar kategori); hanya aktif di halaman utama supaya tidak menutupi tombol di halaman lain */
+.mp__uisw{position:absolute;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 110px);width:64px;height:64px;padding:0;border:0;background:transparent;opacity:0;pointer-events:auto;z-index:3;cursor:default;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.mp__panel:has(.mp__page[data-page="home"][hidden]) .mp__uisw{display:none}
