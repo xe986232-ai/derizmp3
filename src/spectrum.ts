@@ -1,10 +1,9 @@
 // SPECTRUM: plugin gelombang suara langsung (scope). Membaca keluaran master (persis yang terdengar), jadi apa pun yang diputar ikut tergambar.
-//   Kiri  : riwayat amplitudo yang bergulir (isi lavender, ekor pluck meluruh halus)
+//   Kiri  : riwayat amplitudo yang bergulir (isi solid lavender + outline, ekor pluck meluruh halus)
 //   Kanan : gelombang NYATA beberapa siklus terakhir, dikunci ke periode nada (nada rendah = lebar, tinggi = rapat) dan dikunci fase supaya diam di layar
 // Semua hitungan ada di spectrum-dsp.ts (murni, ada tesnya: tools/spectrum-test.ts); file ini hanya jendela + menggambar.
-// Kartunya ada di halaman Plugin pada panel efek (fx-rack.ts). Jendelanya TIDAK modal: lagu tetap bisa diputar / dijeda dari transport sambil melihat, dan jendela bisa digeser lewat header.
+// Kartunya ada di halaman Plugin pada panel efek (fx-rack.ts). Tampil sebagai strip solid selebar layar yang menempel di dasar (tanpa bingkai); tidak modal, jadi Space / pintasan DAW tetap jalan.
 
-import { dragWindow } from './win-drag';
 import { PitchDetector, PitchTracker, TraceBuilder, Envelope, AutoGain, shape, rmsDb, noteName, clamp } from './spectrum-dsp';
 
 export interface SpectrumBridge { tap(): AudioNode | null }   // titik ambil audio: keluaran master (guardOut di main.ts)
@@ -20,6 +19,7 @@ const SPLIT = 0.6;                // bagian kiri (riwayat) = 60% lebar, sisanya 
 const STEP = 0.5;                 // jarak titik gambar riwayat (px CSS): halus di layar HP beresolusi tinggi
 const SPEEDS = [{ k: 'slow', label: 'Lambat', pps: 90 }, { k: 'mid', label: 'Normal', pps: 170 }, { k: 'fast', label: 'Cepat', pps: 320 }];   // px per detik
 const SPEED_KEY = 'derizmp3.spectrum.speed';
+const FILL = '#b3a1f7', OUTLINE = '#f4f0ff';   // isi solid satu warna + garis tepi lebih terang (tanpa gradasi / glow)
 
 let root: HTMLElement | null = null, openFn: (() => void) | null = null;
 export function openSpectrum(): void { if (!root) build(); openFn?.(); }
@@ -30,15 +30,13 @@ function build(): void {
   el.className = 'spec'; el.hidden = true;
   el.innerHTML =
     '<div class="spec__win is-off" role="dialog" aria-label="SPECTRUM" tabindex="-1">' +
-      `<header class="spec__head"><i class="spec__led" aria-hidden="true"></i><span class="spec__title">SPECTRUM</span><div class="spec__lcd"><span class="spec__stat" role="status"></span></div>` +
-        `<button type="button" class="spec__close" aria-label="Tutup SPECTRUM">${ICON_CLOSE}</button></header>` +
-      '<div class="spec__mid"><div class="spec__stage"><canvas class="spec__cv" role="img" aria-label="Gelombang suara langsung dari keluaran master"></canvas></div></div>' +
-      '<div class="spec__bar" role="group" aria-label="Kecepatan gulir riwayat">' +
-        SPEEDS.map(s => `<button type="button" class="spec__spd" data-k="${s.k}" aria-pressed="false">${s.label}</button>`).join('') + '</div>' +
-      '<div class="spec__glass" aria-hidden="true"></div>' +
+      '<div class="spec__stage"><canvas class="spec__cv" role="img" aria-label="Gelombang suara langsung dari keluaran master"></canvas></div>' +
+      '<div class="spec__ui"><span class="spec__stat" role="status"></span>' +
+        '<div class="spec__bar" role="group" aria-label="Kecepatan gulir riwayat">' +
+          SPEEDS.map(s => `<button type="button" class="spec__spd" data-k="${s.k}" aria-pressed="false">${s.label}</button>`).join('') + '</div>' +
+        `<button type="button" class="spec__close" aria-label="Tutup SPECTRUM">${ICON_CLOSE}</button></div>` +
     '</div>';
   document.body.appendChild(el);
-  dragWindow({ root: el, move: el.querySelector<HTMLElement>('.spec__win')!, handle: '.spec__head' });
   root = el;
 
   const win = el.querySelector<HTMLElement>('.spec__win')!;
@@ -121,19 +119,19 @@ function build(): void {
       tops[p] = a; rts[p] = ar;
     }
     for (let p = 0; p < np; p++) { const a = Math.max(tops[p], 0.004); bots[p] = mid + a * amp; tops[p] = mid - a * amp; }
-    const grad = g.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, '#b6a5ff'); grad.addColorStop(0.5, '#ddd3ff'); grad.addColorStop(1, '#b6a5ff');
-    g.fillStyle = grad;
+    // isi solid satu warna + garis tepi (outline) di sisi atas dan bawah; tanpa gradasi, inti, atau glow
+    g.fillStyle = FILL;
     g.beginPath(); g.moveTo(0, mid);
     for (let p = 0; p < np; p++) g.lineTo(Math.min(xs, p * STEP), tops[p]);
     for (let p = np - 1; p >= 0; p--) g.lineTo(Math.min(xs, p * STEP), bots[p]);
     g.closePath(); g.fill();
-    // inti (rms): bagian padat gelombang sedikit lebih gelap, memberi kedalaman
-    g.fillStyle = 'rgba(96,66,214,.34)';
-    g.beginPath(); g.moveTo(0, mid);
-    for (let p = 0; p < np; p++) g.lineTo(Math.min(xs, p * STEP), mid - Math.max(rts[p], 0.002) * amp);
-    for (let p = np - 1; p >= 0; p--) g.lineTo(Math.min(xs, p * STEP), mid + Math.max(rts[p], 0.002) * amp);
-    g.closePath(); g.fill();
+    g.lineJoin = 'round'; g.lineWidth = 1.25; g.strokeStyle = OUTLINE;
+    g.beginPath();
+    for (let p = 0; p < np; p++) { const x = Math.min(xs, p * STEP); if (p) g.lineTo(x, tops[p]); else g.moveTo(x, tops[p]); }
+    g.stroke();
+    g.beginPath();
+    for (let p = 0; p < np; p++) { const x = Math.min(xs, p * STEP); if (p) g.lineTo(x, bots[p]); else g.moveTo(x, bots[p]); }
+    g.stroke();
     // tepi kiri memudar (gelombang "keluar" dari layar)
     g.save(); g.globalCompositeOperation = 'destination-out';
     const fade = g.createLinearGradient(0, 0, Math.min(36, xs * 0.2), 0); fade.addColorStop(0, 'rgba(0,0,0,1)'); fade.addColorStop(1, 'rgba(0,0,0,0)');
@@ -145,12 +143,11 @@ function build(): void {
       const ls = gainL.scale, k = 1 / (m - 1);
       g.beginPath();
       for (let i = 0; i < m; i++) { const y = mid - clamp(trace[i] * ls, -1, 1) * amp * 0.96; if (i) g.lineTo(xs + i * k * live, y); else g.moveTo(xs, y); }
-      g.save();
       g.lineTo(W, mid); g.lineTo(xs, mid); g.closePath();
-      g.fillStyle = 'rgba(150,120,250,.30)'; g.fill(); g.restore();
+      g.fillStyle = FILL; g.fill();
       g.beginPath();
       for (let i = 0; i < m; i++) { const y = mid - clamp(trace[i] * ls, -1, 1) * amp * 0.96; if (i) g.lineTo(xs + i * k * live, y); else g.moveTo(xs, y); }
-      g.lineJoin = 'round'; g.lineWidth = 1.7; g.strokeStyle = '#f3efff'; g.shadowColor = 'rgba(167,139,250,.9)'; g.shadowBlur = 7; g.stroke(); g.shadowBlur = 0;
+      g.lineJoin = 'round'; g.lineWidth = 1.5; g.strokeStyle = OUTLINE; g.stroke();
     }
     // petunjuk saat tidak ada suara
     const idle = silentSince ? performance.now() - silentSince : 0;
@@ -206,7 +203,7 @@ function build(): void {
     stop(); disconnect();
     const done = (): void => { el.hidden = true; };
     if (reduce) { done(); return; }
-    win.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(10px) scale(.96)' }], { duration: 170, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }).onfinish = () => { done(); el.getAnimations({ subtree: true }).forEach(a => a.cancel()); };
+    win.animate([{ transform: 'none' }, { transform: 'translateY(100%)' }], { duration: 180, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }).onfinish = () => { done(); el.getAnimations({ subtree: true }).forEach(a => a.cancel()); };
   }
   openFn = () => {
     if (!el.hidden) return;
@@ -214,7 +211,7 @@ function build(): void {
     el.hidden = false;
     connect(); resetState(); layout(); start();
     stat.textContent = 'Senyap';
-    if (!reduce) win.animate([{ opacity: 0, transform: 'translateY(-12px) scale(.95)' }, { opacity: 1, transform: 'none' }], { duration: 360, easing: 'cubic-bezier(.34,1.3,.64,1)' });
+    if (!reduce) win.animate([{ transform: 'translateY(100%)' }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)' });
   };
   document.addEventListener('visibilitychange', () => { if (!el.hidden) { if (document.hidden) stop(); else { resetState(); start(); } } });
 }

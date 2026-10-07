@@ -1685,57 +1685,22 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
   box-shadow:inset 0 1px 0 rgba(255,255,255,.2),inset 0 -1px 2px rgba(0,0,0,.55),0 0 0 2px #0b0820}
 .fxc--spectrum .fxc__open:hover,.fxc--spectrum .fxc__more:hover,.fxc--spectrum .fxc__more[aria-expanded="true"]{color:#fff;background:radial-gradient(circle at 36% 28%,#5448b0 0%,#382e8c 60%,#221a5c 100%)}
 
-.spec{position:fixed;inset:0;z-index:220;display:grid;place-items:start center;padding:max(64px,env(safe-area-inset-top)) 12px 12px;pointer-events:none}   /* tidak modal: klik di luar jendela tembus ke DAW (transport tetap bisa dipakai) */
+/* SPECTRUM: strip solid selebar layar, menempel di dasar (tanpa bingkai / header / bayangan). Tidak modal di luar strip-nya. */
+.spec{position:fixed;left:0;right:0;bottom:0;z-index:220}
 .spec[hidden]{display:none}
-.spec__win{--accent:#a78bfa;--accent-soft:rgba(167,139,250,.32);--ink:#f1edff;
-  position:relative;pointer-events:auto;display:flex;flex-direction:column;width:min(520px,100%);height:min(300px,calc(100vh - 80px));border-radius:22px;overflow:hidden;outline:none;color:var(--ink);
-  font-family:'Plus Jakarta Sans',system-ui,sans-serif;
-  background-color:#1d1840;
-  background-image:
-    repeating-linear-gradient(90deg,rgba(255,255,255,.012) 0 1px,transparent 1px 3px),
-    linear-gradient(160deg,#352b7a 0%,#211a56 44%,#100c2c 100%);
-  box-shadow:inset 3px 3px 0 rgba(224,214,255,.3),inset -3px -3px 0 rgba(0,0,0,.5),inset 0 0 0 4px rgba(0,0,0,.18),inset 0 0 0 5px rgba(224,214,255,.06),0 4px 0 #0b0820,0 28px 60px -16px rgba(0,0,0,.8)}
-.spec__win>:not(.spec__glass){position:relative;z-index:1}
-.spec__glass{position:absolute;inset:0;z-index:4;pointer-events:none;border-radius:inherit;
-  background:linear-gradient(158deg,rgba(255,255,255,.1) 0,rgba(255,255,255,.02) 30%,transparent 31%),radial-gradient(150% 130% at 50% 50%,transparent 60%,rgba(0,0,0,.28) 100%)}
-.spec__head{display:flex;align-items:center;gap:10px;flex:none;min-height:46px;padding:9px 14px 8px 20px;z-index:5;
-  background:linear-gradient(180deg,rgba(255,255,255,.1),rgba(255,255,255,0) 60%);
-  border-bottom:1px solid rgba(0,0,0,.55);box-shadow:0 1px 0 rgba(224,214,255,.12)}
-.spec__led{flex:none;width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 36% 30%,#fff 0 7%,#e0d4ff 30%,var(--accent) 62%,#3b2a8a 100%);
-  box-shadow:0 0 11px var(--accent),inset 0 -1px 2px rgba(0,0,0,.45),0 0 0 2px #0b0820,0 0 0 3px rgba(224,214,255,.2);transition:box-shadow .3s ease,background .3s ease}
-.spec__win.is-off .spec__led{background:radial-gradient(circle at 36% 30%,#7f78a6 0 6%,#3b3763 45%,#1c1938 100%);box-shadow:inset 0 -1px 2px rgba(0,0,0,.6),0 0 0 2px #0b0820,0 0 0 3px rgba(255,255,255,.1)}
-.spec__title{font-family:'Syncopate',system-ui,sans-serif;font-size:13px;font-weight:700;letter-spacing:.3em;line-height:1.2;color:#efeaff;
-  text-shadow:0 1px 0 #a78bfa,0 2px 0 #7c5ce0,0 3px 0 #4c37a8,0 4px 0 #2a1f66,0 6px 8px rgba(0,0,0,.55)}
-.spec__win.is-off .spec__title{color:#9a93c4;text-shadow:0 1px 0 #5a5190,0 2px 0 #3b3468,0 3px 0 #211c44,0 5px 6px rgba(0,0,0,.5)}
-.spec__lcd{flex:1;min-width:0;max-width:240px;margin:0 auto;display:flex;align-items:center;justify-content:center;height:28px;padding:0 14px;border-radius:999px;
-  background:linear-gradient(180deg,#0a0820,#17123c);
-  box-shadow:inset 0 3px 7px rgba(0,0,0,.85),inset 0 0 0 1px rgba(0,0,0,.6),0 1px 0 rgba(224,214,255,.18),0 0 0 2px #0b0820}
-.spec__stat{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#d9ceff;text-shadow:0 0 8px rgba(167,139,250,.55);font-size:11.5px;font-weight:600;font-variant-numeric:tabular-nums}
-.spec__close{display:grid;place-items:center;flex:none;width:28px;height:28px;padding:0;border:0;border-radius:50%;color:#cfc3ff;cursor:pointer;-webkit-tap-highlight-color:transparent;
-  background:radial-gradient(circle at 36% 28%,#4a3f9a 0%,#2d2574 60%,#1a1448 100%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -2px 3px rgba(0,0,0,.55),0 2px 0 #0b0820,0 0 0 2px #0b0820;
-  transition:color .18s ease,box-shadow .18s ease,transform .12s ease}
-.spec__close:hover{color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),inset 0 -2px 3px rgba(0,0,0,.55),0 2px 0 #0b0820,0 0 0 2px #0b0820,0 0 0 3px var(--accent),0 0 12px var(--accent-soft)}
-.spec__close:active{transform:translateY(2px);box-shadow:inset 0 2px 5px rgba(0,0,0,.7),0 0 0 2px #0b0820}
-.spec__close:focus-visible,.spec__spd:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
-.spec__mid{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;padding:14px 18px 6px}
-.spec__stage{position:relative;flex:1;min-height:90px;border-radius:12px;overflow:hidden;
-  background:
-    repeating-linear-gradient(0deg,rgba(255,255,255,.04) 0 1px,transparent 1px 7px),
-    repeating-linear-gradient(90deg,rgba(255,255,255,.04) 0 1px,transparent 1px 7px),
-    linear-gradient(180deg,#1b1a26 0%,#0f0f16 100%);   /* kisi halus seperti layar scope */
-  box-shadow:inset 0 3px 10px rgba(0,0,0,.85),inset 0 0 0 1px rgba(0,0,0,.6),0 1px 0 rgba(224,214,255,.2),0 0 0 2px #0b0820,0 0 0 3px rgba(224,214,255,.1)}
-.spec__stage::after{content:"";position:absolute;inset:0;z-index:4;pointer-events:none;border-radius:inherit;
-  background:linear-gradient(158deg,rgba(255,255,255,.08) 0,rgba(255,255,255,.015) 36%,transparent 37%),radial-gradient(130% 120% at 50% 50%,transparent 55%,rgba(0,0,0,.4) 100%)}
+.spec__win{--accent:#a78bfa;
+  position:relative;display:flex;flex-direction:column;width:100%;height:calc(clamp(140px,24vh,240px) + env(safe-area-inset-bottom,0px));padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box;outline:none;color:#e9e4ff;
+  font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#0e0e14;border-top:1px solid rgba(255,255,255,.14)}
+.spec__stage{position:relative;flex:1;min-height:0}
 .spec__cv{position:absolute;inset:0;display:block;pointer-events:none}
-.spec__bar{display:flex;align-items:center;justify-content:center;gap:6px;flex:none;padding:8px 18px 14px;z-index:2}
-.spec__spd{padding:0 14px;height:28px;border:0;border-radius:999px;color:#cfc3ff;font:600 11px/1 'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:.04em;cursor:pointer;-webkit-tap-highlight-color:transparent;
-  background:linear-gradient(180deg,#3a3085,#261e66);box-shadow:inset 0 1px 0 rgba(255,255,255,.2),inset 0 -1px 2px rgba(0,0,0,.5),0 2px 0 #0b0820,0 0 0 2px #0b0820;
-  transition:color .18s ease,background .18s ease,transform .1s ease,box-shadow .1s ease}
-.spec__spd:hover{color:#fff}
-.spec__spd:active{transform:translateY(2px);box-shadow:inset 0 2px 4px rgba(0,0,0,.6),0 0 0 2px #0b0820}
-.spec__spd[aria-pressed="true"]{color:#1a1248;background:linear-gradient(180deg,#e9e2ff 0%,#b9a7ff 55%,#8f77f0 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.75),inset 0 -2px 3px rgba(0,0,0,.2),0 2px 0 #3b2a8a,0 0 0 2px #0b0820}
-@media (prefers-reduced-motion:reduce){.spec__spd,.spec__close{transition:none}}
+.spec__ui{position:absolute;left:0;right:0;top:6px;z-index:2;display:flex;align-items:center;gap:6px;padding:0 10px;pointer-events:none}
+.spec__stat{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#b9b2d6;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
+.spec__bar{display:flex;align-items:center;gap:4px;flex:none}
+.spec__spd,.spec__close{pointer-events:auto;height:24px;padding:0 10px;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:#0e0e14;color:#cfc8ea;font:600 10.5px/1 'Plus Jakarta Sans',system-ui,sans-serif;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.spec__close{display:grid;place-items:center;width:24px;padding:0}
+.spec__spd:hover,.spec__close:hover{color:#fff;border-color:rgba(255,255,255,.7)}
+.spec__spd[aria-pressed="true"]{background:#a78bfa;border-color:#a78bfa;color:#0e0e14}
+.spec__spd:focus-visible,.spec__close:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* ===== Export audio (panel menu + overlay progres) ===== */
 .mp__expbtn{position:relative;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:14px;border:0;border-radius:14px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;
   -webkit-tap-highlight-color:transparent;touch-action:manipulation;
@@ -2286,8 +2251,8 @@ body.is-pdragging,body.is-pdragging *{cursor:grabbing!important;user-select:none
 .trkcard__vol .slider:active::-moz-range-thumb{transform:scaleY(1.2);background:#fff}
 
 /* ===== Jendela plugin bisa digeser lewat header (src/win-drag.ts); touch-action:none supaya geser jari tidak men-scroll halaman ===== */
-.derizov__win .fxc__head,.mpcs__head,.cute__head,.mgc__head,.spec__head{touch-action:none;cursor:grab}
-.is-winmove,.is-winmove :is(.fxc__head,.mpcs__head,.cute__head,.mgc__head,.spec__head){cursor:grabbing!important;-webkit-user-select:none;user-select:none}
+.derizov__win .fxc__head,.mpcs__head,.cute__head,.mgc__head{touch-action:none;cursor:grab}
+.is-winmove,.is-winmove :is(.fxc__head,.mpcs__head,.cute__head,.mgc__head){cursor:grabbing!important;-webkit-user-select:none;user-select:none}
 
 /* ===== Drums: step sequencer (faceplate 3D + bevel seperti DERIZ, grid di layar kaca) ===== */
 /* urutan layer: card transport (paling atas) > plugin Drums > tombol-tombol di pojok atas (menu, landscape, tutorial; z 450-500) */
