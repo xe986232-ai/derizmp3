@@ -152,7 +152,7 @@ export function initMenuPanel(): MenuPanel {
               '<button type="button" class="mp__segbtn" role="radio" data-uistyle="soft">Default</button>' +
               '<button type="button" class="mp__segbtn" role="radio" data-uistyle="flat">Flat</button>' +
             '</div>' +
-            '<p class="mp__hint">Flat: semua sudut lancip, tanpa glow. Tahap 1: baru di channel mixer.</p>' +
+            '<p class="mp__hint">Flat: sudut lancip, tanpa glow, warna terang. Tahap 1: baru di channel mixer.</p>' +
           '</div>' +
           '<div class="mp__card mp__item mp__set" style="--i:2">' +
             '<div class="mp__sub"><span>Waveform &amp; bar color</span></div>' +

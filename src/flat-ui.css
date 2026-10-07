@@ -1,0 +1,145 @@
+/* ===== Gaya UI "Flat" (atribut data-uistyle="flat" di <html>; bawaan = "soft"/tanpa atribut) =====
+   File ini dimuat SETELAH styles.css. Aturan pemisah supaya tidak bertabrakan dengan tema default:
+   1. Semua warna Flat memakai token berawalan --flat-* (didefinisikan di bawah, hanya aktif saat data-uistyle="flat").
+   2. Di file ini TIDAK ADA yang menimpa token default (--bg, --panel, --card, --line, --text, --muted, --accent, dst).
+      Token default hanya boleh dipakai sebagai cadangan (fallback) untuk --track-color.
+   3. Semua selector diawali html[data-uistyle="flat"], jadi mode Default tidak tersentuh sama sekali.
+   TAHAP 1: hanya channel mixer (kolom card track di kiri timeline + menu titik tiga track). Ruler & timeline tidak diubah. */
+
+/* ---------- 1. Token warna Flat (terang) ---------- */
+html[data-uistyle="flat"]{
+  /* permukaan */
+  --flat-surface:#eef1f6;        /* dasar kolom mixer */
+  --flat-head:#e3e8f0;           /* strip atas (sejajar ruler) */
+  --flat-card:#ffffff;           /* card track */
+  --flat-card-hover:#f6f8fb;     /* card track tidak terpilih saat disentuh */
+  --flat-line:#d3d9e4;           /* garis pemisah 1px */
+  /* teks */
+  --flat-text:#1d2433;
+  --flat-muted:#677089;
+  --flat-on-color:#1d2433;       /* glyph di atas warna track yang terang */
+  /* kontrol (tombol, slider, knob) */
+  --flat-ctrl:#e3e8f0;
+  --flat-ctrl-hover:#d3dbe8;
+  --flat-ctrl-strong:#c4cddc;
+  --flat-ctrl-on:#2f6bff;        /* tombol nyala (auto scroll) */
+  --flat-track:#c4cddc;          /* rel slider */
+  --flat-focus:#2f6bff;
+  /* status */
+  --flat-accent:#ff4f8b;         /* cadangan jika track belum punya warna */
+  --flat-solo:#ffc933;
+  --flat-ok:#21c06e;
+  --flat-off:#c4cddc;
+  --flat-danger:#e5384a;
+  /* meter level */
+  --flat-meter-bg:#e3e8f0;
+  --flat-meter-empty:rgba(29,36,51,.12);
+  --flat-meter-ok:#21c06e;
+  --flat-meter-warn:#ffc933;
+  --flat-meter-clip:#ff4757;
+  /* bayangan (hanya untuk menu & drag) */
+  --flat-shadow:rgba(29,36,51,.16);
+}
+
+/* ---------- 2. Kolom channel mixer ---------- */
+html[data-uistyle="flat"] .tracklist{
+  color:var(--flat-text);
+  background:
+    linear-gradient(var(--flat-line),var(--flat-line)) 0 47px/100% 1px no-repeat,
+    linear-gradient(var(--flat-head),var(--flat-head)) 0 0/100% 48px no-repeat,
+    var(--flat-surface);
+  border-right:1px solid var(--flat-line)}
+html[data-uistyle="flat"] .tracklist .trkcard-wrap{padding:0;border-bottom:1px solid var(--flat-line)}
+
+/* tombol panah tutup panel & auto scroll di strip atas */
+html[data-uistyle="flat"] .tracklist .panel-toggle{border-radius:0;background:var(--flat-ctrl);color:var(--flat-text);transition:background-color .15s ease,color .15s ease}
+html[data-uistyle="flat"] .tracklist .panel-toggle:hover{background:var(--flat-ctrl-hover);transform:none}
+html[data-uistyle="flat"] .tracklist .panel-toggle:active{transform:none}
+html[data-uistyle="flat"] .tracklist .autoscroll-toggle{color:var(--flat-muted)}
+html[data-uistyle="flat"] .tracklist .autoscroll-toggle[aria-checked="true"]{color:#fff;background:var(--flat-ctrl-on)}
+
+/* ---------- 3. Card track ---------- */
+html[data-uistyle="flat"] .tracklist .trkcard,
+html[data-uistyle="flat"] .tracklist .trkcard--on{border-radius:0;box-shadow:none;background-color:var(--flat-card);color:var(--flat-text);transition:background-color .15s ease}
+html[data-uistyle="flat"] .tracklist .trkcard::before,
+html[data-uistyle="flat"] .tracklist .trkcard::after{display:none}   /* outline gradien + kilau "glass" dimatikan */
+html[data-uistyle="flat"] .tracklist .trkcard:not(.trkcard--on):hover{background-color:var(--flat-card-hover)}
+/* track terpilih: latar = warna track yang sangat muda + strip warna tipis di kiri */
+html[data-uistyle="flat"] .tracklist .trkcard--on,
+html[data-uistyle="flat"] .tracklist .trkcard--on:hover{
+  background-color:color-mix(in srgb,var(--track-color,var(--flat-accent)) 16%,var(--flat-card));
+  box-shadow:inset 3px 0 0 var(--track-color,var(--flat-accent));transform:none}
+html[data-uistyle="flat"] .tracklist .trkcard.is-jelly{transform:none;box-shadow:inset 3px 0 0 var(--track-color,var(--flat-accent)),0 6px 14px var(--flat-shadow)}
+html[data-uistyle="flat"] .tracklist .trkcard-wrap.is-reordering .trkcard{transform:none;box-shadow:0 0 0 2px var(--track-color,var(--flat-accent)),0 6px 14px var(--flat-shadow)}
+
+html[data-uistyle="flat"] .tracklist .trkcard__title-btn{color:var(--flat-text)}
+
+/* icon instrumen: kotak warna track */
+html[data-uistyle="flat"] .tracklist .trkcard__inst{border-radius:0;background:var(--track-color,var(--flat-accent));color:var(--flat-on-color)}
+html[data-uistyle="flat"] .tracklist .trkcard__lead:hover .trkcard__inst,
+html[data-uistyle="flat"] .tracklist .trkcard__lead:active .trkcard__inst{transform:none}
+html[data-uistyle="flat"] .tracklist .trkcard__lead.is-reorder-ready .trkcard__inst{transform:none;box-shadow:0 0 0 2px var(--flat-card),0 0 0 4px var(--track-color,var(--flat-accent))}
+
+/* lampu on/off: kotak datar */
+html[data-uistyle="flat"] .tracklist .trkcard__power{width:10px;height:10px;border-radius:0;background:var(--flat-ok);box-shadow:none}
+html[data-uistyle="flat"] .tracklist .trkcard__power[aria-checked="false"]{background:var(--flat-off);box-shadow:none}
+
+/* titik tiga */
+html[data-uistyle="flat"] .tracklist .ico-btn{border-radius:0;color:var(--flat-muted)}
+html[data-uistyle="flat"] .tracklist .ico-btn:hover{background:var(--flat-ctrl);color:var(--flat-text)}
+html[data-uistyle="flat"] .tracklist .ico-btn[aria-expanded="true"]{background:var(--flat-ctrl-hover);color:var(--flat-text)}
+
+/* tombol S (solo) */
+html[data-uistyle="flat"] .tracklist .trkcard__arm{border-radius:0;border:0;background:var(--flat-ctrl);color:var(--flat-text)}
+html[data-uistyle="flat"] .tracklist .trkcard__arm:hover{background:var(--flat-ctrl-hover)}
+html[data-uistyle="flat"] .tracklist .trkcard__arm[aria-checked="true"]{background:var(--flat-solo);color:var(--flat-text)}
+html[data-uistyle="flat"] .tracklist .trkcard__arm i{border-radius:0}
+html[data-uistyle="flat"] .tracklist .sm,
+html[data-uistyle="flat"] .tracklist .sm__btn{border-radius:0;color:var(--flat-text)}
+
+/* knob pan: tetap bulat (itu bentuk knob), warnanya terang */
+html[data-uistyle="flat"] .tracklist .trkcard__pan .circle-inner{fill:var(--flat-ctrl-strong)}
+html[data-uistyle="flat"] .tracklist .trkcard__pan .knob-pos{stroke:var(--flat-text)}
+
+/* slider volume: rel tipis, isi = warna track, thumb kotak */
+html[data-uistyle="flat"] .tracklist .trkcard__vol .slider{background:linear-gradient(var(--flat-muted),var(--flat-muted)) calc(66.667% - 1.2px) 50%/1px 12px no-repeat}
+html[data-uistyle="flat"] .tracklist .trkcard__vol .slider::-webkit-slider-runnable-track{height:4px;border-radius:0;
+  background:linear-gradient(var(--track-color,var(--flat-accent)),var(--track-color,var(--flat-accent))) 0 0/calc((100% - 8px) * var(--slider-progress-fraction,.667) + 4px) 4px no-repeat,var(--flat-track)}
+html[data-uistyle="flat"] .tracklist .trkcard__vol .slider::-moz-range-track{height:4px;border-radius:0;background:var(--flat-track)}
+html[data-uistyle="flat"] .tracklist .trkcard__vol .slider::-moz-range-progress{height:4px;border-radius:0;background:var(--track-color,var(--flat-accent))}
+html[data-uistyle="flat"] .tracklist .trkcard__vol .slider::-webkit-slider-thumb{margin-top:-8px;border-radius:0;background:var(--flat-text);box-shadow:none}
+html[data-uistyle="flat"] .tracklist .trkcard__vol .slider::-moz-range-thumb{border-radius:0;background:var(--flat-text)}
+html[data-uistyle="flat"] .tracklist .trkcard__vol .slider:hover::-webkit-slider-thumb,
+html[data-uistyle="flat"] .tracklist .trkcard__vol .slider:active::-webkit-slider-thumb{transform:none;background:var(--flat-text)}
+html[data-uistyle="flat"] .tracklist .trkcard__vol .slider:hover::-moz-range-thumb,
+html[data-uistyle="flat"] .tracklist .trkcard__vol .slider:active::-moz-range-thumb{transform:none;background:var(--flat-text)}
+
+/* meter level: warna solid bertingkat, tanpa glow */
+html[data-uistyle="flat"] .tracklist .trackmeter{border-radius:0;background:var(--flat-meter-bg);box-shadow:none}
+html[data-uistyle="flat"] .tracklist .trackmeter::before{background:var(--flat-line)}
+html[data-uistyle="flat"] .tracklist .trackmeter__bar,
+html[data-uistyle="flat"] .tracklist .trackmeter__bar[data-l="2"],
+html[data-uistyle="flat"] .tracklist .trackmeter__bar[data-l="3"]{filter:none}
+html[data-uistyle="flat"] .tracklist .trackmeter__bar::before{background:var(--flat-meter-empty)}
+html[data-uistyle="flat"] .tracklist .trackmeter__bar b,
+html[data-uistyle="flat"] .tracklist .trackmeter__bar s{filter:none;
+  background:linear-gradient(to top,var(--flat-meter-ok) 0 70%,var(--flat-meter-warn) 70% 88%,var(--flat-meter-clip) 88% 100%)}
+
+/* tombol tambah track */
+html[data-uistyle="flat"] .tracklist .addtrack{border-radius:0;margin:0;width:100%;background:var(--flat-card);color:var(--flat-text);border:0;border-bottom:1px solid var(--flat-line)}
+html[data-uistyle="flat"] .tracklist .addtrack:hover{background:var(--flat-ctrl);color:var(--flat-text)}
+
+/* fokus keyboard */
+html[data-uistyle="flat"] .tracklist :is(button,[role="slider"],input):focus-visible{outline:2px solid var(--flat-focus);outline-offset:-2px}
+
+/* ---------- 4. Menu titik tiga track (kelas .mixer-menu dipasang di main.ts; menu piano roll / efek / pattern tidak ikut) ---------- */
+html[data-uistyle="flat"] .track-menu.mixer-menu{border-radius:0;background:var(--flat-card);border:1px solid var(--flat-line);color:var(--flat-text);box-shadow:0 4px 12px var(--flat-shadow)}
+html[data-uistyle="flat"] .mixer-menu .track-menu__item{border-radius:0;color:var(--flat-text)}
+html[data-uistyle="flat"] .mixer-menu .track-menu__item:hover,
+html[data-uistyle="flat"] .mixer-menu .track-menu__item:focus-visible{background:var(--flat-ctrl);transform:none}
+html[data-uistyle="flat"] .mixer-menu .track-menu__item--danger{color:var(--flat-danger)}
+html[data-uistyle="flat"] .mixer-menu .track-menu__item[aria-expanded="true"]{background:var(--flat-ctrl-hover)}
+html[data-uistyle="flat"] .mixer-menu .track-menu__dot,
+html[data-uistyle="flat"] .mixer-menu .track-menu__swatch{border-radius:0}
+html[data-uistyle="flat"] .mixer-menu .track-menu__swatch:hover,
+html[data-uistyle="flat"] .mixer-menu .track-menu__swatch:focus-visible{border-color:var(--flat-text);transform:none}

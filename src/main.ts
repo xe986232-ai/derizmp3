@@ -250,7 +250,7 @@ function openMenu(btn) {
   const cont = btn.closest('.trkcard-wrap');
   const cur = cont.style.getPropertyValue('--track-color') || COLORS[0];
   menu = document.createElement('div');
-  menu.className = 'track-menu';
+  menu.className = 'track-menu mixer-menu';
   menu.setAttribute('role', 'menu');
   const rnLane = document.querySelector('.lane[data-track="' + cont.dataset.track + '"]');
   const rnPats = rnLane ? [...rnLane.querySelectorAll('.pattern')].sort((a, b) => pl(a) - pl(b)) : [];
@@ -305,7 +305,7 @@ function openMenu(btn) {
 function openColors(cont, it) {
   if (sub) { fadeOut(sub); sub = null; it.setAttribute('aria-expanded', 'false'); return; }
   sub = document.createElement('div');
-  sub.className = 'track-menu track-menu--colors';
+  sub.className = 'track-menu track-menu--colors mixer-menu';
   sub.setAttribute('role', 'menu');
   sub.innerHTML = '<div class="track-menu__swatches">' +
     COLORS.map((c, i) => '<button class="track-menu__swatch" data-c="' + c + '" style="background:' + c + ';--i:' + i + '" aria-label="Warna ' + c + '"></button>').join('') +
