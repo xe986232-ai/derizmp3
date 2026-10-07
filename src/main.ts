@@ -23,7 +23,7 @@ import { initMenuPanel, setProjectIO } from './menu-panel';
 import { dbgRun, dbgZoom } from './audio-debug';
 import { mpcsExport, mpcsImport } from './mpcs';
 import { setMgchordBridge, mgchordExport, mgchordImport } from './mgchord';
-import { setSpectrumBridge } from './spectrum';
+import { setSpectrumBridge, restoreSpectrum } from './spectrum';
 import { setDrumsBridge, drumsRefresh, drumsSyncPlay, openDrums, DRUMS_HIDDEN } from './drums';
 import { drumRow, DRUM_KIT } from './drums-audio';
 import { setExportIO } from './export-audio';
@@ -2344,6 +2344,7 @@ const contentEndBar = () => {   // ujung kanan clip / pattern paling akhir di ti
 };
 // SPECTRUM: membaca keluaran master yang sama (setelah pengaman clipping), jadi gambarnya persis yang terdengar
 setSpectrumBridge({tap: () => { audio(); return guardOut; }});
+restoreSpectrum();   // kalau terakhir dinyalakan di Pengaturan, strip muncul lagi setelah sentuhan pertama
 let expSaved = null;
 setExportIO({
   ctx: () => audio(),

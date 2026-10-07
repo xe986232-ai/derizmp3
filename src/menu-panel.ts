@@ -11,6 +11,7 @@ import { installState, promptInstall, onInstallChange } from './pwa';
 import { FULL, getProfile, initialOf, loadProfile, onProfile, removeAvatar, saveName, shownName, uploadAvatar } from './account';
 import { signOut } from './license';
 import { SHOP_CAT, SHOP_PAGE, initShopPage } from './shop-page';
+import { SPECTRUM_SPEEDS, isSpectrumOn, setSpectrumOn, getSpectrumSpeed, setSpectrumSpeed } from './spectrum';
 
 // Jembatan ke main.ts (yang memegang data timeline): snapshot dan pemulihan project
 export interface ProjectIO {
@@ -172,11 +173,21 @@ export function initMenuPanel(): MenuPanel {
           '</div>' +
           '<div class="mp__card mp__item mp__set" style="--i:6">' +
             '<div class="mp__row">' +
+              '<span class="mp__row__t"><b>Spectrum</b><small>Gelombang suara langsung di dasar layar</small></span>' +
+              '<button type="button" class="mp__switch" role="switch" aria-checked="false" aria-label="Spectrum" data-spec><i></i></button>' +
+            '</div>' +
+            '<div class="mp__sub" style="margin-top:14px"><span>Kecepatan gulir</span></div>' +
+            '<div class="mp__seg" role="radiogroup" aria-label="Kecepatan gulir Spectrum">' +
+              SPECTRUM_SPEEDS.map(v => '<button type="button" class="mp__segbtn" role="radio" aria-checked="false" data-specspd="' + v.k + '">' + v.label + '</button>').join('') +
+            '</div>' +
+          '</div>' +
+          '<div class="mp__card mp__item mp__set" style="--i:7">' +
+            '<div class="mp__row">' +
               '<span class="mp__row__t"><b>Debug Audio</b><small>Panel statistik beban, nada telat &amp; nada terpotong saat Play (untuk mencari penyebab glitch)</small></span>' +
               '<button type="button" class="mp__switch" role="switch" aria-checked="false" aria-label="Debug Audio" data-adbg><i></i></button>' +
             '</div>' +
           '</div>' +
-          '<div class="mp__card mp__item mp__set" style="--i:7">' +
+          '<div class="mp__card mp__item mp__set" style="--i:8">' +
             '<div class="mp__row">' +
               '<span class="mp__row__t"><b>Grid Piano Roll</b><small data-prb-hint>Panjang grid piano roll &amp; note mini di pattern</small></span>' +
               '<span class="mp__val" data-prb-val></span>' +
@@ -188,13 +199,13 @@ export function initMenuPanel(): MenuPanel {
             '</div>' +
           '</div>' +
           // Install aplikasi (PWA): disembunyikan kalau sudah terpasang
-          '<div class="mp__card mp__item mp__set" style="--i:8" data-install-card hidden>' +
+          '<div class="mp__card mp__item mp__set" style="--i:9" data-install-card hidden>' +
             '<div class="mp__sub"><span>Install aplikasi</span></div>' +
             '<button type="button" class="mp__expbtn" data-install-btn>' + IC_DL + '<span>Install ke layar utama</span></button>' +
             '<p class="mp__hint" data-install-hint></p>' +
           '</div>' +
           // Credits & lisensi pihak ketiga (wajib tampil di semua build, termasuk versi penuh)
-          '<div class="mp__card mp__item mp__set" style="--i:9">' +
+          '<div class="mp__card mp__item mp__set" style="--i:10">' +
             '<div class="mp__sub"><span>Credits &amp; lisensi</span></div>' +
             '<ul class="mp__cr">' +
               '<li><b>Piano</b>: Salamander Grand Piano V3 oleh Alexander Holm, lisensi <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener noreferrer">CC BY 3.0</a>. Sample dipakai apa adanya; nadanya digeser pitch-nya saat dimainkan.</li>' +
@@ -313,6 +324,18 @@ export function initMenuPanel(): MenuPanel {
   let loudSaved = true;
   try { loudSaved = localStorage.getItem(LOUD_KEY) !== '0'; } catch { /* abaikan */ }
   setLoud(loudSaved, false);
+
+  // ===== Pengaturan: Spectrum (strip gelombang di dasar layar, spectrum.ts). Saklar nyala/mati + kecepatan gulir; bawaan MATI =====
+  const specBtn = panel.querySelector('[data-spec]') as HTMLButtonElement;
+  const specSpd = [...panel.querySelectorAll<HTMLButtonElement>('[data-specspd]')];
+  const syncSpec = (): void => {
+    const on = isSpectrumOn(), k = getSpectrumSpeed();
+    specBtn.classList.toggle('is-on', on); specBtn.setAttribute('aria-checked', String(on));
+    specSpd.forEach(b => { const sel = b.dataset.specspd === k; b.classList.toggle('is-on', sel); b.setAttribute('aria-checked', String(sel)); });
+  };
+  specBtn.addEventListener('click', () => { setSpectrumOn(!isSpectrumOn()); syncSpec(); });
+  specSpd.forEach(b => b.addEventListener('click', () => { setSpectrumSpeed(b.dataset.specspd as string); syncSpec(); }));
+  syncSpec();
 
   // ===== Pengaturan: Grid Piano Roll (4..50 bar, bawaan 15). piano-roll.ts menyimpan nilainya dan mengabari main.ts lewat event 'prbarschange' =====
   const prbRange = panel.querySelector('[data-prb-range]') as HTMLInputElement;

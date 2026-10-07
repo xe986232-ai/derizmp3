@@ -1669,38 +1669,12 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .cute__play:disabled{opacity:.4;cursor:default;box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 0 0 2px #061418;filter:saturate(.5)}
 .cute__play:focus-visible{outline:2px solid #fff;outline-offset:4px}
 @media (prefers-reduced-motion:reduce){.cute__win{transform:none!important;transition:none!important}.cute__drop.is-shake{animation:none}}
-/* ---------- SPECTRUM: gelombang suara langsung (kartu di panel efek + jendela non-modal). Saudara CUTE: faceplate yang sama, bahan "enamel ungu" ---------- */
-.fxc--spectrum{padding:12px 14px 12px 16px;
-  background-color:#1d1840;
-  background-image:
-    linear-gradient(180deg,rgba(255,255,255,.09) 0,rgba(255,255,255,.02) 38%,transparent 39%),
-    linear-gradient(160deg,#2f2670 0%,#1f1950 46%,#120e30 100%);
-  box-shadow:inset 2px 2px 0 rgba(224,214,255,.28),inset -2px -2px 0 rgba(0,0,0,.55),inset 0 0 0 1px rgba(0,0,0,.35),0 3px 0 #0b0820,0 16px 28px -12px rgba(0,0,0,.7);transition:box-shadow .3s ease}
-.fxc--spectrum:hover{box-shadow:inset 2px 2px 0 rgba(224,214,255,.36),inset -2px -2px 0 rgba(0,0,0,.55),inset 0 0 0 1px rgba(0,0,0,.35),0 4px 0 #0b0820,0 22px 34px -12px rgba(0,0,0,.75)}
-.fxc--spectrum .fxc__title{font-family:'Syncopate',system-ui,sans-serif;font-size:14px;font-weight:700;letter-spacing:.3em;color:#efeaff;
-  text-shadow:0 1px 0 #a78bfa,0 2px 0 #7c5ce0,0 3px 0 #4c37a8,0 4px 0 #2a1f66,0 6px 8px rgba(0,0,0,.55)}
-.fxc--spectrum .fxc__led{width:14px;height:14px;background:radial-gradient(circle at 36% 30%,#fff 0 7%,#e0d4ff 30%,#a78bfa 62%,#3b2a8a 100%);
-  box-shadow:0 0 11px rgba(167,139,250,.75),inset 0 -1px 2px rgba(0,0,0,.45),0 0 0 2px #0b0820,0 0 0 3px rgba(224,214,255,.2)}
-.fxc--spectrum .fxc__open,.fxc--spectrum .fxc__more{color:#cfc3ff;background:radial-gradient(circle at 36% 28%,#443a8f 0%,#2b2370 60%,#1a1448 100%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.2),inset 0 -1px 2px rgba(0,0,0,.55),0 0 0 2px #0b0820}
-.fxc--spectrum .fxc__open:hover,.fxc--spectrum .fxc__more:hover,.fxc--spectrum .fxc__more[aria-expanded="true"]{color:#fff;background:radial-gradient(circle at 36% 28%,#5448b0 0%,#382e8c 60%,#221a5c 100%)}
-
-/* SPECTRUM: strip solid selebar layar, menempel di dasar (tanpa bingkai / header / bayangan). Tidak modal di luar strip-nya. */
-.spec{position:fixed;left:0;right:0;bottom:0;z-index:220}
+/* ---------- SPECTRUM: strip polos selebar layar, menempel di dasar (tanpa bingkai / tombol). Nyala-mati dan kecepatan ada di Pengaturan ---------- */
+.spec{position:fixed;left:0;right:0;bottom:0;z-index:220;pointer-events:none}   /* tidak modal: sentuhan tembus ke DAW */
 .spec[hidden]{display:none}
-.spec__win{--accent:#a78bfa;
-  position:relative;display:flex;flex-direction:column;width:100%;height:calc(clamp(88px,14vh,120px) + env(safe-area-inset-bottom,0px));padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box;outline:none;color:#e9e4ff;
-  font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#0e0e14;border-top:1px solid rgba(255,255,255,.14)}
+.spec__win{position:relative;display:flex;flex-direction:column;width:100%;height:calc(clamp(64px,11vh,100px) + var(--spec-pad,env(safe-area-inset-bottom,0px)));padding-bottom:var(--spec-pad,env(safe-area-inset-bottom,0px));box-sizing:border-box;background:#0e0e14;border-top:1px solid rgba(255,255,255,.14)}
 .spec__stage{position:relative;flex:1;min-height:0}
 .spec__cv{position:absolute;inset:0;display:block;pointer-events:none}
-.spec__ui{order:-1;flex:none;display:flex;align-items:center;gap:5px;height:26px;padding:0 8px}
-.spec__stat{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#b9b2d6;font-size:10px;font-weight:600;font-variant-numeric:tabular-nums}
-.spec__bar{display:flex;align-items:center;gap:4px;flex:none}
-.spec__spd,.spec__close{height:20px;padding:0 8px;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:#0e0e14;color:#cfc8ea;font:600 10px/1 'Plus Jakarta Sans',system-ui,sans-serif;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.spec__close{display:grid;place-items:center;width:20px;padding:0}
-.spec__spd:hover,.spec__close:hover{color:#fff;border-color:rgba(255,255,255,.7)}
-.spec__spd[aria-pressed="true"]{background:#a78bfa;border-color:#a78bfa;color:#0e0e14}
-.spec__spd:focus-visible,.spec__close:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* ===== Export audio (panel menu + overlay progres) ===== */
 .mp__expbtn{position:relative;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:14px;border:0;border-radius:14px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;
   -webkit-tap-highlight-color:transparent;touch-action:manipulation;

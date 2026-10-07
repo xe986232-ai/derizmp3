@@ -1,60 +1,63 @@
-// SPECTRUM: plugin gelombang suara langsung (scope). Membaca keluaran master (persis yang terdengar), jadi apa pun yang diputar ikut tergambar.
+// SPECTRUM: gelombang suara langsung (scope), dinyalakan dari Pengaturan (menu kanan atas), bukan plugin. Membaca keluaran master (persis yang terdengar), jadi apa pun yang diputar ikut tergambar.
 //   Kiri  : riwayat amplitudo yang bergulir (isi solid lavender tanpa outline, ekor pluck meluruh halus)
 //   Kanan : gelombang NYATA beberapa siklus terakhir, dikunci ke periode nada (nada rendah = lebar, tinggi = rapat) dan dikunci fase supaya diam di layar
 // Semua hitungan ada di spectrum-dsp.ts (murni, ada tesnya: tools/spectrum-test.ts); file ini hanya jendela + menggambar.
-// Kartunya ada di halaman Plugin pada panel efek (fx-rack.ts). Tampil sebagai strip solid selebar layar yang menempel di dasar (tanpa bingkai); tidak modal, jadi Space / pintasan DAW tetap jalan.
+// Saklar nyala/mati + pilihan kecepatan ada di Pengaturan (menu-panel.ts). Tampil sebagai strip polos selebar layar yang menempel di dasar (tanpa bingkai / tombol); tidak modal, jadi Space / pintasan DAW tetap jalan.
 
-import { PitchDetector, PitchTracker, TraceBuilder, Envelope, AutoGain, shape, rmsDb, noteName, clamp } from './spectrum-dsp';
+import { PitchDetector, PitchTracker, TraceBuilder, Envelope, AutoGain, shape, clamp } from './spectrum-dsp';
 
 export interface SpectrumBridge { tap(): AudioNode | null }   // titik ambil audio: keluaran master (guardOut di main.ts)
 let bridge: SpectrumBridge | null = null;
 export const setSpectrumBridge = (b: SpectrumBridge): void => { bridge = b; };
 
-const svg = (inner: string, size = 18): string =>
-  `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
-const ICON_CLOSE = svg('<path d="M6 6l12 12M18 6L6 18"/>', 12);
-
 const FFT = 4096;                 // jendela baca ~85 ms: cukup untuk 2 siklus nada 25 Hz
-const SPLIT = 0.6;                // bagian kiri (riwayat) = 60% lebar, sisanya scope langsung
+const SPLIT = 0.5;                // riwayat (kiri) dan scope langsung (kanan) masing-masing separuh lebar
 const STEP = 0.5;                 // jarak titik gambar riwayat (px CSS): halus di layar HP beresolusi tinggi
-const SPEEDS = [{ k: 'slow', label: 'Lambat', pps: 90 }, { k: 'mid', label: 'Normal', pps: 170 }, { k: 'fast', label: 'Cepat', pps: 320 }];   // px per detik
-const SPEED_KEY = 'derizmp3.spectrum.speed';
+export const SPECTRUM_SPEEDS = [{ k: 'slow', label: 'Lambat', pps: 90 }, { k: 'mid', label: 'Normal', pps: 170 }, { k: 'fast', label: 'Cepat', pps: 320 }];   // px per detik
+const SPEEDS = SPECTRUM_SPEEDS;
+const SPEED_KEY = 'derizmp3.spectrum.speed', ON_KEY = 'derizmp3.spectrum.on';
 const FILL = '#b3a1f7', OUTLINE = '#f4f0ff';   // riwayat = isi solid tanpa outline; scope langsung = garis saja tanpa isi (tanpa gradasi / glow)
 
-let root: HTMLElement | null = null, openFn: (() => void) | null = null;
-export function openSpectrum(): void { if (!root) build(); openFn?.(); }
+let root: HTMLElement | null = null, openFn: (() => void) | null = null, closeFn: (() => void) | null = null;
+let speed = 1, on = false;   // kecepatan gulir riwayat (indeks SPEEDS; bawaan Normal) dan status nyala (bawaan MATI), keduanya diingat di browser
+try { const k = localStorage.getItem(SPEED_KEY), i = SPEEDS.findIndex(s => s.k === k); if (i >= 0) speed = i; } catch { /* penyimpanan diblokir: bawaan Normal */ }
+try { on = localStorage.getItem(ON_KEY) === '1'; } catch { /* penyimpanan diblokir: bawaan mati */ }
+
+export const getSpectrumSpeed = (): string => SPEEDS[speed].k;
+export function setSpectrumSpeed(k: string, save = true): void {
+  const i = SPEEDS.findIndex(s => s.k === k); if (i < 0) return;
+  speed = i;
+  if (save) { try { localStorage.setItem(SPEED_KEY, SPEEDS[i].k); } catch { /* abaikan */ } }
+}
+export const isSpectrumOn = (): boolean => on;
+export function setSpectrumOn(v: boolean, save = true): void {
+  on = v;
+  if (save) { try { localStorage.setItem(ON_KEY, v ? '1' : '0'); } catch { /* abaikan */ } }
+  if (v) { if (!root) build(); openFn?.(); } else closeFn?.();
+}
+// Dipanggil sekali saat aplikasi mulai: kalau tersimpan NYALA, strip muncul setelah gerakan pertama pengguna (AudioContext baru boleh dibuat setelah itu)
+export function restoreSpectrum(): void {
+  if (!on) return;
+  if (navigator.userActivation?.hasBeenActive) { setSpectrumOn(true, false); return; }
+  const go = (): void => { removeEventListener('pointerdown', go, true); removeEventListener('keydown', go, true); if (on) setSpectrumOn(true, false); };
+  addEventListener('pointerdown', go, true); addEventListener('keydown', go, true);
+}
 
 function build(): void {
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const el = document.createElement('div');
   el.className = 'spec'; el.hidden = true;
   el.innerHTML =
-    '<div class="spec__win is-off" role="dialog" aria-label="SPECTRUM" tabindex="-1">' +
-      '<div class="spec__stage"><canvas class="spec__cv" role="img" aria-label="Gelombang suara langsung dari keluaran master"></canvas></div>' +
-      '<div class="spec__ui"><span class="spec__stat" role="status"></span>' +
-        '<div class="spec__bar" role="group" aria-label="Kecepatan gulir riwayat">' +
-          SPEEDS.map(s => `<button type="button" class="spec__spd" data-k="${s.k}" aria-pressed="false">${s.label}</button>`).join('') + '</div>' +
-        `<button type="button" class="spec__close" aria-label="Tutup SPECTRUM">${ICON_CLOSE}</button></div>` +
+    '<div class="spec__win" role="img" aria-label="SPECTRUM: gelombang suara langsung dari keluaran master">' +
+      '<div class="spec__stage"><canvas class="spec__cv" aria-hidden="true"></canvas></div>' +
     '</div>';
   document.body.appendChild(el);
   root = el;
 
   const win = el.querySelector<HTMLElement>('.spec__win')!;
-  const stat = el.querySelector<HTMLElement>('.spec__stat')!;
   const stage = el.querySelector<HTMLElement>('.spec__stage')!;
   const cv = el.querySelector<HTMLCanvasElement>('.spec__cv')!;
   const g = cv.getContext('2d')!;
-  const spdBtns = [...el.querySelectorAll<HTMLButtonElement>('.spec__spd')];
-
-  // ---------- kecepatan gulir (diingat) ----------
-  let speed = 1;
-  try { const k = localStorage.getItem(SPEED_KEY), i = SPEEDS.findIndex(s => s.k === k); if (i >= 0) speed = i; } catch { /* penyimpanan diblokir: bawaan Normal */ }
-  const syncSpeed = (): void => spdBtns.forEach((b, i) => b.setAttribute('aria-pressed', String(i === speed)));
-  syncSpeed();
-  for (const b of spdBtns) b.addEventListener('click', () => {
-    speed = SPEEDS.findIndex(s => s.k === b.dataset.k); syncSpeed(); b.blur();   // blur: Space tetap untuk play / jeda DAW
-    try { localStorage.setItem(SPEED_KEY, SPEEDS[speed].k); } catch { /* abaikan */ }
-  });
 
   // ---------- audio: analyser di keluaran master ----------
   let ctx: BaseAudioContext | null = null, an: AnalyserNode | null = null, mute: GainNode | null = null, tapNode: AudioNode | null = null;
@@ -63,7 +66,7 @@ function build(): void {
   let env = new Envelope(sr), det = new PitchDetector(FFT), trk = new PitchTracker(), tb = new TraceBuilder(FFT, 64);
   const gainH = new AutoGain(6), gainL = new AutoGain(1.2, 0.02);   // riwayat: turun lambat (6 s); scope: lebih cepat menyesuaikan (1,2 s)
   let trace = new Float32Array(64), prevTrace = new Float32Array(64), traceOk = false;
-  let clk = 0, lastClk = 0, carry = 0, lastPitch = 0, silentSince = 0, lvl = -120, lcdAt = 0;
+  let clk = 0, lastClk = 0, carry = 0, lastPitch = 0;
 
   function connect(): boolean {
     const src = bridge?.tap() ?? null;
@@ -83,12 +86,12 @@ function build(): void {
   }
   function resetState(): void {
     env.clear(); gainH.reset(); gainL.reset(); trk.reset(); prevTrace.fill(0); trace.fill(0); traceOk = false;
-    carry = 0; lastPitch = 0; silentSince = performance.now(); lvl = -120;
+    carry = 0; lastPitch = 0;
     clk = lastClk = ctx ? ctx.currentTime : 0;
   }
 
   // ---------- ukuran kanvas ----------
-  let W = 0, H = 0, dpr = 1, tops = new Float32Array(0), bots = new Float32Array(0), rts = new Float32Array(0);
+  let W = 0, H = 0, dpr = 1, tops = new Float32Array(0), bots = new Float32Array(0);
   function layout(): void {
     dpr = Math.min(3, devicePixelRatio || 1);
     W = Math.max(1, stage.clientWidth); H = Math.max(1, stage.clientHeight);
@@ -96,7 +99,7 @@ function build(): void {
     const xs = Math.round(W * SPLIT), m = clamp(Math.round((W - xs) / 1.5), 48, 400);
     if (trace.length !== m) { trace = new Float32Array(m); prevTrace = new Float32Array(m); tb = new TraceBuilder(FFT, m); traceOk = false; }
     const np = Math.ceil(xs / STEP) + 1;
-    if (tops.length !== np) { tops = new Float32Array(np); bots = new Float32Array(np); rts = new Float32Array(np); }
+    if (tops.length !== np) { tops = new Float32Array(np); bots = new Float32Array(np); }
     if (!el.hidden) draw();
   }
   const ro = new ResizeObserver(() => { if (!el.hidden) layout(); });
@@ -112,11 +115,10 @@ function build(): void {
     const pxCol = SPEEDS[speed].pps * env.binSec, frac = env.frac, sc = gainH.scale;
     for (let p = 0; p < np; p++) {
       const x = Math.min(xs, p * STEP), b = (xs - x) / pxCol;
-      let v: number, r: number;
-      if (b < frac) { const u = frac > 0 ? b / frac : 0; v = env.partial + (env.at(0) - env.partial) * u; r = env.partialRms + (env.rmsAt(0) - env.partialRms) * u; }
-      else { v = env.cubic(b - frac); r = env.cubic(b - frac, true); }
-      const a = shape(v * sc), ar = Math.min(a, shape(r * sc * 1.5));
-      tops[p] = a; rts[p] = ar;
+      let v: number;
+      if (b < frac) { const u = frac > 0 ? b / frac : 0; v = env.partial + (env.at(0) - env.partial) * u; }
+      else v = env.cubic(b - frac);
+      tops[p] = shape(v * sc);
     }
     for (let p = 0; p < np; p++) { const a = Math.max(tops[p], 0.004); bots[p] = mid + a * amp; tops[p] = mid - a * amp; }
     // riwayat: isi solid satu warna saja, tanpa outline (sama seperti referensi); tanpa gradasi, inti, atau glow
@@ -139,13 +141,6 @@ function build(): void {
       for (let i = 0; i < m; i++) { const y = mid - clamp(trace[i] * ls, -1, 1) * amp * 0.96; if (i) g.lineTo(xs + i * k * live, y); else g.moveTo(xs, y); }
       g.lineJoin = 'round'; g.lineWidth = 1.5; g.strokeStyle = OUTLINE; g.stroke();
     }
-    // petunjuk saat tidak ada suara
-    const idle = silentSince ? performance.now() - silentSince : 0;
-    if (idle > 1500) {
-      g.globalAlpha = clamp((idle - 1500) / 600, 0, 1);
-      g.fillStyle = 'rgba(205,195,255,.75)'; g.font = '600 12px system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText('Putar lagu untuk melihat gelombangnya', W / 2, mid - 20); g.globalAlpha = 1; g.textAlign = 'start';
-    }
   }
 
   // ---------- satu frame ----------
@@ -165,8 +160,6 @@ function build(): void {
         if (n > 0) env.push(buf, n);
         gainH.update(env.lastPeak, dt);
       }
-      lvl = rmsDb(buf, 1024);
-      if (lvl > -70) silentSince = 0; else if (silentSince === 0) silentSince = performance.now();   // 0 = sedang ada suara; selain itu = kapan mulai senyap
       if (ts - lastPitch >= 40) { trk.update(det.detect(buf, sr)); lastPitch = ts; }
       const info = tb.build(buf, trk.period, sr, trace, traceOk ? prevTrace : null);
       traceOk = !info.silent;
@@ -174,33 +167,36 @@ function build(): void {
       prevTrace.set(trace);
     }
     draw();
-    if (ts - lcdAt > 130) {
-      lcdAt = ts;
-      const silent = lvl <= -70, hz = trk.hz(sr);
-      win.classList.toggle('is-off', silent);
-      if (silent) stat.textContent = 'Senyap';
-      else if (hz > 0) { const n = noteName(hz); stat.textContent = n.name + ' · ' + hz.toFixed(1) + ' Hz · ' + Math.round(lvl) + ' dB'; }
-      else stat.textContent = 'Tanpa nada jelas · ' + Math.round(lvl) + ' dB';
-    }
   }
   const start = (): void => { cancelAnimationFrame(raf); lastTs = performance.now(); raf = requestAnimationFrame(frame); };
   const stop = (): void => { cancelAnimationFrame(raf); raf = 0; };
 
-  // ---------- buka / tutup ----------
-  el.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } });   // pintasan lain (Space = play / jeda) tetap sampai ke DAW
-  el.querySelector('.spec__close')!.addEventListener('click', () => close());
-  function close(): void {
+  // ---------- posisi: di atas panel bawah (transport + keyboard) kalau terbuka; mentok dasar layar kalau panel bawah ditutup ----------
+  let tbar: HTMLElement | null = null, tro: ResizeObserver | null = null;
+  const dock = (): void => {
+    if (!tbar) { tbar = document.querySelector<HTMLElement>('.transportbar'); if (tbar) { tro = new ResizeObserver(dock); tro.observe(tbar); } }
+    const off = tbar ? Math.round(innerHeight - tbar.getBoundingClientRect().top) : 0, flush = off < 2;
+    el.style.bottom = (flush ? 0 : off) + 'px';
+    el.style.setProperty('--spec-pad', flush ? 'env(safe-area-inset-bottom,0px)' : '0px');   // area aman bawah sudah ditanggung panel bawah
+  };
+  addEventListener('resize', () => { if (!el.hidden) dock(); });
+
+  // ---------- buka / tutup (dari saklar di Pengaturan) ----------
+  let closing = false;
+  closeFn = () => {
+    if (el.hidden || closing) return;
     stop(); disconnect();
-    const done = (): void => { el.hidden = true; };
+    const done = (): void => { el.hidden = true; closing = false; };
     if (reduce) { done(); return; }
+    closing = true;
     win.animate([{ transform: 'none' }, { transform: 'translateY(100%)' }], { duration: 180, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }).onfinish = () => { done(); el.getAnimations({ subtree: true }).forEach(a => a.cancel()); };
-  }
+  };
   openFn = () => {
-    if (!el.hidden) return;
+    if (!el.hidden && !closing) return;   // dinyalakan lagi saat animasi tutup masih jalan: batalkan tutupnya dan lanjut
+    closing = false;
     el.getAnimations({ subtree: true }).forEach(a => a.cancel());
     el.hidden = false;
-    connect(); resetState(); layout(); start();
-    stat.textContent = 'Senyap';
+    dock(); connect(); resetState(); layout(); start();
     if (!reduce) win.animate([{ transform: 'translateY(100%)' }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)' });
   };
   document.addEventListener('visibilitychange', () => { if (!el.hidden) { if (document.hidden) stop(); else { resetState(); start(); } } });

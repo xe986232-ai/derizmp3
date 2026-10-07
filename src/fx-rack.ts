@@ -12,7 +12,6 @@ import { ivkKey } from './ivory-keys';
 import { dbgSched, dbgSent, dbgSpec } from './audio-debug';
 import { openMpcs } from './mpcs';
 import { openCute } from './cute';
-import { openSpectrum } from './spectrum';
 import { openDrums, DRUMS_HIDDEN } from './drums';
 
 // MGCHORD gratis dan tampil di daftar plugin saat tombol "+" ditekan di tab Plugin (tekan-tahan "+" ~1,5 detik tetap jadi jalan pintas).
@@ -27,7 +26,7 @@ import type { DelayParams } from './delay-fx';
 import { EQ_COLORS, bandOf, bandVals, hitNode, hzAt, dbAt, paintEqCanvas, eqReadout, specActive, type EqSpec } from './eq-ui';
 import { DELAY_PARAMS, delayHtml, paintDk, paintDelayUi, paintMeter, linkedPartner } from './delay-ui';
 
-type FxType = 'reverb' | 'eq' | 'filter' | 'deesser' | 'delay' | 'supersaw' | 'deriz' | 'mpcs' | 'cute' | 'mgchord' | 'spectrum' | 'drums';
+type FxType = 'reverb' | 'eq' | 'filter' | 'deesser' | 'delay' | 'supersaw' | 'deriz' | 'mpcs' | 'cute' | 'mgchord' | 'drums';
 // DERIZ: audio yang di-upload ke canvas plugin (buffer disimpan untuk tahap berikutnya; peaks + max khusus untuk menggambar waveform)
 interface DerizData { name: string; dur: number; buf: AudioBuffer; start: number; zoom: number; view: number; spec: Spec | null; busy?: number; }   // start: posisi garis start, 0..1 dari durasi; zoom >= 1: jendela terlihat = [view, view + 1/zoom] dari durasi; spec: spektrogram (null selagi dianalisis, busy = persen)
 // Spektrogram: frames x ROWS nilai dB (0..255 = -100..0 dBFS), baris 0 = frekuensi terendah (skala log); lut = palet warna yang disesuaikan dengan level puncak
@@ -98,7 +97,6 @@ const EFFECTS: EffectDef[] = [
     { key: 'volume', label: 'Volume', hint: 'Volume (level suara)', def: 0.8, fmt: pct }
   ], synth: true },   // plugin DERIZ: spektrogram + upload + knob; satu bawaan track DERIZ (dari "+ Tambahkan track"), sisanya bisa ditambah dari daftar efek (banyak DERIZ per track)
   { type: 'mpcs', name: 'MPCS', params: [], synth: true },
-  { type: 'spectrum', name: 'SPECTRUM', params: [], synth: true },   // plugin SPECTRUM: gelombang suara langsung dari keluaran master; kartu ringkas, jendelanya terpisah dan tidak modal (spectrum.ts)
   { type: 'cute', name: 'CUTE', params: [], synth: true },   // plugin CUTE: pemotong audio; kartu ringkas, jendelanya terpisah (cute.ts)
   { type: 'mgchord', name: 'MGCHORD', params: [], synth: true },   // plugin MGCHORD: pembuat chord progression; kartu ringkas, editornya jendela terpisah (mgchord.ts)   // plugin MPCS: kartu ringkas di panel; editornya jendela terpisah (mpcs.ts), dibuka lewat kartu ini
   {   // plugin Drums: step sequencer di jendela terpisah (drums.ts); suara disintesis (drums-audio.ts). Pattern track ini dibunyikan sebagai hit drum
@@ -448,12 +446,6 @@ function cardHtml(fx: Fx, i: number): string {
       `<header class="fxc__head"><i class="fxc__led" aria-hidden="true"></i><h3 class="fxc__name"><button type="button" class="fxc__title fxc__mp" title="Buka MPCS">MPCS</button></h3>` +
       `<button type="button" class="fxc__open fxc__mp" aria-label="Buka MPCS" title="Buka MPCS">${ICON_OPEN}</button>` +
       `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi MPCS" title="Opsi">${ICON_MORE}</button></header></section>`;
-  }
-  if (fx.type === 'spectrum') {   // SPECTRUM: kartu ringkas (judul + buka + titik tiga); isinya ada di jendela SPECTRUM
-    return `<section class="fxc fxc--spectrum" data-fx="${fx.id}" data-kind="plugin" style="--i:${i}" aria-label="SPECTRUM">` +
-      `<header class="fxc__head"><i class="fxc__led" aria-hidden="true"></i><h3 class="fxc__name"><button type="button" class="fxc__title fxc__sp" title="Buka SPECTRUM">SPECTRUM</button></h3>` +
-      `<button type="button" class="fxc__open fxc__sp" aria-label="Buka SPECTRUM" title="Buka SPECTRUM">${ICON_OPEN}</button>` +
-      `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi SPECTRUM" title="Opsi">${ICON_MORE}</button></header></section>`;
   }
   if (fx.type === 'cute') {   // CUTE: kartu ringkas (judul + buka + titik tiga); isinya ada di jendela CUTE
     return `<section class="fxc fxc--cute" data-fx="${fx.id}" data-kind="plugin" style="--i:${i}" aria-label="CUTE">` +
@@ -967,7 +959,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     const have = new Set(fxs().map(f => f.type));
     // halaman Plugin: hanya DERIZ (boleh banyak; Supersaw otomatis ada di track synth). Halaman Effect: Reverb, EQ, Filter, dll.
     // halaman Plugin: DERIZ (boleh banyak) dan MPCS (satu per track; Supersaw otomatis ada di track synth). Halaman Effect: Reverb, EQ, Filter, dll.
-    const choices = EFFECTS.filter(d => page === 'plugin' ? d.type === 'deriz' || d.type === 'mpcs' || d.type === 'cute' || d.type === 'mgchord' || d.type === 'spectrum' || (d.type === 'drums' && !DRUMS_HIDDEN) : !d.synth);   // MGCHORD gratis: langsung ada di daftar tombol +
+    const choices = EFFECTS.filter(d => page === 'plugin' ? d.type === 'deriz' || d.type === 'mpcs' || d.type === 'cute' || d.type === 'mgchord' || (d.type === 'drums' && !DRUMS_HIDDEN) : !d.synth);   // MGCHORD gratis: langsung ada di daftar tombol +
     const el = document.createElement('div');
     el.className = 'fx-pick';
     el.setAttribute('role', 'menu');
@@ -992,8 +984,8 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
       if (!b || b.disabled) return;
       const t = b.dataset.type as FxType;
       addEffect(t);
-      closePicker(t === 'mpcs' || t === 'cute' || t === 'mgchord' || t === 'spectrum' || t === 'drums');
-      if (t !== 'mpcs' && t !== 'cute' && t !== 'mgchord' && t !== 'spectrum' && t !== 'drums') addBtn.focus({ preventScroll: true });   // MPCS: fokus pindah ke jendelanya
+      closePicker(t === 'mpcs' || t === 'cute' || t === 'mgchord' || t === 'drums');
+      if (t !== 'mpcs' && t !== 'cute' && t !== 'mgchord' && t !== 'drums') addBtn.focus({ preventScroll: true });   // MPCS: fokus pindah ke jendelanya
     });
     el.addEventListener('keydown', e => e.stopPropagation());   // pintasan DAW (Space, panah) tidak ikut jalan
     el.addEventListener('keyup', e => e.stopPropagation());
@@ -1146,7 +1138,6 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     openAuto();
     if (type === 'mpcs') openMpcs();   // langsung terbuka, seperti DERIZ
     if (type === 'cute') openCute();
-    if (type === 'spectrum') openSpectrum();
     if (type === 'mgchord') openMgchord();
     if (type === 'drums') openDrums();
   }
@@ -1207,7 +1198,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   }
 
   function removeEffect(card: HTMLElement): void {
-    const fx = find(card); if (!fx || !cur || (defOf(fx.type).synth && fx.type !== 'deriz' && fx.type !== 'mpcs' && fx.type !== 'cute' && fx.type !== 'mgchord' && fx.type !== 'spectrum' && fx.type !== 'drums')) return;
+    const fx = find(card); if (!fx || !cur || (defOf(fx.type).synth && fx.type !== 'deriz' && fx.type !== 'mpcs' && fx.type !== 'cute' && fx.type !== 'mgchord' && fx.type !== 'drums')) return;
     hideTip();
     if (fx.type === 'deriz') {   // lepas sampler-nya dan buang nadanya di semua pattern
       const e = synths.get(fx.id); if (e) { synths.delete(fx.id); void e.p.then(x => x.dispose(), () => { /* gagal dibuat */ }); }
@@ -1634,7 +1625,6 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     if (t.closest('.dly__sum')) { openOverlay(card); return; }
     if (t.closest('.fxc__mp')) { openMpcs(); return; }
     if (t.closest('.fxc__cu')) { openCute(); return; }
-    if (t.closest('.fxc__sp')) { openSpectrum(); return; }
     if (t.closest('.fxc__mg')) { openMg(); return; }
     if (t.closest('.fxc__dr')) { openDrums(); return; }
     if (t.closest('.fxc__pop')) { if (ovOpen?.card === card) closeOverlay(); else openOverlay(card); return; }
@@ -1746,7 +1736,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
       const k = cnt.get(type) ?? 0; cnt.set(type, k + 1);
       let fx = (racks.get(track) ?? []).filter(f => f.type === type)[k];
       if (!fx) {
-        if (d.synth && type !== 'mpcs' && type !== 'cute' && type !== 'mgchord' && type !== 'spectrum' && type !== 'drums') continue;   // plugin instrumen hanya ada kalau track-nya memang jenis itu (MPCS boleh dipasang di track mana pun)
+        if (d.synth && type !== 'mpcs' && type !== 'cute' && type !== 'mgchord' && type !== 'drums') continue;   // plugin instrumen hanya ada kalau track-nya memang jenis itu (MPCS boleh dipasang di track mana pun)
         const v: Record<string, number> = {}; d.params.forEach(q => { v[q.key] = q.def; });
         fx = { id: ++seq, type, on: true, min: false, v };
         racks.set(track, [...(racks.get(track) ?? []), fx]);
