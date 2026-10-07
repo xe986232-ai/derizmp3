@@ -1634,6 +1634,7 @@ function tick() {
   if (!playing) return;
   posBars = startPos + Math.max(0, audibleNow() - startCtx) / SEC_PER_BAR;
   if (posBars >= BARS) { posBars = BARS; pausePlay(); return; }
+  followPlayhead();
   if (!phHeld && BAR_W !== phAnimBarW) startPhAnim();   // zoom timeline: lebar bar berubah -> buat ulang animasi (timeline tidak auto-scroll mengikuti playhead)
   const b = Math.floor(posBars * 4 + 1e-6);   // titik ketukan di panel metronome + kedip tombol M
   if (b !== lastBeat) { lastBeat = b; metroUI.beat(b % 4); if (metro.on) metroUI.flash(); }
@@ -1735,6 +1736,7 @@ function startPlay() {
   if (posBars >= BARS) posBars = 0;
   startMark = posBars;   // titik start: tombol mundur akan kembali ke sini
   playing = true; holdSpec(true); scheduleClips(metro.countIn);
+  phWasVisible = true; if (autoScroll) showPlayhead();   // Auto Scroll: Play dari posisi di luar layar -> timeline langsung menyusul playhead
   playRaf = requestAnimationFrame(tick); syncTransportUI();
 }
 function pausePlay() {
@@ -1754,6 +1756,32 @@ function seekBy(d) {
 }
 // Tombol mundur: kembali ke titik tempat terakhir kali Play dimulai; kalau sudah di sana (atau di sebelum itu), klik lagi = ke awal (bar 1)
 let startMark = 0;
+// ===== Auto Scroll playlist =====
+// Nyala: saat Play, begitu playhead melewati tepi kanan layar timeline digeser (halus) sampai playhead di ~30% lebar layar.
+// Hanya bereaksi kalau playhead tadinya terlihat lalu keluar lewat kanan: kalau pengguna sengaja menggulir menjauh, timeline tidak ditarik balik.
+// Pilihan disimpan di localStorage (AUTOSCROLL_KEY); bawaan = nyala.
+const AUTOSCROLL_KEY = 'derizmp3.autoScroll';
+let autoScroll = true, phWasVisible = true;
+try { autoScroll = localStorage.getItem(AUTOSCROLL_KEY) !== '0'; } catch { /* penyimpanan diblokir: bawaan nyala */ }
+const autoScrollBtn = document.getElementById('autoScrollToggle');
+function syncAutoScrollUI() {
+  autoScrollBtn.setAttribute('aria-checked', String(autoScroll));
+  autoScrollBtn.title = 'Auto scroll playlist: ' + (autoScroll ? 'nyala' : 'mati');
+}
+autoScrollBtn.addEventListener('click', () => {
+  autoScroll = !autoScroll; syncAutoScrollUI();
+  try { localStorage.setItem(AUTOSCROLL_KEY, autoScroll ? '1' : '0'); } catch { /* abaikan */ }
+  if (autoScroll) { phWasVisible = false; if (playing) showPlayhead(); }   // dinyalakan saat main: langsung susul playhead
+  toast('Auto scroll ' + (autoScroll ? 'nyala' : 'mati'));
+});
+syncAutoScrollUI();
+function followPlayhead() {
+  if (!autoScroll || phHeld) return;
+  const off = tlEl.offsetLeft, x = off + posBars * BAR_W, l = wsEl.scrollLeft, w = wsEl.clientWidth;
+  const right = l + w - 24, vis = x >= l + off + 8 && x <= right;
+  if (!vis && phWasVisible && x > right) wsEl.scrollTo({left: Math.max(0, x - w * .3), behavior: REDUCE ? 'instant' : 'smooth'});
+  phWasVisible = vis;
+}
 function showPlayhead() {   // geser timeline kalau playhead keluar dari layar
   const off = tlEl.offsetLeft, x = off + posBars * BAR_W, l = wsEl.scrollLeft, w = wsEl.clientWidth;
   if (x < l + off + 8 || x > l + w - 24) wsEl.scrollTo({left: Math.max(0, x - w * .3), behavior: REDUCE ? 'instant' : 'smooth'});
