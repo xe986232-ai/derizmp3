@@ -1738,7 +1738,8 @@ function startPlay() {
   if (posBars >= BARS) posBars = 0;
   startMark = posBars;   // titik start: tombol mundur akan kembali ke sini
   playing = true; holdSpec(true); scheduleClips(metro.countIn);
-  userScrollUntil = 0;   // Auto Scroll: Play selalu mengikuti playhead lagi (timeline menyusul kalau playhead di luar layar)
+  userScrollUntil = 0;   // Auto Scroll: Play selalu mengikuti playhead lagi
+  if (autoScroll) showPlayhead();   // playhead di luar layar: timeline dibawa ke dekatnya dulu
   playRaf = requestAnimationFrame(tick); syncTransportUI();
 }
 function pausePlay() {
@@ -1759,13 +1760,14 @@ function seekBy(d) {
 // Tombol mundur: kembali ke titik tempat terakhir kali Play dimulai; kalau sudah di sana (atau di sebelum itu), klik lagi = ke awal (bar 1)
 let startMark = 0;
 // ===== Auto Scroll playlist =====
-// Nyala: timeline mengikuti playhead REAL-TIME. Playhead berjalan normal dari kiri sampai mencapai ~30% lebar layar timeline,
-// lalu "terkunci" di titik itu dan timeline yang bergulir tiap frame (posisi dari jam audio yang sama dengan playhead).
+// Nyala: playhead berjalan sendiri sesuai tempo dari kiri sampai tepat di TENGAH area playlist yang terlihat. Mulai dari situ playhead diam di tengah
+// dan timeline yang bergulir dengan kecepatan yang sama persis (posisi dihitung tiap frame dari jam audio yang sama dengan playhead, jadi ikut tempo / BPM).
+// Penting: .workspace punya scroll-behavior:smooth, jadi geseran per-frame WAJIB behavior:'instant' (kalau tidak, tiap frame memulai animasi baru dan tertinggal).
 // Kalau pengguna menggulir sendiri (wheel / sentuh), ikut-ikutan dijeda 2,5 detik lalu timeline menyusul lagi dengan halus.
 // Pilihan disimpan di localStorage (AUTOSCROLL_KEY); bawaan = nyala.
 const AUTOSCROLL_KEY = 'derizmp3.autoScroll';
 let autoScroll = true, userScrollUntil = 0;
-const FOLLOW_AT = .3, FOLLOW_PAUSE = 2500;   // letak playhead terkunci (porsi lebar layar timeline) dan lama jeda setelah pengguna menggulir
+const FOLLOW_AT = .5, FOLLOW_PAUSE = 2500;   // letak playhead terkunci (porsi lebar area playlist yang terlihat; .5 = tengah) dan lama jeda setelah pengguna menggulir
 try { autoScroll = localStorage.getItem(AUTOSCROLL_KEY) !== '0'; } catch { /* penyimpanan diblokir: bawaan nyala */ }
 const autoScrollBtn = document.getElementById('autoScrollToggle');
 function syncAutoScrollUI() {
@@ -1781,11 +1783,13 @@ autoScrollBtn.addEventListener('click', () => {
 syncAutoScrollUI();
 function followPlayhead() {
   if (!autoScroll || phHeld || performance.now() < userScrollUntil) return;
-  const target = Math.max(0, posBars * BAR_W - (wsEl.clientWidth - tlEl.offsetLeft) * FOLLOW_AT);   // scrollLeft supaya playhead tepat di titik kunci
-  const cur = wsEl.scrollLeft, d = target - cur;
+  const off = tlEl.offsetLeft, vw = wsEl.clientWidth - off, cur = wsEl.scrollLeft;   // vw = lebar area playlist yang terlihat (tanpa panel track)
+  const sx = posBars * BAR_W - cur;                                                   // posisi playhead di dalam area itu
+  if (sx < vw * FOLLOW_AT) return;                                                    // belum sampai tengah: playhead jalan sendiri
+  const target = Math.max(0, posBars * BAR_W - vw * FOLLOW_AT), d = target - cur;     // scrollLeft yang menaruh playhead tepat di titik kunci
   if (Math.abs(d) < .5) return;
   progScrollAt = performance.now();
-  wsEl.scrollLeft = REDUCE || Math.abs(d) < 24 ? target : cur + d * .25;   // jauh (mis. baru selesai digulir sendiri): menyusul halus; dekat: kunci persis
+  wsEl.scrollTo({left: REDUCE || Math.abs(d) < 40 ? target : cur + d * .2, behavior: 'instant'});   // jauh (mis. Play dari posisi di kanan): menyusul halus; dekat: kunci persis
 }
 const userScrolled = () => { userScrollUntil = performance.now() + FOLLOW_PAUSE; };
 wsEl.addEventListener('wheel', userScrolled, {passive: true});
