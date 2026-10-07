@@ -2297,3 +2297,45 @@ body.is-pdragging,body.is-pdragging *{cursor:grabbing!important;user-select:none
 .drm__msg{margin:0;padding:18px 12px;border-radius:10px;background:radial-gradient(120% 100% at 50% 50%,#1e1c2e 0%,#0b0b12 100%);box-shadow:inset 0 2px 6px rgba(0,0,0,.7);color:#9a9ab0;font-size:12px;font-weight:600;line-height:1.5;text-align:center}
 @media (prefers-reduced-motion:reduce){.drm__win{animation:none}.drm__c::after,.drm__btn,.drm__close{transition:none}}
 @media (max-height:460px){.drm__win{padding:calc(6px + env(safe-area-inset-top)) 14px 8px;gap:6px}.drm__labels{grid-template-rows:repeat(var(--n),minmax(22px,1fr))}.drm__grid{grid-template-rows:repeat(var(--n),minmax(22px,1fr))}.drm__c::after{inset:3px 2px}}
+
+/* ===== Gaya UI "Flat" (atribut data-uistyle="flat" di <html>; bawaan = "soft"/tanpa atribut) =====
+   Terpisah dari tema warna (data-ui / data-theme). Semua sudut lancip, tanpa glow / bevel / kilau, garis pemisah 1px (rujukan: Ableton Live).
+   TAHAP 1: hanya channel mixer (card track di kolom kiri timeline). Knob pan tetap bulat karena itu bentuk knob-nya. */
+html[data-uistyle="flat"] .tracklist{border-right:1px solid var(--line)}
+html[data-uistyle="flat"] .trkcard-wrap{padding:0;border-bottom:1px solid var(--line)}
+html[data-uistyle="flat"] .trkcard,
+html[data-uistyle="flat"] .trkcard--on{border-radius:0;box-shadow:none;transition:background-color .15s ease}
+html[data-uistyle="flat"] .trkcard::before,
+html[data-uistyle="flat"] .trkcard::after{display:none}                       /* outline gradien + kilau "glass" dimatikan */
+html[data-uistyle="flat"] .trkcard--on{box-shadow:inset 3px 0 0 var(--track-color,var(--accent))}   /* track terpilih: strip warna tipis di kiri */
+html[data-uistyle="flat"] .trkcard--on:hover,
+html[data-uistyle="flat"] .trkcard.is-jelly{transform:none;box-shadow:inset 3px 0 0 var(--track-color,var(--accent))}
+html[data-uistyle="flat"] .trkcard.is-jelly{box-shadow:inset 3px 0 0 var(--track-color,var(--accent)),0 6px 14px rgba(0,0,0,.45)}
+/* icon instrumen, tombol rec (arm), titik tiga, solo/mute, lampu on/off: semua kotak */
+html[data-uistyle="flat"] .trkcard__inst,
+html[data-uistyle="flat"] .trkcard__arm,
+html[data-uistyle="flat"] .tracklist .ico-btn,
+html[data-uistyle="flat"] .tracklist .sm,
+html[data-uistyle="flat"] .tracklist .sm__btn,
+html[data-uistyle="flat"] .trkcard__power{border-radius:0}
+html[data-uistyle="flat"] .trkcard__arm i{border-radius:0}
+html[data-uistyle="flat"] .trkcard__power{box-shadow:none}                    /* lampu: kotak datar, tanpa glow */
+html[data-uistyle="flat"] .trkcard__power[aria-checked="false"]{box-shadow:none}
+/* slider volume: track & thumb kotak */
+html[data-uistyle="flat"] .trkcard__vol .slider::-webkit-slider-runnable-track{border-radius:0}
+html[data-uistyle="flat"] .trkcard__vol .slider::-moz-range-track,
+html[data-uistyle="flat"] .trkcard__vol .slider::-moz-range-progress{border-radius:0}
+html[data-uistyle="flat"] .trkcard__vol .slider::-webkit-slider-thumb,
+html[data-uistyle="flat"] .trkcard__vol .slider::-moz-range-thumb{border-radius:0}
+/* meter level: tanpa glow */
+html[data-uistyle="flat"] .trackmeter__bar,
+html[data-uistyle="flat"] .trackmeter__bar[data-l="2"],
+html[data-uistyle="flat"] .trackmeter__bar[data-l="3"]{filter:none}
+html[data-uistyle="flat"] .trackmeter__bar s{filter:none}
+/* tombol tambah track */
+html[data-uistyle="flat"] .addtrack{border-radius:0;margin:0;width:100%;border-bottom:1px solid var(--line)}
+/* menu titik tiga di card track (+ pilihan warna) */
+html[data-uistyle="flat"] .track-menu{border-radius:0;box-shadow:0 4px 12px rgba(0,0,0,.5)}
+html[data-uistyle="flat"] .track-menu__item,
+html[data-uistyle="flat"] .track-menu__swatch,
+html[data-uistyle="flat"] .track-menu__dot{border-radius:0}

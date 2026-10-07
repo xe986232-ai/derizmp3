@@ -145,6 +145,15 @@ export function initMenuPanel(): MenuPanel {
               '<button type="button" class="mp__segbtn" role="radio" data-theme="jembut"><i class="mp__sw mp__sw--tjembut"></i>Jembut</button>' +
             '</div>' +
           '</div>' +
+          // Gaya UI (bentuk sudut): tersembunyi, dibuka dengan menahan teks "Pengaturan" di menu utama
+          '<div class="mp__card mp__item mp__set" style="--i:2" data-uistyle-card hidden>' +
+            '<div class="mp__sub"><span>Gaya UI</span></div>' +
+            '<div class="mp__seg" role="radiogroup" aria-label="Gaya UI">' +
+              '<button type="button" class="mp__segbtn" role="radio" data-uistyle="soft">Default</button>' +
+              '<button type="button" class="mp__segbtn" role="radio" data-uistyle="flat">Flat</button>' +
+            '</div>' +
+            '<p class="mp__hint">Flat: semua sudut lancip, tanpa glow. Tahap 1: baru di channel mixer.</p>' +
+          '</div>' +
           '<div class="mp__card mp__item mp__set" style="--i:2">' +
             '<div class="mp__sub"><span>Waveform &amp; bar color</span></div>' +
             '<div class="mp__seg" role="radiogroup" aria-label="Waveform & bar color">' +
@@ -265,6 +274,40 @@ export function initMenuPanel(): MenuPanel {
   let themeSaved = 'default';
   try { themeSaved = localStorage.getItem(THEME_KEY) || 'default'; } catch { /* abaikan */ }
   setTheme(themeSaved, false);
+
+  // ===== Pengaturan: Gaya UI (atribut data-uistyle di <html>: soft = bawaan, flat = sudut lancip) =====
+  // Kartu pilihannya tersembunyi. Buka/tutup dengan menahan teks "Pengaturan" di menu utama (status buka disimpan).
+  const STYLE_KEY = 'derizmp3.uistyle', STYLE_UNLOCK_KEY = 'derizmp3.uistyle.unlock';
+  const styleCard = panel.querySelector<HTMLElement>('[data-uistyle-card]') as HTMLElement;
+  const styleBtns = [...panel.querySelectorAll<HTMLButtonElement>('[data-uistyle]')];
+  const setUiStyle = (v: string, save: boolean): void => {
+    const val = v === 'flat' ? 'flat' : 'soft';
+    if (val === 'flat') document.documentElement.dataset.uistyle = 'flat'; else delete document.documentElement.dataset.uistyle;
+    styleBtns.forEach(b => { const on = b.dataset.uistyle === val; b.classList.toggle('is-on', on); b.setAttribute('aria-checked', String(on)); });
+    if (save) { try { localStorage.setItem(STYLE_KEY, val); } catch { /* penyimpanan diblokir: tetap berlaku sampai halaman ditutup */ } }
+  };
+  styleBtns.forEach(b => b.addEventListener('click', () => setUiStyle(b.dataset.uistyle as string, true)));
+  let styleSaved = 'soft', styleUnlocked = false;
+  try { styleSaved = localStorage.getItem(STYLE_KEY) || 'soft'; styleUnlocked = localStorage.getItem(STYLE_UNLOCK_KEY) === '1'; } catch { /* abaikan */ }
+  styleCard.hidden = !styleUnlocked;
+  setUiStyle(styleSaved, false);
+  // klik-tahan teks "Pengaturan" (± 0,7 detik) = tampilkan / sembunyikan kartu Gaya UI; lepas jari tetap membuka halaman Pengaturan seperti biasa
+  const setGo = panel.querySelector<HTMLElement>('[data-go="settings"]') as HTMLElement;
+  let styleHoldT = 0, styleHoldX = 0, styleHoldY = 0;
+  const styleHoldClear = (): void => { if (styleHoldT) { clearTimeout(styleHoldT); styleHoldT = 0; } };
+  setGo.addEventListener('pointerdown', e => {
+    styleHoldClear(); styleHoldX = e.clientX; styleHoldY = e.clientY;
+    styleHoldT = window.setTimeout(() => {
+      styleHoldT = 0;
+      styleUnlocked = !styleUnlocked;
+      styleCard.hidden = !styleUnlocked;
+      try { localStorage.setItem(STYLE_UNLOCK_KEY, styleUnlocked ? '1' : '0'); } catch { /* abaikan */ }
+      if (navigator.vibrate) { try { navigator.vibrate(18); } catch { /* abaikan */ } }
+      io && io.toast(styleUnlocked ? 'Pilihan Gaya UI dibuka di Pengaturan' : 'Pilihan Gaya UI disembunyikan', 1800);
+    }, 700);
+  });
+  setGo.addEventListener('pointermove', e => { if (styleHoldT && Math.hypot(e.clientX - styleHoldX, e.clientY - styleHoldY) > 10) styleHoldClear(); });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => setGo.addEventListener(ev, styleHoldClear));
 
   // ===== Pengaturan: Waveform & bar color (disimpan di browser, diterapkan lewat atribut data-wf di <html>) =====
   const WF_KEY = 'derizmp3.wfColor';
