@@ -36,6 +36,17 @@ const IC_CHEV = svgi('<path d="M9 5l7 7-7 7"/>', 16);
 const IC_BACK = svgi('<path d="M15 5l-7 7 7 7"/>', 18);
 const AVA = (cls = ''): string => '<span class="mp__ava ' + cls + '" data-ava><img alt="" hidden><b></b></span>';
 
+// Gaya UI (Default / Flat): kartu pilihan terlihat jelas. Build full: di halaman Profil; build lain (tanpa halaman Profil): di Pengaturan.
+const UISTYLE_CARD =
+  '<div class="mp__card mp__item mp__set" style="--i:4" data-uistyle-card>' +
+    '<div class="mp__sub"><span>Gaya UI</span></div>' +
+    '<div class="mp__seg" role="radiogroup" aria-label="Gaya UI">' +
+      '<button type="button" class="mp__segbtn" role="radio" data-uistyle="soft">Default</button>' +
+      '<button type="button" class="mp__segbtn" role="radio" data-uistyle="flat">Flat</button>' +
+    '</div>' +
+    '<p class="mp__hint">Flat: sudut lancip, tanpa glow, warna terang (channel mixer, playlist, dan grid).</p>' +
+  '</div>';
+
 // Kartu profil di atas daftar kategori + halaman Profil (hanya build full; di build lain string ini kosong)
 const PROFILE_CAT = FULL
   ? '<button type="button" class="mp__cat mp__profcat mp__item" style="--i:1" data-go="profile" aria-label="Profil">' + AVA() + '<span class="mp__cat__t"><b data-pname>Akun</b><small data-pmail>Lihat &amp; ubah profil</small></span>' + IC_CHEV + '</button>'
@@ -56,7 +67,8 @@ const PROFILE_PAGE = FULL
       '<div class="mp__card mp__item" style="--i:3">' +
         '<div class="mp__sub"><span>Email</span></div><p class="mp__hint" data-pemail style="word-break:break-all"></p>' +
       '</div>' +
-      '<div class="mp__card mp__item" style="--i:4">' +
+      UISTYLE_CARD +
+      '<div class="mp__card mp__item" style="--i:5">' +
         '<button type="button" class="mp__prim mp__prim--bad" data-signout>Keluar dari akun</button>' +
         '<p class="mp__hint" style="margin-top:8px">Keluar juga mengosongkan salinan offline di perangkat ini. Slot perangkat tidak dibebaskan.</p>' +
       '</div>' +
@@ -145,15 +157,7 @@ export function initMenuPanel(): MenuPanel {
               '<button type="button" class="mp__segbtn" role="radio" data-theme="jembut"><i class="mp__sw mp__sw--tjembut"></i>Jembut</button>' +
             '</div>' +
           '</div>' +
-          // Gaya UI (bentuk sudut): tersembunyi, dibuka dengan menahan judul "Menu" di bagian atas panel
-          '<div class="mp__card mp__item mp__set" style="--i:2" data-uistyle-card hidden>' +
-            '<div class="mp__sub"><span>Gaya UI</span></div>' +
-            '<div class="mp__seg" role="radiogroup" aria-label="Gaya UI">' +
-              '<button type="button" class="mp__segbtn" role="radio" data-uistyle="soft">Default</button>' +
-              '<button type="button" class="mp__segbtn" role="radio" data-uistyle="flat">Flat</button>' +
-            '</div>' +
-            '<p class="mp__hint">Flat: sudut lancip, tanpa glow, warna terang. Tahap 1: baru di channel mixer.</p>' +
-          '</div>' +
+          (FULL ? '' : UISTYLE_CARD) +
           '<div class="mp__card mp__item mp__set" style="--i:2">' +
             '<div class="mp__sub"><span>Waveform &amp; bar color</span></div>' +
             '<div class="mp__seg" role="radiogroup" aria-label="Waveform & bar color">' +
@@ -275,10 +279,8 @@ export function initMenuPanel(): MenuPanel {
   try { themeSaved = localStorage.getItem(THEME_KEY) || 'default'; } catch { /* abaikan */ }
   setTheme(themeSaved, false);
 
-  // ===== Pengaturan: Gaya UI (atribut data-uistyle di <html>: soft = bawaan, flat = sudut lancip) =====
-  // Kartu pilihannya tersembunyi. Buka/tutup dengan menahan judul "Menu" di bagian atas panel (status buka disimpan).
-  const STYLE_KEY = 'derizmp3.uistyle', STYLE_UNLOCK_KEY = 'derizmp3.uistyle.unlock';
-  const styleCard = panel.querySelector<HTMLElement>('[data-uistyle-card]') as HTMLElement;
+  // ===== Gaya UI (atribut data-uistyle di <html>: soft = Default, flat = sudut lancip). Kartu pilihannya ada di halaman Profil (build full) / Pengaturan (build lain) =====
+  const STYLE_KEY = 'derizmp3.uistyle';
   const styleBtns = [...panel.querySelectorAll<HTMLButtonElement>('[data-uistyle]')];
   const setUiStyle = (v: string, save: boolean): void => {
     const val = v === 'flat' ? 'flat' : 'soft';
@@ -288,46 +290,9 @@ export function initMenuPanel(): MenuPanel {
     if (save) { try { localStorage.setItem(STYLE_KEY, val); } catch { /* penyimpanan diblokir: tetap berlaku sampai halaman ditutup */ } }
   };
   styleBtns.forEach(b => b.addEventListener('click', () => setUiStyle(b.dataset.uistyle as string, true)));
-  let styleSaved = 'soft', styleUnlocked = false;
-  try {
-    styleSaved = localStorage.getItem(STYLE_KEY) || 'soft'; styleUnlocked = localStorage.getItem(STYLE_UNLOCK_KEY) === '1';
-    // cadangan kalau klik-tahan tidak jalan di suatu perangkat: buka aplikasi dengan ?uistyle=buka (atau ?uistyle=tutup untuk menyembunyikan lagi)
-    const uq = new URLSearchParams(location.search).get('uistyle');
-    if (uq === 'buka' || uq === 'tutup') { styleUnlocked = uq === 'buka'; localStorage.setItem(STYLE_UNLOCK_KEY, styleUnlocked ? '1' : '0'); }
-  } catch { /* abaikan */ }
-  styleCard.hidden = !styleUnlocked;
+  let styleSaved = 'soft';
+  try { styleSaved = localStorage.getItem(STYLE_KEY) || 'soft'; } catch { /* abaikan */ }
   setUiStyle(styleSaved, false);
-  // klik-tahan judul di bagian atas panel (± 0,7 detik) = tampilkan / sembunyikan kartu Gaya UI; judul ini bukan tombol, jadi tidak bentrok dengan klik apa pun
-  const setGo = panel.querySelector<HTMLElement>('.mp__title') as HTMLElement;
-  let styleHoldT = 0, styleHoldX = 0, styleHoldY = 0;
-  const styleHoldClear = (): void => { if (styleHoldT) { clearTimeout(styleHoldT); styleHoldT = 0; } };
-  setGo.addEventListener('pointerdown', e => {
-    styleHoldClear(); styleHoldX = e.clientX; styleHoldY = e.clientY;
-    styleHoldT = window.setTimeout(() => {
-      styleHoldT = 0;
-      styleUnlocked = !styleUnlocked;
-      styleCard.hidden = !styleUnlocked;
-      try { localStorage.setItem(STYLE_UNLOCK_KEY, styleUnlocked ? '1' : '0'); } catch { /* abaikan */ }
-      if (navigator.vibrate) { try { navigator.vibrate(18); } catch { /* abaikan */ } }
-      io && io.toast(styleUnlocked ? 'Pilihan Gaya UI dibuka di Pengaturan' : 'Pilihan Gaya UI disembunyikan', 1800);
-    }, 700);
-  });
-  setGo.addEventListener('pointermove', e => { if (styleHoldT && Math.hypot(e.clientX - styleHoldX, e.clientY - styleHoldY) > 10) styleHoldClear(); });
-  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => setGo.addEventListener(ev, styleHoldClear));
-  // di Android, tahan lama memicu menu konteks / seleksi teks bawaan browser yang membatalkan pointer (pointercancel) sebelum 0,7 detik; tahan itu dimatikan di judul ini
-  setGo.addEventListener('contextmenu', e => e.preventDefault());
-
-  // Tombol rahasia pindah Gaya UI (Default <-> Flat): tak terlihat, di pojok kanan-bawah halaman utama Menu (lihat .mp__uisw di styles.css).
-  // Sekali tap langsung ganti gaya, tanpa membuka kartu di Pengaturan. Disembunyikan dari pembaca layar dan tidak ikut urutan Tab.
-  const uiSw = document.createElement('button');
-  uiSw.type = 'button'; uiSw.className = 'mp__uisw'; uiSw.tabIndex = -1; uiSw.setAttribute('aria-hidden', 'true');
-  (panel.querySelector('.mp__panel') as HTMLElement).appendChild(uiSw);
-  uiSw.addEventListener('click', () => {
-    const next = document.documentElement.dataset.uistyle === 'flat' ? 'soft' : 'flat';
-    setUiStyle(next, true);
-    if (navigator.vibrate) { try { navigator.vibrate(18); } catch { /* abaikan */ } }
-    io && io.toast(next === 'flat' ? 'Gaya UI: Flat' : 'Gaya UI: Default', 1500);
-  });
 
   // ===== Pengaturan: Waveform & bar color (disimpan di browser, diterapkan lewat atribut data-wf di <html>) =====
   const WF_KEY = 'derizmp3.wfColor';
