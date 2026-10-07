@@ -1689,14 +1689,14 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .spec{position:fixed;left:0;right:0;bottom:0;z-index:220}
 .spec[hidden]{display:none}
 .spec__win{--accent:#a78bfa;
-  position:relative;display:flex;flex-direction:column;width:100%;height:calc(clamp(140px,24vh,240px) + env(safe-area-inset-bottom,0px));padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box;outline:none;color:#e9e4ff;
+  position:relative;display:flex;flex-direction:column;width:100%;height:calc(clamp(170px,26vh,260px) + env(safe-area-inset-bottom,0px));padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box;outline:none;color:#e9e4ff;
   font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#0e0e14;border-top:1px solid rgba(255,255,255,.14)}
 .spec__stage{position:relative;flex:1;min-height:0}
 .spec__cv{position:absolute;inset:0;display:block;pointer-events:none}
-.spec__ui{position:absolute;left:0;right:0;top:6px;z-index:2;display:flex;align-items:center;gap:6px;padding:0 10px;pointer-events:none}
+.spec__ui{order:-1;flex:none;display:flex;align-items:center;gap:6px;height:34px;padding:0 10px;border-bottom:1px solid rgba(255,255,255,.1)}
 .spec__stat{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#b9b2d6;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
 .spec__bar{display:flex;align-items:center;gap:4px;flex:none}
-.spec__spd,.spec__close{pointer-events:auto;height:24px;padding:0 10px;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:#0e0e14;color:#cfc8ea;font:600 10.5px/1 'Plus Jakarta Sans',system-ui,sans-serif;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.spec__spd,.spec__close{height:24px;padding:0 10px;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:#0e0e14;color:#cfc8ea;font:600 10.5px/1 'Plus Jakarta Sans',system-ui,sans-serif;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .spec__close{display:grid;place-items:center;width:24px;padding:0}
 .spec__spd:hover,.spec__close:hover{color:#fff;border-color:rgba(255,255,255,.7)}
 .spec__spd[aria-pressed="true"]{background:#a78bfa;border-color:#a78bfa;color:#0e0e14}
