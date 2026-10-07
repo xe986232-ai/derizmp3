@@ -145,7 +145,7 @@ export function initMenuPanel(): MenuPanel {
               '<button type="button" class="mp__segbtn" role="radio" data-theme="jembut"><i class="mp__sw mp__sw--tjembut"></i>Jembut</button>' +
             '</div>' +
           '</div>' +
-          // Gaya UI (bentuk sudut): tersembunyi, dibuka dengan menahan teks "Pengaturan" di menu utama
+          // Gaya UI (bentuk sudut): tersembunyi, dibuka dengan menahan judul "Menu" di bagian atas panel
           '<div class="mp__card mp__item mp__set" style="--i:2" data-uistyle-card hidden>' +
             '<div class="mp__sub"><span>Gaya UI</span></div>' +
             '<div class="mp__seg" role="radiogroup" aria-label="Gaya UI">' +
@@ -276,7 +276,7 @@ export function initMenuPanel(): MenuPanel {
   setTheme(themeSaved, false);
 
   // ===== Pengaturan: Gaya UI (atribut data-uistyle di <html>: soft = bawaan, flat = sudut lancip) =====
-  // Kartu pilihannya tersembunyi. Buka/tutup dengan menahan teks "Pengaturan" di menu utama (status buka disimpan).
+  // Kartu pilihannya tersembunyi. Buka/tutup dengan menahan judul "Menu" di bagian atas panel (status buka disimpan).
   const STYLE_KEY = 'derizmp3.uistyle', STYLE_UNLOCK_KEY = 'derizmp3.uistyle.unlock';
   const styleCard = panel.querySelector<HTMLElement>('[data-uistyle-card]') as HTMLElement;
   const styleBtns = [...panel.querySelectorAll<HTMLButtonElement>('[data-uistyle]')];
@@ -297,8 +297,8 @@ export function initMenuPanel(): MenuPanel {
   } catch { /* abaikan */ }
   styleCard.hidden = !styleUnlocked;
   setUiStyle(styleSaved, false);
-  // klik-tahan teks "Pengaturan" (± 0,7 detik) = tampilkan / sembunyikan kartu Gaya UI; lepas jari tetap membuka halaman Pengaturan seperti biasa
-  const setGo = panel.querySelector<HTMLElement>('[data-go="settings"]') as HTMLElement;
+  // klik-tahan judul di bagian atas panel (± 0,7 detik) = tampilkan / sembunyikan kartu Gaya UI; judul ini bukan tombol, jadi tidak bentrok dengan klik apa pun
+  const setGo = panel.querySelector<HTMLElement>('.mp__title') as HTMLElement;
   let styleHoldT = 0, styleHoldX = 0, styleHoldY = 0;
   const styleHoldClear = (): void => { if (styleHoldT) { clearTimeout(styleHoldT); styleHoldT = 0; } };
   setGo.addEventListener('pointerdown', e => {
@@ -314,7 +314,7 @@ export function initMenuPanel(): MenuPanel {
   });
   setGo.addEventListener('pointermove', e => { if (styleHoldT && Math.hypot(e.clientX - styleHoldX, e.clientY - styleHoldY) > 10) styleHoldClear(); });
   ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => setGo.addEventListener(ev, styleHoldClear));
-  // di Android, tahan lama memicu menu konteks / seleksi teks bawaan browser yang membatalkan pointer (pointercancel) sebelum 0,7 detik; tahan itu dimatikan di tombol ini
+  // di Android, tahan lama memicu menu konteks / seleksi teks bawaan browser yang membatalkan pointer (pointercancel) sebelum 0,7 detik; tahan itu dimatikan di judul ini
   setGo.addEventListener('contextmenu', e => e.preventDefault());
 
   // ===== Pengaturan: Waveform & bar color (disimpan di browser, diterapkan lewat atribut data-wf di <html>) =====

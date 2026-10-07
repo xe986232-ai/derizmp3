@@ -2300,5 +2300,5 @@ body.is-pdragging,body.is-pdragging *{cursor:grabbing!important;user-select:none
 
 /* Gaya UI "Flat" dipindah ke src/flat-ui.css (token warna --flat-* terpisah dari token default di file ini) */
 
-/* tombol Pengaturan di Menu dipakai untuk klik-tahan (buka/tutup Gaya UI): matikan seleksi teks dan callout bawaan browser saat ditahan */
-.mp__cat[data-go="settings"]{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+/* judul panel Menu dipakai untuk klik-tahan (buka/tutup Gaya UI): area tahan selebar header, tanpa seleksi teks / callout bawaan browser */
+.mp__title{flex:1;align-self:stretch;display:flex;align-items:center;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
