@@ -107,7 +107,7 @@ export function initMenuPanel(): MenuPanel {
             '<p class="mp__hint">Ketuk: simpan sebagai project baru.<br>Tahan: simpan perubahan ke project yang sedang dibuka.</p>' +
           '</div>' +
           '<div class="mp__card mp__item" style="--i:2">' +
-            '<div class="mp__sub"><span>File project</span><button type="button" class="mp__imp" data-impjson>Buka .json</button></div>' +
+            '<div class="mp__sub"><span>File project</span><button type="button" class="mp__imp" data-impjson>Import project</button></div>' +
             '<ul class="mp__files"></ul><p class="mp__hint mp__empty">Belum ada project tersimpan.</p>' +
             '<input type="file" class="mp__impfile" hidden>' +
           '</div>' +
