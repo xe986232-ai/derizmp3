@@ -52,7 +52,7 @@ export class SpectrumStyle2 {
   private col: ImageData | null = null; private rows = new Float32Array(0); private prevRows = new Float32Array(0); private haveRows = false;
   private rowMap: BandMap | null = null; private sgAcc = 0;
   // waveform
-  private wAmp = new Float32Array(0); private wRgb = new Uint8Array(0); private wHead = 0; private wAcc = 0; private wLast = 0;
+  private wAmp = new Float32Array(0); private wRms = new Float32Array(0); private wRgb = new Uint8Array(0); private wHead = 0; private wAcc = 0; private wLast = 0; private wLastR = 0;
   private wGain = new AutoGain(6); private wEnergy: BandEnergy = { low: 0, mid: 0, high: 0 }; private wCol: [number, number, number] = [179, 161, 247];
   private wColS: [number, number, number] = [179, 161, 247];
   // peak / LUFS
@@ -105,12 +105,12 @@ export class SpectrumStyle2 {
       if (!this.rowMap || this.rowMap.n !== H || this.rowMap.sr !== this.sr || this.rowMap.bins !== this.bins) this.rowMap = new BandMap(H, this.bins, this.sr, 3);
     }
     const wv = this.rect('wave');
-    if (wv) { const w = Math.max(8, wv.w); if (this.wAmp.length !== w) { this.wAmp = new Float32Array(w); this.wRgb = new Uint8Array(w * 3); this.wHead = 0; } }
+    if (wv) { const w = Math.max(8, wv.w); if (this.wAmp.length !== w) { this.wAmp = new Float32Array(w); this.wRms = new Float32Array(w); this.wRgb = new Uint8Array(w * 3); this.wHead = 0; } }
     const sm = this.rect('stereo');
     if (sm) { if (this.st.width !== sm.w || this.st.height !== H) { this.st.width = sm.w; this.st.height = H; } }
     const br = this.rect('bars');
     if (br) {
-      const nb = clamp(Math.floor(br.w / 7), 14, 56);
+      const nb = clamp(Math.round(br.w / 3), 40, 140);
       if (!this.barMap || this.barMap.n !== nb || this.barMap.sr !== this.sr || this.barMap.bins !== this.bins) this.barMap = new BandMap(nb, this.bins, this.sr, 4);
       if (this.target.length !== nb) { this.target = new Float32Array(nb); this.bars.resize(nb); }
     }
@@ -122,7 +122,7 @@ export class SpectrumStyle2 {
   reset(): void {
     this.bars.reset(); this.target.fill(0); this.haveRows = false; this.sgAcc = 0; this.readout = ''; this.readAge = 99;
     if (this.sg.width) this.clearSg();
-    this.wAmp.fill(0); this.wHead = 0; this.wAcc = 0; this.wLast = 0; this.wGain.reset();
+    this.wAmp.fill(0); this.wRms.fill(0); this.wHead = 0; this.wAcc = 0; this.wLast = 0; this.wLastR = 0; this.wGain.reset();
     this.lm?.reset(); this.pkL = this.pkR = this.holdL = this.holdR = 0; this.lufs = -Infinity;
     this.gn = 0; this.corr = this.corrS = 0; this.gGain.reset(); if (this.st.width) this.stx.clearRect(0, 0, this.st.width, this.st.height);
   }
@@ -163,23 +163,27 @@ export class SpectrumStyle2 {
       }
     }
 
-    // waveform multi-band: satu kolom per px; amplitudenya puncak sampel sejak kolom lalu, warnanya dari energi frekuensi (dihaluskan)
+    // waveform multi-band: satu kolom per px. Tiap kolom = puncak (selubung) + RMS (badan); nilai diinterpolasi dari frame lalu ke frame ini
+    // supaya tidak bertangga, dan warnanya dari energi frekuensi (dihaluskan)
     if (this.wAmp.length) {
       const pk = peakAbs(inp.mono, n);
+      let sq = 0; for (let i = Math.max(0, inp.mono.length - n); i < inp.mono.length; i++) sq += inp.mono[i] * inp.mono[i];
+      const rms = Math.sqrt(sq / n);
       this.wGain.update(pk, dt);
       bandEnergies(inp.db, inp.sr, this.wEnergy); waveRGB(this.wEnergy, this.wCol);
-      const ks = 1 - Math.exp(-dt / 0.06); for (let i = 0; i < 3; i++) this.wColS[i] += (this.wCol[i] - this.wColS[i]) * ks;
+      const ks = 1 - Math.exp(-dt / 0.08); for (let i = 0; i < 3; i++) this.wColS[i] += (this.wCol[i] - this.wColS[i]) * ks;
+      const curPk = Math.max(pk, this.wLast * Math.exp(-dt / 0.07)), curRms = Math.max(rms, this.wLastR * Math.exp(-dt / 0.1));   // naik seketika, turun halus
       this.wAcc += dt * pps;
       const k = Math.min(Math.floor(this.wAcc), this.wAmp.length);
       if (k > 0) {
         this.wAcc -= Math.floor(this.wAcc);
-        const colDt = dt / k;
         for (let c = 0; c < k; c++) {
-          const v = Math.max(pk, this.wLast * Math.exp(-colDt / 0.07));   // naik seketika, turun halus
-          this.wLast = v;
-          const i = this.wHead; this.wAmp[i] = v; this.wRgb[i * 3] = this.wColS[0]; this.wRgb[i * 3 + 1] = this.wColS[1]; this.wRgb[i * 3 + 2] = this.wColS[2];
+          const t = (c + 1) / k, i = this.wHead;
+          this.wAmp[i] = this.wLast + (curPk - this.wLast) * t; this.wRms[i] = this.wLastR + (curRms - this.wLastR) * t;
+          this.wRgb[i * 3] = this.wColS[0]; this.wRgb[i * 3 + 1] = this.wColS[1]; this.wRgb[i * 3 + 2] = this.wColS[2];
           this.wHead = (this.wHead + 1) % this.wAmp.length;
         }
+        this.wLast = curPk; this.wLastR = curRms;
       }
     }
 
@@ -237,28 +241,38 @@ export class SpectrumStyle2 {
 
   private drawWave(g: CanvasRenderingContext2D, w: number, H: number): void {
     const len = this.wAmp.length; if (!len) return;
-    const mid = H / 2, amp = H / 2 - 7, sc = this.wGain.scale, fw = Math.min(28, w * 0.2);
+    const mid = H / 2, amp = H / 2 - 5, sc = this.wGain.scale, fw = Math.min(28, w * 0.2);
     g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(0, Math.round(mid), w, 1);
     const off = Math.max(0, len - w);   // kolom lebih lama dari lebar modul tidak digambar
     for (let x = 0; x < Math.min(w, len); x++) {
-      const i = (this.wHead + off + x) % len, a = this.wAmp[i];
-      const h = Math.max(0.5, shape(a * sc) * amp);
-      g.globalAlpha = x < fw ? x / fw : 1;
-      g.fillStyle = `rgb(${this.wRgb[i * 3]},${this.wRgb[i * 3 + 1]},${this.wRgb[i * 3 + 2]})`;
-      g.fillRect(x, mid - h, 1, h * 2);
+      const i = (this.wHead + off + x) % len, fade = x < fw ? x / fw : 1;
+      const h1 = Math.max(0.6, shape(this.wAmp[i] * sc) * amp), h2 = Math.min(h1, Math.max(0.5, shape(this.wRms[i] * sc * 1.25) * amp));
+      const rgb = `${this.wRgb[i * 3]},${this.wRgb[i * 3 + 1]},${this.wRgb[i * 3 + 2]}`;
+      g.fillStyle = `rgba(${rgb},${0.30 * fade})`; g.fillRect(x, mid - h1, 1, h1 * 2);   // selubung puncak: tipis, transparan
+      g.fillStyle = `rgba(${rgb},${0.95 * fade})`; g.fillRect(x, mid - h2, 1, h2 * 2);   // badan RMS: pekat
     }
-    g.globalAlpha = 1;
   }
 
   private drawLevel(g: CanvasRenderingContext2D, w: number, H: number): void {
-    const cx = w / 2, dL = ampToDb(this.pkL), dR = ampToDb(this.pkR);
-    const lufsTxt = Number.isFinite(this.lufs) ? this.lufs.toFixed(1) : '−∞';
-    g.textBaseline = 'top'; g.textAlign = 'center';
-    g.font = FONT; g.fillStyle = 'rgba(255,255,255,.45)'; g.fillText('LUFS', cx, 3);
-    g.font = FONT_BIG; g.fillStyle = 'rgba(255,255,255,.92)'; g.fillText(lufsTxt, cx, 13);
-    const pkMax = Math.max(this.holdL, this.holdR);
-    g.font = FONT; g.fillStyle = pkMax > -1 ? '#ff6b81' : 'rgba(255,255,255,.55)'; g.fillText('pk ' + (pkMax > -100 ? pkMax.toFixed(1) : '−∞'), cx, 29);
-    const top = 44, base = H - PAD_B, ah = base - top; if (ah < 12) { g.textAlign = 'left'; return; }
+    const cx = w / 2, dL = ampToDb(this.pkL), dR = ampToDb(this.pkR), compact = H < 100;
+    const val = Number.isFinite(this.lufs) ? this.lufs.toFixed(1) : '−∞';
+    g.textBaseline = 'top';
+    let top: number;
+    if (compact) {   // strip rendah (sama tinggi dengan Gaya 1): satu baris "−8.0 LU", batang di bawahnya
+      g.font = FONT_BIG; const wn = g.measureText(val).width; g.font = FONT; const wu = g.measureText('LU').width, x0 = cx - (wn + 3 + wu) / 2;
+      g.textAlign = 'left'; g.font = FONT_BIG; g.fillStyle = 'rgba(255,255,255,.92)'; g.fillText(val, x0, 2);
+      g.font = FONT; g.fillStyle = 'rgba(255,255,255,.45)'; g.fillText('LU', x0 + wn + 3, 5);
+      top = 19;
+    } else {
+      g.textAlign = 'center';
+      g.font = FONT; g.fillStyle = 'rgba(255,255,255,.45)'; g.fillText('LUFS', cx, 3);
+      g.font = FONT_BIG; g.fillStyle = 'rgba(255,255,255,.92)'; g.fillText(val, cx, 13);
+      const pkMax = Math.max(this.holdL, this.holdR);
+      g.font = FONT; g.fillStyle = pkMax > -1 ? '#ff6b81' : 'rgba(255,255,255,.55)'; g.fillText('pk ' + (pkMax > -100 ? pkMax.toFixed(1) : '−∞'), cx, 29);
+      top = 44;
+    }
+    g.textAlign = 'left';
+    const base = H - PAD_B, ah = base - top; if (ah < 10) return;
     const bw = clamp(Math.floor((w - 24) / 2), 6, 14), gp = 5, x0 = Math.round(cx - bw - gp / 2);
     const grad = g.createLinearGradient(0, base, 0, top);
     grad.addColorStop(0, '#3a2a8a'); grad.addColorStop(0.62, '#9d86ee'); grad.addColorStop(0.86, '#7ee2f0'); grad.addColorStop(1, '#ff6b81');
@@ -269,11 +283,10 @@ export class SpectrumStyle2 {
       if (hd > 0.01) { g.fillStyle = 'rgba(255,250,234,.95)'; g.fillRect(x, base - hd * ah - 1, bw, 1.5); }
     }
     g.fillStyle = 'rgba(255,255,255,.18)'; for (const db of [-6, -18, -36]) g.fillRect(x0 - 4, Math.round(base - dbToMeter(db) * ah), 2 * bw + gp + 8, 1);   // garis bantu -6 / -18 / -36 dBFS
-    g.textAlign = 'left';
   }
 
   private drawStereo(g: CanvasRenderingContext2D, w: number, H: number): void {
-    const corrH = 10, areaH = H - corrH - 8, R = Math.max(10, Math.min(w / 2 - 4, areaH / 2)), cx = w / 2, cy = 4 + areaH / 2;
+    const corrH = 8, areaH = H - corrH - 6, R = Math.max(10, Math.min(w / 2 - 4, areaH / 2)), cx = w / 2, cy = 4 + areaH / 2;
     // bingkai: belah ketupat (sumbu L/R diputar 45°) + sumbu tengah
     g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 1;
     g.beginPath(); g.moveTo(cx, cy - R); g.lineTo(cx + R, cy); g.lineTo(cx, cy + R); g.lineTo(cx - R, cy); g.closePath(); g.stroke();
@@ -308,21 +321,35 @@ export class SpectrumStyle2 {
     g.lineJoin = 'round'; g.lineWidth = 1.5; g.strokeStyle = '#f4f0ff'; g.stroke();
   }
 
+  // kurva area halus (Catmull-Rom) dengan gradasi, garis tipis di tepi atas, dan garis puncak redup; sumbu frekuensi log
   private drawBars(g: CanvasRenderingContext2D, w: number, H: number): void {
-    const nb = this.bars.n; if (nb < 1) return;
-    const top = 14, base = H - PAD_B, ah = base - top, step = w / nb, bw = Math.max(2, step * 0.66), r = bw / 2;
+    const nb = this.bars.n; if (nb < 2) return;
+    const top = 14, base = H - PAD_B, ah = base - top, dx = w / nb;
     g.fillStyle = 'rgba(255,255,255,.06)';
-    for (const q of [0.25, 0.5, 0.75]) g.fillRect(0, Math.round(base - q * ah), w, 1);
-    const grad = g.createLinearGradient(0, base, 0, top);
-    grad.addColorStop(0, '#3a2a8a'); grad.addColorStop(0.45, '#9d86ee'); grad.addColorStop(0.8, '#7ee2f0'); grad.addColorStop(1, '#fffaea');
-    g.fillStyle = grad;
-    const rr = (g as unknown as { roundRect?: (x: number, y: number, w: number, h: number, r: number | number[]) => void }).roundRect;
-    for (let i = 0; i < nb; i++) {
-      const h = Math.max(2, this.bars.level[i] * ah), x = i * step + (step - bw) / 2, y = base - h;
-      if (rr && h > bw) { g.beginPath(); rr.call(g, x, y, bw, h, [r, r, 1, 1]); g.fill(); } else g.fillRect(x, y, bw, h);
+    for (const q of [0.33, 0.66]) g.fillRect(0, Math.round(base - q * ah), w, 1);
+    g.font = FONT; g.textBaseline = 'alphabetic';
+    for (const [hz, label] of TICKS) {   // garis vertikal tipis + label di tepi bawah
+      const x = Math.round(hzToPos(hz) * w) + 0.5;
+      g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(x - 0.5, top, 1, ah);
+      g.fillStyle = 'rgba(255,255,255,.35)'; g.fillText(label, x + 3, base - 2);
     }
-    g.fillStyle = 'rgba(255,250,234,.9)';
-    for (let i = 0; i < nb; i++) { const p = this.bars.peak[i]; if (p < 0.02) continue; g.fillRect(i * step + (step - bw) / 2, base - p * ah - 3, bw, 1.5); }
+    const curve = (arr: Float32Array, closeDown: boolean): void => {
+      const X = (i: number): number => (i + 0.5) * dx, Y = (i: number): number => base - clamp(arr[clamp(i, 0, nb - 1)], 0, 1) * ah;
+      g.beginPath();
+      if (closeDown) { g.moveTo(0, base); g.lineTo(0, Y(0)); } else g.moveTo(X(0), Y(0));
+      for (let i = 0; i < nb - 1; i++) {
+        const x0 = X(i - 1), y0 = Y(i - 1), x1 = X(i), y1 = Y(i), x2 = X(i + 1), y2 = Y(i + 1), x3 = X(i + 2), y3 = Y(i + 2);
+        g.bezierCurveTo(x1 + (x2 - x0) / 6, Math.min(base, y1 + (y2 - y0) / 6), x2 - (x3 - x1) / 6, Math.min(base, y2 - (y3 - y1) / 6), x2, y2);
+      }
+      if (closeDown) { g.lineTo(w, Y(nb - 1)); g.lineTo(w, base); g.closePath(); }
+    };
+    const fill = g.createLinearGradient(0, base, 0, top);
+    fill.addColorStop(0, 'rgba(58,42,138,.10)'); fill.addColorStop(0.5, 'rgba(157,134,238,.45)'); fill.addColorStop(0.85, 'rgba(126,226,240,.70)'); fill.addColorStop(1, 'rgba(255,250,234,.85)');
+    curve(this.bars.level, true); g.fillStyle = fill; g.fill();
+    const line = g.createLinearGradient(0, base, 0, top);
+    line.addColorStop(0, '#6a55d0'); line.addColorStop(0.5, '#b3a1f7'); line.addColorStop(0.85, '#7ee2f0'); line.addColorStop(1, '#fffaea');
+    curve(this.bars.level, false); g.lineJoin = 'round'; g.lineWidth = 1.4; g.strokeStyle = line; g.stroke();
+    curve(this.bars.peak, false); g.lineWidth = 1; g.strokeStyle = 'rgba(255,250,234,.32)'; g.stroke();   // garis puncak redup (penahan + jatuh)
     if (this.readout) { g.font = FONT; g.textBaseline = 'top'; g.textAlign = 'right'; g.fillStyle = 'rgba(255,255,255,.7)'; g.fillText(this.readout, w - 6, 2); g.textAlign = 'left'; }
   }
 }

@@ -23,7 +23,7 @@ const mkCtx = (): unknown => new Proxy({}, {
 
 const { SpectrumStyle2, FFT2 } = await import('../src/spectrum2.ts') as typeof import('../src/spectrum2');
 
-const SR = 48000, BINS = FFT2 / 2, H = 120;
+const SR = 48000, BINS = FFT2 / 2;
 const db = new Float32Array(BINS).fill(-100);
 for (let k = 0; k < BINS; k++) { const hz = (k * SR) / FFT2; db[k] = -30 - 20 * Math.log10(1 + hz / 200); }   // spektrum miring seperti musik
 db[Math.round(440 / (SR / FFT2))] = -12;
@@ -33,19 +33,19 @@ for (let i = 0; i < 2048; i++) { l[i] = 0.5 * Math.sin((2 * Math.PI * 440 * i) /
 for (let i = 0; i < trace.length; i++) trace[i] = 0.5 * Math.sin((i / trace.length) * 2 * Math.PI * 3);
 
 const mins: Record<string, number> = { sgram: 110, wave: 96, level: 50, stereo: 72, scope: 90, bars: 130 };
-for (const W of [260, 320, 420, 568, 700, 844, 1000, 1400]) {
+for (const [W, H] of [[260, 64], [320, 64], [420, 64], [568, 64], [700, 64], [844, 64], [888, 64], [1000, 100], [1400, 100], [700, 120]] as [number, number][]) {
   const s = new SpectrumStyle2();
   let err = '';
   try {
     s.layout(W, H, SR, BINS);
     const rects = (s as unknown as { rects: { k: string; x: number; w: number }[] }).rects;
-    ok(rects.length >= 1, `W=${W}: ada modul (${rects.map(r => r.k).join(', ')})`);
+    ok(rects.length >= 1, `W=${W} H=${H}: ada modul (${rects.map(r => r.k).join(', ')})`);
     ok(rects.some(r => r.k === 'bars') || W < 130, `  analyzer selalu dipertahankan saat muat`);
     let prevEnd = -Infinity, good = true;
     for (const r of rects) { if (r.x < prevEnd || r.x < 0 || r.x + r.w > W + 1 || r.w < mins[r.k] - 1) good = false; prevEnd = r.x + r.w; }
     ok(good, `  tanpa tumpang tindih, di dalam layar, lebar >= minimum`);
     const st = rects.find(r => r.k === 'stereo'); if (st) ok(st.w <= Math.max(72, H * 1.15) + 1, `  stereometer tidak terlalu lebar (${st.w}px)`);
-    if (W >= 1000) ok(rects.length === 6, `  layar lebar: keenam modul tampil`);
+    if (W >= 888) ok(rects.length === 6, `  layar lebar: keenam modul tampil`);
     // jalankan 90 frame (1,5 detik) + gambar
     const g = mkCtx() as CanvasRenderingContext2D;
     for (let f = 0; f < 90; f++) { s.update({ db, mono, l, r, sr: SR, newSamples: 800, trace, traceOk: true, traceScale: 1 }, 1 / 60, 170); s.draw(g); }
@@ -56,7 +56,7 @@ for (const W of [260, 320, 420, 568, 700, 844, 1000, 1400]) {
     if (rects.some(r => r.k === 'wave')) ok(Math.max(...sx.wAmp) > 0.4, `  waveform terisi (maks ${Math.max(...sx.wAmp).toFixed(2)})`);
     s.reset(); s.draw(g);
   } catch (e) { err = String((e as Error).stack || e); }
-  ok(err === '', `W=${W}: layout/update/draw/reset tanpa error${err ? '\n' + err : ''}`);
+  ok(err === '', `W=${W} H=${H}: layout/update/draw/reset tanpa error${err ? '\n' + err : ''}`);
 }
 
 // ubah ukuran berulang kali + sample rate lain tidak boleh error
@@ -65,6 +65,7 @@ for (const W of [260, 320, 420, 568, 700, 844, 1000, 1400]) {
   try {
     const g = mkCtx() as CanvasRenderingContext2D;
     for (const [W, sr] of [[900, 48000], [300, 44100], [1200, 96000], [640, 48000]] as [number, number][]) {
+      const H = 64;
       s.layout(W, H, sr, BINS); for (let f = 0; f < 10; f++) { s.update({ db, mono, l, r, sr, newSamples: 700, trace, traceOk: false, traceScale: 1 }, 1 / 60, 90); s.draw(g); }
     }
   } catch (e) { err = String((e as Error).stack || e); }

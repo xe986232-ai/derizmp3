@@ -135,8 +135,10 @@ export function bandEnergies(db: Float32Array, sr: number, out: BandEnergy): voi
 }
 const C_LOW: [number, number, number] = [255, 107, 129], C_MID: [number, number, number] = [179, 161, 247], C_HIGH: [number, number, number] = [126, 226, 240];   // koral, lavender, cyan
 export function waveRGB(e: BandEnergy, out: [number, number, number] = [0, 0, 0]): [number, number, number] {
-  const wl = e.low * e.low, wm = e.mid * e.mid, wh = e.high * e.high, s = wl + wm + wh;
-  if (s < 1e-6) { out[0] = C_MID[0]; out[1] = C_MID[1]; out[2] = C_MID[2]; return out; }
+  // bobot relatif terhadap rentang terkuat, dipangkatkan 3: rentang yang jelas dominan mewarnai kolom, yang seimbang bercampur
+  const mx = Math.max(e.low, e.mid, e.high);
+  if (mx < 0.02) { out[0] = C_MID[0]; out[1] = C_MID[1]; out[2] = C_MID[2]; return out; }
+  const wl = Math.pow(e.low / mx, 3), wm = Math.pow(e.mid / mx, 3), wh = Math.pow(e.high / mx, 3), s = wl + wm + wh;
   for (let i = 0; i < 3; i++) out[i] = (C_LOW[i] * wl + C_MID[i] * wm + C_HIGH[i] * wh) / s;
   return out;
 }
