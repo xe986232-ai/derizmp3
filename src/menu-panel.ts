@@ -607,6 +607,46 @@ export function initMenuPanel(): MenuPanel {
   onIo = () => { void refresh(); };
   void refresh();
 
+  // ===== Animasi buka project: putar (memuat) -> centang hijau (terbuka) / silang merah + pesan (gagal) =====
+  const ld = document.createElement('div');
+  ld.className = 'ldov'; ld.hidden = true;
+  ld.innerHTML =
+    '<div class="ldov__card" role="status" aria-live="polite">' +
+      '<svg class="ldov__svg" viewBox="0 0 48 48" aria-hidden="true"><circle class="ldov__c" cx="24" cy="24" r="20"/>' +
+      '<path class="ldov__ok" d="M14 25l7 7 13-15"/><path class="ldov__no" d="M17 17l14 14M31 17L17 31"/></svg>' +
+      '<b class="ldov__t"></b><small class="ldov__s"></small>' +
+      '<button type="button" class="svov__btn ldov__x" hidden>Tutup</button>' +
+    '</div>';
+  document.body.appendChild(ld);
+  const ldT = ld.querySelector('.ldov__t') as HTMLElement, ldS = ld.querySelector('.ldov__s') as HTMLElement, ldX = ld.querySelector('.ldov__x') as HTMLButtonElement;
+  let ldBusy = false, ldTimer = 0;
+  const ldSet = (st: 'load' | 'ok' | 'err', t: string, sub = ''): void => {
+    ld.className = 'ldov ldov--' + st; ld.hidden = false;
+    ldT.textContent = t; ldS.textContent = sub; ldX.hidden = st !== 'err';
+  };
+  const ldClose = (): void => { clearTimeout(ldTimer); ld.hidden = true; ldBusy = false; };
+  ldX.addEventListener('click', ldClose);
+  ld.addEventListener('pointerdown', e => { if (e.target === ld && ld.classList.contains('ldov--err')) ldClose(); });
+  // Jalankan pembukaan project dengan animasi. fn melempar error kalau gagal. true = terbuka.
+  const runOpen = async (label: string, fn: () => Promise<void>): Promise<boolean> => {
+    if (ldBusy) return false;
+    ldBusy = true; clearTimeout(ldTimer);
+    ldSet('load', 'Membuka project…', label);
+    const t0 = performance.now();
+    try {
+      await fn();
+      const wait = 400 - (performance.now() - t0);   // minimal tampil sebentar supaya animasi tidak berkedip
+      if (wait > 0) await new Promise(r => setTimeout(r, wait));
+      ldSet('ok', 'Project terbuka', label);
+      ldTimer = window.setTimeout(ldClose, 800);
+      return true;
+    } catch (err) {
+      console.error(err);
+      ldSet('err', 'Project gagal dibuka', (err instanceof Error && err.message ? err.message : 'tidak diketahui') + ' (' + label + ')');
+      return false;
+    }
+  };
+
   // ===== Cadangan ke folder pilihan user (TAMBAHAN; IndexedDB tetap penyimpanan utama) =====
   const fcard = panel.querySelector('.mp__fcard') as HTMLElement;
   const fstat = fcard.querySelector('.mp__fstat') as HTMLElement;
@@ -710,11 +750,12 @@ export function initMenuPanel(): MenuPanel {
     const name = li.dataset.n as string, act = btn.dataset.fact;
     try {
       if (act === 'open') {
-        say('Membuka ' + name + ' dari folder…', 0);
-        const rec = await loadFromFolder(name);
-        if (!rec) { say('Project tidak terbaca dari folder (cek izin folder)', 3500); void refreshFolder(); return; }
-        await io.restore(rec); curName = name;
-        say('Dibuka dari folder: ' + name + '. Tekan SAVE untuk menyimpan ke browser.', 4000); apply(false, true);
+        const ok = await runOpen(name + ' (dari folder)', async () => {
+          const rec = await loadFromFolder(name);
+          if (!rec) { void refreshFolder(); throw new Error('tidak terbaca dari folder, cek izin folder'); }
+          await io!.restore(rec); curName = name;
+        });
+        if (ok) { say('Dibuka dari folder. Tekan SAVE untuk menyimpan ke browser.', 3500); apply(false, true); }
       } else if (act === 'keep') {
         if ((await projectExists(name).catch(() => false)) && btn.dataset.sure !== '1') {   // nama sudah ada di browser: ketuk dua kali untuk menimpa
           btn.dataset.sure = '1'; btn.classList.add('is-sure'); btn.title = 'Sudah ada di browser. Ketuk lagi untuk menimpa';
@@ -884,11 +925,12 @@ export function initMenuPanel(): MenuPanel {
     const name = li.dataset.n as string, act = btn.dataset.act;
     try {
       if (act === 'open') {
-        say('Membuka ' + name + '…', 0);
-        const rec = await loadProject(name);
-        if (!rec) { say('File tidak ditemukan'); return; }
-        await io.restore(rec); curName = name;
-        say('Project dibuka: ' + name); apply(false, true);
+        const ok = await runOpen(name, async () => {
+          const rec = await loadProject(name);
+          if (!rec) throw new Error('file project tidak ditemukan');
+          await io!.restore(rec); curName = name;
+        });
+        if (ok) apply(false, true);
       } else if (act === 'dl') {
         const rec = await loadProject(name); if (rec) download(name, await recordToJson(rec));
       } else if (act === 'del') {
@@ -906,13 +948,13 @@ export function initMenuPanel(): MenuPanel {
   impFile.addEventListener('change', async () => {
     const f = impFile.files && impFile.files[0]; impFile.value = '';
     if (!f || !io) return;
-    try {
+    const ok = await runOpen(f.name, async () => {
       const rec = await jsonToRecord(await f.text());
       await saveProject(rec); await refresh();
       void mirror(rec);
-      await io.restore(rec); curName = rec.name;
-      say('Project dibuka: ' + rec.name); apply(false, true);
-    } catch (err) { console.error(err); say('Gagal membuka file: ' + (err instanceof Error ? err.message : 'tidak valid')); }
+      await io!.restore(rec); curName = rec.name;
+    });
+    if (ok) apply(false, true);
   });
 
   apply(false, false);
