@@ -907,6 +907,12 @@ button:focus:not(:focus-visible),[role="button"]:focus:not(:focus-visible),[role
 .pr__mtoggle[aria-checked="true"] .pr__sw{background:#4ade80;box-shadow:0 0 8px 1px rgba(74,222,128,.55),inset 0 -1px 0 rgba(0,0,0,.2)}
 .pr__mtoggle[aria-checked="true"] .pr__sw::after{transform:translateX(14px)}
 .pr__mtoggle[aria-checked="true"]:active .pr__sw::after{transform:translateX(10px)}
+/* menu Step (ukuran snap / panjang nada) */
+.pr__mval{margin-left:auto;font-style:normal;font-size:12px;color:var(--muted)}
+.pr__mval + .track-menu__chev{margin-left:2px}
+.pr-snapcard{min-width:150px;max-height:calc(100vh - 16px);max-height:calc(100dvh - 16px);overflow-y:auto;overscroll-behavior:contain}
+.pr-snapcard .track-menu__item{height:38px}
+.pr__snapitem[aria-checked="true"]{background:rgba(255,255,255,.16);font-weight:600}
 @media (prefers-reduced-motion:reduce){.pr__more svg,.pr__sw,.pr__sw::after{transition:none!important}}
 
 /* area utama: penggaris atas, piano kiri, grid (scroll native) */

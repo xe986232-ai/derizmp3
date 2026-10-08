@@ -101,9 +101,28 @@ function resetAnim() { born.clear(); ghosts = []; rel = null; lastSel = new Set(
 const snapshot = () => JSON.stringify(st.notes);
 // langkah snap = garis grid paling halus yang sedang tampil (ikut zoom), jadi note menempel ke semua garis grid
 const gridStep = () => { let s = LEVELS[0][0]; for (const [st] of LEVELS) if (st * ppb >= 11) s = st; return s; };
-const unit = () => (snapOn ? gridStep() : 1 / 16);
-const snapRound = (b: number) => { if (!snapOn) return b; const s = gridStep(); return Math.round(b / s) * s; };
-const snapFloor = (b: number) => { if (!snapOn) return b; const s = gridStep(); return Math.floor(b / s + 1e-9) * s; };
+// Menu Step (titik tiga > Step): ukuran snap / panjang nada. Auto = ikut zoom (perilaku lama); selain itu ukurannya tetap.
+// 1 Step = 1/4 ketukan (1/16 not), 1 Beat = 1 ketukan, 1 Bar = 4 ketukan. Nada diukur dalam ketukan.
+const STEP_BEATS = 0.25;
+const SNAP_SIZES: Array<{id: string; label: string; beats: number | null}> = [
+  {id: 'auto', label: 'Auto', beats: null},
+  {id: 's1/6', label: '1/6 Step', beats: STEP_BEATS / 6}, {id: 's1/4', label: '1/4 Step', beats: STEP_BEATS / 4},
+  {id: 's1/3', label: '1/3 Step', beats: STEP_BEATS / 3}, {id: 's1/2', label: '1/2 Step', beats: STEP_BEATS / 2},
+  {id: 'step', label: 'Step', beats: STEP_BEATS},
+  {id: 'b1/6', label: '1/6 Beat', beats: 1 / 6}, {id: 'b1/4', label: '1/4 Beat', beats: 1 / 4},
+  {id: 'b1/3', label: '1/3 Beat', beats: 1 / 3}, {id: 'b1/2', label: '1/2 Beat', beats: 1 / 2},
+  {id: 'beat', label: 'Beat', beats: 1},
+  {id: 'bar', label: 'Bar', beats: BEATS_PER_BAR},
+];
+export const PR_SNAP_KEY = 'derizmp3.prSnapSize';
+let snapId = (() => { try { const v = localStorage.getItem(PR_SNAP_KEY) || ''; return SNAP_SIZES.some(o => o.id === v) ? v : 'auto'; } catch { return 'auto'; } })();
+const fixedStep = (): number | null => SNAP_SIZES.find(o => o.id === snapId)?.beats ?? null;   // null = Auto
+const snapLabel = () => SNAP_SIZES.find(o => o.id === snapId)?.label ?? 'Auto';
+const curStep = () => fixedStep() ?? gridStep();
+const tidy = (v: number) => Math.round(v * 1e9) / 1e9;   // buang sisa pecahan desimal (1/3, 1/6, ...)
+const unit = () => (snapOn ? curStep() : 1 / 16);
+const snapRound = (b: number) => { if (!snapOn) return b; const s = curStep(); return tidy(Math.round(b / s) * s); };
+const snapFloor = (b: number) => { if (!snapOn) return b; const s = curStep(); return tidy(Math.floor(b / s + 1e-9) * s); };
 
 // ---------- gambar ----------
 function fit(c: HTMLCanvasElement, w: number, h: number, cap = 8) {
@@ -127,6 +146,7 @@ const PR = {
 };
 const LEVELS: Array<[number, number]> = [[4, 0.34], [1, 0.17], [0.5, 0.1], [0.25, 0.07], [0.125, 0.05]];
 const LEVEL_FILL = LEVELS.map(l => gl(l[1]));
+LEVEL_FILL.push(gl(0.045));   // indeks LEVELS.length: garis bantu untuk ukuran Step tetap yang tidak jatuh di garis grid biasa (mis. 1/3 Beat)
 // Tema UI: Ink Rose (bawaan) / Mono Graphite. Warna canvas diganti di tempat, lalu digambar ulang lewat event dari menu.
 const UI_PR = {
   ink:  { g: '166,140,206', bg: '#0f0d13', rowWhite: '#1b1722', rowBlack: '#15121b', ruler: '#19151f', rulerLine: '#2a2233', rulerText: '#e6dcf5', t1: '#8f7fb0', t2: '#5e5280', t3: '#3d3358' },
@@ -138,6 +158,7 @@ function applyUiPalette(): void {
   Object.assign(PR, { bg: u.bg, beyond: u.bg, rowWhite: u.rowWhite, rowBlack: u.rowBlack, hover: gl(0.07), rowLine: gl(0.07), octLine: gl(0.3),
     ruler: u.ruler, rulerLine: u.rulerLine, rulerText: u.rulerText, rulerTick1: u.t1, rulerTick2: u.t2, rulerTick3: u.t3, dim: u.t1 });
   LEVELS.forEach((l, i) => { LEVEL_FILL[i] = gl(l[1]); });
+  LEVEL_FILL[LEVELS.length] = gl(0.045);
 }
 applyUiPalette();
 window.addEventListener('derizmp3:ui', () => { applyUiPalette(); schedule(); });
@@ -164,6 +185,16 @@ function eachVLine(sx: number, vw: number, fn: (x: number, beat: number, level: 
       const beat = k * step;
       if (prev && Math.abs(beat / prev - Math.round(beat / prev)) < 1e-6) continue;   // sudah digambar level di atasnya
       fn(Math.round(beat * ppb - sx) + 0.5, beat, li);
+    }
+  }
+  // ukuran Step tetap (mis. 1/3 Beat): gambar garis bantu di tempat nada akan menempel, kecuali sudah ada garis grid di situ
+  const fs = fixedStep();
+  if (fs !== null && fs < 4 && fs * ppb >= 4) {
+    const k0 = Math.max(0, Math.floor(sx / (fs * ppb))), k1 = Math.min(Math.floor(total / fs + 1e-9), Math.ceil((sx + vw) / (fs * ppb)));
+    for (let k = k0; k <= k1; k++) {
+      const beat = k * fs;
+      if (LEVELS.some(([ls]) => ls * ppb >= 11 && Math.abs(beat / ls - Math.round(beat / ls)) < 1e-6)) continue;
+      fn(Math.round(beat * ppb - sx) + 0.5, beat, LEVELS.length);
     }
   }
 }
@@ -227,7 +258,7 @@ function drawGrid(zoomOnly = false) {
   prevSl = sl; prevSt = stp;
   gclip.style.width = vw0 + 'px'; gclip.style.height = vh0 + 'px';
   const dprNow = window.devicePixelRatio || 1;
-  const bsig = ppb + '|' + rowH + '|' + sx + '|' + sy + '|' + vw + '|' + vh + '|' + hoverP + '|' + color + '|' + dprNow;
+  const bsig = ppb + '|' + rowH + '|' + sx + '|' + sy + '|' + vw + '|' + vh + '|' + hoverP + '|' + color + '|' + dprNow + '|' + snapId;
   const xr = Math.min(vw, total * ppb - sx);
   if (bsig !== bgSig) {   // LAPIS LATAR: baris, garis grid, garis akhir pattern. Hanya digambar kalau zoom / posisi canvas / hover / warna berubah (bukan tiap frame drag)
     bgSig = bsig;
@@ -463,6 +494,7 @@ function drawRuler() {
   c.fillStyle = PR.ruler; c.fillRect(0, 0, vw, RULER_H);
   c.font = '11px system-ui,sans-serif'; c.textBaseline = 'top';
   eachVLine(sx, vw, (x, beat, li) => {
+    if (li >= LEVELS.length) return;   // garis bantu Step tidak ikut di penggaris
     if (li === 0) { c.fillStyle = PR.rulerTick1; c.fillRect(x - 0.5, 4, 1, RULER_H - 4); if (beat < total) { c.fillStyle = PR.rulerText; c.fillText(String(1 + beat / BEATS_PER_BAR), x + 5, 5); } }
     else if (li === 1) { c.fillStyle = PR.rulerTick2; c.fillRect(x - 0.5, RULER_H - 12, 1, 12); if (ppb >= 64) { c.fillStyle = PR.dim; c.fillText(String(Math.round(beat % BEATS_PER_BAR) + 1), x + 4, 14); } }
     else { c.fillStyle = PR.rulerTick3; c.fillRect(x - 0.5, RULER_H - 6, 1, 6); }
@@ -1053,7 +1085,7 @@ function addNoteAt(x: number, y: number): Note | null {
   const p = P_MAX - Math.floor(y / rowH);
   if (p < P_MIN || p > P_MAX || x < 0 || x >= total * ppb) return null;
   const s = clamp(snapFloor(x / ppb), 0, total - unit());
-  const l = Math.min(lastLen, total - s);
+  const l = Math.min(fixedStep() ?? lastLen, total - s);   // Step tetap dipilih = panjang nada baru mengikuti ukuran itu; Auto = panjang nada terakhir
   if (l <= 0) return null;
   pushUndo();
   const n: Note = {id: st.nextId++, p, s, l, ...(lastSlide ? {sl: true} : {}), ...(lastVel < 1 ? {v: lastVel} : {})};   // nada baru memakai velocity terakhir yang diatur di panel
@@ -1198,9 +1230,18 @@ const CHEV = '<svg class="track-menu__chev ico-ln" viewBox="0 0 24 24" width="14
 const mico = (d: string) => '<svg class="pr__mico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
 const MICO = {
   view: mico('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
+  step: mico('<path d="M3 8h18v8H3zM7 8v4M11 8v3M15 8v4M19 8v3"/>'),
   keys: mico('<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16M15 4v16"/>'),
   style: mico('<path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19z"/>'),
 };
+
+function setSnapSize(id: string) {   // pilih ukuran Step dari menu; disimpan di browser dan langsung dipakai semua alat gambar
+  if (!SNAP_SIZES.some(o => o.id === id)) return;
+  snapId = id;
+  try { localStorage.setItem(PR_SNAP_KEY, id); } catch { /* penyimpanan tidak tersedia: pilihan tetap berlaku selama aplikasi terbuka */ }
+  bgSig = ''; rulerSig = '';   // garis bantu grid berubah: gambar ulang lapis latar
+  schedule(); drawVel();
+}
 
 function buildSettingsMenu(el: HTMLElement) {
   const more = el.querySelector<HTMLButtonElement>('.pr__more')!;
@@ -1215,9 +1256,9 @@ function buildSettingsMenu(el: HTMLElement) {
   };
   const dropFrom = (level: number) => {
     cards.splice(level).forEach(fade);
-    const items = cards.map(c => c.querySelector<HTMLElement>('[aria-expanded]'));
-    items.forEach((it, i) => it && it.setAttribute('aria-expanded', String(i < cards.length - 1)));
+    cards[cards.length - 1]?.querySelectorAll<HTMLElement>('[aria-expanded]').forEach(it => it.setAttribute('aria-expanded', 'false'));   // card paling ujung tidak punya anak yang terbuka
   };
+  let subKind = '';   // jenis card tingkat 2 yang sedang terbuka: 'view' | 'step'
   const closeAll = () => { cards.splice(0).forEach(fade); more.setAttribute('aria-expanded', 'false'); };
 
   const makeCard = (extra: string, html: string) => {
@@ -1270,19 +1311,42 @@ function buildSettingsMenu(el: HTMLElement) {
     });
   };
 
+  // Card Step: Auto, 1/6 Step ... Bar. Dipilih = ukuran snap + panjang nada baru ikut berubah.
+  const openStep = (parent: HTMLElement, item: HTMLElement) => {
+    const c = makeCard('pr-snapcard', SNAP_SIZES.map(o =>
+      '<button type="button" role="menuitemradio" class="track-menu__item pr__snapitem" data-snap="' + o.id + '" aria-checked="' + (o.id === snapId) + '"><span>' + o.label + '</span></button>').join(''));
+    placeSub(c, parent, item);
+    item.setAttribute('aria-expanded', 'true');
+    c.querySelector<HTMLElement>('[aria-checked="true"]')?.scrollIntoView({block: 'nearest'});
+    c.addEventListener('click', e => {
+      const it = (e.target as HTMLElement).closest<HTMLElement>('[data-snap]');
+      if (!it) return;
+      setSnapSize(it.dataset.snap!);
+      closeAll();
+    });
+  };
+
   const openMain = () => {
     const c = makeCard('',
       '<button type="button" role="menuitem" class="track-menu__item" data-act="view" aria-expanded="false">' + MICO.view + '<span>View</span>' + CHEV + '</button>' +
+      '<button type="button" role="menuitem" class="track-menu__item" data-act="step" aria-expanded="false">' + MICO.step + '<span>Step</span><em class="pr__mval">' + snapLabel() + '</em>' + CHEV + '</button>' +
       '<button type="button" role="menuitemcheckbox" class="track-menu__item pr__mtoggle" data-act="notekey" aria-checked="' + showNoteNames + '">' + MICO.keys + '<span>Note Key</span><i class="pr__sw" aria-hidden="true"></i></button>');
     const r = more.getBoundingClientRect();
     c.style.left = Math.max(8, Math.min(r.left, innerWidth - c.offsetWidth - 8)) + 'px';
     c.style.top = (r.bottom + 8) + 'px';
     c.style.transformOrigin = 'left top';
-    more.setAttribute('aria-expanded', 'true');
+    more.setAttribute('aria-expanded', 'true'); subKind = '';
     c.addEventListener('click', e => {
       const it = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
       if (!it) return;
-      if (it.dataset.act === 'view') { if (cards.length > 1) dropFrom(1); else openView(c, it); }
+      if (it.dataset.act === 'view' || it.dataset.act === 'step') {
+        const kind = it.dataset.act, wasOpen = cards.length > 1 ? subKind : '';
+        if (cards.length > 1) dropFrom(1);   // tutup card tingkat 2 yang lama (View / Step)
+        c.querySelectorAll<HTMLElement>('[aria-expanded]').forEach(x => x.setAttribute('aria-expanded', 'false'));
+        if (wasOpen === kind) { subKind = ''; return; }   // diketuk lagi = tutup
+        subKind = kind;
+        if (kind === 'view') openView(c, it); else openStep(c, it);
+      }
       else if (it.dataset.act === 'notekey') {
         showNoteNames = !showNoteNames;
         it.setAttribute('aria-checked', String(showNoteNames));
