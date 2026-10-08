@@ -12,7 +12,7 @@ import { installState, promptInstall, onInstallChange } from './pwa';
 import { FULL, getProfile, initialOf, loadProfile, onProfile, removeAvatar, saveName, shownName, uploadAvatar } from './account';
 import { signOut } from './license';
 import { SHOP_CAT, SHOP_PAGE, initShopPage } from './shop-page';
-import { SPECTRUM_SPEEDS, isSpectrumOn, setSpectrumOn, getSpectrumSpeed, setSpectrumSpeed } from './spectrum';
+import { SPECTRUM_SPEEDS, SPECTRUM_STYLES, isSpectrumOn, setSpectrumOn, getSpectrumSpeed, setSpectrumSpeed, getSpectrumStyle, setSpectrumStyle } from './spectrum';
 
 // Jembatan ke main.ts (yang memegang data timeline): snapshot dan pemulihan project
 export interface ProjectIO {
@@ -192,8 +192,12 @@ export function initMenuPanel(): MenuPanel {
           '</div>' +
           '<div class="mp__card mp__item mp__set" style="--i:6">' +
             '<div class="mp__row">' +
-              '<span class="mp__row__t"><b>Spectrum</b><small>Gelombang suara langsung di dasar layar</small></span>' +
+              '<span class="mp__row__t"><b>Spectrum</b><small>Gelombang &amp; spektrum suara langsung di dasar layar</small></span>' +
               '<button type="button" class="mp__switch" role="switch" aria-checked="false" aria-label="Spectrum" data-spec><i></i></button>' +
+            '</div>' +
+            '<div class="mp__sub" style="margin-top:14px"><span>Gaya</span></div>' +
+            '<div class="mp__seg" role="radiogroup" aria-label="Gaya Spectrum">' +
+              SPECTRUM_STYLES.map(v => '<button type="button" class="mp__segbtn" role="radio" aria-checked="false" data-specstyle="' + v.k + '">' + v.label + '</button>').join('') +
             '</div>' +
             '<div class="mp__sub" style="margin-top:14px"><span>Kecepatan gulir</span></div>' +
             '<div class="mp__seg" role="radiogroup" aria-label="Kecepatan gulir Spectrum">' +
@@ -401,13 +405,16 @@ export function initMenuPanel(): MenuPanel {
   // ===== Pengaturan: Spectrum (strip gelombang di dasar layar, spectrum.ts). Saklar nyala/mati + kecepatan gulir; bawaan MATI =====
   const specBtn = panel.querySelector('[data-spec]') as HTMLButtonElement;
   const specSpd = [...panel.querySelectorAll<HTMLButtonElement>('[data-specspd]')];
+  const specSty = [...panel.querySelectorAll<HTMLButtonElement>('[data-specstyle]')];   // Gaya 1 = gelombang, Gaya 2 = spectrogram + analyzer
   const syncSpec = (): void => {
-    const on = isSpectrumOn(), k = getSpectrumSpeed();
+    const on = isSpectrumOn(), k = getSpectrumSpeed(), st = getSpectrumStyle();
     specBtn.classList.toggle('is-on', on); specBtn.setAttribute('aria-checked', String(on));
     specSpd.forEach(b => { const sel = b.dataset.specspd === k; b.classList.toggle('is-on', sel); b.setAttribute('aria-checked', String(sel)); });
+    specSty.forEach(b => { const sel = b.dataset.specstyle === st; b.classList.toggle('is-on', sel); b.setAttribute('aria-checked', String(sel)); });
   };
   specBtn.addEventListener('click', () => { setSpectrumOn(!isSpectrumOn()); syncSpec(); });
   specSpd.forEach(b => b.addEventListener('click', () => { setSpectrumSpeed(b.dataset.specspd as string); syncSpec(); }));
+  specSty.forEach(b => b.addEventListener('click', () => { setSpectrumStyle(b.dataset.specstyle as string); syncSpec(); }));
   syncSpec();
 
   // ===== Pengaturan: Grid Piano Roll (4..50 bar, bawaan 15). piano-roll.ts menyimpan nilainya dan mengabari main.ts lewat event 'prbarschange' =====

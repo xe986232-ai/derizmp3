@@ -5,6 +5,7 @@
 // Saklar nyala/mati + pilihan kecepatan ada di Pengaturan (menu-panel.ts). Tampil sebagai strip polos selebar layar yang menempel di dasar (tanpa bingkai / tombol); tidak modal, jadi Space / pintasan DAW tetap jalan.
 
 import { PitchDetector, PitchTracker, TraceBuilder, Envelope, AutoGain, shape, clamp } from './spectrum-dsp';
+import { SpectrumStyle2, FFT2 } from './spectrum2';
 
 export interface SpectrumBridge { tap(): AudioNode | null }   // titik ambil audio: keluaran master (guardOut di main.ts)
 let bridge: SpectrumBridge | null = null;
@@ -15,13 +16,24 @@ const SPLIT = 0.5;                // riwayat (kiri) dan scope langsung (kanan) m
 const STEP = 0.5;                 // jarak titik gambar riwayat (px CSS): halus di layar HP beresolusi tinggi
 export const SPECTRUM_SPEEDS = [{ k: 'slow', label: 'Lambat', pps: 90 }, { k: 'mid', label: 'Normal', pps: 170 }, { k: 'fast', label: 'Cepat', pps: 320 }];   // px per detik
 const SPEEDS = SPECTRUM_SPEEDS;
-const SPEED_KEY = 'derizmp3.spectrum.speed', ON_KEY = 'derizmp3.spectrum.on';
+// Gaya 1 = gelombang (riwayat amplitudo + scope langsung, ranah waktu); Gaya 2 = spektrum (spectrogram bergulir + analyzer bar, ranah frekuensi; spectrum2.ts)
+export const SPECTRUM_STYLES = [{ k: '1', label: 'Gaya 1' }, { k: '2', label: 'Gaya 2' }];
+const SPEED_KEY = 'derizmp3.spectrum.speed', ON_KEY = 'derizmp3.spectrum.on', STYLE_KEY = 'derizmp3.spectrum.style';
 const FILL = '#b3a1f7', OUTLINE = '#f4f0ff';   // riwayat = isi solid tanpa outline; scope langsung = garis saja tanpa isi (tanpa gradasi / glow)
 
-let root: HTMLElement | null = null, openFn: (() => void) | null = null, closeFn: (() => void) | null = null;
-let speed = 1, on = false;   // kecepatan gulir riwayat (indeks SPEEDS; bawaan Normal) dan status nyala (bawaan MATI), keduanya diingat di browser
+let root: HTMLElement | null = null, openFn: (() => void) | null = null, closeFn: (() => void) | null = null, restyleFn: (() => void) | null = null;
+let speed = 1, on = false, style = 0;   // kecepatan gulir (indeks SPEEDS; bawaan Normal), status nyala (bawaan MATI), gaya (indeks SPECTRUM_STYLES; bawaan Gaya 1): semuanya diingat di browser
 try { const k = localStorage.getItem(SPEED_KEY), i = SPEEDS.findIndex(s => s.k === k); if (i >= 0) speed = i; } catch { /* penyimpanan diblokir: bawaan Normal */ }
 try { on = localStorage.getItem(ON_KEY) === '1'; } catch { /* penyimpanan diblokir: bawaan mati */ }
+try { const k = localStorage.getItem(STYLE_KEY), i = SPECTRUM_STYLES.findIndex(s => s.k === k); if (i >= 0) style = i; } catch { /* penyimpanan diblokir: bawaan Gaya 1 */ }
+
+export const getSpectrumStyle = (): string => SPECTRUM_STYLES[style].k;
+export function setSpectrumStyle(k: string, save = true): void {
+  const i = SPECTRUM_STYLES.findIndex(s => s.k === k); if (i < 0) return;
+  const changed = i !== style; style = i;
+  if (save) { try { localStorage.setItem(STYLE_KEY, SPECTRUM_STYLES[i].k); } catch { /* abaikan */ } }
+  if (changed) restyleFn?.();   // kalau strip sedang tampil: ganti analyser, bersihkan keadaan, gambar ulang
+}
 
 export const getSpectrumSpeed = (): string => SPEEDS[speed].k;
 export function setSpectrumSpeed(k: string, save = true): void {
@@ -60,8 +72,10 @@ function build(): void {
   const g = cv.getContext('2d')!;
 
   // ---------- audio: analyser di keluaran master ----------
-  let ctx: BaseAudioContext | null = null, an: AnalyserNode | null = null, mute: GainNode | null = null, tapNode: AudioNode | null = null;
+  let ctx: BaseAudioContext | null = null, an: AnalyserNode | null = null, an2: AnalyserNode | null = null, mute: GainNode | null = null, tapNode: AudioNode | null = null;
   const buf = new Float32Array(FFT);
+  const fbuf = new Float32Array(FFT2 / 2).fill(-Infinity);   // gaya 2: dB per bin dari analyser kedua (FFT lebih panjang supaya bass rapat)
+  const s2 = new SpectrumStyle2();
   let sr = 48000;
   let env = new Envelope(sr), det = new PitchDetector(FFT), trk = new PitchTracker(), tb = new TraceBuilder(FFT, 64);
   const gainH = new AutoGain(6), gainL = new AutoGain(1.2, 0.02);   // riwayat: turun lambat (6 s); scope: lebih cepat menyesuaikan (1,2 s)
@@ -72,22 +86,24 @@ function build(): void {
     const src = bridge?.tap() ?? null;
     if (!src) return false;
     ctx = src.context;
-    if (!an || an.context !== ctx) {
+    if (!an || !an2 || an.context !== ctx) {
       an = ctx.createAnalyser(); an.fftSize = FFT; an.smoothingTimeConstant = 0;
-      mute = ctx.createGain(); mute.gain.value = 0; an.connect(mute); mute.connect(ctx.destination);   // sambungan senyap: beberapa browser baru memproses node yang tersambung ke output
+      an2 = ctx.createAnalyser(); an2.fftSize = FFT2; an2.smoothingTimeConstant = 0.35; an2.minDecibels = -110; an2.maxDecibels = 0;
+      mute = ctx.createGain(); mute.gain.value = 0; an.connect(mute); an2.connect(mute); mute.connect(ctx.destination);   // sambungan senyap: beberapa browser baru memproses node yang tersambung ke output
     }
     if (sr !== ctx.sampleRate) { sr = ctx.sampleRate; env = new Envelope(sr); }
-    try { src.connect(an); tapNode = src; } catch { return false; }
+    try { src.connect(style === 1 ? an2 : an); tapNode = src; } catch { return false; }   // hanya analyser yang dipakai gaya aktif yang disambung (yang lain tidak menghabiskan CPU)
     return true;
   }
   function disconnect(): void {
-    if (tapNode && an) { try { tapNode.disconnect(an); } catch { /* sudah lepas */ } }
+    if (tapNode) for (const a of [an, an2]) { if (a) { try { tapNode.disconnect(a); } catch { /* sudah lepas / memang tidak tersambung */ } } }
     tapNode = null;
   }
   function resetState(): void {
     env.clear(); gainH.reset(); gainL.reset(); trk.reset(); prevTrace.fill(0); trace.fill(0); traceOk = false;
     carry = 0; lastPitch = 0;
     clk = lastClk = ctx ? ctx.currentTime : 0;
+    s2.reset(); fbuf.fill(-Infinity);
   }
 
   // ---------- ukuran kanvas ----------
@@ -100,6 +116,7 @@ function build(): void {
     if (trace.length !== m) { trace = new Float32Array(m); prevTrace = new Float32Array(m); tb = new TraceBuilder(FFT, m); traceOk = false; }
     const np = Math.ceil(xs / STEP) + 1;
     if (tops.length !== np) { tops = new Float32Array(np); bots = new Float32Array(np); }
+    s2.layout(W, H, sr, FFT2 / 2);
     if (!el.hidden) draw();
   }
   const ro = new ResizeObserver(() => { if (!el.hidden) layout(); });
@@ -108,6 +125,7 @@ function build(): void {
   // ---------- gambar ----------
   function draw(): void {
     g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+    if (style === 1) { s2.draw(g); return; }   // Gaya 2: spectrogram + analyzer (spectrum2.ts)
     const mid = H / 2, amp = H / 2 - 7, xs = Math.round(W * SPLIT), live = W - xs, np = tops.length;
     g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(0, Math.round(mid), W, 1);
 
@@ -148,7 +166,9 @@ function build(): void {
   function frame(ts: number): void {
     raf = requestAnimationFrame(frame);
     const dt = clamp((ts - lastTs) / 1000, 0.001, 0.1); lastTs = ts;
-    if (an && ctx) {
+    if (style === 1) {
+      if (an2 && ctx) { an2.getFloatFrequencyData(fbuf); s2.update(fbuf, dt, SPEEDS[speed].pps); }
+    } else if (an && ctx) {
       an.getFloatTimeDomainData(buf);
       // jam halus: maju mengikuti rAF, dikoreksi pelan ke jam audio (currentTime naik per blok besar, kalau dipakai langsung gulirannya patah-patah)
       if (ctx.state !== 'running') { lastClk = clk = ctx.currentTime; carry = 0; }
@@ -189,8 +209,16 @@ function build(): void {
     closing = false;
     el.getAnimations({ subtree: true }).forEach(a => a.cancel());
     el.hidden = false;
+    el.classList.toggle('spec--s2', style === 1);
     connect(); resetState(); layout(); start();
     if (!reduce) win.animate([{ transform: 'translateY(100%)' }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  };
+  // ganti gaya saat strip sedang tampil (dari Pengaturan): lepas analyser lama, sambung yang baru, bersihkan keadaan
+  restyleFn = () => {
+    if (el.hidden || closing) return;
+    stop(); disconnect();
+    el.classList.toggle('spec--s2', style === 1);
+    connect(); resetState(); layout(); start();
   };
   document.addEventListener('visibilitychange', () => { if (!el.hidden) { if (document.hidden) stop(); else { resetState(); start(); } } });
 }
