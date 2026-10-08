@@ -1681,9 +1681,14 @@ function syncTransportUI() {
 // Playhead sudah melewati ujung pattern / clip paling akhir (tidak ada lagi yang diputar di depan): langsung balik ke titik start dan lanjut main (seperti loop).
 // Jam penjadwalan (bukan jam yang terdengar) yang dipakai, supaya putaran berikutnya menyambung tanpa jeda sebesar latensi output.
 // Tidak berlaku saat export audio (rekaman harus berhenti di ujung isi), dan kalau Play dimulai dari titik di luar isi (tidak ada yang bisa diputar).
+const lastBlockEndBar = () => {   // ujung kanan blok APA PUN di timeline (pattern kosong, pattern nada, Automation Clip, audio clip), dalam bar
+  let m = 0;
+  lanesEl.querySelectorAll('.pattern').forEach(p => { m = Math.max(m, (pl(p) + pw(p)) / BAR_W); });
+  return Math.min(m, BARS);
+};
 function loopBackIfEnded() {
   if (expSaved) return false;
-  const end = contentEndBar(); if (end <= 0) return false;
+  const end = lastBlockEndBar(); if (end <= 0) return false;
   if (startPos >= end - 1e-6) return false;
   if (startPos + Math.max(0, actx.currentTime - startCtx) / SEC_PER_BAR < end - 1e-6) return false;
   posBars = startMark < end - 1e-6 ? startMark : 0;
