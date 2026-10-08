@@ -7,6 +7,7 @@ import { runExport, FMT_KEY, type ExportFormat } from './export-audio';
 import { setAudioDebug, loadAudioDebug } from './audio-debug';
 import { DEMO, demoNotice } from './demo';
 import { saveProject, loadProject, deleteProject, listProjects, projectExists, recordToJson, jsonToRecord } from './project-store';
+import { folderSupported, folderState, chooseFolder, regrantFolder, forgetFolder, backupToFolder, listFolderProjects, loadFromFolder } from './folder-backup';
 import { installState, promptInstall, onInstallChange } from './pwa';
 import { FULL, getProfile, initialOf, loadProfile, onProfile, removeAvatar, saveName, shownName, uploadAvatar } from './account';
 import { signOut } from './license';
@@ -110,6 +111,14 @@ export function initMenuPanel(): MenuPanel {
             '<div class="mp__sub"><span>File project</span><button type="button" class="mp__imp" data-impjson>Import project</button></div>' +
             '<ul class="mp__files"></ul><p class="mp__hint mp__empty">Belum ada project tersimpan.</p>' +
             '<input type="file" class="mp__impfile" hidden>' +
+          '</div>' +
+          '<div class="mp__card mp__item mp__fcard" style="--i:3">' +
+            '<div class="mp__sub"><span>Cadangan ke folder</span></div>' +
+            '<p class="mp__hint mp__fstat" aria-live="polite"></p>' +
+            '<div class="mp__frow"><button type="button" class="mp__imp" data-fpick>Pilih folder</button>' +
+            '<button type="button" class="mp__imp" data-fall hidden>Cadangkan semua</button>' +
+            '<button type="button" class="mp__imp" data-fres hidden>Pulihkan dari folder</button>' +
+            '<button type="button" class="mp__imp mp__imp--bad" data-fforget hidden>Lepas folder</button></div>' +
           '</div>' +
         '</section>' +
         // kategori Export
@@ -597,6 +606,111 @@ export function initMenuPanel(): MenuPanel {
   onIo = () => { void refresh(); };
   void refresh();
 
+  // ===== Cadangan ke folder pilihan user (TAMBAHAN; IndexedDB tetap penyimpanan utama) =====
+  const fcard = panel.querySelector('.mp__fcard') as HTMLElement;
+  const fstat = fcard.querySelector('.mp__fstat') as HTMLElement;
+  const fpick = fcard.querySelector('[data-fpick]') as HTMLButtonElement;
+  const fall = fcard.querySelector('[data-fall]') as HTMLButtonElement;
+  const fres = fcard.querySelector('[data-fres]') as HTMLButtonElement;
+  const fforget = fcard.querySelector('[data-fforget]') as HTMLButtonElement;
+  let fneed = false;   // true = folder sudah dipilih tapi izin perlu diminta lagi
+  const refreshFolder = async (): Promise<void> => {
+    if (DEMO) { fcard.hidden = true; return; }
+    let st: Awaited<ReturnType<typeof folderState>>;
+    try { st = await folderState(); } catch { st = {state: 'none'}; }
+    fneed = st.state === 'need-permission';
+    const has = st.state === 'ready' || st.state === 'need-permission';
+    fall.hidden = fres.hidden = !has || fneed; fforget.hidden = !has;
+    fpick.hidden = st.state === 'unsupported';
+    fpick.textContent = fneed ? 'Izinkan akses folder' : has ? 'Ganti folder' : 'Pilih folder';
+    if (st.state === 'unsupported') {
+      fstat.textContent = 'Browser ini belum mendukung pilih folder (iPhone/iOS memang belum bisa). Untuk cadangan, pakai tombol unduh .json di daftar project atau Import project.';
+    } else if (st.state === 'none') {
+      fstat.textContent = 'Pilih satu folder di perangkat. Setiap kali SAVE, salinan project ikut ditulis ke folder itu, jadi bisa dipulihkan kalau aplikasi dihapus. Pilih folder biasa, bukan langsung Downloads / Documents.';
+    } else if (fneed) {
+      fstat.textContent = 'Folder: ' + st.name + ' (perlu izin lagi). Ketuk "Izinkan akses folder".';
+    } else {
+      fstat.textContent = 'Folder aktif: ' + st.name + '/derizmp3. Setiap SAVE otomatis disalin ke sini.';
+    }
+  };
+  // salin satu project ke folder; tidak pernah melempar error ke pemanggil (simpan di browser sudah berhasil lebih dulu)
+  const mirror = async (rec: {name: string; savedAt: number; data: unknown; clips: Record<string, Blob>}): Promise<void> => {
+    if (DEMO || !folderSupported()) return;
+    try {
+      const r = await backupToFolder(rec, true);
+      if (r === 'ok') say('✓ Disalin ke folder: ' + rec.name);
+      else if (r === 'no-permission') say('Folder perlu izin lagi: buka Project > Cadangan ke folder');
+    } catch (err) { console.error(err); say('Gagal menyalin ke folder (project tetap tersimpan di browser)'); }
+    void refreshFolder();
+  };
+  const prevRefreshProjects = refreshProjects;
+  refreshProjects = () => { prevRefreshProjects(); void refreshFolder(); };
+  void refreshFolder();
+
+  fpick.addEventListener('click', async () => {
+    if (DEMO) { demoNotice('save'); return; }
+    try {
+      if (fneed) { say(await regrantFolder() ? 'Akses folder diizinkan' : 'Izin folder ditolak'); }
+      else {
+        const n = await chooseFolder();
+        if (n) say('Folder dipilih: ' + n + '. Gunakan "Cadangkan semua" untuk menyalin project yang sudah ada.', 4000);
+      }
+    } catch (err) { console.error(err); say('Gagal memilih folder: ' + (err instanceof Error ? err.message : 'tidak diketahui'), 4000); }
+    void refreshFolder();
+  });
+  fforget.addEventListener('click', async () => {
+    if (fforget.dataset.sure !== '1') {
+      fforget.dataset.sure = '1'; fforget.textContent = 'Ketuk lagi untuk melepas';
+      setTimeout(() => { fforget.dataset.sure = ''; fforget.textContent = 'Lepas folder'; }, 2500);
+      return;
+    }
+    fforget.dataset.sure = ''; fforget.textContent = 'Lepas folder';
+    await forgetFolder().catch(() => undefined);   // hanya melupakan folder; file di dalamnya TIDAK dihapus
+    say('Folder dilepas (file di dalamnya tidak dihapus)');
+    void refreshFolder();
+  });
+  fall.addEventListener('click', async () => {
+    if (!io) { say('Project belum siap, coba lagi sebentar'); return; }
+    fall.disabled = true;
+    try {
+      const items = await listProjects();
+      let ok = 0, fail = 0;
+      for (const it of items) {
+        say('Menyalin ' + it.name + '…', 0);
+        try {
+          const rec = await loadProject(it.name);
+          if (rec && (await backupToFolder(rec, true)) === 'ok') ok++; else fail++;
+        } catch (err) { console.error(err); fail++; }
+      }
+      say(items.length ? 'Selesai: ' + ok + ' project disalin ke folder' + (fail ? ', ' + fail + ' gagal' : '') : 'Belum ada project untuk disalin', 3500);
+    } catch (err) { console.error(err); say('Gagal menyalin ke folder'); }
+    fall.disabled = false; void refreshFolder();
+  });
+  // Pulihkan: hanya MENAMBAH project yang belum ada di browser; yang namanya sudah ada tidak ditimpa
+  fres.addEventListener('click', async () => {
+    fres.disabled = true;
+    try {
+      const list = await listFolderProjects(true);
+      if (!list) { say('Folder belum bisa dibaca (belum ada cadangan, atau izin ditolak)', 3500); }
+      else {
+        const have = new Set((await listProjects().catch(() => [])).map(p => p.name));
+        let added = 0, skipped = 0, failed = 0;
+        for (const it of list) {
+          if (have.has(it.name)) { skipped++; continue; }
+          say('Memulihkan ' + it.name + '…', 0);
+          try {
+            const rec = await loadFromFolder(it.name);
+            if (!rec) { failed++; continue; }
+            await saveProject(rec); added++;
+          } catch (err) { console.error(err); failed++; }
+        }
+        await refresh();
+        say('Pulih: ' + added + ' project' + (skipped ? ', ' + skipped + ' sudah ada (dilewati)' : '') + (failed ? ', ' + failed + ' gagal' : ''), 4500);
+      }
+    } catch (err) { console.error(err); say('Gagal memulihkan dari folder', 3500); }
+    fres.disabled = false;
+  });
+
   // overlay nama file project
   const ov = document.createElement('div');
   ov.className = 'svov'; ov.hidden = true;
@@ -642,9 +756,11 @@ export function initMenuPanel(): MenuPanel {
     busy = true; okBtn.disabled = true; note.textContent = 'Menyimpan…';
     try {
       const snap = io.snapshot();
-      await saveProject({name, savedAt: Date.now(), data: snap.data, clips: snap.clips});
+      const rec = {name, savedAt: Date.now(), data: snap.data, clips: snap.clips};
+      await saveProject(rec);
       const back = await loadProject(name);   // baca ulang: pastikan benar-benar tersimpan
       if (!back) throw new Error('verifikasi gagal');
+      void mirror(rec);   // salinan ke folder pilihan user (kalau ada); gagal di sini tidak mempengaruhi simpan di browser
       curName = name;
       note.textContent = '✓ Tersimpan: ' + name;
       ov.classList.add('is-done');
@@ -669,8 +785,10 @@ export function initMenuPanel(): MenuPanel {
     quickBusy = true;
     try {
       const snap = io.snapshot();
-      await saveProject({name: curName, savedAt: Date.now(), data: snap.data, clips: snap.clips});
+      const rec = {name: curName, savedAt: Date.now(), data: snap.data, clips: snap.clips};
+      await saveProject(rec);
       if (!(await loadProject(curName))) throw new Error('verifikasi gagal');
+      void mirror(rec);
       await refresh();
       say('✓ Perubahan tersimpan: ' + curName);
       saveBtn.classList.add('is-saved'); setTimeout(() => saveBtn.classList.remove('is-saved'), 900);
@@ -748,6 +866,7 @@ export function initMenuPanel(): MenuPanel {
     try {
       const rec = await jsonToRecord(await f.text());
       await saveProject(rec); await refresh();
+      void mirror(rec);
       await io.restore(rec); curName = rec.name;
       say('Project dibuka: ' + rec.name); apply(false, true);
     } catch (err) { console.error(err); say('Gagal membuka file: ' + (err instanceof Error ? err.message : 'tidak valid')); }

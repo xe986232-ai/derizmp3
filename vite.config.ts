@@ -32,7 +32,7 @@ function pwaPrecache(): Plugin {
 
 // Build demo: modul fitur versi penuh DIGANTI stub di src/demo-stubs/ (nama ekspor sama, isinya kosong), jadi kodenya tidak ada di dist-demo.
 // Menambah fitur penuh-saja yang berupa modul sendiri: buat stub-nya di src/demo-stubs/ dan tambahkan namanya di daftar ini.
-const DEMO_STUBBED = ['automation', 'audio-debug', 'project-store'];
+const DEMO_STUBBED = ['automation', 'audio-debug', 'project-store', 'folder-backup'];
 function demoStubs(): Plugin {
   const src = resolve('src');
   return {
