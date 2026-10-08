@@ -2316,3 +2316,5 @@ body.is-pdragging,body.is-pdragging *{cursor:grabbing!important;user-select:none
 .mp__frow .mp__imp[hidden],.mp__fcard[hidden]{display:none}
 .mp__imp:disabled{opacity:.5}
 .mp__fstat{margin:0}
+.mp__flist{margin-top:10px}
+.mp__flist[hidden]{display:none}

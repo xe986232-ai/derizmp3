@@ -119,6 +119,7 @@ export function initMenuPanel(): MenuPanel {
             '<button type="button" class="mp__imp" data-fall hidden>Cadangkan semua</button>' +
             '<button type="button" class="mp__imp" data-fres hidden>Pulihkan dari folder</button>' +
             '<button type="button" class="mp__imp mp__imp--bad" data-fforget hidden>Lepas folder</button></div>' +
+            '<ul class="mp__files mp__flist" hidden></ul>' +
           '</div>' +
         '</section>' +
         // kategori Export
@@ -613,6 +614,8 @@ export function initMenuPanel(): MenuPanel {
   const fall = fcard.querySelector('[data-fall]') as HTMLButtonElement;
   const fres = fcard.querySelector('[data-fres]') as HTMLButtonElement;
   const fforget = fcard.querySelector('[data-fforget]') as HTMLButtonElement;
+  const flist = fcard.querySelector('.mp__flist') as HTMLUListElement;
+  let fseq = 0;
   let fneed = false;   // true = folder sudah dipilih tapi izin perlu diminta lagi
   const refreshFolder = async (): Promise<void> => {
     if (DEMO) { fcard.hidden = true; return; }
@@ -632,6 +635,18 @@ export function initMenuPanel(): MenuPanel {
     } else {
       fstat.textContent = 'Folder aktif: ' + st.name + '/derizmp3. Setiap SAVE otomatis disalin ke sini.';
     }
+    // isi folder: bisa dibuka langsung dari sini
+    const my = ++fseq;
+    let items: Array<{name: string; savedAt: number}> | null = null;
+    if (st.state === 'ready') { try { items = await listFolderProjects(false); } catch (err) { console.error(err); } }
+    if (my !== fseq) return;
+    flist.hidden = !items || !items.length;
+    if (st.state === 'ready' && (!items || !items.length)) fstat.textContent += ' Belum ada project di folder.';
+    flist.innerHTML = (items || []).map((it, i) =>
+      '<li class="mp__file" data-n="' + esc(it.name) + '" style="--i:' + i + '">' +
+        '<button type="button" class="mp__open" data-fact="open"><b>' + esc(it.name) + '</b><small>Buka dari folder' + (it.savedAt ? ' · ' + fmtDate(it.savedAt) : '') + '</small></button>' +
+        '<button type="button" class="mp__ico" data-fact="keep" aria-label="Simpan ke browser" title="Simpan ke daftar project di browser">' + IC_DL + '</button>' +
+      '</li>').join('');
   };
   // salin satu project ke folder; tidak pernah melempar error ke pemanggil (simpan di browser sudah berhasil lebih dulu)
   const mirror = async (rec: {name: string; savedAt: number; data: unknown; clips: Record<string, Blob>}): Promise<void> => {
@@ -685,6 +700,34 @@ export function initMenuPanel(): MenuPanel {
       say(items.length ? 'Selesai: ' + ok + ' project disalin ke folder' + (fail ? ', ' + fail + ' gagal' : '') : 'Belum ada project untuk disalin', 3500);
     } catch (err) { console.error(err); say('Gagal menyalin ke folder'); }
     fall.disabled = false; void refreshFolder();
+  });
+  // Buka langsung dari folder (tanpa menyentuh IndexedDB) / simpan salinannya ke daftar project di browser
+  flist.addEventListener('click', async e => {
+    const btn = (e.target as HTMLElement).closest('[data-fact]') as HTMLElement | null;
+    const li = btn && btn.closest('.mp__file') as HTMLElement | null;
+    if (!btn || !li) return;
+    if (!io) { say('Project belum siap, coba lagi sebentar'); return; }
+    const name = li.dataset.n as string, act = btn.dataset.fact;
+    try {
+      if (act === 'open') {
+        say('Membuka ' + name + ' dari folder…', 0);
+        const rec = await loadFromFolder(name);
+        if (!rec) { say('Project tidak terbaca dari folder (cek izin folder)', 3500); void refreshFolder(); return; }
+        await io.restore(rec); curName = name;
+        say('Dibuka dari folder: ' + name + '. Tekan SAVE untuk menyimpan ke browser.', 4000); apply(false, true);
+      } else if (act === 'keep') {
+        if ((await projectExists(name).catch(() => false)) && btn.dataset.sure !== '1') {   // nama sudah ada di browser: ketuk dua kali untuk menimpa
+          btn.dataset.sure = '1'; btn.classList.add('is-sure'); btn.title = 'Sudah ada di browser. Ketuk lagi untuk menimpa';
+          setTimeout(() => { btn.dataset.sure = ''; btn.classList.remove('is-sure'); btn.title = 'Simpan ke daftar project di browser'; }, 2500);
+          say('Nama ini sudah ada di browser. Ketuk lagi untuk menimpa.', 2500);
+          return;
+        }
+        const rec = await loadFromFolder(name);
+        if (!rec) { say('Project tidak terbaca dari folder (cek izin folder)', 3500); return; }
+        await saveProject(rec); await refresh();
+        say('Disimpan ke browser: ' + name);
+      }
+    } catch (err) { console.error(err); say('Gagal memproses project dari folder'); }
   });
   // Pulihkan: hanya MENAMBAH project yang belum ada di browser; yang namanya sudah ada tidak ditimpa
   fres.addEventListener('click', async () => {
