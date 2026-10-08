@@ -16,7 +16,7 @@ import { setHostBpm } from './delay-fx';
 import { initRecordJelly } from './record-jelly';
 import { initPatternJelly } from './pattern-jelly';
 import { initClipIconMenu } from './clip-icon-menu';
-import { STRETCH_MIN, STRETCH_MAX } from './time-stretch';
+import { STRETCH_MIN, STRETCH_MAX, CLIP_PITCH_MIN, CLIP_PITCH_MAX } from './time-stretch';
 import { initLandscape } from './landscape';
 import { registerSW } from './pwa';
 import { startLicenseGuard } from './license';
@@ -415,7 +415,12 @@ function createPattern(lane, sl, ci) {   // ci = {clip, off}: pattern ini adalah
   el.style.width = sl.width + 'px';
   el.innerHTML = '<div class="pattern__head"><span class="pattern__title"></span></div><div class="pattern__handle" aria-label="Panjangkan / pendekkan akhir pattern"></div><div class="pattern__handle pattern__handle--l" aria-label="Panjangkan / pendekkan awal pattern"></div>';
   el.querySelector('.pattern__title').textContent = nm ? nm.textContent : 'Track';
-  if (ci) { el.dataset.clip = ci.clip; el.dataset.off = ci.off; if (ci.src) el.dataset.src = ci.src; if (ci.bpm) el.dataset.bpm = ci.bpm; }   // src = clip asli sebelum di-stretch, bpm = BPM yang diisi di menu Tempo
+  if (ci) {   // src = clip asli sebelum diproses, bpm = BPM yang diisi di menu Tempo, pitch = semitone dari menu Pitch
+    const meta = clipMeta.get(+ci.clip) || {};   // undo / redo membuat pattern baru hanya dari id clip: info proses dipulihkan dari catatan
+    const src = ci.src || meta.src, bpm = ci.bpm || meta.bpm, pitch = ci.pitch || meta.pitch;
+    el.dataset.clip = ci.clip; el.dataset.off = ci.off;
+    if (src) el.dataset.src = src; if (bpm) el.dataset.bpm = bpm; if (pitch) el.dataset.pitch = pitch;
+  }
   lane.appendChild(el);
   return el;
 }
@@ -632,11 +637,13 @@ function patBarPlace() {
   patBar.style.top = (above < 0 ? lane.offsetTop + lane.offsetHeight + 8 : above) + 'px';   // track paling atas: toolbar turun ke bawah pattern
 }
 wsEl.addEventListener('scroll', () => { patBarPlace(); if (!isProgScroll()) closePatMenu(); }, {passive: true});
-// ===== Tempo audio clip: stretch (pitch tetap) supaya BPM clip mengikuti BPM project =====
+// ===== Tempo + Pitch audio clip =====
 // Menu Tempo (tahan icon microphone): isi BPM asli clip, mis. vokal 126 di project 130 -> audio dipercepat 126/130 tanpa mengubah nada.
-// Hasil stretch = buffer baru (clip id baru); clip asli tetap disimpan (dataset.src) supaya stretch ulang selalu dari audio asli, bukan bertumpuk.
+// Menu Pitch (menu yang sama): geser nada -12..+12 semitone tanpa mengubah durasi. Tempo dan Pitch saling menjaga: tiap kali salah satu diubah,
+// buffer dibuat ulang dari audio asli dengan KEDUANYA (tidak bertumpuk, kualitas tidak menurun tiap diubah).
+// Hasil = buffer baru (clip id baru); clip asli tetap disimpan (dataset.src). clipMeta mencatat {src, bpm, pitch} per id hasil supaya undo / redo tidak kehilangan info ini.
 let stretchWorker = null, stretchSeq = 0;
-const stretchJobs = new Map(), stretchCache = new Map();
+const stretchJobs = new Map(), stretchCache = new Map(), clipMeta = new Map();
 function stretchWorkerGet() {
   if (stretchWorker) return stretchWorker;
   stretchWorker = new Worker(new URL('./stretch-worker.ts', import.meta.url), {type: 'module'});
@@ -648,14 +655,14 @@ function stretchWorkerGet() {
   stretchWorker.onerror = () => { stretchJobs.forEach(j => j.err(new Error('Pemrosesan audio gagal'))); stretchJobs.clear(); stretchWorker = null; };
   return stretchWorker;
 }
-function stretchClipBuffer(srcId, factor) {   // -> Promise<id buffer baru>
-  const key = srcId + '|' + factor.toFixed(5);
+function stretchClipBuffer(srcId, factor, pitch = 0) {   // -> Promise<id buffer baru>
+  const key = srcId + '|' + factor.toFixed(5) + '|' + pitch.toFixed(2);
   if (stretchCache.has(key)) return stretchCache.get(key);
   const buf = getBuffer(srcId);
   const chs = Array.from({length: buf.numberOfChannels}, (_, c) => buf.getChannelData(c).slice());
   const p = new Promise((ok, err) => {
     const id = ++stretchSeq; stretchJobs.set(id, {ok, err});
-    stretchWorkerGet().postMessage({id, chs, sr: buf.sampleRate, factor}, chs.map(c => c.buffer));
+    stretchWorkerGet().postMessage({id, chs, sr: buf.sampleRate, factor, pitch}, chs.map(c => c.buffer));
   }).then(y => {
     const out = audio().createBuffer(y.length, y[0].length, buf.sampleRate);
     y.forEach((c, i) => out.copyToChannel(c, i));
@@ -664,31 +671,43 @@ function stretchClipBuffer(srcId, factor) {   // -> Promise<id buffer baru>
   stretchCache.set(key, p); p.catch(() => stretchCache.delete(key));
   return p;
 }
-async function applyClipTempo(el, clipBpm) {
+// opt = {bpm} (menu Tempo) atau {pitch} (menu Pitch); yang tidak diisi tetap seperti sekarang
+async function reprocessClip(el, opt) {
   if (!el.isConnected || !el.dataset.clip) throw new Error('Clip tidak ditemukan');
-  const factor = clipBpm / BPM;   // durasi hasil / durasi asli
-  if (factor < STRETCH_MIN || factor > STRETCH_MAX) throw new Error('Terlalu jauh dari project: pakai ' + Math.ceil(BPM * STRETCH_MIN) + '-' + Math.floor(BPM * STRETCH_MAX) + ' BPM');
   const curId = +el.dataset.clip, srcId = +(el.dataset.src || curId);
   const cur = getBuffer(curId), src = getBuffer(srcId);
   if (!cur || !src) throw new Error('Audio clip tidak ditemukan');
   const kPrev = cur.duration / src.duration;   // faktor yang sedang terpasang (1 = audio asli)
+  const tempoChange = opt.bpm !== undefined;
+  const factor = tempoChange ? opt.bpm / BPM : kPrev;   // durasi hasil / durasi asli
+  const pitch = opt.pitch !== undefined ? opt.pitch : (+el.dataset.pitch || 0);
+  if (factor < STRETCH_MIN || factor > STRETCH_MAX) throw new Error('Terlalu jauh dari project: pakai ' + Math.ceil(BPM * STRETCH_MIN) + '-' + Math.floor(BPM * STRETCH_MAX) + ' BPM');
+  if (!(pitch >= CLIP_PITCH_MIN && pitch <= CLIP_PITCH_MAX)) throw new Error('Pitch harus antara ' + CLIP_PITCH_MIN + ' dan +' + CLIP_PITCH_MAX);
   let newId;
-  try { newId = Math.abs(factor - 1) < 5e-4 ? srcId : await stretchClipBuffer(srcId, factor); }
+  try { newId = Math.abs(factor - 1) < 5e-4 && pitch === 0 ? srcId : await stretchClipBuffer(srcId, Math.abs(factor - 1) < 5e-4 ? 1 : factor, pitch); }
   catch (err) { console.error(err); throw new Error('Gagal memproses audio'); }
   if (!el.isConnected) return;
-  const r = getBuffer(newId).duration / src.duration / kPrev;   // perubahan panjang isi audio dibanding yang tampil sekarang
-  const st = pl(el), off = (+el.dataset.off || 0) * r;
-  const need = (st + pw(el) * r) / BAR_W;
-  if (need > BARS) growTimeline(Math.min(MAX_BARS, Math.ceil(need) + 1));
-  let hi = W; otherPats(el).forEach(o => { if (pl(o) > st + 1) hi = Math.min(hi, pl(o)); });
-  const w = Math.max(Math.min(pw(el) * r, hi - st), Math.min(BAR_W / 2, hi - st));   // sama seperti ganti BPM: dipotong kalau menabrak clip berikutnya
-  el.dataset.clip = newId; el.dataset.off = off; el.dataset.src = srcId; el.dataset.bpm = clipBpm;
-  el.style.width = w + 'px'; handleSide(el);
+  const r = tempoChange ? getBuffer(newId).duration / src.duration / kPrev : 1;   // perubahan panjang isi audio dibanding yang tampil sekarang (Pitch saja: durasi tetap)
+  if (tempoChange) {
+    const st = pl(el), off = (+el.dataset.off || 0) * r;
+    const need = (st + pw(el) * r) / BAR_W;
+    if (need > BARS) growTimeline(Math.min(MAX_BARS, Math.ceil(need) + 1));
+    let hi = W; otherPats(el).forEach(o => { if (pl(o) > st + 1) hi = Math.min(hi, pl(o)); });
+    const w = Math.max(Math.min(pw(el) * r, hi - st), Math.min(BAR_W / 2, hi - st));   // sama seperti ganti BPM: dipotong kalau menabrak clip berikutnya
+    el.dataset.off = off; el.dataset.bpm = opt.bpm;
+    el.style.width = w + 'px'; handleSide(el);
+  }
+  el.dataset.clip = newId; el.dataset.src = srcId;
+  if (pitch) el.dataset.pitch = pitch; else delete el.dataset.pitch;
+  if (newId !== srcId) clipMeta.set(newId, {src: srcId, bpm: el.dataset.bpm, pitch: el.dataset.pitch});
   delete el.dataset.wk; syncWaves();   // waveform dari buffer baru
   if (el === selPat) patBarPlace();
   if (playing) scheduleClips();
-  toast('Tempo ' + (Math.round(clipBpm * 100) / 100) + ' → ' + BPM + ' BPM');
+  if (tempoChange) toast('Tempo ' + (Math.round(opt.bpm * 100) / 100) + ' → ' + BPM + ' BPM');
+  else toast(pitch ? 'Pitch ' + (pitch > 0 ? '+' : '−') + Math.abs(pitch) + ' semitone' : 'Pitch kembali normal');
 }
+const applyClipTempo = (el, bpm) => reprocessClip(el, {bpm});
+const applyClipPitch = (el, pitch) => reprocessClip(el, {pitch});
 
 // ===== Sync all sample (tahan icon piano pada pattern nada) =====
 // Semua DERIZ yang bernada di pattern ini dikunci ke BPM project: kecepatan (knob Speed) tiap sample dicatat saat Sync dinyalakan
@@ -729,7 +748,7 @@ function applySyncSamples() {
   if (clamped) toast('Speed sample sudah di batas 0.5× - 2×');
 }
 
-// Tahan icon microphone pada audio clip -> card putih "Tempo"; menu bulat (copy, delete, dst) hilang selama card terbuka
+// Tahan icon microphone pada audio clip -> card putih "Sesuaikan Tempo" / "Sesuaikan Pitch"; menu bulat (copy, delete, dst) hilang selama card terbuka
 let barHidByCard = false, barHideAnim = null;
 initClipIconMenu(lanesEl, {
   onPatternMenu: el => toggleSyncSamples(el),
@@ -737,6 +756,8 @@ initClipIconMenu(lanesEl, {
   getProjectBpm: () => BPM,
   getClipBpm: el => el.dataset.bpm ? +el.dataset.bpm : null,
   applyTempo: (el, bpm) => applyClipTempo(el, bpm),
+  getClipPitch: el => +el.dataset.pitch || 0,
+  applyPitch: (el, st) => applyClipPitch(el, st),
   onOpen() {
     closePatMenu();
     if (patBar.hidden) return;
@@ -755,7 +776,7 @@ initClipIconMenu(lanesEl, {
 window.addEventListener('resize', patBarPlace);
 
 function shakeBar() { patBar.classList.remove('is-shake'); void patBar.offsetWidth; patBar.classList.add('is-shake'); }
-const clipOf = (el, addSec) => el.dataset.clip ? {clip: +el.dataset.clip, off: (+el.dataset.off || 0) + addSec, src: el.dataset.src, bpm: el.dataset.bpm} : null;
+const clipOf = (el, addSec) => el.dataset.clip ? {clip: +el.dataset.clip, off: (+el.dataset.off || 0) + addSec, src: el.dataset.src, bpm: el.dataset.bpm, pitch: el.dataset.pitch} : null;
 const otherPats = el => [...el.parentElement.querySelectorAll('.pattern')].filter(p => p !== el);
 function freeRightOf(el) {   // batas kanan terdekat sebelum pattern lain / ujung timeline
   const end = pl(el) + pw(el); let hi = W;

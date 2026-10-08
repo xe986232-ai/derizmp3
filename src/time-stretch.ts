@@ -72,3 +72,42 @@ function resample(c: Float32Array, len: number): Float32Array {   // jalan pinta
   for (let i = 0; i < len; i++) { const p = i * k, a = Math.floor(p), f = p - a; r[i] = (c[a] ?? 0) * (1 - f) + (c[Math.min(a + 1, c.length - 1)] ?? 0) * f; }
   return r;
 }
+
+// ---------- Pitch shift (durasi tetap) ----------
+// Pitch naik/turun `semitones` tanpa mengubah durasi: stretch dulu sebesar factor x r (r = 2^(semitones/12)), lalu di-resample ke durasi akhir
+// (memutar r kali lebih cepat menaikkan nada sebesar r). Durasi akhir = n x factor, sama persis dengan timeStretch(): factor 1 = durasi asli.
+// factor bisa digabung dengan tempo (mis. 126 -> 130 BPM sekaligus +3 semitone) dalam satu kali proses.
+export const CLIP_PITCH_MIN = -12, CLIP_PITCH_MAX = 12;
+
+export function timeStretchPitch(chs: Float32Array[], sr: number, factor: number, semitones: number, onProgress?: (p: number) => void): Float32Array[] {
+  if (Math.abs(semitones) < 1e-4) return timeStretch(chs, sr, factor, onProgress);
+  const r = 2 ** (semitones / 12), outLen = Math.max(1, Math.round(chs[0].length * factor));
+  const y = timeStretch(chs, sr, factor * r, onProgress);
+  return y.map(c => resampleCubic(r > 1 ? lowpass(c, sr, 0.45 * sr / r) : c, outLen));   // nada naik: buang frekuensi di atas Nyquist baru supaya tidak aliasing
+}
+
+function lowpass(x: Float32Array, sr: number, fc: number): Float32Array {   // Butterworth orde 4 (dua biquad berurutan)
+  const w = 2 * Math.PI * fc / sr, cw = Math.cos(w), al = Math.sin(w) / (2 * Math.SQRT1_2);
+  const a0 = 1 + al, b0 = (1 - cw) / 2 / a0, b1 = (1 - cw) / a0, a1 = -2 * cw / a0, a2 = (1 - al) / a0;
+  let cur = x;
+  for (let pass = 0; pass < 2; pass++) {
+    const o = new Float32Array(cur.length);
+    let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+    for (let i = 0; i < cur.length; i++) {
+      const v = cur[i], s = b0 * v + b1 * x1 + b0 * x2 - a1 * y1 - a2 * y2;
+      x2 = x1; x1 = v; y2 = y1; y1 = s; o[i] = s;
+    }
+    cur = o;
+  }
+  return cur;
+}
+
+function resampleCubic(c: Float32Array, len: number): Float32Array {   // interpolasi Catmull-Rom (lebih bersih dari linear untuk pergeseran nada)
+  const r = new Float32Array(len), k = c.length / len, last = c.length - 1;
+  for (let i = 0; i < len; i++) {
+    const p = i * k, a = Math.floor(p), f = p - a;
+    const y0 = c[Math.max(a - 1, 0)], y1 = c[Math.min(a, last)], y2 = c[Math.min(a + 1, last)], y3 = c[Math.min(a + 2, last)];
+    r[i] = y1 + 0.5 * f * (y2 - y0 + f * (2 * y0 - 5 * y1 + 4 * y2 - y3 + f * (3 * (y1 - y2) + y3 - y0)));
+  }
+  return r;
+}

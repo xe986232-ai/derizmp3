@@ -276,6 +276,14 @@ button{font:inherit;color:inherit;cursor:pointer}
 @keyframes clipSpin{to{transform:rotate(360deg)}}
 .clip-card__err{font-size:12px;line-height:1.3;color:#d92d4a}
 .clip-card__err[hidden]{display:none}
+.clip-card__val{margin-left:auto;padding-left:20px;color:#7a7a88;font-variant-numeric:tabular-nums}   /* nilai pitch yang terpasang, di kanan item */
+.clip-card__row{display:flex;gap:6px}
+.clip-card__row .clip-card__input{flex:1;min-width:0;text-align:center}
+.clip-card__step{flex:none;display:grid;place-items:center;width:44px;height:44px;padding:0;border:1px solid #d9d9e1;border-radius:10px;background:#f4f4f7;color:#16161d;font-size:20px;font-weight:600;line-height:1;transition:background .15s ease,transform .1s ease}
+.clip-card__step:hover{background:#ebebf0}
+.clip-card__step:active{transform:scale(.95)}
+.clip-card__step:disabled{opacity:.6}
+.clip-card__hint{font-size:12px;line-height:1.3;color:#7a7a88}
 @media (prefers-reduced-motion:reduce){.clip-card__spin{animation-duration:1.6s}}
 .pattern-ghost{position:absolute;top:0;bottom:1px;z-index:1;border-radius:8px;background:rgba(255,255,255,.07);pointer-events:none;animation:fadeIn .12s ease backwards}
 .add-card{position:absolute;top:50%;margin-top:-17px;width:34px;height:34px;z-index:2;padding:0;border:0;border-radius:50%;
