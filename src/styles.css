@@ -1686,7 +1686,7 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .spec[hidden]{display:none}
 .spec__win{position:relative;display:flex;flex-direction:column;width:100%;height:calc(clamp(64px,11vh,100px) + env(safe-area-inset-bottom,0px));padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box;background:#0e0e14;border-top:1px solid rgba(255,255,255,.14)}
 .spec__stage{position:relative;flex:1;min-height:0}
-.spec--s2 .spec__win{height:calc(clamp(88px,14vh,132px) + env(safe-area-inset-bottom,0px))}   /* Gaya 2 (spectrogram + analyzer) butuh sedikit lebih tinggi supaya pita frekuensi terbaca */
+.spec--s2 .spec__win{height:calc(clamp(104px,17vh,150px) + env(safe-area-inset-bottom,0px))}   /* Gaya 2 (6 modul: spectrogram, waveform, peak/LUFS, stereometer, oscilloscope, analyzer) butuh lebih tinggi supaya teks LUFS dan batang meter muat */
 .spec__cv{position:absolute;inset:0;display:block;pointer-events:none}
 /* ===== Export audio (panel menu + overlay progres) ===== */
 .mp__expbtn{position:relative;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:14px;border:0;border-radius:14px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;

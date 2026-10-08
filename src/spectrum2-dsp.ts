@@ -115,3 +115,96 @@ export const contrast = (v: number): number => Math.pow(clamp(v, 0, 1), 1.35);
 
 // ---------- format pembacaan ----------
 export const fmtHz = (hz: number): string => (hz >= 1000 ? (hz / 1000).toFixed(hz >= 10000 ? 1 : 2) + ' kHz' : Math.round(hz) + ' Hz');
+
+// =====================================================================================================
+// MODUL TAMBAHAN GAYA 2 (mengikuti daftar modul referensi: Waveform multi-band, Peak/LUFS, Stereometer)
+// =====================================================================================================
+
+// ---------- Waveform multi-band: warna per rentang frekuensi (rendah / menengah / tinggi) ----------
+export interface BandEnergy { low: number; mid: number; high: number }   // 0..1
+const EDGES = [30, 250, 4000, 16000];                                    // batas rentang (Hz)
+const COMP = [0, 4, 9];                                                  // pengangkat dB per rentang (musik miring ke bawah)
+export function bandEnergies(db: Float32Array, sr: number, out: BandEnergy): void {
+  const bins = db.length, binHz = sr / 2 / bins, p = [0, 0, 0];
+  for (let b = 0; b < 3; b++) {
+    const a = Math.max(1, Math.ceil(EDGES[b] / binHz)), e = Math.min(bins - 1, Math.floor(EDGES[b + 1] / binHz));
+    let s = 0; for (let k = a; k <= e; k++) { const x = db[k]; if (Number.isFinite(x)) s += Math.pow(10, x / 10); }
+    p[b] = s > 0 ? dbToLevel(10 * Math.log10(s) + COMP[b]) : 0;
+  }
+  out.low = p[0]; out.mid = p[1]; out.high = p[2];
+}
+const C_LOW: [number, number, number] = [255, 107, 129], C_MID: [number, number, number] = [179, 161, 247], C_HIGH: [number, number, number] = [126, 226, 240];   // koral, lavender, cyan
+export function waveRGB(e: BandEnergy, out: [number, number, number] = [0, 0, 0]): [number, number, number] {
+  const wl = e.low * e.low, wm = e.mid * e.mid, wh = e.high * e.high, s = wl + wm + wh;
+  if (s < 1e-6) { out[0] = C_MID[0]; out[1] = C_MID[1]; out[2] = C_MID[2]; return out; }
+  for (let i = 0; i < 3; i++) out[i] = (C_LOW[i] * wl + C_MID[i] * wm + C_HIGH[i] * wh) / s;
+  return out;
+}
+
+// ---------- Peak ----------
+export function peakAbs(x: Float32Array, n: number): number {
+  let p = 0; for (let i = Math.max(0, x.length - n); i < x.length; i++) { const v = Math.abs(x[i]); if (v > p) p = v; }
+  return p;
+}
+export const ampToDb = (a: number): number => (a > 1e-6 ? 20 * Math.log10(a) : -120);
+export const PEAK_FLOOR_DB = -60;
+export const dbToMeter = (db: number): number => clamp((db - PEAK_FLOOR_DB) / -PEAK_FLOOR_DB, 0, 1);   // -60..0 dBFS -> 0..1
+
+// ---------- LUFS momentari (ITU-R BS.1770: K-weighting + jendela 400 ms, blok 100 ms) ----------
+export class Biquad {
+  private z1 = 0; private z2 = 0;
+  readonly b0: number; readonly b1: number; readonly b2: number; readonly a1: number; readonly a2: number;
+  constructor(b0: number, b1: number, b2: number, a1: number, a2: number) { this.b0 = b0; this.b1 = b1; this.b2 = b2; this.a1 = a1; this.a2 = a2; }
+  process(x: number): number { const y = this.b0 * x + this.z1; this.z1 = this.b1 * x - this.a1 * y + this.z2; this.z2 = this.b2 * x - this.a2 * y; return y; }
+  reset(): void { this.z1 = 0; this.z2 = 0; }
+}
+// Koefisien untuk sample rate apa pun (rumus analog dasar BS.1770): high-shelf ~ +4 dB di 1,68 kHz, lalu high-pass 38 Hz
+export function kWeighting(sr: number): [Biquad, Biquad] {
+  const f1 = 1681.974450955533, G = 3.999843853973347, Q1 = 0.7071752369554196;
+  const K1 = Math.tan(Math.PI * f1 / sr), Vh = Math.pow(10, G / 20), Vb = Math.pow(Vh, 0.4996667741545416), a0 = 1 + K1 / Q1 + K1 * K1;
+  const shelf = new Biquad((Vh + Vb * K1 / Q1 + K1 * K1) / a0, 2 * (K1 * K1 - Vh) / a0, (Vh - Vb * K1 / Q1 + K1 * K1) / a0, 2 * (K1 * K1 - 1) / a0, (1 - K1 / Q1 + K1 * K1) / a0);
+  const f2 = 38.13547087602444, Q2 = 0.5003270373238773, K2 = Math.tan(Math.PI * f2 / sr), c0 = 1 + K2 / Q2 + K2 * K2;
+  const hp = new Biquad(1, -2, 1, 2 * (K2 * K2 - 1) / c0, (1 - K2 / Q2 + K2 * K2) / c0);
+  return [shelf, hp];
+}
+// Memproses aliran sampel stereo (dipanggil tiap frame dengan sampel baru saja); momentary = rata-rata energi 4 blok terakhir (400 ms)
+export class LoudnessMeter {
+  private fl: [Biquad, Biquad]; private fr: [Biquad, Biquad];
+  private blockN: number; private n = 0; private sumL = 0; private sumR = 0;
+  private blocks = new Float64Array(4); private nb = 0; private head = 0;
+  constructor(sr: number) { this.fl = kWeighting(sr); this.fr = kWeighting(sr); this.blockN = Math.max(1, Math.round(sr * 0.1)); }
+  reset(): void { this.fl[0].reset(); this.fl[1].reset(); this.fr[0].reset(); this.fr[1].reset(); this.n = 0; this.sumL = 0; this.sumR = 0; this.blocks.fill(0); this.nb = 0; this.head = 0; }
+  // memakai `count` sampel terakhir dari l dan r
+  push(l: Float32Array, r: Float32Array, count: number): void {
+    const len = Math.min(l.length, r.length), c = Math.min(count, len);
+    for (let i = len - c; i < len; i++) {
+      const a = this.fl[1].process(this.fl[0].process(l[i])), b = this.fr[1].process(this.fr[0].process(r[i]));
+      this.sumL += a * a; this.sumR += b * b;
+      if (++this.n >= this.blockN) {
+        this.blocks[this.head] = (this.sumL + this.sumR) / this.n; this.head = (this.head + 1) & 3; if (this.nb < 4) this.nb++;
+        this.n = 0; this.sumL = 0; this.sumR = 0;
+      }
+    }
+  }
+  get momentary(): number {   // LUFS; -Infinity bila belum ada blok / senyap (di bawah -70)
+    if (this.nb === 0) return -Infinity;
+    let s = 0; for (let i = 0; i < this.nb; i++) s += this.blocks[i];
+    const z = s / this.nb, v = z > 0 ? -0.691 + 10 * Math.log10(z) : -Infinity;
+    return v < -70 ? -Infinity : v;
+  }
+}
+
+// ---------- Stereometer ----------
+// korelasi fase: +1 = mono sempurna, 0 = tak berkorelasi (lebar), -1 = berlawanan fase
+export function correlation(l: Float32Array, r: Float32Array, n: number): number {
+  let ll = 0, rr = 0, lr = 0; const len = Math.min(l.length, r.length);
+  for (let i = Math.max(0, len - n); i < len; i++) { ll += l[i] * l[i]; rr += r[i] * r[i]; lr += l[i] * r[i]; }
+  const d = Math.sqrt(ll * rr); return d > 1e-12 ? clamp(lr / d, -1, 1) : 0;
+}
+// Titik lissajous (diputar 45°): x = samping (L-R)/√2, y = tengah (L+R)/√2. Mengambil sampel terakhir dengan langkah tetap; mengembalikan jumlah titik.
+export function goniometer(l: Float32Array, r: Float32Array, n: number, outX: Float32Array, outY: Float32Array): number {
+  const len = Math.min(l.length, r.length), cnt = Math.min(outX.length, n, len), stride = Math.max(1, Math.floor(Math.min(n, len) / cnt)), q = Math.SQRT1_2;
+  let k = 0;
+  for (let i = len - 1; i >= 0 && k < cnt; i -= stride) { outX[k] = (l[i] - r[i]) * q; outY[k] = (l[i] + r[i]) * q; k++; }
+  return k;
+}

@@ -73,8 +73,10 @@ function build(): void {
 
   // ---------- audio: analyser di keluaran master ----------
   let ctx: BaseAudioContext | null = null, an: AnalyserNode | null = null, an2: AnalyserNode | null = null, mute: GainNode | null = null, tapNode: AudioNode | null = null;
+  let split: ChannelSplitterNode | null = null, aL: AnalyserNode | null = null, aR: AnalyserNode | null = null;   // gaya 2: kiri / kanan terpisah (Peak/LUFS, Stereometer)
   const buf = new Float32Array(FFT);
-  const fbuf = new Float32Array(FFT2 / 2).fill(-Infinity);   // gaya 2: dB per bin dari analyser kedua (FFT lebih panjang supaya bass rapat)
+  const LR = 2048, lbuf = new Float32Array(LR), rbuf = new Float32Array(LR);
+  const fbuf = new Float32Array(FFT2 / 2).fill(-Infinity);   // gaya 2: dB per bin dari analyser frekuensi (FFT lebih panjang supaya bass rapat)
   const s2 = new SpectrumStyle2();
   let sr = 48000;
   let env = new Envelope(sr), det = new PitchDetector(FFT), trk = new PitchTracker(), tb = new TraceBuilder(FFT, 64);
@@ -89,21 +91,29 @@ function build(): void {
     if (!an || !an2 || an.context !== ctx) {
       an = ctx.createAnalyser(); an.fftSize = FFT; an.smoothingTimeConstant = 0;
       an2 = ctx.createAnalyser(); an2.fftSize = FFT2; an2.smoothingTimeConstant = 0.35; an2.minDecibels = -110; an2.maxDecibels = 0;
-      mute = ctx.createGain(); mute.gain.value = 0; an.connect(mute); an2.connect(mute); mute.connect(ctx.destination);   // sambungan senyap: beberapa browser baru memproses node yang tersambung ke output
+      split = ctx.createChannelSplitter(2);   // sumber mono otomatis dinaikkan ke 2 kanal (L = R), jadi aman
+      aL = ctx.createAnalyser(); aL.fftSize = LR; aL.smoothingTimeConstant = 0;
+      aR = ctx.createAnalyser(); aR.fftSize = LR; aR.smoothingTimeConstant = 0;
+      split.connect(aL, 0); split.connect(aR, 1);
+      mute = ctx.createGain(); mute.gain.value = 0; an.connect(mute); an2.connect(mute); aL.connect(mute); aR.connect(mute); mute.connect(ctx.destination);   // sambungan senyap: beberapa browser baru memproses node yang tersambung ke output
     }
     if (sr !== ctx.sampleRate) { sr = ctx.sampleRate; env = new Envelope(sr); }
-    try { src.connect(style === 1 ? an2 : an); tapNode = src; } catch { return false; }   // hanya analyser yang dipakai gaya aktif yang disambung (yang lain tidak menghabiskan CPU)
+    try {
+      src.connect(an);   // domain waktu mono: dipakai kedua gaya
+      if (style === 1) { src.connect(an2); src.connect(split!); }   // Gaya 2 menambah analyser frekuensi + kiri/kanan (gaya 1 tidak menyambungnya, jadi tidak menghabiskan CPU)
+      tapNode = src;
+    } catch { return false; }
     return true;
   }
   function disconnect(): void {
-    if (tapNode) for (const a of [an, an2]) { if (a) { try { tapNode.disconnect(a); } catch { /* sudah lepas / memang tidak tersambung */ } } }
+    if (tapNode) for (const a of [an, an2, split]) { if (a) { try { tapNode.disconnect(a); } catch { /* sudah lepas / memang tidak tersambung */ } } }
     tapNode = null;
   }
   function resetState(): void {
     env.clear(); gainH.reset(); gainL.reset(); trk.reset(); prevTrace.fill(0); trace.fill(0); traceOk = false;
     carry = 0; lastPitch = 0;
     clk = lastClk = ctx ? ctx.currentTime : 0;
-    s2.reset(); fbuf.fill(-Infinity);
+    s2.reset(); fbuf.fill(-Infinity); lbuf.fill(0); rbuf.fill(0);
   }
 
   // ---------- ukuran kanvas ----------
@@ -166,8 +176,12 @@ function build(): void {
   function frame(ts: number): void {
     raf = requestAnimationFrame(frame);
     const dt = clamp((ts - lastTs) / 1000, 0.001, 0.1); lastTs = ts;
-    if (style === 1) {
-      if (an2 && ctx) { an2.getFloatFrequencyData(fbuf); s2.update(fbuf, dt, SPEEDS[speed].pps); }
+    if (style === 1) {   // Gaya 2: semua modul memakai satu set pembacaan yang sama per frame
+      if (an && an2 && aL && aR && ctx) {
+        an.getFloatTimeDomainData(buf); an2.getFloatFrequencyData(fbuf); aL.getFloatTimeDomainData(lbuf); aR.getFloatTimeDomainData(rbuf);
+        traceStep(ts, dt);   // Oscilloscope memakai scope terkunci fase yang sama dengan Gaya 1
+        s2.update({ db: fbuf, mono: buf, l: lbuf, r: rbuf, sr, newSamples: dt * sr, trace, traceOk, traceScale: gainL.scale }, dt, SPEEDS[speed].pps);
+      }
     } else if (an && ctx) {
       an.getFloatTimeDomainData(buf);
       // jam halus: maju mengikuti rAF, dikoreksi pelan ke jam audio (currentTime naik per blok besar, kalau dipakai langsung gulirannya patah-patah)
@@ -180,13 +194,17 @@ function build(): void {
         if (n > 0) env.push(buf, n);
         gainH.update(env.lastPeak, dt);
       }
-      if (ts - lastPitch >= 40) { trk.update(det.detect(buf, sr)); lastPitch = ts; }
-      const info = tb.build(buf, trk.period, sr, trace, traceOk ? prevTrace : null);
-      traceOk = !info.silent;
-      gainL.update(info.peak, dt);
-      prevTrace.set(trace);
+      traceStep(ts, dt);
     }
     draw();
+  }
+  // deteksi nada + bangun scope terkunci fase dari `buf` (dipakai Gaya 1 di kanan strip dan Oscilloscope Gaya 2)
+  function traceStep(ts: number, dt: number): void {
+    if (ts - lastPitch >= 40) { trk.update(det.detect(buf, sr)); lastPitch = ts; }
+    const info = tb.build(buf, trk.period, sr, trace, traceOk ? prevTrace : null);
+    traceOk = !info.silent;
+    gainL.update(info.peak, dt);
+    prevTrace.set(trace);
   }
   const start = (): void => { cancelAnimationFrame(raf); lastTs = performance.now(); raf = requestAnimationFrame(frame); };
   const stop = (): void => { cancelAnimationFrame(raf); raf = 0; };

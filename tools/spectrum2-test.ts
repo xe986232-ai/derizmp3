@@ -1,6 +1,7 @@
 // Tes SPECTRUM GAYA 2 (src/spectrum2-dsp.ts): pemetaan pita log, dinamika bar + penanda puncak, frekuensi terkeras, palet.
 //   node tools/spectrum2-test.ts
-import { BandMap, BarDynamics, loudestPeak, buildPalette, paletteAt, hzToPos, posToHz, dbToLevel, fmtHz, FMIN, FMAX } from '../src/spectrum2-dsp.ts';
+import { BandMap, BarDynamics, loudestPeak, buildPalette, paletteAt, hzToPos, posToHz, dbToLevel, fmtHz, FMIN, FMAX,
+  bandEnergies, waveRGB, peakAbs, ampToDb, dbToMeter, LoudnessMeter, correlation, goniometer } from '../src/spectrum2-dsp.ts';
 
 let fail = 0;
 const ok = (c: boolean, msg: string) => { console.log((c ? 'ok   ' : 'FAIL ') + msg); if (!c) fail++; };
@@ -102,6 +103,69 @@ ok(dbToLevel(-Infinity) === 0 && dbToLevel(NaN) === 0 && dbToLevel(0) === 1 && d
   ok(pal[255 * 4 + 3] === 255 && pal[3] === 255, 'semua warna opak');
   const mid = paletteAt(0.64);
   ok(Math.abs(mid[0] - 179) < 1 && Math.abs(mid[1] - 161) < 1 && Math.abs(mid[2] - 247) < 1, 'titik 0,64 = lavender aksen aplikasi (#b3a1f7)');
+}
+
+// ---------- Waveform multi-band: warna mengikuti isi frekuensi ----------
+{
+  const e = { low: 0, mid: 0, high: 0 };
+  bandEnergies(spectrumDb(tone(100)), SR, e);
+  ok(e.low > e.mid && e.low > e.high, `sinus 100 Hz -> rentang rendah dominan (${e.low.toFixed(2)} / ${e.mid.toFixed(2)} / ${e.high.toFixed(2)})`);
+  bandEnergies(spectrumDb(tone(1000)), SR, e);
+  ok(e.mid > e.low && e.mid > e.high, 'sinus 1 kHz -> menengah dominan');
+  bandEnergies(spectrumDb(tone(9000)), SR, e);
+  ok(e.high > e.low && e.high > e.mid, 'sinus 9 kHz -> tinggi dominan');
+  const lo = waveRGB({ low: 1, mid: 0.05, high: 0.05 }), hi = waveRGB({ low: 0.05, mid: 0.05, high: 1 });
+  ok(lo[0] > 220 && hi[2] > 200 && hi[0] < 150, 'warna: rendah condong koral, tinggi condong cyan');
+  const sil = waveRGB({ low: 0, mid: 0, high: 0 });
+  ok(sil[0] === 179 && sil[1] === 161, 'senyap -> warna lavender (tidak NaN)');
+  bandEnergies(new Float32Array(BINS).fill(-Infinity), SR, e);
+  ok(e.low === 0 && e.mid === 0 && e.high === 0, 'senyap -> energi 0');
+}
+
+// ---------- Peak ----------
+{
+  const x = new Float32Array(1000); x[900] = -0.5; x[100] = 0.9;
+  ok(Math.abs(peakAbs(x, 200) - 0.5) < 1e-6 && Math.abs(peakAbs(x, 1000) - 0.9) < 1e-6, 'peakAbs hanya melihat n sampel terakhir');
+  ok(Math.abs(ampToDb(1)) < 1e-9 && Math.abs(ampToDb(0.5) + 6.0206) < 1e-3 && ampToDb(0) === -120, 'ampToDb');
+  ok(dbToMeter(0) === 1 && dbToMeter(-60) === 0 && dbToMeter(-30) === 0.5 && dbToMeter(-200) === 0, 'dbToMeter: -60..0 dBFS -> 0..1');
+}
+
+// ---------- LUFS (BS.1770) ----------
+{
+  const run = (sr: number, f: number, aL: number, aR: number, sec = 1): number => {
+    const m = new LoudnessMeter(sr), n = Math.floor(sr * sec), l = new Float32Array(n), r = new Float32Array(n);
+    for (let i = 0; i < n; i++) { const s = Math.sin((2 * Math.PI * f * i) / sr); l[i] = aL * s; r[i] = aR * s; }
+    m.push(l, r, n); return m.momentary;
+  };
+  const full = run(48000, 997, 1, 1);
+  const one = run(48000, 997, 1, 0);
+  ok(Math.abs(one - -3.01) < 0.15, `acuan BS.1770: 997 Hz skala penuh di SATU kanal = -3,01 LUFS (didapat ${one.toFixed(2)})`);
+  ok(Math.abs(full) < 0.15, `997 Hz skala penuh di kedua kanal = 0,0 LUFS (didapat ${full.toFixed(2)})`);
+  ok(Math.abs(run(48000, 997, 0.1, 0.1) - (full - 20)) < 0.1, '-20 dB amplitudo = -20 LUFS (linear)');
+  ok(Math.abs(run(44100, 997, 1, 1) - full) < 0.1, 'konsisten di 44,1 kHz');
+  ok(Math.abs(one - (full - 3.01)) < 0.1, 'satu kanal saja = 3 dB lebih pelan dari dua kanal');
+  ok(run(48000, 20, 1, 1) < run(48000, 997, 1, 1) - 10, 'high-pass K-weighting: 20 Hz jauh lebih pelan dari 997 Hz');
+  ok(run(48000, 8000, 1, 1) > full + 2, 'high-shelf K-weighting: 8 kHz lebih keras terukur dari 997 Hz');
+  ok(run(48000, 997, 0, 0) === -Infinity, 'senyap = -Infinity');
+  const m = new LoudnessMeter(48000); ok(m.momentary === -Infinity, 'belum ada data = -Infinity');
+}
+
+// ---------- Stereometer ----------
+{
+  const n = 2048, l = new Float32Array(n), r = new Float32Array(n), r2 = new Float32Array(n), r3 = new Float32Array(n);
+  for (let i = 0; i < n; i++) { l[i] = Math.sin(i * 0.05); r[i] = l[i]; r2[i] = -l[i]; r3[i] = Math.sin(i * 0.05 + Math.PI / 2); }
+  ok(correlation(l, r, n) > 0.999, 'korelasi mono sempurna = +1');
+  ok(correlation(l, r2, n) < -0.999, 'korelasi berlawanan fase = -1');
+  ok(Math.abs(correlation(l, r3, n)) < 0.05, 'korelasi beda fase 90° = ~0');
+  ok(correlation(new Float32Array(n), new Float32Array(n), n) === 0, 'senyap = 0');
+  const xs = new Float32Array(256), ys = new Float32Array(256);
+  let k = goniometer(l, r, n, xs, ys);
+  let maxX = 0; for (let i = 0; i < k; i++) maxX = Math.max(maxX, Math.abs(xs[i]));
+  ok(k === 256 && maxX < 1e-6, 'sinyal mono: semua titik di sumbu tengah (x = 0)');
+  k = goniometer(l, r2, n, xs, ys);
+  let maxY = 0; for (let i = 0; i < k; i++) maxY = Math.max(maxY, Math.abs(ys[i]));
+  ok(maxY < 1e-6, 'sinyal berlawanan fase: semua titik di sumbu samping (y = 0)');
+  ok(goniometer(l, r, 100, xs, ys) === 100, 'jumlah titik dibatasi n bila n < kapasitas');
 }
 
 ok(fmtHz(440) === '440 Hz' && fmtHz(1234) === '1.23 kHz' && fmtHz(12500) === '12.5 kHz', 'fmtHz');
