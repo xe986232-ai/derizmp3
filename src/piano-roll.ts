@@ -1474,6 +1474,7 @@ function build(): HTMLElement {
 export function openPianoRoll(opts: PianoRollOpts, host: HTMLElement = document.querySelector('.stage') as HTMLElement) {
   if (!root) { root = build(); host.appendChild(root); }
   const key = opts.id || opts.track + '/' + opts.pattern;
+  if (curKey && key !== curKey) { window.clearTimeout(notifyT); notifyT = 0; notifyChange(); }   // perubahan terakhir pattern lama yang masih tertunda (debounce drag/zoom) dikirim dulu, kalau tidak pratinjau di pattern tertinggal dan beda dengan isi piano roll
   if (key !== curKey) { undoStack = []; redoStack = []; selected = new Set(); }
   pvStop();   // pindah pattern / VST: lepas nada preview yang masih bunyi
   curKey = key;

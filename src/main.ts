@@ -1602,6 +1602,7 @@ function duplicateTrack(src) {
   // DERIZ: pertama = bawaan track, sisanya lewat addDeriz (sama seperti membuka project)
   while (fxRack.derizIds(id).length < derizSrc.length) { const k = fxRack.derizIds(id).length; if (k === 0) fxRack.addInstrument(id, 'deriz'); else fxRack.addDeriz(id); if (fxRack.derizIds(id).length === k) break; }
   derizState.forEach((st, i) => { if (fxRack.derizIds(id)[i] !== undefined) fxRack.derizImport(id, i, st); });
+  const srcPlain = fxRack.derizPlainIndex(sid); if (srcPlain !== undefined) fxRack.derizSetPlainIndex(id, srcPlain);   // pemilik kunci polos ikut disalin, kalau tidak nada DERIZ lain di pattern salinan jadi yatim (tergambar di pattern tapi tidak ada di piano roll)
   if (fxs.length) fxRack.fxImport(id, fxs);
   if (sPwr && sPwr.getAttribute('aria-checked') === 'false') cont.querySelector('.trkcard__power').click();
 
@@ -2283,7 +2284,7 @@ function projectSnapshot() {
     tracks.push({
       id, ins: c.dataset.ins || 'Audio clip', name: document.getElementById('track-name-' + id).textContent,
       color: c.style.getPropertyValue('--track-color'), vol: sl ? +sl.value : 100,
-      off: !!pwr && pwr.getAttribute('aria-checked') === 'false', deriz: fxRack.derizIds(id).length, pats,
+      off: !!pwr && pwr.getAttribute('aria-checked') === 'false', deriz: fxRack.derizIds(id).length, po: fxRack.derizPlainIndex(id), pats,
       ...(dz.some(x => x.z) ? {dz} : {}),
       ...(fxs.length ? {fx: fxs} : {}),
     });
@@ -2336,6 +2337,12 @@ async function projectRestore(rec) {
       const z = st.z && dBufs[st.z.k];
       fxRack.derizImport(id, i, {on: st.on !== false, v: st.v || {}, ...(z ? {z: {name: st.z.name, start: st.z.start || 0, zoom: st.z.zoom || 1, view: st.z.view || 0, buf: z}} : {})});
     });
+    if (typeof t.po === 'number') fxRack.derizSetPlainIndex(id, t.po);   // pemilik nada kunci polos di pattern track ini (bukan selalu DERIZ pertama, mis. DERIZ pertama sudah dihapus)
+    else if ((t.deriz || 0) > 1) {   // project lama tanpa data pemilik: DERIZ yang punya nada berkunci "@" pasti bukan pemilik kunci polos
+      const used = new Set(); for (const p of t.pats || []) for (const x of p.x || []) if (x.tr === t.id) used.add(x.i);
+      const free = []; for (let i = 0; i < t.deriz; i++) if (!used.has(i)) free.push(i);
+      if (used.size && free.length <= 1) fxRack.derizSetPlainIndex(id, free.length ? free[0] : -1);
+    }
     if (t.fx && t.fx.length) fxRack.fxImport(id, t.fx);   // Reverb / EQ / Filter / Supersaw: jenis, nyala, nilai knob
     if (t.off) cont.querySelector('.trkcard__power').click();
     for (const p of t.pats || []) {

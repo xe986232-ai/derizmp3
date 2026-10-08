@@ -513,6 +513,8 @@ export interface FxRack {
   derizHeadPump(ahead: number): void;   // buat garis play untuk nada yang mulai sebelum waktu AudioContext `ahead` (tidak ada elemen DOM untuk nada yang masih jauh)
   derizOn(track: string, midi: number, fxId?: number): number;   // nada langsung (keyboard di bawah piano roll); mengembalikan id untuk derizOff
   derizOwnsPlain(track: string, fxId: number): boolean;   // DERIZ ini pemilik nada kunci polos di pattern track tsb
+  derizPlainIndex(track: string): number | undefined;   // urutan DERIZ pemilik kunci polos di track ini (-1 = pemiliknya sudah dihapus, undefined = belum pernah ada); ikut disimpan di project
+  derizSetPlainIndex(track: string, i: number): void;   // pulihkan pemilik kunci polos saat project dibuka / track diduplikat (i < 0 = tidak ada pemilik)
   derizCount(): number;                       // jumlah plugin DERIZ di semua track (batas demo)
   derizIds(track: string): number[];        // semua DERIZ di track ini, urut kartu (yang pertama = bawaan track)
   derizAll(): Array<{ id: number; track: string }>;   // semua DERIZ yang menyala dan sudah berisi audio, di semua track
@@ -1793,6 +1795,8 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     hasDeriz: track => !!derizOf(track),
     derizPlay, derizSchedule, derizHeadPump, derizOn, derizOff, derizStop, derizWarm,
     derizOwnsPlain: (track, fxId) => plainOwner.get(track) === fxId,
+    derizPlainIndex: track => { const o = plainOwner.get(track); return o === undefined ? undefined : (racks.get(track) ?? []).filter(f => f.type === 'deriz').findIndex(f => f.id === o); },
+    derizSetPlainIndex: (track, i) => { const ids = (racks.get(track) ?? []).filter(f => f.type === 'deriz').map(f => f.id); if (ids.length) plainOwner.set(track, ids[i] ?? -1); },
     derizCount,
     derizIds: track => (racks.get(track) ?? []).filter(f => f.type === 'deriz').map(f => f.id),
     derizAll: () => [...racks.entries()].flatMap(([track, r]) => r.filter(f => f.type === 'deriz' && f.on && f.deriz).map(f => ({ id: f.id, track }))),
