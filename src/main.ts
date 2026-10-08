@@ -1678,8 +1678,23 @@ function syncTransportUI() {
   drumsSyncPlay();   // tombol play di jendela Drums ikut berubah
 }
 // Posisi playhead dihitung dari jam AudioContext (bukan jam rAF), jadi selalu sinkron dengan suara audio clip
+// Playhead sudah melewati ujung pattern / clip paling akhir (tidak ada lagi yang diputar di depan): langsung balik ke titik start dan lanjut main (seperti loop).
+// Jam penjadwalan (bukan jam yang terdengar) yang dipakai, supaya putaran berikutnya menyambung tanpa jeda sebesar latensi output.
+// Tidak berlaku saat export audio (rekaman harus berhenti di ujung isi), dan kalau Play dimulai dari titik di luar isi (tidak ada yang bisa diputar).
+function loopBackIfEnded() {
+  if (expSaved) return false;
+  const end = contentEndBar(); if (end <= 0) return false;
+  if (startPos >= end - 1e-6) return false;
+  if (startPos + Math.max(0, actx.currentTime - startCtx) / SEC_PER_BAR < end - 1e-6) return false;
+  posBars = startMark < end - 1e-6 ? startMark : 0;
+  scheduleClips(false);   // jadwalkan ulang dari titik start (tanpa count-in); sekaligus membuat ulang animasi playhead
+  userScrollUntil = 0;
+  if (autoScroll) showPlayhead();   // timeline ikut kembali ke start
+  return true;
+}
 function tick() {
   if (!playing) return;
+  if (loopBackIfEnded()) { playRaf = requestAnimationFrame(tick); return; }
   posBars = startPos + Math.max(0, smoothAudible() - startCtx) / SEC_PER_BAR;
   if (posBars >= BARS) { posBars = BARS; pausePlay(); return; }
   followPlayhead();
