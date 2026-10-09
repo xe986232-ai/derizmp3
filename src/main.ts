@@ -56,7 +56,11 @@ const MAX_BARS = 300, H = 48;
 const BAR_MIN = 24, BAR_MAX = 3840, BAR_DEFAULT = 80;   // maks 4800%: sampai level 1/64 ketukan kelihatan jelas
 const wsEl = document.querySelector('.workspace'), tlEl = document.getElementById('timeline');
 let BAR_W = BAR_DEFAULT, W = BARS * BAR_W;
-const pl = el => parseFloat(el.style.left) || 0, pw = el => parseFloat(el.style.width) || 0;
+// Browser menyerialkan style.left / width dengan ~6 angka bermakna, jadi membaca lalu menulis ulang (zoom: pl * ratio) membuang presisi di tiap langkah dan posisi pattern
+// "melayang" setelah banyak zoom; placementSig lalu mengira pattern digeser dan menjadwal ulang SELURUH nada saat Play (suara patah-patah). setZoom menyimpan nilai
+// eksaknya di _lv / _wv (dipakai selama string style belum diubah kode lain), jadi zoom tidak lagi menggeser posisi dalam satuan bar.
+const pl = el => (el._lv !== undefined && el.style.left === el._ls) ? el._lv : parseFloat(el.style.left) || 0;
+const pw = el => (el._wv !== undefined && el.style.width === el._ws) ? el._wv : parseFloat(el.style.width) || 0;
 // Snap makin halus saat di-zoom besar (1/4 bar sampai 240px, lalu 1/16, 1/32, 1/64)
 let progScrollAt = 0;   // waktu terakhir timeline digeser oleh Auto Scroll: scroll semacam itu tidak boleh menutup menu yang sedang terbuka
 const isProgScroll = () => performance.now() - progScrollAt < 80;
@@ -2147,8 +2151,9 @@ function setZoom(next, clientX) {
   setZoomVar('--fine-a', BAR_W >= 1280 ? .03 : 0);
   lap('2 variabel CSS');
   document.querySelectorAll('.pattern').forEach(p => {
-    p.style.left = pl(p) * ratio + 'px';
-    p.style.width = pw(p) * ratio + 'px';
+    const L = pl(p) * ratio, Wd = pw(p) * ratio;
+    p.style.left = L + 'px'; p.style.width = Wd + 'px';
+    p._lv = L; p._ls = p.style.left; p._wv = Wd; p._ws = p.style.width;   // nilai eksak (lihat pl / pw)
   });
   lap('3 left/width semua pattern');
   sizeRuler(); lap('4 sizeRuler');
