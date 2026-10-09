@@ -381,20 +381,32 @@ function slot(lane, x) {
   return end - start >= BAR_W / 2 ? {start, width: end - start} : null;
 }
 // Isi note ditampilkan mini di dalam pattern (seperti piano roll kecil): x = ketukan dari awal pattern, y = nada (dipusatkan sesuai rentang nada)
+// Potong dari KIRI tidak menghapus nada: nada tetap utuh di data, awal pattern cuma bergeser. dataset.noff = berapa ketukan awal pattern sudah maju
+// dari titik asal nada (negatif = ditarik mundur melewati titik asal). Posisi nada di pattern = n.s - noff. Nada yang jatuh di luar pattern hanya
+// ke-clip (tampilan) / tidak dibunyikan, jadi ditarik balik ke kiri nadanya muncul lagi, sama seperti potong kanan.
+const patNoff = el => +el.dataset.noff || 0;
+const setPatNoff = (el, v) => { if (Math.abs(v) > 1e-6) el.dataset.noff = String(Math.round(v * 1e6) / 1e6); else delete el.dataset.noff; };
+// Sebelum nada dibaca / diedit relatif ke awal pattern (piano roll, Drums, bagi dua): geser nada sungguhan supaya awal pattern = ketukan 0, noff kembali 0
+function bakePatNoff(el) {
+  const d = patNoff(el), id = el.dataset.prId; if (!d || !id) { if (d) setPatNoff(el, 0); return; }
+  [id, ...pianoRollExtraKeys(id)].forEach(k => shiftPianoRollNotes(k, -d));
+  setPatNoff(el, 0); renderPatNotes(el);
+}
 function renderPatNotes(el) {
   const id = el.dataset.prId; if (!id) return;
+  const nx = 'transform:translateX(calc(var(--bar) * ' + (-patNoff(el) / 4) + '));';
   const notes = [id, ...pianoRollExtraKeys(id)].flatMap(k => getPianoRollNotes(k));   // nada milik track pattern + nada dari DERIZ lain yang mengisi pattern ini
   let box = el.querySelector('.pattern__notes');
   if (!notes.length) { if (box) box.remove(); return; }
   if (!box) { box = document.createElement('div'); box.className = 'pattern__notes'; el.insertBefore(box, el.querySelector('.pattern__handle')); }
   if (isDrumsTrack(el.parentElement.dataset.track)) {   // pattern Drums: tampil sebagai blok per alat (8 baris tetap), bukan tinggi nada
-    box.innerHTML = '<svg viewBox="0 0 ' + PR_BEATS + ' ' + DRUM_KIT.length + '" preserveAspectRatio="none" aria-hidden="true" style="width:calc(var(--bar) * ' + PR_BEATS / 4 + ')">' +
+    box.innerHTML = '<svg viewBox="0 0 ' + PR_BEATS + ' ' + DRUM_KIT.length + '" preserveAspectRatio="none" aria-hidden="true" style="' + nx + 'width:calc(var(--bar) * ' + PR_BEATS / 4 + ')">' +
       notes.map(n => '<rect x="' + n.s + '" y="' + (drumRow(n.p) + 0.12) + '" width="0.2" height="0.76" rx="0.05"' + (n.v !== undefined ? ' fill-opacity="' + velAlpha(n.v).toFixed(2) + '"' : '') + '/>').join('') + '</svg>';
     return;
   }
   let lo = 127, hi = 0; notes.forEach(n => { lo = Math.min(lo, n.p); hi = Math.max(hi, n.p); });
   const rows = Math.max(hi - lo + 1, 8), top = (rows - (hi - lo + 1)) / 2;   // minimal 8 baris supaya 1-2 nada tidak jadi balok raksasa
-  box.innerHTML = '<svg viewBox="0 0 ' + PR_BEATS + ' ' + rows + '" preserveAspectRatio="none" aria-hidden="true" style="width:calc(var(--bar) * ' + PR_BEATS / 4 + ')">' +
+  box.innerHTML = '<svg viewBox="0 0 ' + PR_BEATS + ' ' + rows + '" preserveAspectRatio="none" aria-hidden="true" style="' + nx + 'width:calc(var(--bar) * ' + PR_BEATS / 4 + ')">' +
     notes.map(n => '<rect x="' + n.s + '" y="' + (top + hi - n.p + 0.1) + '" width="' + Math.max(n.l, 0.12) + '" height="0.8"' + (n.v !== undefined ? ' fill-opacity="' + velAlpha(n.v).toFixed(2) + '"' : '') + '/>').join('') + '</svg>';
 }
 // Banyak DERIZ bisa mengisi satu pattern: nada instrumen bawaan track pemilik pattern disimpan di kunci id pattern, nada DERIZ lain di "<id>@<id DERIZ>"
@@ -550,15 +562,15 @@ lanesEl.addEventListener('pointerdown', e => {
 });
 
 // Resize dari sisi KIRI (awal pattern): ujung kanan diam, isi pattern tetap di posisi waktunya.
-// Audio clip: offset ikut bergeser (tidak bisa ditarik lebih kiri dari awal audio). Nada piano roll & kurva Automation Clip digeser saat dilepas
-// (nada / titik yang jatuh sebelum awal baru dipotong, sama seperti "Bagi dua"); selama ditarik, nada mini digeser lewat CSS dan kurva digeser langsung.
+// Audio clip: offset ikut bergeser (tidak bisa ditarik lebih kiri dari awal audio). Nada piano roll TIDAK dihapus: cuma dataset.noff (offset awal pattern) yang berubah,
+// jadi nada yang ke-clip muncul lagi kalau ditarik balik (sama seperti potong kanan). Kurva Automation Clip digeser langsung; selama ditarik, nada mini digeser lewat CSS.
 lanesEl.addEventListener('pointerdown', e => {
   const h = e.target.closest('.pattern__handle--l');
   if (!h || e.button > 0) return;
   e.preventDefault();
   const el = h.parentElement;
   const s0 = pl(el), end = s0 + pw(el), STEP = snapStep(), MIN = BAR_W / 2;
-  const isClip = !!el.dataset.clip, off0 = +el.dataset.off || 0, auId = el.dataset.auId, base = auId ? exportClip(auId) : null;
+  const isClip = !!el.dataset.clip, off0 = +el.dataset.off || 0, auId = el.dataset.auId, base = auId ? exportClip(auId) : null, noff0 = patNoff(el);
   let lo = 0;
   otherPats(el).forEach(p => { const b = pl(p) + pw(p); if (b <= s0 + 1) lo = Math.max(lo, b); });   // batas kiri: pattern sebelumnya / awal timeline
   if (isClip) lo = Math.max(lo, s0 - off0 / SEC_PER_BAR * BAR_W);                                    // audio clip: tidak boleh melewati awal audio
@@ -569,7 +581,7 @@ lanesEl.addEventListener('pointerdown', e => {
     el.style.left = L + 'px'; el.style.width = (end - L) + 'px';
     if (isClip) el.dataset.off = Math.max(0, off0 + d / BAR_W * SEC_PER_BAR);
     if (auId) shiftClip(auId, d / BAR_W * 4, base);
-    el.querySelectorAll('.pattern__notes svg').forEach(sv => { sv.style.transform = d ? 'translateX(' + (-d) + 'px)' : ''; });
+    el.querySelectorAll('.pattern__notes svg').forEach(sv => { sv.style.transform = 'translateX(' + (-(noff0 / 4 * BAR_W + d)) + 'px)'; });
     handleSide(el);
   };
   h.setPointerCapture(e.pointerId);
@@ -582,13 +594,8 @@ lanesEl.addEventListener('pointerdown', e => {
     el.classList.remove('is-resizing');
     const L = clamp(snapOn ? Math.round(pl(el) / STEP) * STEP : pl(el));
     apply(L);
-    el.querySelectorAll('.pattern__notes svg').forEach(sv => { sv.style.transform = ''; });
     const dB = (L - s0) / BAR_W * 4;   // ketukan: + = awal dimajukan (memendek), - = awal dimundurkan (memanjang)
-    if (el.dataset.prId && Math.abs(dB) > 1e-6) {
-      const id = el.dataset.prId;
-      [id, ...pianoRollExtraKeys(id)].forEach(k => shiftPianoRollNotes(k, -dB));
-      renderPatNotes(el);
-    }
+    if (el.dataset.prId) { setPatNoff(el, noff0 + dB); renderPatNotes(el); }   // nada TIDAK dihapus / digeser di data, hanya offset tampilan + putar yang berubah
   };
   h.addEventListener('pointermove', move);
   h.addEventListener('pointerup', done);
@@ -792,7 +799,7 @@ function copyPattern() {
   if (start + w > W + .5) return shakeBar();
   const n = createPattern(lane, {start, width: w}, clipOf(el, 0));
   n.querySelector('.pattern__title').textContent = el.querySelector('.pattern__title').textContent;
-  if (el.dataset.prId) { n.dataset.prId = 'pat' + (++prSeq); copyPatNotes(el.dataset.prId, n.dataset.prId); renderPatNotes(n); }   // salinan ikut membawa nada
+  if (el.dataset.prId) { n.dataset.prId = 'pat' + (++prSeq); copyPatNotes(el.dataset.prId, n.dataset.prId); setPatNoff(n, patNoff(el)); renderPatNotes(n); }   // salinan ikut membawa nada (dan offset potong kirinya)
   if (el.dataset.auId) setupAutoEl(n, cloneClip(el.dataset.auId));   // salinan Automation Clip: kurva sama, diedit terpisah
   patAnchor = null; selectPattern(n);
   n.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'smooth'});
@@ -819,6 +826,7 @@ function openEdit(el, keepView = false) {
   const lane = el.parentElement, id = lane.dataset.track;
   const nm = document.getElementById('track-name-' + id);
   if (!el.dataset.prId) el.dataset.prId = 'pat' + (++prSeq);   // kunci supaya nada piano roll tersimpan per pattern
+  bakePatNoff(el);   // piano roll membaca nada relatif ke awal pattern
   if (isDrumsTrack(id)) { selectPattern(el); openDrums(); return; }   // track Drums: pola disusun di editor blok (step sequencer), bukan piano roll
   prStartBar = pl(el) / BAR_W; prEl = el;
   prvTarget = {track: id, fx: hasSynth(id) ? null : fxRack.derizIds(id)[0] ?? null};   // sama dengan pemilik editKey(el)
@@ -853,6 +861,7 @@ function enterPatternAs(el, fxId, keepView = false) {
   if (!el.isConnected) return;
   const lane = el.parentElement, track = fxRack.derizTrackOf(fxId); if (track === undefined) return;
   if (!el.dataset.prId) el.dataset.prId = 'pat' + (++prSeq);
+  bakePatNoff(el);
   const nm = document.getElementById('track-name-' + track), cont = document.querySelector('.trkcard-wrap[data-track="' + track + '"]');
   prStartBar = pl(el) / BAR_W; prEl = el;
   prvTarget = {track, fx: fxId};   // nada di piano roll ini milik DERIZ fxId
@@ -924,6 +933,7 @@ function splitPattern() {
   let cut = snapOn ? Math.round((s0 + w / 2) / st) * st : s0 + w / 2;
   if (cut - s0 < st || s0 + w - cut < st) cut = s0 + w / 2;
   if (cut - s0 < 4 || s0 + w - cut < 4) return shakeBar();
+  bakePatNoff(el);   // titik bagi dihitung dari awal pattern yang terlihat
   const n = createPattern(el.parentElement, {start: cut, width: s0 + w - cut}, clipOf(el, (cut - s0) / BAR_W * SEC_PER_BAR));
   n.querySelector('.pattern__title').textContent = el.querySelector('.pattern__title').textContent;
   if (el.dataset.prId) {   // nada ikut terbagi: kiri dipotong di titik bagi, kanan mulai dari titik itu
@@ -1464,11 +1474,13 @@ setMgchordBridge({
       const lt = el.parentElement.dataset.track;
       if (!isDrumsTrack(lt)) return 'Pattern ini bukan milik track Drums. Pilih pattern di track yang punya plugin Drums.';
       if (!el.dataset.prId) el.dataset.prId = 'pat' + (++prSeq);
+      bakePatNoff(el);
       return {notes: getPianoRollNotes(editKey(el)).map(n => ({p: n.p, s: n.s, l: n.l, ...(n.v !== undefined ? {v: n.v} : {})})), beats: pw(el) / BAR_W * 4, label: document.getElementById('track-name-' + lt).textContent};
     },
     set(notes) {
       const el = drumsPat(); if (!el) return;
       if (isPianoRollOpen()) closePianoRoll();   // supaya piano roll tidak menyimpan nada lama
+      bakePatNoff(el);
       setPianoRollNotes(editKey(el), notes);
       renderPatNotes(el); patBarPlace();
     },
@@ -1619,7 +1631,7 @@ function duplicateTrack(src) {
       const to = i >= 0 ? newDz[i] : fx;
       if (to !== undefined) copyPianoRollNotes(k, nid + '@' + to);
     }
-    renderPatNotes(el);
+    setPatNoff(el, patNoff(p)); renderPatNotes(el);
   }
   selectTrack(cont);
   toast('Track diduplikat: ' + name);
@@ -1731,21 +1743,22 @@ function synthPump(ctx, ahead) {
 // Nada satu pattern (kunci nada = key) dijadwalkan ke instrumen track "track"; deriz = lewat sampler DERIZ track itu
 function queueNotes(el, key, track, deriz, bs, fxId) {
   const notes = getPianoRollNotes(key); if (!notes.length) return;
-  const b0 = pl(el) / BAR_W * 4, b1 = (pl(el) + pw(el)) / BAR_W * 4, from = startPos * 4;
+  const pStart = pl(el) / BAR_W * 4, b0 = pStart - patNoff(el), b1 = (pl(el) + pw(el)) / BAR_W * 4, from = startPos * 4;   // b0 = titik asal nada; nada sebelum awal pattern (dipotong dari kiri) tidak dibunyikan (lihat lo di bawah)
+  const lo = Math.max(from, pStart);
   // slide: nada slide tidak dibunyikan ulang; suara nada sumber dipanjangkan sampai akhir nada slide dan tinggi nadanya meluncur
   notes.sort((a, b) => a.s - b.s);
   const ent = new Map(), list = [];
   notes.forEach(n => {
     const s = b0 + n.s, e = Math.min(s + n.l, b1);
-    if (e <= from + 1e-6 || s >= b1) return;
+    if (e <= lo + 1e-6 || s >= b1) return;
     const src = slideSource(notes, n), en = src && ent.get(src);
     if (en) {
       ent.set(n, en); en.eb = Math.max(en.eb, e);
-      if (s <= from) { en.p = n.p; en.cur = n.p; en.glides = []; }   // mulai main di tengah / setelah luncuran: langsung di tinggi nada akhir
+      if (s <= lo) { en.p = n.p; en.cur = n.p; en.glides = []; }   // mulai main di tengah / setelah luncuran: langsung di tinggi nada akhir
       else { en.glides.push({b: s, from: en.cur, to: n.p, d: Math.min(glideBeats(n), e - s)}); en.cur = n.p; }
       return;
     }
-    const e1 = {p: n.p, cur: n.p, sb: Math.max(s, from), eb: e, glides: [], vel: n.v};   // velocity nada sumber berlaku untuk seluruh luncuran
+    const e1 = {p: n.p, cur: n.p, sb: Math.max(s, lo), eb: e, glides: [], vel: n.v};   // velocity nada sumber berlaku untuk seluruh luncuran
     ent.set(n, e1); list.push(e1);
   });
   list.forEach(en => synthQ.push({track, deriz, fxId, p: en.p, vel: en.vel, when: startCtx + (en.sb - from) * bs, dur: (en.eb - en.sb) * bs,
@@ -2293,6 +2306,7 @@ function projectSnapshot() {
       const pid = p.dataset.prId;
       if (pid) {
         const notes = getPianoRollNotes(pid); if (notes.length) o.n = notes;
+        if (patNoff(p)) o.no = patNoff(p);   // offset potong kiri: nada di luar pattern tetap tersimpan
         const extra = pianoRollExtraKeys(pid).map(k => {
           const fx = +k.slice(pid.length + 1), tr = fxRack.derizTrackOf(fx);
           return tr === undefined ? null : {tr, i: fxRack.derizIds(tr).indexOf(fx), n: getPianoRollNotes(k)};
@@ -2394,6 +2408,7 @@ async function projectRestore(rec) {
   for (const {el, p} of pending) {
     const pid = el.dataset.prId;
     if (p.n) setPianoRollNotes(pid, p.n);
+    setPatNoff(el, +p.no || 0);
     for (const x of p.x || []) {
       const tr = trMap[x.tr], fx = tr && fxRack.derizIds(tr)[x.i];
       if (fx !== undefined) setPianoRollNotes(pid + '@' + fx, x.n);
