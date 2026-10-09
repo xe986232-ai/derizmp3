@@ -216,7 +216,7 @@ export const reverbPreSec = (v: number): number => 0.2 * Math.max(0, Math.min(1,
 export const reverbToneHz = (v: number): number => 1500 * Math.pow(20000 / 1500, Math.max(0, Math.min(1, v)));          // tone: 1,5 kHz .. 20 kHz (log); 1 = terbuka
 export const reverbLowHz = (v: number): number => 20 * Math.pow(50, Math.max(0, Math.min(1, v)));                       // low cut: 20 Hz .. 1 kHz (log); 0 = mati
 const reverbs = new Map<string, ReverbParams>();
-const dests = new Map<string, AudioNode>();
+const dests = new Map<string, GainNode>();
 export interface EqParams { on: boolean; v: Record<string, number> }   // semua nilai 0..1: gain per band (key band, 0,5 = 0 dB), <band>F = frekuensi, <band>Q = lebar (hanya band peaking), out = level akhir
 const eqs = new Map<string, EqParams>();
 // Filter ala DJ: satu knob Cutoff. Tengah = bypass, ke kiri = low-pass (makin kiri makin gelap), ke kanan = high-pass (makin kanan makin tipis).
@@ -427,10 +427,38 @@ export function stopTrack(ctx: AudioContext | null, track: string): void {
   active.forEach(r => { if (r.track === track) { release(r, ctx.currentTime); active.delete(r); } });
 }
 
+// Pause: ekor Reverb / Delay (feedback Delay bisa sampai 200%) tidak ikut berhenti karena hidup di dalam jalur efek, bukan di clip.
+// Output track diturunkan ke nol sebentar, lalu isi convolver dikosongkan dan unit Delay dibuat ulang, baru output dikembalikan.
+// Dipanggil lagi lewat play() sebelum selesai: output langsung dikembalikan (tanpa membangun ulang) supaya Play berikutnya tidak tertahan.
+let flushTimer = 0;
+function restoreOut(ctx: AudioContext): void {
+  dests.forEach((o, track) => { if (o.context === ctx) { o.gain.cancelScheduledValues(ctx.currentTime); o.gain.setTargetAtTime(muted.has(track) ? 0 : 1, ctx.currentTime, .015); } });
+}
+export function flushTails(ctx: AudioContext | null): void {
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  dests.forEach((o, track) => {
+    const ch = chains.get(track);
+    if (o.context !== ctx || !ch || (!reverbs.has(track) && !delays.has(track))) return;
+    o.gain.cancelScheduledValues(now); o.gain.setValueAtTime(o.gain.value, now); o.gain.setTargetAtTime(0, now, .01);
+  });
+  clearTimeout(flushTimer);
+  flushTimer = window.setTimeout(() => {
+    flushTimer = 0;
+    chains.forEach((ch, track) => {
+      if (ch.ctx !== ctx) return;
+      if (reverbs.has(track) && ch.conv.buffer) { const b = ch.conv.buffer; ch.conv.buffer = null; ch.conv.buffer = b; }   // buffer dipasang ulang = keadaan convolver (gema) kosong
+      if (delays.has(track) && ch.dl) { ch.dl.output.disconnect(); ch.dl.dispose(); ch.dl = null; ch.topo = ''; syncFx(track); }
+    });
+    restoreOut(ctx);
+  }, 90);
+}
+
 const CLIP_FADE_IN = .004, CLIP_FADE_OUT = .006;   // detik; cukup singkat supaya serangan (transien) tidak terasa tumpul
 
 // Jadwalkan semua clip mulai dari posisi `fromBar`; `t0` = waktu AudioContext saat fromBar dimainkan.
 export function play(ctx: AudioContext, dest: AudioNode, clips: ClipPlacement[], fromBar: number, secPerBar: number, t0: number): void {
+  if (flushTimer) { clearTimeout(flushTimer); flushTimer = 0; restoreOut(ctx); }   // Play sebelum pembersihan ekor selesai: output dikembalikan sekarang
   stopAll(ctx);
   for (const c of clips) {
     const e = buffers.get(c.clip);

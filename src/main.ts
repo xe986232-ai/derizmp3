@@ -34,7 +34,7 @@ import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
 import { initTransportMore } from './transport-more';
 import { initPitchPanel, getMasterPitch, setMasterPitch } from './master-pitch';
 import { createClip, importClip, exportClip, cloneClip, splitClip, shiftClip, valueAt, getClip, renderMini, openAutoEditor } from './automation';
-import { decodeFile, addBuffer, getBuffer, encodeWav, renderWave, play as playClips, stopAll as stopClips, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
+import { decodeFile, addBuffer, getBuffer, encodeWav, renderWave, play as playClips, stopAll as stopClips, flushTails, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
 import { slideSource, glideBeats } from './note-slide';
 import { velAlpha } from './velocity';
 import { DEMO, LIMITS, demoNotice, demoMount } from './demo';
@@ -1811,7 +1811,7 @@ function startPlay() {
 function pausePlay() {
   holdSpec(false);
   if (playing) posBars = Math.min(BARS, startPos + Math.max(0, audibleNow() - startCtx) / SEC_PER_BAR);   // posisi terakhir (yang terdengar) dari jam audio (playhead bergerak lewat animasi, bukan lewat tick)
-  playing = false; cancelAnimationFrame(playRaf); playRaf = 0; stopClips(actx); stopAllSynth(actx); fxRack.derizStop(); synthQ = []; clearInterval(metroTimer); metroTimer = 0; metroCancel(actx, true); metroUI.beat(-1); syncTransportUI(); phHeld = false; renderStatic();
+  playing = false; cancelAnimationFrame(playRaf); playRaf = 0; stopClips(actx); flushTails(actx); stopAllSynth(actx); fxRack.derizStop(); synthQ = []; clearInterval(metroTimer); metroTimer = 0; metroCancel(actx, true); metroUI.beat(-1); syncTransportUI(); phHeld = false; renderStatic();
 }
 const togglePlay = () => playing ? pausePlay() : startPlay();
 function toStart() {
