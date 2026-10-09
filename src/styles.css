@@ -1363,14 +1363,10 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .trkcard-wrap[data-ins="Automation"] .trkcard__ctrl{visibility:hidden}   /* track Automation tidak punya volume / pan / solo */
 .tmore__col{display:flex;flex-direction:column;gap:1px;min-width:0;padding:6px 0}   /* item menu titik tiga dengan keterangan */
 .tmore__sub{font-size:11px;font-weight:600;letter-spacing:.03em;color:#8a8a9a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-/* dropdown titik tiga playlist: judul grup + saklar */
-.plmenu{min-width:208px}
-.plmenu__head{padding:4px 12px 0;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#8a8a9a}
-.plmenu__sw{margin-left:auto;flex:none;position:relative;width:34px;height:20px;border-radius:10px;background:#3a3a48;transition:background-color .22s ease,box-shadow .22s ease}
-.plmenu__sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.45);transition:transform .32s var(--ease-spring)}
-.plmenu__item[aria-checked="true"] .plmenu__sw{background:var(--accent);box-shadow:0 0 10px color-mix(in srgb,var(--accent) 55%,transparent)}
-.plmenu__item[aria-checked="true"] .plmenu__sw::after{transform:translateX(14px)}
-@media (prefers-reduced-motion:reduce){.more-toggle svg,.plmenu__sw,.plmenu__sw::after{transition:none!important}}
+/* dropdown titik tiga playlist: memakai card .track-menu.mixer-menu seperti menu channel mixer; item pilihan (centang) menampilkan keadaan nyala / mati */
+.track-menu__check{margin-left:auto;flex:none;opacity:0;transform:scale(.3) rotate(-25deg);transition:opacity .2s ease,transform .38s var(--ease-spring)}
+.track-menu__item[aria-checked="true"] .track-menu__check{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){.more-toggle svg,.track-menu__check{transition:none!important}}
 .autoov{position:fixed;inset:0;z-index:215;display:grid;place-items:center;padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom))}
 .autoov__back{position:absolute;inset:0;background:rgba(8,8,12,.45)}
 .autoov__win{position:relative;width:min(720px,100%);max-height:100%;outline:none;display:flex;flex-direction:column;gap:10px;padding:14px 14px 12px;border-radius:16px;
