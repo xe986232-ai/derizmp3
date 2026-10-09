@@ -1975,7 +1975,19 @@ function setAutoScroll(on) {
   userScrollUntil = 0;   // dinyalakan saat main: timeline langsung menyusul playhead
   toast('Auto scroll ' + (autoScroll ? 'nyala' : 'mati'));
 }
-initPlaylistMenu(document.getElementById('playlistMoreToggle') as HTMLButtonElement, {isAutoScroll: () => autoScroll, setAutoScroll});
+// Track Size (View > Track Size): tinggi semua track. Tinggi card mixer dan lane playlist keduanya memakai --lane, diatur lewat html[data-tracksize] (styles.css)
+const TRACKSIZE_KEY = 'derizmp3.trackSize', TRACK_SIZES = ['compact', 'small', 'normal', 'large'];
+let trackSize = 'normal';
+try { const v = localStorage.getItem(TRACKSIZE_KEY); if (TRACK_SIZES.includes(v)) trackSize = v; } catch { /* penyimpanan diblokir: bawaan normal */ }
+document.documentElement.dataset.tracksize = trackSize;
+function setTrackSize(v) {
+  if (!TRACK_SIZES.includes(v) || v === trackSize) return;
+  trackSize = v; document.documentElement.dataset.tracksize = v;
+  try { localStorage.setItem(TRACKSIZE_KEY, v); } catch { /* abaikan */ }
+  patBarPlace();                                  // toolbar pattern ikut turun / naik sesuai lane
+  setTimeout(patBarPlace, REDUCE ? 0 : 340);      // dan sekali lagi setelah animasi tinggi selesai
+}
+initPlaylistMenu(document.getElementById('playlistMoreToggle') as HTMLButtonElement, {isAutoScroll: () => autoScroll, setAutoScroll, getTrackSize: () => trackSize, setTrackSize});
 // Saat terkunci di tengah, playhead TIDAK lagi memakai animasi CSS (jam compositor beda dengan scroll di main thread -> posisi relatifnya bergetar).
 // Playhead dan scrollLeft dihitung dari satu nilai (posBars, jam halus) dan ditulis di frame yang sama, jadi playhead diam di layar dan timeline
 // yang bergulir. Offset scroll di-snap ke piksel fisik (browser membulatkannya) dan playhead mengikuti nilai yang sama, jadi tidak ada getar sub-piksel.

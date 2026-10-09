@@ -2374,3 +2374,22 @@ body.is-pdragging,body.is-pdragging *{cursor:grabbing!important;user-select:none
 .track-menu__pick input{width:28px;height:28px;padding:0;border:0;background:none;cursor:pointer}
 .track-menu__reset{font:inherit;font-size:12px;padding:5px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.25);background:transparent;color:inherit;cursor:pointer}
 .track-menu__reset:hover{background:rgba(255,255,255,.12)}
+
+/* ===== View > Track Size: tinggi SEMUA track (card di channel mixer + lane di playlist) diatur satu variabel --lane lewat html[data-tracksize] =====
+   Normal = bawaan (72px). Compact menyembunyikan baris volume / pan / solo supaya card tetap muat; Small merapatkan jarak antar baris; Large memberi napas lebih. */
+html[data-tracksize="compact"]{--lane:40px}
+html[data-tracksize="small"]{--lane:60px}
+html[data-tracksize="large"]{--lane:100px}
+.trkcard-wrap{transition:height .32s var(--ease-out)}
+.lane{transition:filter .35s var(--ease-out),height .32s var(--ease-out)}
+.trkcard__inst{transition:transform .3s var(--ease-spring),background-color .45s var(--ease-inout),width .3s var(--ease-out),height .3s var(--ease-out)}   /* transisi lama + ukuran */
+.trackmeter{transition:opacity .25s ease .2s,visibility 0s,top .3s var(--ease-out),bottom .3s var(--ease-out)}
+html[data-tracksize="compact"] .trkcard__ctrl{display:none}
+html[data-tracksize="compact"] .trkcard__inst{width:28px;height:28px}
+html[data-tracksize="compact"] .trkcard__inst .ico{width:16px;height:16px}
+html[data-tracksize="compact"] .trackmeter{top:5px;bottom:5px}
+html[data-tracksize="small"] .trkcard__rows{gap:0}   /* 60px: isi card hampir penuh, rapatkan jarak antar baris */
+html[data-tracksize="large"] .trkcard__rows{gap:10px}
+/* ikon ukuran di menu: batang yang makin tinggi */
+.track-menu__sz{flex:none;width:16px;display:grid;place-items:center}
+.track-menu__sz i{display:block;width:14px;height:var(--h);border-radius:3px;background:currentColor;opacity:.75}
