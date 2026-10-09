@@ -79,7 +79,8 @@ html[data-uistyle="flat"] .tracklist .panel-toggle:hover{background:var(--flat-c
 html[data-uistyle="flat"] .tracklist .panel-toggle:active{transform:none}
 html[data-uistyle="flat"] .tracklist .autoscroll-toggle,
 html[data-uistyle="flat"] .tracklist .more-toggle{color:var(--flat-muted)}
-html[data-uistyle="flat"] .tracklist .autoscroll-toggle[aria-checked="true"]{color:var(--flat-on-accent);background:var(--flat-ctrl-on)}
+html[data-uistyle="flat"] .tracklist .autoscroll-toggle[aria-checked="true"]{color:#000;background:#fff}
+html[data-uistyle="flat"] .tracklist .autoscroll-toggle[aria-checked="true"]:hover{background:#ececf1}
 
 /* ---------- 3. Card track ---------- */
 html[data-uistyle="flat"] .tracklist .trkcard,
