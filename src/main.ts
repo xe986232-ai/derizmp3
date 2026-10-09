@@ -2221,7 +2221,11 @@ function histCapture() {
   const ids = [], pats = {};
   lanesEl.querySelectorAll('.lane').forEach(l => {
     ids.push(l.dataset.track);
-    pats[l.dataset.track] = [...l.querySelectorAll('.pattern')].map(p => ({s: r4(pl(p) / BAR_W), w: r4(pw(p) / BAR_W), t: p.querySelector('.pattern__title').textContent, c: p.dataset.clip || '', o: r4(+p.dataset.off || 0), a: p.dataset.auId || ''}))
+    pats[l.dataset.track] = [...l.querySelectorAll('.pattern')].map(p => {
+      // k = kunci nada piano roll pattern (nada tidak ada di snapshot; disimpan di states per kunci, jadi pattern yang dibuat ulang oleh undo / redo cukup memakai kunci yang sama)
+      if (!p.dataset.clip && !p.dataset.auId && !p.dataset.prId) p.dataset.prId = 'pat' + (++prSeq);
+      return {s: r4(pl(p) / BAR_W), w: r4(pw(p) / BAR_W), t: p.querySelector('.pattern__title').textContent, c: p.dataset.clip || '', o: r4(+p.dataset.off || 0), a: p.dataset.auId || '', k: p.dataset.prId || '', no: r4(patNoff(p))};
+    })
       .sort((a, b) => a.s - b.s || a.w - b.w || (a.t < b.t ? -1 : a.t > b.t ? 1 : 0));
   });
   return {ids: ids.join(','), pats};
@@ -2250,12 +2254,13 @@ function histApply(st) {
     const want = (st.pats[l.dataset.track] || []).map(x => ({...x, used: false}));
     [...l.querySelectorAll('.pattern')].forEach(p => {   // pattern yang sudah cocok dibiarkan, hanya yang berbeda diganti
       const s = r4(pl(p) / BAR_W), w = r4(pw(p) / BAR_W), t = p.querySelector('.pattern__title').textContent;
-      const m = want.find(x => !x.used && x.s === s && x.w === w && x.t === t && x.c === (p.dataset.clip || '') && x.o === r4(+p.dataset.off || 0) && x.a === (p.dataset.auId || ''));
+      const m = want.find(x => !x.used && x.s === s && x.w === w && x.t === t && x.c === (p.dataset.clip || '') && x.o === r4(+p.dataset.off || 0) && x.a === (p.dataset.auId || '') && x.k === (p.dataset.prId || '') && x.no === r4(patNoff(p)));
       if (m) m.used = true; else p.remove();
     });
     want.filter(x => !x.used).forEach(x => {
       const n = createPattern(l, {start: x.s * BAR_W, width: x.w * BAR_W}, x.c ? {clip: +x.c, off: x.o} : null);
       n.querySelector('.pattern__title').textContent = x.t;
+      if (x.k) { n.dataset.prId = x.k; setPatNoff(n, x.no); renderPatNotes(n); }   // nada pattern ini masih ada di states: pasang lagi kuncinya (dan offset potong kirinya)
       if (x.a) setupAutoEl(n, x.a);   // Automation Clip yang dihapus lalu di-undo: kurvanya masih tersimpan
     });
   });
