@@ -437,7 +437,10 @@ html[data-theme="jembut"] .lane{background-image:
 .autoscroll-toggle{left:58px;color:var(--muted);transition:background-color .2s ease,color .2s ease,opacity .2s ease,transform .25s var(--ease-spring)}
 .autoscroll-toggle[aria-checked="true"]{color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,#1f1f29)}
 .autoscroll-toggle svg{width:18px;height:18px}
-.tracklist--collapsed .autoscroll-toggle{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s ease,visibility 0s linear .15s}
+.more-toggle{left:102px;color:var(--muted);transition:background-color .2s ease,color .2s ease,opacity .2s ease,transform .25s var(--ease-spring)}
+.more-toggle svg{width:18px;height:18px;transform:none!important}   /* jangan ikut berputar seperti panah panel saat kolom ditutup */
+.tracklist--collapsed .autoscroll-toggle,
+.tracklist--collapsed .more-toggle{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s ease,visibility 0s linear .15s}
 .panel-toggle svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;transition:transform .38s var(--ease-spring)}
 .tracklist--collapsed .panel-toggle svg{transform:rotate(180deg)}
 

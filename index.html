@@ -31,8 +31,10 @@
     <!-- Pojok kiri atas (setinggi ruler): menempel di atas saat playlist di-scroll vertikal, seperti ruler -->
     <div class="tl-corner">
       <button class="panel-toggle" id="panelToggle" type="button" aria-expanded="true" aria-label="Tutup panel track" title="Tutup panel track"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
-      <!-- Auto Scroll: timeline ikut menggeser saat playhead keluar layar. Icon: Lucide "locate-fixed" (ISC, bebas dipakai komersial) -->
-      <button class="panel-toggle autoscroll-toggle" id="autoScrollToggle" type="button" role="switch" aria-checked="true" aria-label="Auto scroll playlist" title="Auto scroll playlist: nyala"><svg class="ico-ln" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true"><line x1="2" x2="5" y1="12" y2="12"/><line x1="19" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="5"/><line x1="12" x2="12" y1="19" y2="22"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3"/></svg></button>
+      <!-- Auto Scroll: timeline ikut menggeser saat playhead keluar layar. Icon: Lucide "move-horizontal" (ISC, bebas dipakai komersial) -->
+      <button class="panel-toggle autoscroll-toggle" id="autoScrollToggle" type="button" role="switch" aria-checked="true" aria-label="Auto scroll playlist" title="Auto scroll playlist: nyala"><svg class="ico-ln" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true"><path d="m18 8 4 4-4 4"/><path d="M2 12h20"/><path d="m6 8-4 4 4 4"/></svg></button>
+      <!-- Titik tiga: menu opsi playlist (fungsinya menyusul) -->
+      <button class="panel-toggle more-toggle" id="playlistMoreToggle" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi playlist" title="Opsi playlist"><svg class="ico-ln" viewBox="0 0 24 24" stroke-width="2.6" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
     </div>
     <section class="headers" aria-label="Daftar Track">
       <div class="headers-list">
