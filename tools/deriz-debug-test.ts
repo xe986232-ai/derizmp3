@@ -39,6 +39,7 @@ function scenario(dbg: boolean, perf: any, date: any, heavyMs: (blk: number) => 
   const nodes = [make(), make(), make()];
   T = 0;
   nodes.forEach(n => give(n, s));
+  nodes.forEach(n => n.msg({ t: 'gov', on: false }));   // tes ini menguji instrumentasi: governor beban bergantung pada waktu nyata (JIT dingin vs hangat), jadi dimatikan agar keluaran deterministik (governor diuji di deriz-load-test.ts)
   if (dbg) nodes.forEach(n => n.msg({ t: 'dbg', on: true }));
   let id = 0;
   nodes.forEach((n, k) => {

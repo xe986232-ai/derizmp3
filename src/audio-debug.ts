@@ -21,6 +21,7 @@ interface Agg {
   full: number; light: number; hit: number;
   nOn: number; nLate: number; ltSum: number; ltMax: number;
   stealH: number; stealT: number; noBuf: number; penDrop: number;
+  gl: number; gc: number; gs: number;   // pengaman beban (governor): beban puncak, batas nada terendah, nada dibuang
   trN: number; trSlow: number; trMax: number; lateSkip: number; spK: number; spO: number; pcK: number; pcO: number; spFrom: number; spTo: number;   // pesan nada main thread -> worklet
   wait: number; waitMax: number; clamp: number; clampMax: number;           // sisi main thread: menunggu sampler siap, nada yang jadwalnya sudah lewat saat benar-benar dikirim
   tr: number; bud: number;
@@ -33,7 +34,7 @@ interface Agg {
   cul: Map<string, { n: number; ms: number; max: number }>;                // skrip penyebab frame lambat
 }
 const fresh = (): Agg => ({ n: 0, sum: 0, max: 0, maxAt: 0, late: 0, vmax: 0, iamax: 0, full: 0, light: 0, hit: 0, nOn: 0, nLate: 0, ltSum: 0, ltMax: 0,
-  stealH: 0, stealT: 0, noBuf: 0, penDrop: 0, trN: 0, trSlow: 0, trMax: 0, lateSkip: 0, spK: 0, spO: 0, pcK: 0, pcO: 0, spFrom: 0, spTo: 0, wait: 0, waitMax: 0, clamp: 0, clampMax: 0, tr: -1, bud: 0, sched: 0, schedMin: Infinity, schedTight: 0, schedLate: 0, stall: 0, stallMax: 0, loaf: 0, loafScript: 0, loafRender: 0, loafMax: 0, spec: 0, specMs: 0, zm: new Map(), loafForced: 0, cul: new Map() });
+  stealH: 0, stealT: 0, noBuf: 0, penDrop: 0, gl: 0, gc: Infinity, gs: 0, trN: 0, trSlow: 0, trMax: 0, lateSkip: 0, spK: 0, spO: 0, pcK: 0, pcO: 0, spFrom: 0, spTo: 0, wait: 0, waitMax: 0, clamp: 0, clampMax: 0, tr: -1, bud: 0, sched: 0, schedMin: Infinity, schedTight: 0, schedLate: 0, stall: 0, stallMax: 0, loaf: 0, loafScript: 0, loafRender: 0, loafMax: 0, spec: 0, specMs: 0, zm: new Map(), loafForced: 0, cul: new Map() });
 
 let on = false, a = fresh(), t0 = 0, ctxRef: BaseAudioContext | null = null, ctxBase: { dur: number; ev: number } | null = null;
 let events: string[] = [];
@@ -52,6 +53,7 @@ function ingest(m: DerizStat, ctx: BaseAudioContext): void {
   a.n += m.n; a.sum += m.sum; a.late += m.late; a.full += m.full; a.light += m.light; a.hit += m.hit;
   a.nOn += m.nOn; a.nLate += m.nLate; a.ltSum += m.ltSum;
   a.stealH += m.stealH; a.stealT += m.stealT; a.noBuf += m.noBuf; a.penDrop += m.penDrop; a.trN += m.trN; a.trSlow += m.trSlow; a.lateSkip += m.lateSkip; a.spK += m.spK; a.spO += m.spO; a.pcK += m.pcK; a.pcO += m.pcO; if (m.spO || m.spK) { a.spFrom = m.spFrom; a.spTo = m.spTo; }
+  a.gs += m.gs; if (m.gl > a.gl) a.gl = m.gl; if (m.gc < a.gc) a.gc = m.gc;
   if (m.trMax > a.trMax) a.trMax = m.trMax;
   if (m.max > a.max) { a.max = m.max; a.maxAt = m.maxAt - t0; }
   if (m.vmax > a.vmax) a.vmax = m.vmax;
@@ -67,6 +69,7 @@ function ingest(m: DerizStat, ctx: BaseAudioContext): void {
   if (m.pcO) bits.push('PITCH berubah lewat nada ' + m.pcO + 'x');
   if (m.spK) bits.push('speed lewat knob ' + m.spK + 'x (' + m.spFrom.toFixed(2) + ' -> ' + m.spTo.toFixed(2) + ')');
   if (m.stealH) bits.push(m.stealH + ' nada terpotong');
+  if (m.gs) bits.push(m.gs + ' nada dibuang pengaman beban (batas ' + m.gc + ', beban ' + Math.round(100 * m.gl) + '%)');
   if (m.noBuf) bits.push(m.noBuf + ' nada tanpa sample');
   if (m.penDrop) bits.push(m.penDrop + ' jadwal terhapus');
   if (bits.length) { events.push('@' + f1(Math.max(0, m.ct - t0)) + 's  ' + bits.join(', ')); if (events.length > EVENT_MAX) events.shift(); }
@@ -152,6 +155,7 @@ function lines(): string[] {
   L.push('Pesan nada di jalan (main -> worklet): terlama ' + ms(a.trMax) + ', > 100 ms: ' + a.trSlow + ' / ' + a.trN);
   L.push('Di main thread: tunggu sampler terlama ' + ms(a.waitMax) + ', jadwal sudah lewat saat dikirim: ' + a.clamp + (a.clamp ? ' (maks ' + ms(a.clampMax) + ')' : ''));
   L.push('Nada dipotong (batas 12/plugin): ditahan ' + a.stealH + ', ekor ' + a.stealT);
+  L.push('Pengaman beban: beban puncak ' + Math.round(100 * a.gl) + '% dari jatah, batas nada total terendah ' + (a.gc === Infinity ? '-' : a.gc) + ', nada dibuang ' + a.gs + (a.gs ? ' (ekor pelan dulu, baru nada tertahan tertua)' : ''));
   L.push('Nada hilang: tanpa sample ' + a.noBuf + ', jadwal terhapus ' + a.penDrop + ', dilewati karena telat ' + a.lateSkip);
   L.push('Speed / Pitch di worklet: lewat knob ' + a.spK + 'x / ' + a.pcK + 'x, lewat nada ' + a.spO + 'x / ' + a.pcO + 'x' + (a.spO || a.spK ? ' (terakhir speed ' + a.spFrom.toFixed(2) + ' -> ' + a.spTo.toFixed(2) + ')' : ''));
   L.push('Beban puncak: ' + a.vmax + ' voice di ' + a.iamax + ' DERIZ sekaligus');
@@ -215,7 +219,7 @@ function render(): void {
   const k = ensureUI(), L = lines();
   k.body.textContent = L.join('\n');
   k.log.textContent = events.length ? events.join('\n') : 'Belum ada kejadian bermasalah.';
-  const bad = a.late + a.nLate + a.trSlow + a.stealH + a.noBuf + a.penDrop + a.lateSkip + a.spO + a.pcO + a.stall + (underrun()?.ev ?? 0);
+  const bad = a.late + a.nLate + a.trSlow + a.stealH + a.gs + a.noBuf + a.penDrop + a.lateSkip + a.spO + a.pcO + a.stall + (underrun()?.ev ?? 0);
   k.sum.textContent = bad ? bad + ' masalah' : 'aman';
   k.root.classList.toggle('is-bad', bad > 0);
 }

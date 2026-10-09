@@ -25,6 +25,54 @@ export const WORKLET_SRC = `
 // MAX_VOICES: batas nada aktif per plugin (nada paling tua / yang sudah dilepas dilepas cepat 4 ms bila terlampaui).
 const FULL_FRAMES = 4, MAX_VOICES = 12;
 let gT = -1, gUsed = 0;
+// ---- Pengaman beban thread audio (governor) ----
+// Seluruh graf Web Audio (audio clip, efek, SEMUA plugin DERIZ) dirender di SATU thread. Kalau jumlah nada DERIZ yang hidup (termasuk ekor lepas)
+// membuat satu blok 128 sampel lebih lama dari jatahnya, SEMUA suara ikut patah-patah / loncat, jam audio tersendat (playhead loncat),
+// dan suara yang tertinggal baru keluar belakangan (masih bunyi setelah Pause). Dulu batas hanya per plugin (MAX_VOICES), jadi banyak plugin DERIZ
+// bisa menumpuk puluhan nada tanpa batas. Sekarang beban dihitung dari waktu proses nyata semua plugin, dan jumlah nada total (CAP) disesuaikan:
+// turun saat beban di atas ambang, naik lagi pelan saat longgar. Yang dibuang lebih dulu = ekor nada yang sudah dilepas dan paling pelan (nyaris tak terdengar),
+// baru nada yang masih ditahan (paling tua). Di bawah ambang tidak ada yang berubah.
+// Ukuran beban: totalWaktuProsesSemuaPlugin / jatahBlok, dirata-ratakan per jendela 64 blok. Tanpa performance.now (worklet biasa) dipakai Date.now yang
+// resolusinya 1 ms: selisih per pemanggilan hanya 0 atau 1, tapi rata-rata jendela tetap tak bias, jadi cukup untuk beban rata-rata.
+const CAP_MAX = 48, CAP_MIN = 6, GOV_HI = 0.6, GOV_LO = 0.4, GOV_TARGET = 0.5, GOV_WIN = 64;   // beban > GOV_HI: batas diturunkan menuju GOV_TARGET; < GOV_LO: dinaikkan pelan
+const GOV = { on: true, cap: CAP_MAX, ms: 0, n: 0, load: 0, shed: 0 };   // shed: jumlah nada yang dibuang governor (untuk Debug Audio / tes)
+let gSeq = 0;                          // urutan umur nada lintas plugin (nada lebih baru = angka lebih besar)
+const ALL = new Set();                 // semua prosesor DERIZ di scope ini (dilepas saat 'kill')
+const FAST_K = Math.exp(-1 / (0.004 * sampleRate));   // peluruhan cepat (4 ms): nada yang dibuang tidak berklik
+const CHEAP_ENV = 0.02, TAIL_END = 0.002;             // ekor di bawah -34 dB: resample murah; di bawah -54 dB: dipercepat habis
+// Cache search() cukup 32768 slot (isinya hanya mempercepat: hasil sama bit-per-bit kalau terhapus). Dulu 65536 slot x 5 x 8 B = 2,6 MB PER plugin
+// yang juga diisi ulang nol tiap sample baru; dengan belasan plugin itu puluhan MB dan lonjakan beberapa ms di thread audio saat Play.
+const CACHE_SLOTS = 32768;
+// Kolam ring buffer voice (256 KB sepasang) dipakai BERSAMA semua plugin, bukan 16 pasang (4 MB) per plugin; perawatannya satu langkah per blok untuk
+// seluruh scope, jadi puluhan plugin tidak mengalokasi puluhan buffer di blok yang sama.
+const POOL = 24, POOL_CLEAN = [], POOL_DIRTY = [];
+let gIdleT = -1;
+// hitung nada yang masih dihitung (belum dalam peluruhan cepat) di semua plugin
+function govLive() { let n = 0; for (const p of ALL) for (const v of p.voices) if (!v.fast) n++; return n; }
+// buang nada paling tidak penting sampai jumlah hidup <= target. Urutan: ekor terpelan -> ekor lebih keras -> nada ditahan tertua.
+function govShed(target) {
+  let live = govLive();
+  while (live > target) {
+    let vic = null, vk = 0;
+    for (const p of ALL) for (const v of p.voices) {
+      if (v.fast) continue;
+      const k = v.rel ? v.env : 10 + v.age * 1e-9;   // ekor: kunci = level sekarang (0..1); ditahan: selalu di atas ekor, yang tertua dulu
+      if (!vic || k < vk) { vic = v; vk = k; }
+    }
+    if (!vic) break;
+    vic.rel = true; vic.fast = true; vic.relK = FAST_K; live--; GOV.shed++;
+  }
+}
+// dipanggil sekali per jendela blok oleh blockStart
+function govStep(budMs) {
+  const load = GOV.ms / (GOV.n * budMs); GOV.load = load; GOV.ms = 0; GOV.n = 0;
+  if (!GOV.on) { GOV.cap = CAP_MAX; return; }
+  if (load > GOV_HI) {   // turun sebanding kelebihan bebannya (maks setengah per jendela ~170 ms), jadi beban berat cepat reda dan beban ringan hanya sedikit dikoreksi
+    GOV.cap = Math.max(CAP_MIN, Math.floor(Math.min(GOV.cap, govLive()) * Math.max(0.5, Math.min(0.9, GOV_TARGET / load))));
+    govShed(GOV.cap);
+  }
+  else if (load < GOV_LO && GOV.cap < CAP_MAX) GOV.cap = Math.min(CAP_MAX, GOV.cap + 2);
+}
 // ---- Statistik debug (Pengaturan > Debug Audio). Mati = hanya satu cek boolean per blok, hasil suara TIDAK berubah. ----
 // Satu objek G untuk semua plugin DERIZ dalam AudioContext ini; dikirim ke main thread tiap 0,5 detik (selisihnya saja, lalu direset).
 // Waktu: performance.now() kalau ada di scope worklet; kalau tidak, Date.now() (resolusi 1 ms, CLK_RES = 1) dan 'telat' hanya dihitung bila PASTI lewat jatah.
@@ -36,7 +84,7 @@ function gClear() {
   G.full = 0; G.light = 0; G.hit = 0;                                                  // frame WSOLA: penuh / ringan / dari cache
   G.nOn = 0; G.nLate = 0; G.ltSum = 0; G.ltMax = 0;                                    // nada terjadwal: total, telat (> 6 ms), jumlah + terlama
   G.stealH = 0; G.stealT = 0; G.noBuf = 0; G.penDrop = 0;                              // nada ditahan yang dipotong, ekor yang dipercepat, nada tanpa sample, jadwal terhapus
-  G.trN = 0; G.trSlow = 0; G.trMax = 0; G.lateSkip = 0;
+  G.trN = 0; G.trSlow = 0; G.trMax = 0; G.lateSkip = 0; GOV.shed = 0;                  // GOV.shed: nada yang dibuang pengaman beban sejak laporan terakhir
   G.spK = 0; G.spO = 0; G.pcK = 0; G.pcO = 0; G.spFrom = 0; G.spTo = 0;               // Speed / Pitch di worklet berubah nilainya: K = lewat knob (pesan p), O = dibawa nada (on); O = tidak diharapkan kalau knob tidak disentuh
                                              // pesan nada main thread -> worklet: jumlah, yang tiba > 100 ms setelah dikirim, tertunda terlama (ms)
 }
@@ -53,9 +101,9 @@ function finBlock(self) {
   G.cur = 0; G.act = false; G.vc = 0; G.ia = 0;
   if (gT >= G.nextRep) {
     G.nextRep = gT + 0.5;
-    if (G.n || G.nOn || G.noBuf || G.penDrop || G.stealH || G.stealT || G.trN || G.lateSkip || G.spK || G.spO || G.pcK || G.pcO) {
+    if (G.n || G.nOn || G.noBuf || G.penDrop || G.stealH || G.stealT || G.trN || G.lateSkip || GOV.shed || G.spK || G.spO || G.pcK || G.pcO) {
       self.port.postMessage({ t: 'st', ct: gT, tr: CLK_RES, bud: 128 / sampleRate * 1000, n: G.n, sum: G.sum, max: G.max, maxAt: G.maxAt, late: G.late, vmax: G.vmax, iamax: G.iamax,
-        full: G.full, light: G.light, hit: G.hit, nOn: G.nOn, nLate: G.nLate, ltSum: G.ltSum, ltMax: G.ltMax, stealH: G.stealH, stealT: G.stealT, noBuf: G.noBuf, penDrop: G.penDrop, trN: G.trN, trSlow: G.trSlow, trMax: G.trMax, lateSkip: G.lateSkip, spK: G.spK, spO: G.spO, pcK: G.pcK, pcO: G.pcO, spFrom: G.spFrom, spTo: G.spTo });
+        full: G.full, light: G.light, hit: G.hit, nOn: G.nOn, nLate: G.nLate, ltSum: G.ltSum, ltMax: G.ltMax, stealH: G.stealH, stealT: G.stealT, noBuf: G.noBuf, penDrop: G.penDrop, trN: G.trN, trSlow: G.trSlow, trMax: G.trMax, lateSkip: G.lateSkip, gl: GOV.load, gc: GOV.cap, gs: GOV.shed, spK: G.spK, spO: G.spO, pcK: G.pcK, pcO: G.pcO, spFrom: G.spFrom, spTo: G.spTo });
       gClear();
     }
   }
@@ -63,7 +111,8 @@ function finBlock(self) {
 class DerizSampler extends AudioWorkletProcessor {
   constructor() {
     super();
-    this.pStamp = 0; this.seq = 0; this.fastK = Math.exp(-1 / (0.004 * sampleRate));   // pStamp: nomor versi parameter live (lihat msg / apply)
+    ALL.add(this); this.gov = GOV;   // gov: dibaca tes (deriz-load-test.ts)
+    this.pStamp = 0; this.fastK = Math.exp(-1 / (0.004 * sampleRate));   // pStamp: nomor versi parameter live (lihat msg / apply)
     this.ch = null; this.mono = null; this.len = 0; this.bufRate = sampleRate; this.ons = [];
     this.wins = new Map();
     // tabel kernel sinc berjendela Blackman (HW lobus tiap sisi, TR entri per lobus) untuk resampling anti-alias saat nada naik
@@ -78,8 +127,7 @@ class DerizSampler extends AudioWorkletProcessor {
     this.pend = [];   // perintah on / off yang dijadwalkan di waktu AudioContext tertentu (piano roll)
     this.speed = 1; this.pitch = 0; this.vol = 0.9; this.volS = 0.9;
     this.PF = 2;   // jatah frame prefetch per blok audio (di luar frame yang wajib)
-    this.clean = []; this.dirty = []; this.POOL = 16;   // kolam ring buffer voice: disiapkan di blok senggang, bukan saat nada ditekan
-    this.st = new Float64Array(65536 * 5);   // cache hasil search()
+    this.st = new Float64Array(CACHE_SLOTS * 5);   // cache hasil search()
     this.port.onmessage = e => this.msg(e.data);
   }
   msg(m) {
@@ -97,7 +145,8 @@ class DerizSampler extends AudioWorkletProcessor {
     }
     else if (m.t === 'p') { this.pStamp++; this.setPar(m, 0); }
     else if (m.t === 'relall') { this.pend = []; this.sq = []; this.si = 0; this.lag.clear(); for (const v of this.voices) v.rel = true; }
-    else if (m.t === 'kill') { this.recycleAll(); this.pend = []; this.sq = []; this.si = 0; this.lag.clear(); }
+    else if (m.t === 'kill') { this.recycleAll(); this.pend = []; this.sq = []; this.si = 0; this.lag.clear(); ALL.delete(this); }
+    else if (m.t === 'gov') { GOV.on = !!m.on; GOV.cap = CAP_MAX; GOV.ms = 0; GOV.n = 0; }   // tes: nyalakan / matikan governor
   }
   // satu-satunya tempat Speed / Pitch / Volume worklet berubah (statistik Debug Audio: siapa yang mengubahnya, knob atau nada)
   setPar(m, viaNote) {
@@ -178,8 +227,9 @@ class DerizSampler extends AudioWorkletProcessor {
       if (G.on) { if (vic.rel) G.stealT++; else G.stealH++; }   // H = nada yang masih ditahan terpotong (terdengar 'tidak bunyi'), T = ekor nada yang sudah dilepas
       vic.rel = true; vic.fast = true; vic.relK = this.fastK; live--;
     }
+    if (GOV.on && govLive() >= GOV.cap) govShed(GOV.cap - 1);   // batas total lintas plugin (governor): yang paling tidak terdengar dibuang dulu
     this.voices.push({
-      id: m.id, semis: m.semis, N: N, nom: start, prev: 0, first: true, last: false, oi: oi, age: ++this.seq, fast: false,
+      id: m.id, semis: m.semis, N: N, nom: start, prev: 0, first: true, last: false, oi: oi, age: ++gSeq, fast: false,
       w: 0, cEnd: 0, vEnd: 0, rd: 0, rho: P0 * rate / sampleRate, size: size,
       T: this.takeRing(size),
       env: 0, rel: false, atk: 1 / (0.002 * sampleRate), relK: Math.exp(-1 / (0.04 * sampleRate)),
@@ -202,7 +252,7 @@ class DerizSampler extends AudioWorkletProcessor {
   // light = true (anggaran frame penuh blok ini habis): pencarian tanpa langkah sub-sampel, dan hasilnya TIDAK disimpan di cache
   // (cache hanya berisi hasil kualitas penuh, jadi nada yang sama kelak tetap mendapat hasil penuh yang identik).
   search(c0, tp, N, Hs, light) {
-    const t = this.st, h = (((Math.imul(c0, 73856093) ^ Math.imul((tp * 64) | 0, 19349663) ^ Math.imul(N, 83492791)) >>> 0) & 65535) * 5;
+    const t = this.st, h = (((Math.imul(c0, 73856093) ^ Math.imul((tp * 64) | 0, 19349663) ^ Math.imul(N, 83492791)) >>> 0) & (CACHE_SLOTS - 1)) * 5;
     if (t[h + 4] === N && t[h] === tp && t[h + 1] === c0) { if (G.on) G.hit++; this.fr = t[h + 3]; return t[h + 2]; }   // cache kena: hampir gratis, tidak memakai anggaran
     gUsed++;
     if (light) { if (G.on) G.light++; return this.search0(c0, tp, N, Hs, true); }
@@ -256,15 +306,17 @@ class DerizSampler extends AudioWorkletProcessor {
   }
   // ---- kolam ring buffer voice: tanpa alokasi 256 KB per nada di tengah audio ----
   takeRing(size) {
-    const r = this.clean.length ? this.clean.pop() : null;
+    const r = POOL_CLEAN.length ? POOL_CLEAN.pop() : null;
     return r && r[0].length === size ? r : [new Float32Array(size), new Float32Array(size)];   // kolam kosong: alokasi seperti dulu
   }
-  recycle(v) { if (this.clean.length + this.dirty.length < 2 * this.POOL) this.dirty.push(v.T); }
+  recycle(v) { if (POOL_CLEAN.length + POOL_DIRTY.length < 2 * POOL) POOL_DIRTY.push(v.T); }
   recycleAll() { for (const v of this.voices) this.recycle(v); this.voices = []; }
   // satu langkah perawatan per blok senggang: bersihkan satu buffer bekas (harus nol lagi: ujung kiri sinc dibaca sebagai nol), atau isi kolam sampai POOL
   idle() {
-    if (this.dirty.length) { const r = this.dirty.pop(); r[0].fill(0); r[1].fill(0); this.clean.push(r); }
-    else if (this.clean.length < this.POOL) this.clean.push([new Float32Array(1 << 15), new Float32Array(1 << 15)]);
+    if (gIdleT === gT) return;   // kolam dipakai bersama: cukup satu langkah per blok untuk SEMUA plugin
+    gIdleT = gT;
+    if (POOL_DIRTY.length) { const r = POOL_DIRTY.pop(); r[0].fill(0); r[1].fill(0); POOL_CLEAN.push(r); }
+    else if (POOL_CLEAN.length < POOL) POOL_CLEAN.push([new Float32Array(1 << 15), new Float32Array(1 << 15)]);
   }
   // apakah frame berikutnya voice ini adalah "mulai ulang di onset"? Frame itu bergantung pada posisi pembaca (v.rd),
   // jadi tidak boleh disiapkan lebih awal supaya hasilnya sama persis dengan penghitungan tepat waktu.
@@ -338,8 +390,13 @@ class DerizSampler extends AudioWorkletProcessor {
         for (let i = K; i < N; i++) T[(wpos + i) & mask] = src[i] * S[i] * taper(i);
       } else {
         const add = N - Hs;
-        for (let i = 0; i < add; i++) T[(wpos + i) & mask] += src[i] * W[i] * taper(i);
-        for (let i = add; i < N; i++) T[(wpos + i) & mask] = src[i] * W[i] * taper(i);
+        if (lim >= N) {   // kasus umum (tidak ada onset di dalam frame): taper = 1, kali 1 tepat sama hasilnya (bit-per-bit), jadi dilewati
+          for (let i = 0; i < add; i++) T[(wpos + i) & mask] += src[i] * W[i];
+          for (let i = add; i < N; i++) T[(wpos + i) & mask] = src[i] * W[i];
+        } else {
+          for (let i = 0; i < add; i++) T[(wpos + i) & mask] += src[i] * W[i] * taper(i);
+          for (let i = add; i < N; i++) T[(wpos + i) & mask] = src[i] * W[i] * taper(i);
+        }
       }
     }
     v.prev = c + fr; v.first = false;
@@ -348,16 +405,20 @@ class DerizSampler extends AudioWorkletProcessor {
     if (c >= maxC || v.nom >= maxC) { v.last = true; v.cEnd = wpos + N; }   // sample habis: sisa ekor ikut dimainkan (sudah memudar)
   }
   process(inputs, outputs) {
-    if (!G.on) return this.run(inputs, outputs);
-    if (currentTime !== gT) finBlock(this);   // blok baru: tutup hitungan blok sebelumnya (dan kirim laporan kalau sudah 0,5 detik)
+    if (currentTime !== gT) {   // blok baru (node pertama yang diproses di blok ini)
+      if (G.on) finBlock(this);   // tutup hitungan blok sebelumnya (dan kirim laporan kalau sudah 0,5 detik)
+      gT = currentTime; gUsed = 0;   // anggaran frame penuh direset (dibagi semua plugin DERIZ)
+      if (GOV.n >= GOV_WIN) govStep(128 / sampleRate * 1000);   // jendela beban penuh: sesuaikan batas jumlah nada
+      GOV.n++;
+    }
     const had = this.voices.length > 0, t0 = clk();
-    const r = this.run(inputs, outputs);
-    if (had || this.voices.length) { G.cur += clk() - t0; G.act = true; G.vc += this.voices.length; G.ia++; }
+    const r = this.run(inputs, outputs), d = clk() - t0;
+    GOV.ms += d;   // beban semua plugin dalam jendela ini (dasar governor)
+    if (G.on && (had || this.voices.length)) { G.cur += d; G.act = true; G.vc += this.voices.length; G.ia++; }
     return r;
   }
   run(inputs, outputs) {
     const out = outputs[0], oL = out[0], oR = out[1] || out[0], n = oL.length;
-    if (currentTime !== gT) { gT = currentTime; gUsed = 0; }   // blok baru: anggaran frame penuh direset (dibagi semua plugin DERIZ)
     this.flush();
     if (!this.voices.length) { this.idle(); return true; }
     const g0 = this.volS; this.volS += (this.vol - this.volS) * 0.25; const g1 = this.volS;
@@ -394,7 +455,9 @@ class DerizSampler extends AudioWorkletProcessor {
       // (glide dan laju baca rho sudah diperbarui di tahap A, di atas)
       // rho > 1 (nada naik): baca dengan kernel sinc yang frekuensi potongnya 0.85/rho (pita transisi filter muat di bawah Nyquist keluaran) (low-pass sebelum decimate) -> tidak ada aliasing
       // rho <= 1: Hermite 4 titik (tidak perlu filter)
-      const rr = v.rho, aa = rr > 1, fc = aa ? 0.85 / Math.min(rr, 8) : 1, hh = aa ? Math.ceil(this.HW / fc) : 2, sk = this.sinc, TRf = this.TR * fc, lim = this.HW * this.TR;
+      // ekor lepas di bawah -34 dB: aliasing interpolasi biasa jauh di bawah ambang dengar (levelnya sudah diredam envelope), jadi cukup Hermite
+      // (sinc 2 x hh tap per sampel jauh lebih mahal, apalagi untuk nada tinggi: hh makin besar sebanding rasio nada)
+      const rr = v.rho, aa = rr > 1 && !(v.rel && v.env < CHEAP_ENV), fc = aa ? 0.85 / Math.min(rr, 8) : 1, hh = aa ? Math.ceil(this.HW / fc) : 2, sk = this.sinc, TRf = this.TR * fc, lim = this.HW * this.TR;
       // (frame yang diperlukan sudah disiapkan di tahap A)
       let dead = false;
       for (let i = 0; i < n; i++) {
@@ -423,6 +486,7 @@ class DerizSampler extends AudioWorkletProcessor {
         v.rd += v.rho;
       }
       if (dead || (v.rel && v.env < 1e-4)) { this.voices.splice(vi, 1); this.recycle(v); }
+      else if (v.rel && !v.fast && v.env < TAIL_END) { v.fast = true; v.relK = FAST_K; }   // ekor sudah di bawah -54 dB: habiskan dalam beberapa ms (tanpa klik), tidak sampai 370 ms
     }
     // limiter lembut: sampai 0.9 lurus (satu nada di volume normal tidak tersentuh), di atasnya melengkung halus menuju 1.0 (hanya akor yang keras)
     for (let i = 0; i < n; i++) {
@@ -472,6 +536,7 @@ export interface DerizStat {
   trN: number; trSlow: number; trMax: number;   // pesan nada main thread -> worklet: jumlah, tiba > 100 ms setelah dikirim, tertunda terlama (ms)
   spK: number; spO: number; pcK: number; pcO: number; spFrom: number; spTo: number;   // Speed / Pitch berubah di worklet: lewat knob (K) atau dibawa nada (O)
   lateSkip: number;   // nada jadwal yang telat lebih dari panjangnya sehingga dilewati
+  gl: number; gc: number; gs: number;   // pengaman beban: beban terakhir (1 = tepat jatah), batas jumlah nada sekarang, nada yang dibuang sejak laporan terakhir
 }
 export const derizHooks: { on: boolean; stat: ((m: DerizStat, ctx: BaseAudioContext) => void) | null } = { on: false, stat: null };
 const liveSynths = new Set<DerizSynth>();
