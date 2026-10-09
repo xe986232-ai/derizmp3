@@ -1610,7 +1610,8 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 .fxc--cute .fxc__open:hover,.fxc--cute .fxc__more:hover,.fxc--cute .fxc__more[aria-expanded="true"]{color:#fff;background:radial-gradient(circle at 36% 28%,#37747b 0%,#1d4e56 60%,#123238 100%)}
 @media (prefers-reduced-motion:reduce){.fxc--cute{transform:none!important;transition:none!important}}
 
-.cute{position:fixed;inset:0;z-index:220;display:grid;place-items:center;padding:max(12px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom))}
+.cute{position:fixed;inset:0;z-index:220;display:grid;place-items:center;padding:max(12px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom));pointer-events:none}   /* dual plugin: lapisan CUTE tidak menangkap sentuhan, hanya jendelanya; plugin lain (DERIZ dll) tetap bisa dipakai bersamaan */
+.cute__win{pointer-events:auto}
 .cute[hidden]{display:none}
 .cute__back{position:absolute;inset:0;background:rgba(4,12,16,.55)}
 .cute__win{--accent:#5eead4;--accent-soft:rgba(94,234,212,.3);--ink:#e6fffb;--mute:#8fb7b2;--line:rgba(0,0,0,.5);--rx:0deg;--ry:0deg;--mx:50%;--my:0%;
@@ -2346,3 +2347,9 @@ body.is-pdragging,body.is-pdragging *{cursor:grabbing!important;user-select:none
 @keyframes ldDraw{to{stroke-dashoffset:0}}
 @keyframes ldIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.ldov--load .ldov__c{animation-duration:1.6s!important}}
+
+.cute__swap{flex:none;height:30px;padding:0 14px;border:0;border-radius:999px;font:800 11px/1 'Syncopate',system-ui,sans-serif;letter-spacing:.18em;color:#a9d9d2;background:radial-gradient(circle at 36% 28%,#2b5d63 0%,#173f46 60%,#0e2a30 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.25),inset 0 -2px 3px rgba(0,0,0,.5),0 2px 0 #061418,0 0 0 2px #061418;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .2s var(--ease-spring),color .2s ease}
+.cute__swap[hidden]{display:none}
+.cute__swap:hover{color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),inset 0 -2px 3px rgba(0,0,0,.55),0 2px 0 #061418,0 0 0 2px #061418,0 0 0 3px var(--accent),0 0 12px var(--accent-soft)}
+.cute__swap:active{transform:translateY(2px)}
+.cute__swap:focus-visible{outline:2px solid #fff;outline-offset:3px}

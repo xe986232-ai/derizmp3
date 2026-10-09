@@ -48,6 +48,7 @@ const niceStep = (raw: number): number => {   // jarak garis grid waktu yang ena
   return (r <= 1 ? 1 : r <= 2 ? 2 : r <= 5 ? 5 : 10) * p;
 };
 
+let zTop = 220;   // z-index jendela CUTE yang paling depan (naik tiap disentuh)
 let root: HTMLElement | null = null, openFn: (() => void) | null = null;
 
 // Dibuka dari kartu CUTE di panel efek (fx-rack.ts)
@@ -61,8 +62,7 @@ function build(): void {
   const el = document.createElement('div');
   el.className = 'cute'; el.hidden = true;
   el.innerHTML =
-    '<div class="cute__back"></div>' +
-    '<div class="cute__win is-off" role="dialog" aria-modal="true" aria-label="CUTE" tabindex="-1">' +
+    '<div class="cute__win is-off" role="dialog" aria-label="CUTE" tabindex="-1">' +
       `<header class="cute__head"><i class="cute__led" aria-hidden="true"></i><span class="cute__title">CUTE</span><div class="cute__lcd"><span class="cute__stat" role="status" aria-live="polite"></span></div>` +
         `<button type="button" class="cute__drag" aria-label="Seret hasil ke timeline" title="Seret hasil ke timeline (segera hadir)" disabled>${ICON.drag}</button>` +
         `<button type="button" class="cute__close" aria-label="Tutup CUTE">${ICON.close}</button></header>` +
@@ -70,7 +70,7 @@ function build(): void {
         '<canvas class="cute__cv" role="img" aria-label="Waveform audio. Seret untuk memilih bagian"></canvas>' +
         `<button type="button" class="cute__drop">${ICON.up}<span>Drop audio di sini</span><small>atau ketuk untuk memilih file</small></button>` +
       '</div></div>' +
-      `<div class="cute__bar"><button type="button" class="cute__zbtn" data-z="out" aria-label="Zoom out" title="Zoom out (-)" disabled>${ICON.zout}</button><button type="button" class="cute__play" aria-label="Putar" disabled>${ICON.play}</button><button type="button" class="cute__zbtn" data-z="in" aria-label="Zoom in" title="Zoom in (+)" disabled>${ICON.zin}</button></div>` +
+      `<div class="cute__bar"><button type="button" class="cute__swap" aria-label="Ganti sample audio" title="Ganti sample audio" hidden>GANTI</button><button type="button" class="cute__zbtn" data-z="out" aria-label="Zoom out" title="Zoom out (-)" disabled>${ICON.zout}</button><button type="button" class="cute__play" aria-label="Putar" disabled>${ICON.play}</button><button type="button" class="cute__zbtn" data-z="in" aria-label="Zoom in" title="Zoom in (+)" disabled>${ICON.zin}</button></div>` +
       '<div class="cute__glass" aria-hidden="true"></div>' +
       `<input type="file" class="cute__file" accept="${AUDIO_ACCEPT}" hidden>` +
     '</div>';
@@ -85,6 +85,7 @@ function build(): void {
   const drop = el.querySelector<HTMLButtonElement>('.cute__drop')!;
   const playBtn = el.querySelector<HTMLButtonElement>('.cute__play')!;
   const dragBtn = el.querySelector<HTMLButtonElement>('.cute__drag')!;
+  const swapBtn = el.querySelector<HTMLButtonElement>('.cute__swap')!;
   const zOut = el.querySelector<HTMLButtonElement>('[data-z="out"]')!, zIn = el.querySelector<HTMLButtonElement>('[data-z="in"]')!;
   const file = el.querySelector<HTMLInputElement>('.cute__file')!;
   const g = cv.getContext('2d')!;
@@ -342,12 +343,13 @@ function build(): void {
       stopPlay(); stopSource();
       S = { name: f.name.replace(/\.[^.]+$/, ''), dur: buf.duration, buf, pk: buildPeaks(buf) };
       sel = null; playPos = 0; playing = false; setPlayUi(false); vs = 0; ve = S.dur; pts.clear(); pinch = null; syncZ();
-      playBtn.disabled = false; dragBtn.disabled = false; drop.hidden = true;
+      playBtn.disabled = false; dragBtn.disabled = false; drop.hidden = true; swapBtn.hidden = false;
       cv.style.cursor = 'crosshair';
       layout(); info();
     } catch (err) { console.error(err); if (tok === loadTok) flash('Gagal membaca audio'); }
   }
   drop.addEventListener('click', () => file.click());
+  swapBtn.addEventListener('click', () => { stopPlay(); file.click(); });   // GANTI: pilih file lain; audio + seleksi lama diganti (load() mereset semuanya)
   file.addEventListener('change', () => { const f = file.files?.[0]; file.value = ''; if (f) void load(f); });
   el.addEventListener('dragover', e => { e.preventDefault(); win.classList.add('is-drop'); });
   el.addEventListener('dragleave', e => { if (!el.contains(e.relatedTarget as Node | null)) win.classList.remove('is-drop'); });
@@ -425,13 +427,12 @@ function build(): void {
   });
   el.addEventListener('keyup', e => e.stopPropagation());
   el.querySelector('.cute__close')!.addEventListener('click', () => close());
-  el.querySelector('.cute__back')!.addEventListener('pointerdown', () => close());
+  win.addEventListener('pointerdown', () => { el.style.zIndex = String(++zTop); });   // dual plugin: jendela yang disentuh naik ke depan
 
   function close(): void {
     stopPlay();
     const done = (): void => { el.hidden = true; };
     if (reduce) { done(); return; }
-    el.querySelector('.cute__back')!.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, fill: 'forwards' });
     win.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(10px) scale(.96)' }], { duration: 170, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }).onfinish = () => { done(); el.getAnimations({ subtree: true }).forEach(a => a.cancel()); };
   }
   openFn = () => {

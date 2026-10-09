@@ -578,7 +578,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   let ovOpen: { card: HTMLElement; ph: HTMLElement; opener: HTMLElement | null } | null = null;
   let autoOpen: { track: string; id: number } | null = null;   // DERIZ baru ditambahkan: dibuka otomatis begitu track-nya terpilih
   const onOvKey = (e: KeyboardEvent): void => {
-    if (e.key !== 'Escape') return;
+    if (e.key !== 'Escape' || (e.target as Element | null)?.closest?.('.cute')) return;   // Esc di dalam CUTE hanya menutup CUTE (dual plugin)
     e.preventDefault(); e.stopPropagation();
     closeOverlay();
   };
