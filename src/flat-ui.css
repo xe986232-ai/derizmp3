@@ -60,6 +60,9 @@ html[data-uistyle="flat"]{
   --flat-shadow:rgba(28,29,31,.18);
 }
 
+/* pojok kiri atas yang menempel (sticky) memakai warna strip atas mixer flat */
+html[data-uistyle="flat"] .tl-corner{background:var(--flat-head);box-shadow:inset 0 -1px 0 var(--flat-line)}
+
 /* ---------- 2. Kolom channel mixer ---------- */
 html[data-uistyle="flat"] .tracklist{
   color:var(--flat-text);

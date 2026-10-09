@@ -428,6 +428,8 @@ html[data-theme="jembut"] .lane{background-image:
 /* tombol panah dikunci ke tepi KIRI kolom (left:14px), bukan kanan: lebar kolom berubah 282px <-> 64px, tapi tepi kirinya diam, jadi tombol tidak ikut bergeser */
 .panel-toggle{position:absolute;top:6px;left:14px;width:36px;height:36px;border-radius:50%;border:0;background:#1f1f29;color:var(--text);display:grid;place-items:center;z-index:2;
   transition:background-color .2s ease,transform .25s var(--ease-spring)}
+/* pojok kiri atas (setinggi ruler, 48px): menempel di atas saat playlist di-scroll vertikal, persis seperti .tl-headwrap. Opaque supaya card track yang naik tidak tembus ke belakang tombol */
+.tl-corner{position:sticky;top:0;height:48px;margin-top:-48px;z-index:6;background:var(--tl-ruler);box-shadow:inset 0 -1px 0 var(--line)}
 .panel-toggle:hover{background:#2b2b37;transform:scale(1.08)}
 .panel-toggle:active{transform:scale(.92)}
 .panel-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
