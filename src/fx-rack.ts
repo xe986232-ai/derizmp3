@@ -745,9 +745,9 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     const fx = derizOf(track, fxId); if (!fx) return;
     const { ctx, dest } = host(), id = ++kbSeq;
     dbgSched(when - ctx.currentTime);   // statistik Debug Audio: sisa waktu sebelum nada ini mulai (tidak berefek kalau debug mati)
-    const tw = performance.now();
+    const tw = performance.now(), gen = schedGen;
     derizSynth(fx, ctx).then(s => {
-      const z = fx.deriz; if (!z) return;
+      const z = fx.deriz; if (!z || gen !== schedGen) return;   // Pause / Play ulang selagi sampler disiapkan: nada ini dibatalkan
       s.routeTo(trackInput(ctx, dest, track)); s.setBuffer(z.buf);
       dbgSent(performance.now() - tw, ctx.currentTime - when);
       const [sp, pi, vo] = derizArgs(fx), at = Math.max(when, ctx.currentTime);

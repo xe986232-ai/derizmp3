@@ -1788,6 +1788,7 @@ const placementSig = () => JSON.stringify([
 ]);
 let schedSig = '';
 function scheduleClips(countIn) {
+  gateOpen();   // Play / lompat: output master langsung dibuka lagi
   const ctx = audio(), beat = 60 / BPM, lead = countIn ? 4 * beat : 0;
   document.querySelectorAll('.trkcard-wrap').forEach(c => {
     const sl = c.querySelector('input[type=range]'); if (sl) setTrackVolume(c.dataset.track, +sl.value);
@@ -1813,7 +1814,20 @@ function startPlay() {
   if (autoScroll) showPlayhead();   // playhead di luar layar: timeline dibawa ke dekatnya dulu
   playRaf = requestAnimationFrame(tick); syncTransportUI();
 }
+// Pengaman pause: output master diturunkan ke nol saat pause dan dibuka lagi setelah GATE_MS (atau seketika saat Play / lompat posisi), jadi suara yang
+// bocor dari jalur mana pun (pesan telat ke worklet, nada yang masih disiapkan, ekor) tidak terdengar setelah pause. Pause = senyap.
+const GATE_MS = 400; let gateTimer = 0;
+function gateOpen() {
+  clearTimeout(gateTimer); gateTimer = 0;
+  if (master && actx) { const t = actx.currentTime; master.gain.cancelScheduledValues(t); master.gain.setValueAtTime(master.gain.value, t); master.gain.setTargetAtTime(1, t, .01); }
+}
+function gateClose() {
+  if (!master || !actx) return;
+  const t = actx.currentTime; master.gain.cancelScheduledValues(t); master.gain.setValueAtTime(master.gain.value, t); master.gain.setTargetAtTime(0, t, .006);
+  clearTimeout(gateTimer); gateTimer = setTimeout(gateOpen, GATE_MS);
+}
 function pausePlay() {
+  if (playing) gateClose();   // hanya kalau memang sedang main (menekan pause / tombol mundur saat berhenti tidak membisukan nada pratinjau)
   holdSpec(false);
   if (playing) posBars = Math.min(BARS, startPos + Math.max(0, audibleNow() - startCtx) / SEC_PER_BAR);   // posisi terakhir (yang terdengar) dari jam audio (playhead bergerak lewat animasi, bukan lewat tick)
   playing = false; cancelAnimationFrame(playRaf); playRaf = 0; stopClips(actx); flushTails(actx); stopAllSynth(actx); fxRack.derizStop(); synthQ = []; clearInterval(metroTimer); metroTimer = 0; metroCancel(actx, true); metroUI.beat(-1); syncTransportUI(); phHeld = false; renderStatic();
