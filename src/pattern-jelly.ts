@@ -85,6 +85,7 @@ export function initPatternJelly(lanesEl: HTMLElement): void {
     layer = document.createElement('div');
     layer.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;overflow:visible;pointer-events:none';
     if (col) layer.style.setProperty('--track-color', col);
+    ['--pat-color', '--note-fill', '--wave-fill'].forEach(v => { const c = lane.style.getPropertyValue(v); if (c) layer!.style.setProperty(v, c); });   // Customize track ikut terbawa di salinan
     layer.appendChild(card);
     document.body.appendChild(layer);
     src.classList.add('is-jelly-src');

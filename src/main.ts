@@ -232,16 +232,16 @@ const initKnobs = root => root.querySelectorAll('.knob-input').forEach(el => {
 // Menu titik tiga: Delete & Color
 const COLORS = ['#ff5c9e','#a66cff','#5b8ff3','#2dd4bf','#3fbf5f','#f2b632','#ff8a4c','#ef4444'];
 syncTrackColors(COLORS); window.addEventListener('derizmp3:ui', () => syncTrackColors(COLORS));   // set warna mengikuti Tema UI
-let menu = null, sub = null, menuBtn = null;
+let menu = null, sub = null, sub2 = null, menuBtn = null;
 function fadeOut(el) {
   el.style.pointerEvents = 'none';
   el.animate([{opacity:1,transform:'scale(1)'},{opacity:0,transform:'scale(.9) translateY(-4px)'}],
     {duration:160,easing:'cubic-bezier(.4,0,1,1)',fill:'forwards'}).onfinish = () => el.remove();
 }
 function closeMenu(instant) {
-  const s = sub, m = menu, b = menuBtn;
-  sub = menu = menuBtn = null;
-  [s, m].forEach(el => { if (el) (instant === true || instant instanceof Event || REDUCE) ? el.remove() : fadeOut(el); });
+  const s = sub, m = menu, b = menuBtn, s2 = sub2;
+  sub = sub2 = menu = menuBtn = null;
+  [s2, s, m].forEach(el => { if (el) (instant === true || instant instanceof Event || REDUCE) ? el.remove() : fadeOut(el); });
   if (b) b.setAttribute('aria-expanded', 'false');
 }
 function removeTrack(cont, lane) {
@@ -285,6 +285,9 @@ function openMenu(btn) {
     '<button role="menuitem" class="track-menu__item" data-act="color" aria-expanded="false">' +
       '<span class="track-menu__dot" style="background:' + cur + '"></span><span>Color</span>' +
       '<svg class="track-menu__chev ico-ln" viewBox="0 0 24 24" width="14" height="14" stroke-width="2.4" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>' +
+    '<button role="menuitem" class="track-menu__item" data-act="custom" aria-expanded="false">' +
+      '<span class="ico"><svg class="ico-ln" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></svg></span><span>Customize</span>' +
+      '<svg class="track-menu__chev ico-ln" viewBox="0 0 24 24" width="14" height="14" stroke-width="2.4" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>' +
     '';
   document.body.appendChild(menu);
   // posisi: di sebelah kanan tombol, kalau tidak muat pindah ke kiri
@@ -313,6 +316,8 @@ function openMenu(btn) {
       selectPattern(rnTarget);
       rnTarget.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: REDUCE ? 'auto' : 'smooth'});
       setTimeout(() => { if (rnTarget.isConnected) renamePattern(rnTarget); }, 30);
+    } else if (it.dataset.act === 'custom') {
+      openCustom(cont, it);
     } else {
       openColors(cont, it);
     }
@@ -320,7 +325,9 @@ function openMenu(btn) {
 }
 // Card terpisah untuk pilihan warna, muncul di kanan menu utama
 function openColors(cont, it) {
-  if (sub) { fadeOut(sub); sub = null; it.setAttribute('aria-expanded', 'false'); return; }
+  const wasColors = !!sub && sub.classList.contains('track-menu--colors') && !sub.dataset.custom;
+  if (sub2) { fadeOut(sub2); sub2 = null; }
+  if (sub) { fadeOut(sub); sub = null; menu.querySelectorAll('[aria-expanded="true"]').forEach(x => x.setAttribute('aria-expanded', 'false')); if (wasColors) return; }
   sub = document.createElement('div');
   sub.className = 'track-menu track-menu--colors mixer-menu';
   sub.setAttribute('role', 'menu');
@@ -349,13 +356,85 @@ function openColors(cont, it) {
     closeMenu();
   });
 }
+// ===== Customize (menu titik tiga track): warna pattern & warna note / waveform audio clip, per track =====
+// Disimpan sebagai variabel CSS di lane (--pat-color = latar pattern, --note-fill + --wave-fill = note mini & waveform). Kosong = ikut warna track / Pengaturan.
+const CUSTOM_VARS = {pattern: ['--pat-color'], note: ['--note-fill', '--wave-fill']};
+const CUSTOM_SWATCHES = ['#ffffff', '#000000', '#ff5c9e', '#a66cff', '#5b8ff3', '#2dd4bf', '#3fbf5f', '#f2b632', '#ff8a4c', '#ef4444', '#facc15', '#14b8a6'];
+const laneOfTrack = id => document.querySelector('.lane[data-track="' + id + '"]');
+function setLaneCustom(lane, kind, color) {   // color null = kembali ke bawaan
+  if (!lane) return;
+  CUSTOM_VARS[kind].forEach(v => color ? lane.style.setProperty(v, color) : lane.style.removeProperty(v));
+}
+const laneCustom = (lane, kind) => (lane && lane.style.getPropertyValue(CUSTOM_VARS[kind][0])) || '';
+function openCustom(cont, it) {
+  const wasCustom = !!sub && sub.dataset.custom === '1';
+  if (sub2) { fadeOut(sub2); sub2 = null; }
+  if (sub) { fadeOut(sub); sub = null; menu.querySelectorAll('[aria-expanded="true"]').forEach(x => x.setAttribute('aria-expanded', 'false')); if (wasCustom) return; }
+  const lane = laneOfTrack(cont.dataset.track);
+  sub = document.createElement('div');
+  sub.className = 'track-menu mixer-menu'; sub.dataset.custom = '1';
+  sub.setAttribute('role', 'menu');
+  const dot = c => '<span class="track-menu__dot" style="background:' + (c || 'transparent') + (c ? '' : ';box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.4)') + '"></span>';
+  const chev = '<svg class="track-menu__chev ico-ln" viewBox="0 0 24 24" width="14" height="14" stroke-width="2.4" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>';
+  sub.innerHTML =
+    '<button role="menuitem" class="track-menu__item" data-kind="pattern" aria-expanded="false">' + dot(laneCustom(lane, 'pattern')) + '<span>Color pattern</span>' + chev + '</button>' +
+    '<button role="menuitem" class="track-menu__item" data-kind="note" aria-expanded="false">' + dot(laneCustom(lane, 'note')) + '<span>Color note / waveform</span>' + chev + '</button>';
+  document.body.appendChild(sub);
+  const mr = menu.getBoundingClientRect(), ir = it.getBoundingClientRect(), sr = sub.getBoundingClientRect();
+  let left = mr.right + 4;
+  if (left + sr.width > innerWidth - 8) left = Math.max(8, mr.left - sr.width - 4);
+  sub.style.left = left + 'px';
+  sub.style.top = Math.max(8, Math.min(ir.top - 6, innerHeight - sr.height - 8)) + 'px';
+  sub.style.transformOrigin = left >= mr.right ? 'left top' : 'right top';
+  it.setAttribute('aria-expanded', 'true');
+  sub.addEventListener('click', e => {
+    const k = e.target.closest('[data-kind]');
+    if (k) openCustomColors(cont, k);
+  });
+}
+function openCustomColors(cont, it) {
+  const kind = it.dataset.kind, wasSame = !!sub2 && sub2.dataset.kind === kind;
+  if (sub2) { fadeOut(sub2); sub2 = null; sub.querySelectorAll('[aria-expanded="true"]').forEach(x => x.setAttribute('aria-expanded', 'false')); if (wasSame) return; }
+  const lane = laneOfTrack(cont.dataset.track), cur = laneCustom(lane, kind);
+  sub2 = document.createElement('div');
+  sub2.className = 'track-menu track-menu--colors track-menu--custom mixer-menu'; sub2.dataset.kind = kind;
+  sub2.setAttribute('role', 'menu');
+  const hex = /^#[0-9a-f]{6}$/i.test(cur) ? cur : '#ffffff';
+  sub2.innerHTML = '<div class="track-menu__swatches">' +
+    CUSTOM_SWATCHES.map((c, i) => '<button class="track-menu__swatch' + (c.toLowerCase() === cur.toLowerCase() ? ' is-cur' : '') + '" data-c="' + c + '" style="background:' + c + ';--i:' + i + '" aria-label="Warna ' + c + '"></button>').join('') +
+    '</div>' +
+    '<div class="track-menu__custom-row">' +
+      '<label class="track-menu__pick" title="Pilih warna sendiri"><input type="color" value="' + hex + '" aria-label="Pilih warna sendiri"><span>Custom</span></label>' +
+      '<button class="track-menu__reset" data-reset="1">Reset</button>' +
+    '</div>';
+  document.body.appendChild(sub2);
+  const mr = sub.getBoundingClientRect(), ir = it.getBoundingClientRect(), sr = sub2.getBoundingClientRect();
+  let left = mr.right + 4;
+  if (left + sr.width > innerWidth - 8) left = Math.max(8, mr.left - sr.width - 4);
+  sub2.style.left = left + 'px';
+  sub2.style.top = Math.max(8, Math.min(ir.top - 6, innerHeight - sr.height - 8)) + 'px';
+  sub2.style.transformOrigin = left >= mr.right ? 'left top' : 'right top';
+  it.setAttribute('aria-expanded', 'true');
+  const apply = c => {
+    setLaneCustom(lane, kind, c);
+    const d = it.querySelector('.track-menu__dot');
+    if (d) { d.style.background = c || 'transparent'; d.style.boxShadow = c ? '' : 'inset 0 0 0 1.5px rgba(255,255,255,.4)'; }
+    sub2.querySelectorAll('.track-menu__swatch').forEach(x => x.classList.toggle('is-cur', !!c && x.dataset.c.toLowerCase() === c.toLowerCase()));
+  };
+  sub2.addEventListener('click', e => {
+    const sw = e.target.closest('.track-menu__swatch');
+    if (sw) { apply(sw.dataset.c); return; }
+    if (e.target.closest('[data-reset]')) apply(null);
+  });
+  sub2.querySelector('input[type=color]').addEventListener('input', e => apply(e.target.value));   // langsung terlihat di timeline selama memilih
+}
 const initMore = root => root.querySelectorAll('.trkcard__menu').forEach(btn => {
   btn.addEventListener('click', e => {
     e.stopPropagation(); closeAddMenu(true);
     if (menuBtn === btn) closeMenu(); else openMenu(btn);
   });
 });
-document.addEventListener('click', e => { if (menu && !menu.contains(e.target) && !(sub && sub.contains(e.target))) closeMenu(); });
+document.addEventListener('click', e => { if (menu && !menu.contains(e.target) && !(sub && sub.contains(e.target)) && !(sub2 && sub2.contains(e.target))) closeMenu(); });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && menu) { const b = menuBtn; closeMenu(); b && b.focus(); }
 });
@@ -1625,6 +1704,7 @@ function duplicateTrack(src) {
   src.after(cont); sLane.after(lane);   // addTrack menaruh di paling bawah: pindahkan ke tepat di bawah track asal (card + lane)
   document.getElementById('track-name-' + id).textContent = name;
   cont.querySelector('.trkcard__title-btn').title = name;
+  setLaneCustom(lane, 'pattern', laneCustom(sLane, 'pattern') || null); setLaneCustom(lane, 'note', laneCustom(sLane, 'note') || null);   // Customize ikut disalin
   const vol = cont.querySelector('input[type=range]');
   if (vol && sVol) { vol.setAttribute('aria-label', 'Volume, ' + name); vol.value = sVol.value; vol.dispatchEvent(new Event('input', {bubbles: true})); }
   const pan = cont.querySelector('.knob-input');
@@ -2363,6 +2443,7 @@ function projectSnapshot() {
     tracks.push({
       id, ins: c.dataset.ins || 'Audio clip', name: document.getElementById('track-name-' + id).textContent,
       color: c.style.getPropertyValue('--track-color'), vol: sl ? +sl.value : 100,
+      ...(laneCustom(laneOfTrack(id), 'pattern') ? {pc: laneCustom(laneOfTrack(id), 'pattern')} : {}), ...(laneCustom(laneOfTrack(id), 'note') ? {wc: laneCustom(laneOfTrack(id), 'note')} : {}),
       off: !!pwr && pwr.getAttribute('aria-checked') === 'false', deriz: fxRack.derizIds(id).length, po: fxRack.derizPlainIndex(id), pats,
       ...(dz.some(x => x.z) ? {dz} : {}),
       ...(fxs.length ? {fx: fxs} : {}),
@@ -2408,6 +2489,8 @@ async function projectRestore(rec) {
     const cont = document.querySelector('.trkcard-wrap[data-track="' + id + '"]'), lane = lanesEl.querySelector('.lane[data-track="' + id + '"]');
     document.getElementById('track-name-' + id).textContent = t.name;
     cont.querySelector('.trkcard__title-btn').title = t.name;
+    if (typeof t.pc === 'string') setLaneCustom(lane, 'pattern', t.pc);   // Customize: warna pattern & note / waveform per track
+    if (typeof t.wc === 'string') setLaneCustom(lane, 'note', t.wc);
     const sl = cont.querySelector('input[type=range]');
     if (sl) { sl.setAttribute('aria-label', 'Volume, ' + t.name); sl.value = t.vol; sl.dispatchEvent(new Event('input', {bubbles: true})); }
     panTip.hidden = true;
