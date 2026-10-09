@@ -219,3 +219,9 @@ Pembeli punya nama tampilan dan foto profil. Tampil sebagai kartu di paling atas
 - Foto dipotong persegi dan diperkecil jadi 256x256 JPEG di browser sebelum diunggah (batas server 256 KB; jenis file dicek dari isinya). Bucket privat: foto hanya bisa dilihat lewat `/api/avatar` oleh pemilik yang sedang masuk.
 - Kode: `api/profile.ts`, `api/avatar.ts`, `api/_auth.ts`, `src/account.ts`, bagian "Profil" di `src/menu-panel.ts` + `src/styles.css`. Tes: `npx tsx tools/profile-test.ts`.
 - Hanya build full. Build demo tidak memuat kode ini.
+
+## DERIZ: rentang Speed 0.25× - 4×
+Knob Speed DERIZ sekarang 0.25× (slow) sampai 4× (speed), tengah tetap 1×, skala logaritmik (`src/deriz-speed.ts`). Dulu 0.5× - 2×.
+Project lama otomatis dikonversi saat dibuka (penanda `spr` di knob DERIZ, `derizImport` di `src/fx-rack.ts`), jadi kecepatan yang tersimpan tetap terdengar sama. Sync all sample (`src/main.ts`) ikut memakai batas baru.
+Catatan: Automation Clip yang menggerakkan knob Speed di project lama menyimpan posisi knob (0-1), bukan kecepatan, jadi kurvanya perlu dicek ulang.
+Tes: `node --experimental-transform-types tools/deriz-speed-test.ts` (skala knob, konversi project lama, worklet bersih di 0.25× / 1× / 4×).

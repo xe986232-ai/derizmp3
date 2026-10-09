@@ -12,6 +12,7 @@ import { initEffectsPanel } from './effects-panel';
 import { initTrackMeters } from './track-meters';
 import { initTrackReorder } from './track-reorder';
 import { initFxRack, holdSpec } from './fx-rack';
+import { derizSpeed as derizSpeedOf, derizSpeedKnob, SPEED_MIN, SPEED_MAX } from './deriz-speed';
 import { setHostBpm } from './delay-fx';
 import { initRecordJelly } from './record-jelly';
 import { initPatternJelly } from './pattern-jelly';
@@ -723,8 +724,7 @@ const applyClipPitch = (el, pitch) => reprocessClip(el, {pitch});
 // ===== Sync all sample (tahan icon piano pada pattern nada) =====
 // Semua DERIZ yang bernada di pattern ini dikunci ke BPM project: kecepatan (knob Speed) tiap sample dicatat saat Sync dinyalakan
 // (boleh beda-beda), lalu ikut berubah sebanding tiap BPM project diganti. Speed baru = Speed catatan x BPM sekarang / BPM saat sync.
-// Knob Speed DERIZ terbatas 0.5x - 2x: di luar itu berhenti di batas.
-const derizSpeedOf = v => 2 ** ((v - 0.5) * 2), derizSpeedKnob = sp => Math.max(0, Math.min(1, Math.log2(sp) / 2 + 0.5));
+// Knob Speed DERIZ terbatas 0.25x - 4x (SPEED_MIN / SPEED_MAX di fx-rack.ts): di luar itu berhenti di batas.
 function patDerizList(el) {   // DERIZ yang menyala + berisi audio dan punya nada di pattern ini
   const prId = el.dataset.prId, lt = el.parentElement.dataset.track; if (!prId) return [];
   return fxRack.derizAll().filter(d => getPianoRollNotes(patKey(prId, d.id, lt)).length);
@@ -756,7 +756,7 @@ function applySyncSamples() {
     });
     if (!sy.items.size) unsyncPattern(el);
   });
-  if (clamped) toast('Speed sample sudah di batas 0.5× - 2×');
+  if (clamped) toast('Speed sample sudah di batas ' + SPEED_MIN + '× - ' + SPEED_MAX + '×');
 }
 
 // Tahan icon microphone pada audio clip -> card putih "Sesuaikan Tempo" / "Sesuaikan Pitch"; menu bulat (copy, delete, dst) hilang selama card terbuka

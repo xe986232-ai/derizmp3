@@ -6,6 +6,7 @@
 // Efek / plugin baru cukup ditambah ke EFFECTS (nama, parameter) dan ke applyAudio().
 // DERIZ: plugin sampler dengan canvas audio (spektrogram, zoom) + upload file; nada (tuts + Pitch) dan kecepatan (Speed) terpisah (deriz-synth.ts).
 
+import { derizSpeed, derizSpeedKnob, derizSpeedFromV1, SPEED_VER } from './deriz-speed';
 import { setReverb, setEq, setFilter, setDeesser, setDelay, delayLevels, reverbSeconds, reverbPreSec, reverbToneHz, reverbLowHz, eqDb, EQ_BANDS, eqHz, eqFreqV, eqQ, eqQV, EQ_RANGE_DB, eqSpectrum, EQ_FFT_BINS, filterMode, filterHz, deesserHz, deesserThr, deesserMaxDb, decodeStandalone, trackInput } from './audio-engine';
 import { DerizSynth } from './deriz-synth';
 import { ivkKey } from './ivory-keys';
@@ -51,7 +52,6 @@ const fmtCut = (v: number): string => { const m = filterMode(v); return m === 'o
 
 const derizVol = (v: number | undefined): number => (v ?? 0.8) * 1.125;   // knob Volume: default 80% = penguatan 0.9 (sama seperti sebelumnya), 100% = 1.125
 const derizPitch = (v: number | undefined): number => Math.round(((v ?? 0.5) - 0.5) * 24);   // knob Pitch: tengah = 0, kiri -12, kanan +12 semitone (bulat)
-const derizSpeed = (v: number): number => 2 ** ((v - 0.5) * 2);   // knob Speed: tengah = 1×, kiri 0.5×, kanan 2× (kecepatan sample saja; nada tidak ikut berubah, diatur tuts + Pitch)
 
 const EFFECTS: EffectDef[] = [
   {
@@ -1683,7 +1683,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   }
   function derizExport(track: string): DerizSaved[] {
     return (racks.get(track) ?? []).filter(f => f.type === 'deriz').map(f => {
-      const o: DerizSaved = { on: f.on, v: { ...f.v } };
+      const o: DerizSaved = { on: f.on, v: { ...f.v, spr: SPEED_VER } };   // spr: versi skala Speed (lihat derizImport)
       if (f.deriz) o.z = { name: f.deriz.name, start: f.deriz.start, zoom: f.deriz.zoom, view: f.deriz.view, buf: f.deriz.buf };
       return o;
     });
@@ -1691,6 +1691,8 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   function derizImport(track: string, i: number, st: DerizSaved): void {
     const fx = (racks.get(track) ?? []).filter(f => f.type === 'deriz')[i]; if (!fx) return;
     fx.on = st.on; fx.v = { ...fx.v, ...st.v };
+    if (st.v.speed !== undefined && st.v.spr !== SPEED_VER) fx.v.speed = derizSpeedFromV1(st.v.speed);   // project lama (rentang 0.5× - 2×): posisi knob dihitung ulang supaya kecepatannya tetap sama
+    fx.v.spr = SPEED_VER;   // penanda versi skala Speed ikut tersimpan bersama knob
     autoOpen = null;   // membuka project: jangan memunculkan jendela DERIZ otomatis
     if (st.z) {
       const my = fx.tok = (fx.tok ?? 0) + 1;
