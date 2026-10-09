@@ -77,10 +77,9 @@ html[data-uistyle="flat"] .tracklist .trkcard-wrap{padding:0;border-bottom:1px s
 html[data-uistyle="flat"] .tracklist .panel-toggle{border-radius:0;background:var(--flat-ctrl);color:var(--flat-text);transition:background-color .15s ease,color .15s ease}
 html[data-uistyle="flat"] .tracklist .panel-toggle:hover{background:var(--flat-ctrl-hover);transform:none}
 html[data-uistyle="flat"] .tracklist .panel-toggle:active{transform:none}
-html[data-uistyle="flat"] .tracklist .autoscroll-toggle,
 html[data-uistyle="flat"] .tracklist .more-toggle{color:var(--flat-muted)}
-html[data-uistyle="flat"] .tracklist .autoscroll-toggle[aria-checked="true"]{color:#000;background:#fff}
-html[data-uistyle="flat"] .tracklist .autoscroll-toggle[aria-checked="true"]:hover{background:#ececf1}
+html[data-uistyle="flat"] .tracklist .more-toggle[aria-expanded="true"]{color:#000;background:#fff;transform:none}
+html[data-uistyle="flat"] .tracklist .more-toggle[aria-expanded="true"]:hover{background:#ececf1;transform:none}
 
 /* ---------- 3. Card track ---------- */
 html[data-uistyle="flat"] .tracklist .trkcard,

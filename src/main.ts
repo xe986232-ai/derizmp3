@@ -33,6 +33,7 @@ import { hasSynth, isDrumsTrack, startVoice, releaseVoice, playNote, stopAllSynt
 import { click as metroClick, cancel as metroCancel } from './metronome-audio';
 import { initMetronomePanel, BPM_MIN, BPM_MAX } from './metronome-panel';
 import { initTransportMore } from './transport-more';
+import { initPlaylistMenu } from './playlist-menu';
 import { initPitchPanel, getMasterPitch, setMasterPitch } from './master-pitch';
 import { createClip, importClip, exportClip, cloneClip, splitClip, shiftClip, valueAt, getClip, renderMini, openAutoEditor } from './automation';
 import { decodeFile, addBuffer, getBuffer, encodeWav, renderWave, play as playClips, stopAll as stopClips, flushTails, stopTrack, setTrackVolume, setTrackMuted } from './audio-engine';
@@ -1967,18 +1968,14 @@ const AUTOSCROLL_KEY = 'derizmp3.autoScroll';
 let autoScroll = true, userScrollUntil = 0;
 const FOLLOW_AT = .5, FOLLOW_PAUSE = 2500;   // letak playhead terkunci (porsi lebar area playlist yang terlihat; .5 = tengah) dan lama jeda setelah pengguna menggulir
 try { autoScroll = localStorage.getItem(AUTOSCROLL_KEY) !== '0'; } catch { /* penyimpanan diblokir: bawaan nyala */ }
-const autoScrollBtn = document.getElementById('autoScrollToggle');
-function syncAutoScrollUI() {
-  autoScrollBtn.setAttribute('aria-checked', String(autoScroll));
-  autoScrollBtn.title = 'Auto scroll playlist: ' + (autoScroll ? 'nyala' : 'mati');
-}
-autoScrollBtn.addEventListener('click', () => {
-  autoScroll = !autoScroll; syncAutoScrollUI();
+// Auto scroll dinyalakan / dimatikan lewat dropdown titik tiga di pojok kiri atas playlist (View -> Automatic Scroll)
+function setAutoScroll(on) {
+  autoScroll = on;
   try { localStorage.setItem(AUTOSCROLL_KEY, autoScroll ? '1' : '0'); } catch { /* abaikan */ }
   userScrollUntil = 0;   // dinyalakan saat main: timeline langsung menyusul playhead
   toast('Auto scroll ' + (autoScroll ? 'nyala' : 'mati'));
-});
-syncAutoScrollUI();
+}
+initPlaylistMenu(document.getElementById('playlistMoreToggle') as HTMLButtonElement, {isAutoScroll: () => autoScroll, setAutoScroll});
 // Saat terkunci di tengah, playhead TIDAK lagi memakai animasi CSS (jam compositor beda dengan scroll di main thread -> posisi relatifnya bergetar).
 // Playhead dan scrollLeft dihitung dari satu nilai (posBars, jam halus) dan ditulis di frame yang sama, jadi playhead diam di layar dan timeline
 // yang bergulir. Offset scroll di-snap ke piksel fisik (browser membulatkannya) dan playhead mengikuti nilai yang sama, jadi tidak ada getar sub-piksel.
