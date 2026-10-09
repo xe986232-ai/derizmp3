@@ -1720,7 +1720,12 @@ function synthPump(ctx, ahead) {
   while (synthI < synthQ.length && synthQ[synthI].when <= ahead) {
     if (synthQ[synthI].when > ctx.currentTime + .1 && performance.now() - t0 > 3) break;
     const n = synthQ[synthI++];
-    if (n.deriz) fxRack.derizPlay(n.track, n.p, n.when, n.dur, n.glides, n.fxId, n.vel); else playNote(ctx, master, n.track, n.p, n.when, n.dur, n.glides, n.vel);
+    if (n.deriz) { fxRack.derizPlay(n.track, n.p, n.when, n.dur, n.glides, n.fxId, n.vel); continue; }
+    // Main thread tersendat (patah-patah): nada yang waktunya sudah lewat jangan dibunyikan semua sekaligus (terdengar ngebut / pitch naik menumpuk).
+    // Sudah lewat seluruh panjangnya = dilewati; masih sisa = dimulai sekarang dengan panjang yang dipotong sebesar telatnya (sama seperti worklet DERIZ).
+    const late = ctx.currentTime - n.when;
+    if (late > .03) { if (late >= n.dur) continue; playNote(ctx, master, n.track, n.p, ctx.currentTime, n.dur - late, n.glides, n.vel); continue; }
+    playNote(ctx, master, n.track, n.p, n.when, n.dur, n.glides, n.vel);
   }
 }
 // Nada satu pattern (kunci nada = key) dijadwalkan ke instrumen track "track"; deriz = lewat sampler DERIZ track itu
