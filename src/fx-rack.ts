@@ -127,6 +127,8 @@ const derizCount = (): number => { let n = 0; for (const r of racks.values()) fo
 const derizNo = (id: number): number => { for (const r of racks.values()) { const k = r.filter(f => f.type === 'deriz').findIndex(f => f.id === id); if (k >= 0) return k + 1; } return 1; };   // urutan DERIZ di track-nya (1 = bawaan)
 
 const racks = new Map<string, Fx[]>();   // id track -> efek miliknya
+// DERIZ baru mengambil nada polos pattern track kalau belum ada pemilik, atau pemilik sebelumnya sudah dihapus (nadanya tetap ada, jadi dipakai DERIZ baru)
+function claimPlain(track: string, id: number): void { const o = plainOwner.get(track); if (o === undefined || o === -1) plainOwner.set(track, id); }
 const plainOwner = new Map<string, number>();   // id track -> id DERIZ pemilik nada berkunci polos di pattern track itu (DERIZ pertama yang dibuat; -1 = sudah dihapus, tidak diwariskan)
 let cur: string | null = null, seq = 0;
 
@@ -536,7 +538,7 @@ export interface PatternBridge {
   list(fxId: number): PatternRow[];           // semua pattern instrumen di timeline, urut dari atas ke bawah lalu kiri ke kanan (notes = nada milik DERIZ fxId)
   open(row: PatternRow, fxId: number): void;  // masuk ke pattern: buka piano roll untuk DERIZ ini
   drop(fxId: number): boolean;                // DERIZ di-drag & drop ke piano roll yang sedang terbuka: piano roll langsung jadi milik DERIZ ini (false = tidak ada piano roll terbuka)
-  removed(fxId: number, track: string, ownedPlain: boolean): void;   // DERIZ dihapus: buang nadanya dari semua pattern (ownedPlain: ikut buang nada kunci polos di pattern track-nya)
+  removed(fxId: number, track: string, ownedPlain: boolean, nextOwner?: number): void;   // DERIZ dihapus: nada di pattern track-nya TIDAK dibuang (digabung ke nada polos pattern, dibaca DERIZ paling atas yang tersisa / DERIZ baru berikutnya); ownedPlain: yang dihapus pemilik kunci polos, nextOwner: DERIZ teratas yang tersisa (pemilik baru)
 }
 
 export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxRack {
@@ -1127,7 +1129,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     const d = defOf(type), v: Record<string, number> = {};
     d.params.forEach(p => { v[p.key] = p.def; });
     const fx: Fx = { id: ++seq, type, on: true, min: false, v };
-    if (type === 'deriz') { if (!plainOwner.has(cur)) plainOwner.set(cur, fx.id); autoOpen = { track: cur, id: fx.id }; }   // langsung terbuka di tengah layar seperti DERIZ bawaan
+    if (type === 'deriz') { claimPlain(cur, fx.id); autoOpen = { track: cur, id: fx.id }; }   // langsung terbuka di tengah layar seperti DERIZ bawaan
     if (type === 'delay') autoOpen = { track: cur, id: fx.id };   // Delay juga: panelnya terlalu besar untuk kolom efek
     racks.set(cur, [...fxs(), fx]);
     applyAudio(cur);
@@ -1159,7 +1161,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     d.params.forEach(p => { v[p.key] = p.def; });
     const fx: Fx = { id: ++seq, type, on: true, min: false, v };
     racks.set(track, [fx, ...rack]);
-    if (type === 'deriz' && !plainOwner.has(track)) plainOwner.set(track, fx.id);
+    if (type === 'deriz') claimPlain(track, fx.id);
     applyAudio(track);
     if (type === 'deriz') autoOpen = { track, id: fx.id };   // DERIZ langsung muncul di tengah layar (overlay), bukan hanya di panel efek
     if (track !== cur) return;   // track lain belum dipilih: kartu digambar & overlay dibuka saat show()
@@ -1202,11 +1204,12 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   function removeEffect(card: HTMLElement): void {
     const fx = find(card); if (!fx || !cur || (defOf(fx.type).synth && fx.type !== 'deriz' && fx.type !== 'mpcs' && fx.type !== 'cute' && fx.type !== 'mgchord' && fx.type !== 'drums')) return;
     hideTip();
-    if (fx.type === 'deriz') {   // lepas sampler-nya dan buang nadanya di semua pattern
+    if (fx.type === 'deriz') {   // lepas sampler-nya; nada di pattern track ini tetap disimpan (lihat patterns.removed)
       const e = synths.get(fx.id); if (e) { synths.delete(fx.id); void e.p.then(x => x.dispose(), () => { /* gagal dibuat */ }); }
       const owned = plainOwner.get(cur) === fx.id;
-      if (owned) plainOwner.set(cur, -1);
-      patterns?.removed(fx.id, cur, owned);
+      const next = fxs().find(f => f.type === 'deriz' && f !== fx)?.id;   // DERIZ teratas yang tersisa mewarisi nada polos
+      if (owned) plainOwner.set(cur, next ?? -1);
+      patterns?.removed(fx.id, cur, owned, next);
     }
     racks.set(cur, fxs().filter(f => f !== fx));
     applyAudio(cur);
@@ -1674,7 +1677,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     d.params.forEach(p => { v[p.key] = p.def; });
     const fx: Fx = { id: ++seq, type: 'deriz', on: true, min: false, v };
     racks.set(track, [...(racks.get(track) ?? []), fx]);
-    if (!plainOwner.has(track)) plainOwner.set(track, fx.id);
+    claimPlain(track, fx.id);
     applyAudio(track);
     if (cur === track) api.show(track);
   }

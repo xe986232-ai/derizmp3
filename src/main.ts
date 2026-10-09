@@ -897,9 +897,25 @@ const patternBridge = {
     if (!isPianoRollOpen() || !prEl || !prEl.isConnected) return false;
     enterPatternAs(prEl, fxId, true); toast('DERIZ masuk ke piano roll'); return true;
   },
-  removed(fxId, track, ownedPlain) {
+  // Hapus plugin DERIZ TIDAK menghapus nada piano roll di pattern track-nya. Nada milik plugin yang dihapus digabung ke nada polos pattern (kunci pattern itu sendiri):
+  // dibaca DERIZ teratas yang tersisa (pemilik baru), atau DERIZ baru yang ditambah berikutnya (fx-rack: claimPlain). Nada layer DERIZ teratas yang mewarisi ikut digabung
+  // ke kunci polos supaya tidak ada nada yatim. Hanya nada DERIZ ini di pattern track LAIN (layer lintas track) yang dibuang bersama plugin-nya.
+  removed(fxId, track, ownedPlain, nextOwner) {
+    if (isPianoRollOpen()) closePianoRoll();   // piano roll yang terbuka mungkin memegang kunci nada yang akan dipindah
+    const merge = (to, from) => {
+      const src = getPianoRollNotes(from); if (!src.length) { clearPianoRollNotes(from); return; }
+      const dst = getPianoRollNotes(to), seen = new Set(dst.map(n => n.p + '|' + n.s + '|' + n.l));
+      setPianoRollNotes(to, [...dst, ...src.filter(n => !seen.has(n.p + '|' + n.s + '|' + n.l))]);
+      clearPianoRollNotes(from);
+    };
+    lanesEl.querySelectorAll('.pattern[data-pr-id]').forEach(p => {
+      if (p.parentElement.dataset.track !== track) return;
+      const P = p.dataset.prId;
+      if (!ownedPlain) merge(P, P + '@' + fxId);                                   // layer DERIZ biasa: nadanya pindah ke nada polos pattern
+      else if (nextOwner !== undefined) merge(P, P + '@' + nextOwner);             // pemilik polos dihapus: DERIZ teratas jadi pemilik, layer-nya digabung ke polos
+      renderPatNotes(p);
+    });
     dropPianoRollNotesOf(String(fxId));
-    if (ownedPlain) lanesEl.querySelectorAll('.pattern[data-pr-id]').forEach(p => { if (p.parentElement.dataset.track === track) clearPianoRollNotes(p.dataset.prId); });
   }
 };
 lanesEl.addEventListener('dblclick', e => {   // ganti nama pattern: klik dua kali judulnya
