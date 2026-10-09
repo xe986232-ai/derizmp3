@@ -5,7 +5,7 @@
 
 import { ACCEPT as AUDIO_ACCEPT, isAudio } from './audio-upload-card';
 import { encodeWavFloatMulti } from './wav';
-import { dragWindow } from './win-drag';
+import { bringFront, dragWindow } from './win-drag';
 
 const svg = (inner: string, size = 18): string =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
@@ -48,7 +48,6 @@ const niceStep = (raw: number): number => {   // jarak garis grid waktu yang ena
   return (r <= 1 ? 1 : r <= 2 ? 2 : r <= 5 ? 5 : 10) * p;
 };
 
-let zTop = 220;   // z-index jendela CUTE yang paling depan (naik tiap disentuh)
 let root: HTMLElement | null = null, openFn: (() => void) | null = null;
 
 // Dibuka dari kartu CUTE di panel efek (fx-rack.ts)
@@ -64,7 +63,7 @@ function build(): void {
   el.innerHTML =
     '<div class="cute__win is-off" role="dialog" aria-label="CUTE" tabindex="-1">' +
       `<header class="cute__head"><i class="cute__led" aria-hidden="true"></i><span class="cute__title">CUTE</span><div class="cute__lcd"><span class="cute__stat" role="status" aria-live="polite"></span></div>` +
-        `<button type="button" class="cute__drag" aria-label="Seret hasil ke timeline" title="Seret hasil ke timeline (segera hadir)" disabled>${ICON.drag}</button>` +
+        `<button type="button" class="cute__drag" aria-label="Seret hasil ke timeline" title="Tahan lalu seret: ke DERIZ = sample, ke MPCS = dimuat di MPCS, ke timeline = track audio clip" disabled>${ICON.drag}</button>` +
         `<button type="button" class="cute__close" aria-label="Tutup CUTE">${ICON.close}</button></header>` +
       '<div class="cute__mid"><div class="cute__stage">' +
         '<canvas class="cute__cv" role="img" aria-label="Waveform audio. Seret untuk memilih bagian"></canvas>' +
@@ -378,7 +377,7 @@ function build(): void {
     return new File([encodeWavFloatMulti(chs, sr)], S.name + (sel ? '-CUTE' : '') + '.wav', { type: 'audio/wav' });
   }
   const stageAt = (x: number, y: number): HTMLElement | null => {
-    for (const n of document.elementsFromPoint(x, y)) { if (n.closest('.cute')) continue; return n.closest<HTMLElement>('.deriz__stage') ?? n.closest<HTMLElement>('.workspace'); }   // elemen pertama di bawah CUTE: kanvas DERIZ = jadi sample, timeline = jadi track audio clip baru
+    for (const n of document.elementsFromPoint(x, y)) { if (n.closest('.cute')) continue; return n.closest<HTMLElement>('.mpcs__win') ?? n.closest<HTMLElement>('.deriz__stage') ?? n.closest<HTMLElement>('.workspace'); }   // elemen pertama di bawah CUTE: jendela MPCS = dimuat ke MPCS, kanvas DERIZ = jadi sample, timeline = jadi track audio clip baru
     return null;
   };
   function dgMove(e: PointerEvent): void {
@@ -400,12 +399,13 @@ function build(): void {
     if (!dg || e.pointerId !== dg.id) return;
     const d = dg; dg = null;
     window.removeEventListener('pointermove', dgMove); window.removeEventListener('pointerup', dgEnd); window.removeEventListener('pointercancel', dgEnd);
-    if (!d.ghost) { flash('Tahan lalu seret ke DERIZ / timeline'); return; }   // ketukan tanpa geser
+    if (!d.ghost) { flash('Tahan lalu seret ke DERIZ / MPCS / timeline'); return; }   // ketukan tanpa geser
     d.over?.classList.remove('is-over');
     const p = { x: e.clientX, y: e.clientY - (d.touch ? LIFT : 0) }, target = e.type === 'pointerup' ? stageAt(p.x, p.y) : null;
     d.ghost.remove(); el.classList.remove('is-dragout');
-    if (!target) { flash('Lepas di atas plugin DERIZ atau timeline'); return; }   // jatuh di tempat lain: jendela kembali
-    if (!d.file || !target.isConnected) { flash(d.file ? 'Plugin DERIZ sudah tidak ada' : 'Gagal memotong'); return; }
+    if (!target) { flash('Lepas di atas plugin DERIZ, MPCS, atau timeline'); return; }   // jatuh di tempat lain: jendela kembali
+    if (!d.file || !target.isConnected) { flash(d.file ? 'Tujuan sudah tidak ada' : 'Gagal memotong'); return; }
+    if (target.classList.contains('mpcs__win')) { target.dispatchEvent(new CustomEvent('cute-sample', { bubbles: true, detail: { file: d.file } })); flash('Dikirim ke MPCS'); return; }   // MPCS: sample dimuat ke editor pitch; CUTE tetap terbuka (dual plugin)
     if (target.classList.contains('workspace')) document.dispatchEvent(new CustomEvent('mpcs-audioclip', { detail: { file: d.file, x: p.x } }));   // timeline: main.ts bikin track Audio clip baru, clip diletakkan di bar tempat dilepas
     else target.dispatchEvent(new CustomEvent('mpcs-sample', { bubbles: true, detail: { file: d.file } }));
     stopPlay(); el.hidden = true;   // hasil sudah terpasang: CUTE ditutup supaya terlihat
@@ -427,7 +427,7 @@ function build(): void {
   });
   el.addEventListener('keyup', e => e.stopPropagation());
   el.querySelector('.cute__close')!.addEventListener('click', () => close());
-  win.addEventListener('pointerdown', () => { el.style.zIndex = String(++zTop); });   // dual plugin: jendela yang disentuh naik ke depan
+  win.addEventListener('pointerdown', () => bringFront(el));   // dual plugin: jendela yang disentuh naik ke depan
 
   function close(): void {
     stopPlay();

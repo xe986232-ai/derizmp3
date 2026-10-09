@@ -4,6 +4,9 @@
 const MARGIN = 6;   // jarak minimum jendela ke tepi layar (px)
 const SKIP = 'button:not(.fxc__title), input, select, textarea, a, canvas, label, [role="slider"], [contenteditable]';   // kontrol di header tetap berfungsi normal
 
+let zTop = 220;   // z-index jendela plugin yang paling depan (CUTE / MPCS): dipakai bersama supaya dua plugin bisa dibuka barengan
+export const bringFront = (root: HTMLElement): void => { root.style.zIndex = String(++zTop); };
+
 export function dragWindow(o: { root: HTMLElement; move: HTMLElement; handle: string }): void {
   const { root, move, handle } = o;
   let tx = 0, ty = 0;

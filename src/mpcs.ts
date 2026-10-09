@@ -8,7 +8,7 @@ import { DEFAULT_CONTROLS, shiftCurve, snapTargets, toMono, type Controls, type 
 import { encodeWavFloat } from './wav';
 import { DEMO, LIMITS, demoTrim, demoMarked, demoNotice } from './demo';
 import { encodeMp3Mono, encodeWav16Mono, saveBlob, type SaveFormat } from './mpcs-save';
-import { dragWindow } from './win-drag';
+import { bringFront, dragWindow } from './win-drag';
 
 const svg = (inner: string, size = 18): string =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
@@ -115,8 +115,7 @@ function build(): void {
   const el = document.createElement('div');
   el.className = 'mpcs'; el.hidden = true;
   el.innerHTML =
-    '<div class="mpcs__back"></div>' +
-    '<div class="mpcs__win is-off" role="dialog" aria-modal="true" aria-label="MPCS" tabindex="-1">' +
+    '<div class="mpcs__win is-off" role="dialog" aria-label="MPCS" tabindex="-1">' +
       `<header class="mpcs__head"><i class="mpcs__led" aria-hidden="true"></i><span class="mpcs__title">MPCS</span><div class="mpcs__lcd"><span class="mpcs__stat" role="status" aria-live="polite"></span></div><button type="button" class="mpcs__dl" aria-label="Download hasil olahan" aria-haspopup="menu" aria-expanded="false" title="Download hasil olahan (WAV / MP3)" disabled>${ICON.dl}</button><button type="button" class="mpcs__full" aria-label="Layar penuh piano roll" aria-pressed="false" title="Piano roll layar penuh (menu tetap di bawah)">${ICON.full}</button><button type="button" class="mpcs__drag" aria-label="Seret hasil olahan ke plugin DERIZ atau timeline" title="Tahan lalu seret: ke plugin DERIZ = jadi sample DERIZ, ke timeline = jadi track audio clip" disabled>${ICON.drag}</button><button type="button" class="mpcs__close" aria-label="Tutup MPCS">${ICON.close}</button><div class="mpcs__dlm" role="menu" aria-label="Format download" hidden><button type="button" role="menuitem" data-f="wav"><b>WAV</b><span>16-bit, tanpa kompresi</span></button><button type="button" role="menuitem" data-f="mp3"><b>MP3</b><span>192 kbps</span></button></div></header>` +
       '<div class="mpcs__mid">' +
       '<canvas class="mpcs__ov" aria-label="Peta posisi sample (ketuk / seret untuk pindah)" hidden></canvas>' +
@@ -758,6 +757,7 @@ function build(): void {
   });
   empty.querySelector('button')!.addEventListener('click', () => file.click());
   file.addEventListener('change', () => { const f = file.files?.[0]; file.value = ''; if (f) void load(f); });
+  el.addEventListener('cute-sample', e => { const f = (e as CustomEvent<{ file: File }>).detail?.file; if (f) void load(f); });   // dari plugin CUTE (seret hasil potongan ke jendela MPCS)
   el.addEventListener('dragover', e => e.preventDefault());
   el.addEventListener('drop', e => { e.preventDefault(); const f = e.dataTransfer?.files[0]; if (f) void load(f); });
 
@@ -827,14 +827,13 @@ function build(): void {
   };
   el.addEventListener('keydown', onKey); el.addEventListener('keyup', e => e.stopPropagation());
   el.querySelector('.mpcs__close')!.addEventListener('click', () => close());
-  el.querySelector('.mpcs__back')!.addEventListener('pointerdown', () => close());
+  win.addEventListener('pointerdown', () => bringFront(el));   // dual plugin (CUTE + MPCS): jendela yang disentuh naik ke depan; klik di luar tidak lagi menutup
 
   function close(): void {
     stopPlay(); untilt(); setDlMenu(false);
     setFull(false);
     const done = (): void => { el.hidden = true; };
     if (reduce) { done(); return; }
-    el.querySelector('.mpcs__back')!.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, fill: 'forwards' });
     win.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(10px) scale(.96)' }], { duration: 170, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }).onfinish = () => { done(); el.getAnimations({ subtree: true }).forEach(a => a.cancel()); };
   }
   openFn = () => {
