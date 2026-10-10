@@ -8,7 +8,9 @@
                                     --flat-pl-* = playlist & grid (tahap 2). Nilainya boleh sama dengan token mixer, tapi tidak saling merujuk,
                                                   jadi mengubah warna playlist tidak menggeser mixer (dan sebaliknya).
    TAHAP 1: channel mixer (kolom card track di kiri timeline + menu titik tiga track).
-   TAHAP 2: playlist (latar area kerja, ruler, baris track) + grid (garis bar / ketukan / 1/16 ...). Clip / pattern belum diubah. */
+   TAHAP 2: playlist (latar area kerja, ruler, baris track) + grid (garis bar / ketukan / 1/16 ...).
+   TAHAP 3: seluruh aplikasi mengikuti gambar referensi (beige / taupe): latar app, clip MIDI & audio, playhead, dock transport, panel keyboard,
+            panel efek + kartu plugin, menu panel. Palet mentah tahap 3 = --flat-ap-* (bagian 9). */
 
 /* ---------- 0. Palet dasar Flat (dari src/palettes.ts: "Studio Netral" + Klasik/Redam untuk status) ----------
    Hanya nilai mentah untuk PLAYLIST & GRID (token --flat-pl-* di bawah merujuk ke sini). Channel mixer memakai palet sendiri (--flat-mx-*, bagian 0b). */
@@ -204,26 +206,26 @@ html[data-uistyle="flat"] .mixer-menu .track-menu__swatch:focus-visible{border-c
    TAHAP 2: PLAYLIST & GRID
    ================================================================================================ */
 
-/* ---------- 5. Token warna Playlist & Grid (terang, terpisah dari token mixer) ---------- */
+/* ---------- 5. Token warna Playlist & Grid (palet hangat beige, mengikuti gambar referensi; mentah di --flat-ap-*, bagian 9) ---------- */
 html[data-uistyle="flat"]{
   /* permukaan */
-  --flat-pl-bg:color-mix(in srgb,var(--flat-pal-paper) 55%,var(--flat-pal-light));           /* latar area kerja (di bawah baris track terakhir / di luar ujung timeline) */
-  --flat-pl-lane:var(--flat-pal-paper);         /* baris track */
-  --flat-pl-lane-alt:color-mix(in srgb,var(--flat-pal-paper) 80%,var(--flat-pal-light));     /* baris track selang-seling */
-  --flat-pl-ruler:var(--flat-pal-paper);        /* strip ruler (48px, menyambung dengan strip atas mixer) */
-  --flat-pl-line:var(--flat-pal-light);         /* garis pemisah baris & garis bawah ruler */
+  --flat-pl-bg:var(--flat-ap-bg);               /* latar area kerja (di bawah baris track terakhir / di luar ujung timeline) */
+  --flat-pl-lane:var(--flat-ap-raised);         /* baris track */
+  --flat-pl-lane-alt:var(--flat-ap-raised);     /* tanpa selang-seling: lane kosong tidak diberi warna berbeda (spec 5) */
+  --flat-pl-ruler:var(--flat-ap-panel);         /* strip ruler (48px, menyambung dengan strip atas mixer) */
+  --flat-pl-line:var(--flat-ap-border);         /* garis pemisah baris & garis bawah ruler */
   /* grid: bar = garis solid; ketukan, 1/16, dst = warna dasar (R,G,B) x alpha zoom (--beat-a, --sub-a, --mid-a, --fine-a) x gain */
-  --flat-pl-grid-bar:var(--flat-pal-light);     /* garis tiap bar */
-  --flat-pl-grid:28,29,31;        /* warna dasar garis ketukan & lebih halus (format R,G,B) */
-  --flat-pl-grid-gain:3.6;        /* pengali alpha zoom: latar terang butuh garis lebih pekat daripada latar gelap */
+  --flat-pl-grid-bar:var(--flat-ap-border);     /* garis tiap bar */
+  --flat-pl-grid:166,157,143;     /* warna dasar garis ketukan & lebih halus (= --flat-ap-border, format R,G,B) */
+  --flat-pl-grid-gain:5;          /* pengali alpha zoom: garis ketukan harus tipis tapi terbaca di latar beige */
   /* ruler (dibaca juga oleh main.ts untuk canvas) */
-  --flat-pl-tick-a:#55585D;       /* tick bar + angka */
-  --flat-pl-tick-b:#8A8D92;       /* tick ketukan + label ketukan */
-  --flat-pl-tick-c:#C2C4C7;       /* tick 1/16 + label 1/16 */
+  --flat-pl-tick-a:#68665F;       /* tick bar + angka */
+  --flat-pl-tick-b:#8F887D;       /* tick ketukan + label ketukan */
+  --flat-pl-tick-c:#A69D8F;       /* tick 1/16 + label 1/16 */
   /* penunjuk */
-  --flat-pl-play:var(--flat-pal-rec);         /* playhead */
-  --flat-pl-focus:var(--flat-pal-orange);        /* baris target saat drop / seret */
-  --flat-pl-shadow:rgba(28,29,31,.18);
+  --flat-pl-play:var(--flat-ap-playhead);     /* playhead: cyan solid, tanpa glow */
+  --flat-pl-focus:var(--flat-ap-orange);      /* baris target saat drop / seret */
+  --flat-pl-shadow:transparent;
 }
 
 /* ---------- 6. Latar playlist ---------- */
@@ -244,7 +246,247 @@ html[data-uistyle="flat"] .lanes .lane.alt{background-color:var(--flat-pl-lane-a
 
 /* baris saat jadi target drop / sedang dipindah: bingkai solid, tanpa glow */
 html[data-uistyle="flat"] .lanes .lane.is-over{box-shadow:inset 0 0 0 2px var(--flat-pl-focus)}
-html[data-uistyle="flat"] .lanes .lane.is-reordering{filter:none;box-shadow:0 0 0 2px var(--track-color,var(--flat-pl-focus)),0 6px 14px var(--flat-pl-shadow)}
+html[data-uistyle="flat"] .lanes .lane.is-reordering{filter:none;box-shadow:0 0 0 2px var(--track-color,var(--flat-pl-focus))}
 
-/* ---------- 8. Playhead ---------- */
-html[data-uistyle="flat"] .playhead{color:var(--flat-pl-play)}
+/* ---------- 8. Playhead: lihat bagian 11 (tahap 3) ---------- */
+
+/* ================================================================================================
+   TAHAP 3: SELURUH APLIKASI (acuan: daw-flat-ui-design-spec.md + gambar referensi)
+   Aturan: warna solid, tanpa gradien / glow / bevel / bayangan dekoratif; radius kecil (2-4px); border 1px.
+   ================================================================================================ */
+
+/* ---------- 9. Palet mentah tahap 3 (nilai persis dari spec, bagian 2) ---------- */
+html[data-uistyle="flat"]{
+  --flat-ap-bg:#D2C7B5;           /* background utama aplikasi */
+  --flat-ap-panel:#C7BBA8;        /* panel, toolbar, track header */
+  --flat-ap-raised:#DDD3C2;       /* area timeline / piano roll, kontrol menonjol, field */
+  --flat-ap-muted:#BDB19E;        /* area pasif, state ditekan */
+  --flat-ap-border:#A69D8F;       /* border, pemisah */
+  --flat-ap-grid:#B7AD9E;         /* grid minor */
+  --flat-ap-ctrl-line:#8F887D;    /* outline knob */
+  --flat-ap-text:#343536;         /* teks & ikon utama */
+  --flat-ap-text2:#68665F;        /* teks sekunder */
+  --flat-ap-inverse:#F3EBDD;      /* teks di atas warna gelap */
+  --flat-ap-lavender:#B98AD0;     /* clip MIDI */
+  --flat-ap-lavender-dark:#8D70A8;
+  --flat-ap-orange:#F5A044;       /* clip audio */
+  --flat-ap-orange-dark:#D98232;
+  --flat-ap-teal:#5B9F9A;
+  --flat-ap-teal-dark:#397F7A;
+  --flat-ap-playhead:#39C6C7;     /* playhead + fokus */
+  --flat-ap-accent:#D85A94;       /* kontrol aktif / parameter terpilih */
+  --flat-ap-green:#79B86A;
+  --flat-ap-yellow:#E5C65A;
+  --flat-ap-gray:#8F8F8F;
+  --flat-ap-key-white:#F3EBDD;
+  --flat-ap-key-black:#454545;
+  --flat-ap-note:#454545;         /* not MIDI & waveform di dalam clip */
+}
+
+/* ---------- 10. Latar aplikasi ---------- */
+html[data-uistyle="flat"] body{background:var(--flat-ap-bg);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .stage{background:var(--flat-ap-bg)}
+
+/* ---------- 11. Playhead: garis cyan 2px + penanda segitiga 10x10, tanpa glow ---------- */
+html[data-uistyle="flat"] .playhead{color:var(--flat-pl-play);filter:none}
+html[data-uistyle="flat"] .playhead-body{left:3px;width:2px}
+html[data-uistyle="flat"] .playhead-head{position:absolute;left:-1px;top:9px;width:10px;height:10px}
+html[data-uistyle="flat"] .playhead-head svg{display:none}
+html[data-uistyle="flat"] .playhead-head::after{content:"";display:block;width:10px;height:10px;background:currentColor;clip-path:polygon(0 0,100% 0,50% 100%)}
+html[data-uistyle="flat"] .pattern__ph{width:2px}
+
+/* ---------- 12. Clip (MIDI = warna track lavender, audio = oranye; note & waveform gelap) ---------- */
+html[data-uistyle="flat"] .pattern{
+  --flat-clip:var(--pat-color,var(--track-color,var(--flat-ap-lavender)));
+  border-radius:2px;
+  background-color:var(--flat-clip);background-image:none;
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--flat-clip) 68%,var(--flat-ap-text));
+  animation:none;transition:background-color .15s ease}
+html[data-uistyle="flat"] .pattern:hover{filter:none}
+html[data-uistyle="flat"] .pattern__head{height:18px;border-radius:2px 2px 0 0;background:color-mix(in srgb,var(--flat-ap-text) 12%,transparent);color:var(--flat-ap-text);font-weight:500}
+html[data-uistyle="flat"] .pattern__notes{border-radius:0 0 2px 2px}
+html[data-uistyle="flat"] .pattern__wave,
+html[data-uistyle="flat"] .pattern__auto{border-radius:0 0 2px 2px}
+html[data-uistyle="flat"] .pattern__notes rect{fill:var(--note-fill,var(--flat-ap-note))}
+html[data-uistyle="flat"] .pattern__wave path{fill:var(--wave-fill,var(--flat-ap-note))}
+html[data-uistyle="flat"] .pattern__auto-fill{fill:color-mix(in srgb,var(--flat-ap-text) 16%,transparent)}
+html[data-uistyle="flat"] .pattern__auto-line{stroke:var(--flat-ap-text)}
+html[data-uistyle="flat"] .pattern-ghost{border-radius:2px;background:color-mix(in srgb,var(--flat-ap-text) 8%,transparent)}
+/* seleksi: border tegas lebih gelap (tanpa glow) + handle resize kotak solid */
+html[data-uistyle="flat"] .pattern::after{border:2px solid color-mix(in srgb,var(--flat-clip) 55%,var(--flat-ap-text));border-radius:2px}
+html[data-uistyle="flat"] .pattern__handle::before{background:var(--flat-ap-text);border-radius:3px;box-shadow:none}
+html[data-uistyle="flat"] .pattern.is-selected .pattern__handle:hover::before,
+html[data-uistyle="flat"] .pattern.is-resizing .pattern__handle::before,
+html[data-uistyle="flat"] .pattern.is-selected .pattern__handle:active::before{box-shadow:none;transform:none}
+html[data-uistyle="flat"] .pattern.is-dragging,
+html[data-uistyle="flat"] .pattern.is-jelly{transform:none;filter:none;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--flat-clip) 68%,var(--flat-ap-text)),0 0 0 2px var(--flat-ap-text)}
+html[data-uistyle="flat"] .lane.is-off .pattern{filter:saturate(.25)}
+
+/* ---------- 13. Dock transport + panel keyboard: strip alat solid beige, tombol kotak 3px ---------- */
+html[data-uistyle="flat"] .transportbar{background:var(--flat-ap-bg)}
+html[data-uistyle="flat"] .tp-dock{border-radius:0;background-color:var(--flat-ap-panel);box-shadow:none;border-top:1px solid var(--flat-ap-border)}
+html[data-uistyle="flat"] .tp-dock::before,
+html[data-uistyle="flat"] .tp-dock::after{display:none}
+html[data-uistyle="flat"] .tp-dock:hover{transform:none;box-shadow:none}
+html[data-uistyle="flat"] .tp__btn,
+html[data-uistyle="flat"] .hist-btn{width:36px;height:32px;border-radius:3px;border:1px solid var(--flat-ap-border);background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none;transition:background-color .15s ease}
+html[data-uistyle="flat"] .tp .play{width:36px;height:32px;margin-right:0;background:var(--flat-ap-raised);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .tp__btn:hover,
+html[data-uistyle="flat"] .tp .play:hover,
+html[data-uistyle="flat"] .hist-btn:hover:not(:disabled){background:var(--flat-ap-panel);border-color:var(--flat-ap-border)}
+html[data-uistyle="flat"] .tp__btn:active,
+html[data-uistyle="flat"] .hist-btn:active:not(:disabled){transform:none;background:var(--flat-ap-muted)}
+html[data-uistyle="flat"] .hist-btn:disabled{opacity:1;background:var(--flat-ap-grid);color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .tp__btn .ico,
+html[data-uistyle="flat"] .tp .play .ico{width:18px;height:18px}
+html[data-uistyle="flat"] .pitch-btn.is-on{background:var(--flat-ap-accent);border-color:var(--flat-ap-accent);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .pitch-btn.is-on:hover:not(:disabled){background:var(--flat-ap-accent);border-color:var(--flat-ap-accent)}
+html[data-uistyle="flat"] .pitch-btn[aria-expanded="true"]{border-color:var(--flat-ap-text)}
+html[data-uistyle="flat"] :is(.tp__btn,.hist-btn,.kbd__btn):focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
+html[data-uistyle="flat"] .metro-btn{font-weight:600}
+html[data-uistyle="flat"] .kbd{background:var(--flat-ap-panel)}
+html[data-uistyle="flat"] .kbd.is-open{border-top-color:var(--flat-ap-border)}
+html[data-uistyle="flat"] .kbd__title{color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .kbd__octlabel{color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .kbd__btn{border-radius:3px;border:1px solid var(--flat-ap-border);background:var(--flat-ap-raised);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .kbd__btn:hover{background:var(--flat-ap-panel)}
+html[data-uistyle="flat"] .kbd__btn:active{transform:none;background:var(--flat-ap-muted)}
+html[data-uistyle="flat"] .transportbar.is-collapsed .kbd-toggle{background:var(--flat-ap-bg)}
+
+/* ---------- 14. Panel efek (kanan): panel beige, tab segmen kotak, kartu plugin = surface menonjol berborder 1px ---------- */
+html[data-uistyle="flat"] .fx__panel{background:var(--flat-ap-panel);border-left:1px solid var(--flat-ap-border)}
+html[data-uistyle="flat"] .fx__head{border-bottom:1px solid var(--flat-ap-border)}
+html[data-uistyle="flat"] .fx__title{color:var(--flat-ap-text);font-size:16px;font-weight:600}
+html[data-uistyle="flat"] .fx__toggle{border-color:var(--flat-ap-border);background:var(--flat-ap-panel);color:var(--flat-ap-text);border-radius:4px 0 0 4px;box-shadow:none}
+html[data-uistyle="flat"] .fx__toggle:hover{background:var(--flat-ap-raised);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .fx__toggle:active{background:var(--flat-ap-muted);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .fx__pages{border-radius:3px;background:var(--flat-ap-muted);border:1px solid var(--flat-ap-border)}
+html[data-uistyle="flat"] .fx__pages::before{border-radius:2px;background:var(--flat-ap-raised);box-shadow:none}
+html[data-uistyle="flat"] .fx__page{border-radius:2px;color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .fx__page:hover,
+html[data-uistyle="flat"] .fx__page[aria-selected="true"]{color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .fx__add{border-radius:3px;border:1px solid var(--flat-ap-border);background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] .fx__add:hover{transform:none;box-shadow:none;background:var(--flat-ap-panel)}
+html[data-uistyle="flat"] .fx__add:active{transform:none;background:var(--flat-ap-muted)}
+html[data-uistyle="flat"] :is(.fx__page,.fx__add,.fx__toggle):focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
+
+html[data-uistyle="flat"] .fxc{background-color:var(--flat-ap-raised);color:var(--flat-ap-text);border:1px solid var(--flat-ap-border);border-radius:4px;box-shadow:none}
+html[data-uistyle="flat"] .fxc::before,
+html[data-uistyle="flat"] .fxc::after{display:none}
+html[data-uistyle="flat"] .fxc__name{font-size:15px;font-weight:600;color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .fxc__label{color:var(--flat-ap-text2);font-weight:600}
+html[data-uistyle="flat"] .fxc__pwr{border-radius:3px;background:var(--flat-ap-accent)}
+html[data-uistyle="flat"] .fxc__pwr::after{background:var(--flat-ap-inverse);box-shadow:none}
+html[data-uistyle="flat"] .fxc__tab{color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .fxc__tab:hover,
+html[data-uistyle="flat"] .fxc__tab[aria-selected="true"]{color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .fxc__tab[aria-selected="true"]{border-bottom-color:var(--flat-ap-accent)}
+html[data-uistyle="flat"] .fxc :is(button,[role="slider"],input):focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
+/* knob plugin: cincin nilai 3px (aksen), rel pasif beige gelap, penunjuk gelap; tanpa kilau */
+html[data-uistyle="flat"] .fxc .circular-chart .circle-bg{stroke:var(--flat-ap-border);stroke-width:3}
+html[data-uistyle="flat"] .fxc .circular-chart .circle{stroke:var(--flat-ap-accent);stroke-width:3}
+html[data-uistyle="flat"] .fxc .circular-chart .circle-inner{fill:var(--flat-ap-text2);stroke:none}
+html[data-uistyle="flat"] .fxc .circular-chart .circle-inner-stroke{stroke:var(--flat-ap-ctrl-line)}
+html[data-uistyle="flat"] .fxc .circular-chart .knob-pos{stroke:var(--flat-ap-inverse);stroke-width:2.4}
+html[data-uistyle="flat"] .fxc .knob-input:hover,
+html[data-uistyle="flat"] .fxc .knob-input.is-dragging{transform:none}
+
+/* menu pop-up efek / picker plugin */
+html[data-uistyle="flat"] :is(.fx-menu,.fx-pick,.fx-pats){background:var(--flat-ap-raised);color:var(--flat-ap-text);border:1px solid var(--flat-ap-border);border-radius:3px;box-shadow:none}
+html[data-uistyle="flat"] :is(.fx-pick__item,.fx-pats__item){border-radius:2px;color:var(--flat-ap-text)}
+html[data-uistyle="flat"] :is(.fx-pick__item,.fx-pats__item):hover{background:var(--flat-ap-panel)}
+
+/* ---------- 15. Menu panel (kanan): kartu & kontrol beige berborder 1px, tombol aksi solid ---------- */
+html[data-uistyle="flat"] .mp__panel{background:var(--flat-ap-panel);border-left:1px solid var(--flat-ap-border)}
+html[data-uistyle="flat"] .mp__head{border-bottom:1px solid var(--flat-ap-border)}
+html[data-uistyle="flat"] .mp__title{color:var(--flat-ap-text);font-size:16px;font-weight:600}
+html[data-uistyle="flat"] .mp__card{border-radius:4px;background-color:var(--flat-ap-raised);color:var(--flat-ap-text);border:1px solid var(--flat-ap-border);box-shadow:none}
+html[data-uistyle="flat"] .mp__card::before,
+html[data-uistyle="flat"] :is(.mp__cat,.mp__segbtn,.mp__back)::before,
+html[data-uistyle="flat"] :is(.mp__cat,.mp__segbtn,.mp__back)::after{display:none}
+html[data-uistyle="flat"] .mp__hint{color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] :is(.mp__cat,.mp__segbtn,.mp__back){border-radius:3px;border:1px solid var(--flat-ap-border);background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] :is(.mp__cat,.mp__segbtn,.mp__back):hover{background:var(--flat-ap-panel);transform:none}
+html[data-uistyle="flat"] :is(.mp__cat,.mp__segbtn,.mp__back):active{background:var(--flat-ap-muted);transform:none;box-shadow:none}
+html[data-uistyle="flat"] .mp__segbtn{color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .mp__segbtn.is-on{color:var(--flat-ap-text);background:var(--flat-ap-panel);border-color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] .mp__segbtn:focus-visible,
+html[data-uistyle="flat"] .mp__inp:focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
+html[data-uistyle="flat"] .mp__imp{border-radius:3px;border:1px solid var(--flat-ap-border);background:var(--flat-ap-raised);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .mp__imp:hover{background:var(--flat-ap-panel)}
+html[data-uistyle="flat"] .mp__imp--bad{color:var(--flat-danger)}
+html[data-uistyle="flat"] .mp__inp{border-radius:3px;border:1px solid var(--flat-ap-border);background:var(--flat-ap-raised);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .mp__inp::placeholder{color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .mp__prim{border-radius:4px;background:var(--flat-ap-teal);color:var(--flat-ap-text);filter:none}
+html[data-uistyle="flat"] .mp__prim:hover{filter:none;background:var(--flat-ap-teal-dark);color:var(--flat-ap-inverse)}
+html[data-uistyle="flat"] .mp__prim--bad{background:var(--flat-ap-raised);color:var(--flat-danger);border:1px solid var(--flat-ap-border)}
+html[data-uistyle="flat"] .mp__prim--bad:hover{background:var(--flat-ap-panel);color:var(--flat-danger)}
+html[data-uistyle="flat"] .menu-btn{border-radius:3px;box-shadow:none}
+
+/* ---------- 16. Piano roll (DOM di sekitar canvas): bar alat beige, grup & tombol kotak 3px ---------- */
+html[data-uistyle="flat"] .pr__bar{background:var(--flat-ap-panel);border-bottom:1px solid var(--flat-ap-border)}
+html[data-uistyle="flat"] .pr__main,
+html[data-uistyle="flat"] .pr__scroll,
+html[data-uistyle="flat"] .pr__vel{background:var(--flat-ap-raised)}
+html[data-uistyle="flat"] .pr__corner{background:var(--flat-ap-panel)}
+html[data-uistyle="flat"] :is(.pr__grp,.pr__snap){height:40px;border-radius:3px;border:1px solid var(--flat-ap-border);background-color:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] :is(.pr__grp,.pr__snap)::before,
+html[data-uistyle="flat"] :is(.pr__grp,.pr__snap)::after{display:none}
+html[data-uistyle="flat"] :is(.pr__grp,.pr__snap):hover{box-shadow:none;transform:none;background-color:var(--flat-ap-panel)}
+html[data-uistyle="flat"] .pr__lbl{color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .pr__btn{border-radius:3px;color:var(--flat-ap-text2);width:34px;height:32px}
+html[data-uistyle="flat"] .pr__btn:hover{background:var(--flat-ap-panel);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .pr__btn:active{transform:none;background:var(--flat-ap-muted)}
+html[data-uistyle="flat"] .pr__btn.on{background:var(--flat-ap-accent);color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] .pr__btn:disabled{opacity:1;color:var(--flat-ap-gray)}
+html[data-uistyle="flat"] .pr__snap{color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] :is(.pr__btn,.pr__snap):focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
+html[data-uistyle="flat"] .pr__back{color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .pr__back:hover{background:var(--flat-ap-panel);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .pr__back:hover svg,
+html[data-uistyle="flat"] .pr__back:active svg{transform:none}
+html[data-uistyle="flat"] .pr__more{border-radius:3px;color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .pr__more[aria-expanded="true"]{background:var(--flat-ap-muted)}
+html[data-uistyle="flat"] .pr__led{background:var(--flat-ap-gray);box-shadow:none}
+html[data-uistyle="flat"] .pr-menu .pr__mtoggle[aria-checked="true"] .pr__sw{background:var(--flat-ap-green);box-shadow:none}
+
+/* ---------- 17. Tombol melayang, toolbar pattern, pop-up putih: semuanya kotak 3px beige berborder 1px ---------- */
+html[data-uistyle="flat"] .fxc__title{color:var(--flat-ap-text)}
+html[data-uistyle="flat"] :is(.menu-btn,.landscape-btn,.tut-btn){width:34px;height:34px;border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;opacity:1}
+html[data-uistyle="flat"] .menu-btn::before{display:none}
+html[data-uistyle="flat"] :is(.menu-btn,.landscape-btn,.tut-btn):hover{background:var(--flat-ap-panel);transform:none;border-color:var(--flat-ap-border)}
+html[data-uistyle="flat"] :is(.menu-btn,.landscape-btn,.tut-btn):active{background:var(--flat-ap-muted);transform:none}
+html[data-uistyle="flat"] :is(.menu-btn,.landscape-btn,.tut-btn):focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
+html[data-uistyle="flat"] .menu-btn .menu-btn__ic{color:var(--flat-ap-text)}
+
+html[data-uistyle="flat"] .pat-btn{width:auto;min-width:46px;height:32px;padding:0 10px;border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text);font-size:13px;font-weight:500;box-shadow:none}
+html[data-uistyle="flat"] .pat-btn:hover{transform:none;background:var(--flat-ap-panel)}
+html[data-uistyle="flat"] .pat-btn:active{transform:none;background:var(--flat-ap-muted)}
+html[data-uistyle="flat"] .pat-btn.is-on{background:var(--flat-ap-accent);color:var(--flat-ap-text);border-color:var(--flat-ap-accent)}
+html[data-uistyle="flat"] .pat-btn[aria-pressed="false"]{background:var(--flat-ap-grid);color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .pat-btn[aria-pressed="true"]{background:var(--flat-ap-raised);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .pat-btn:focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
+html[data-uistyle="flat"] :is(.pat-btn[data-act="snap"]::after){background:var(--flat-ap-gray);box-shadow:none}
+html[data-uistyle="flat"] .pat-btn[data-act="snap"][aria-pressed="true"]::after{background:var(--flat-ap-green)}
+html[data-uistyle="flat"] .add-card{border-radius:3px;box-shadow:none}
+
+html[data-uistyle="flat"] .clip-card{background:var(--flat-ap-raised);color:var(--flat-ap-text);border:1px solid var(--flat-ap-border);border-radius:3px;box-shadow:none}
+html[data-uistyle="flat"] .clip-card__in{border-radius:2px}
+html[data-uistyle="flat"] .clip-card__item,
+html[data-uistyle="flat"] .clip-card__title{color:var(--flat-ap-text);border-radius:2px}
+html[data-uistyle="flat"] .clip-card__item:hover,
+html[data-uistyle="flat"] .clip-card__item:focus-visible{background:var(--flat-ap-panel)}
+html[data-uistyle="flat"] .clip-card__val,
+html[data-uistyle="flat"] .clip-card__hint{color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] :is(.clip-card__input,.clip-card__step){border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .clip-card__input:focus{border:2px solid var(--flat-ap-playhead);background:var(--flat-ap-raised)}
+html[data-uistyle="flat"] .clip-card__go{border-radius:4px;background:var(--flat-ap-teal);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] :is(.pr-menu,.pr-snapcard,.add-menu,.track-menu:not(.mixer-menu)){background:var(--flat-ap-raised);color:var(--flat-ap-text);border:1px solid var(--flat-ap-border);border-radius:3px;box-shadow:none}
+
+/* ---------- 18. Sisa detail: LED snap solid (tanpa glow), tombol velocity, handle clip ---------- */
+html[data-uistyle="flat"] .pr__snap[aria-pressed="true"] .pr__led{background:var(--flat-ap-green);box-shadow:none}
+html[data-uistyle="flat"] .pr__velbtn{border-radius:3px;border:1px solid var(--flat-ap-border);background:var(--flat-ap-raised);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .pr__velbtn:hover,
+html[data-uistyle="flat"] .pr__velbtn:focus-visible{color:var(--flat-ap-text);border-color:var(--flat-ap-text);background:var(--flat-ap-panel)}
+html[data-uistyle="flat"] .pr__velbtn:focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
+html[data-uistyle="flat"] .pattern__handle::before{width:8px;height:24px;margin-top:-12px}

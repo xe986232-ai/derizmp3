@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { ivkDock, ivkSetCaps } from './ivory-keys';
-import { uiTheme, syncTrackColors } from './ui-theme';
+import { uiTheme, syncTrackColors, isFlat } from './ui-theme';
 import '@fontsource/syncopate/700.css';   // font judul plugin DERIZ (dibundel, tidak butuh internet)
 import '@fontsource/plus-jakarta-sans/latin-400.css';   // font gelembung tutorial (dibundel, tidak butuh internet)
 import '@fontsource/plus-jakarta-sans/latin-600.css';
@@ -1611,6 +1611,9 @@ setBpmtuneBridge({getBpm: () => BPM, setBpm: v => setBpm(v)});   // BPMTUNE: tom
 const INSTRUMENTS = [
   {n:'Audio clip', c:'#14b8a6'}, {n:'Supersaw', c:'#5b3de8'}, {n:'DERIZ', c:'#22c7e8'}, {n:'Drums', c:'#f59e0b'}
 ].filter(t => !(DRUMS_HIDDEN && t.n === 'Drums'));   // Drums disembunyikan (lihat DRUMS_HIDDEN di drums.ts)
+// Gaya UI Flat: track baru memakai warna palet Flat menurut jenisnya (audio = oranye, instrumen / MIDI = lavender, drum = teal); track lama & project tersimpan tidak berubah
+const FLAT_INS_COLOR = {'Audio clip': '#F5A044', 'Drums': '#5B9F9A'};
+const flatIns = ins => (ins && isFlat()) ? {...ins, c: FLAT_INS_COLOR[ins.n] || '#B98AD0'} : ins;
 let addMenu = null, addBtn = null;
 let trackSeq = Math.max(1, ...[...document.querySelectorAll('.trkcard-wrap')].map(c => +c.dataset.track));
 function closeAddMenu(instant) {
@@ -1637,7 +1640,7 @@ function openAddMenu(btn) {
     if (!it) return;
     const ins = INSTRUMENTS[+it.dataset.k];
     if (demoTrackFull(ins.n)) { closeAddMenu(); return; }
-    addTrack(ins);
+    addTrack(flatIns(ins));
     closeAddMenu();
     // Audio clip: setelah track dibuat, munculkan card upload audio (menunggu menu selesai menghilang)
     if (ins.n === 'Audio clip') {
@@ -2177,7 +2180,7 @@ document.addEventListener('mpcs-audioclip', e => {
   const {file, x} = e.detail || {};
   if (!file) return;
   if (demoTrackFull('Audio clip')) return;
-  addTrack(INSTRUMENTS.find(i => i.n === 'Audio clip'));
+  addTrack(flatIns(INSTRUMENTS.find(i => i.n === 'Audio clip')));
   const id = trackSeq;
   trackAudioFiles.set(id, file);
   importAudio(id, file, x);
