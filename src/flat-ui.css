@@ -185,9 +185,8 @@ html[data-uistyle="flat"] .tracklist .trackmeter__bar s{filter:none;
    Elemen .trackmeter-mini dibuat oleh track-meters.ts; tinggi isi = scaleY dari bawah. Tersembunyi saat panel terbuka. */
 html[data-uistyle="flat"] .tracklist .trackmeter-mini{display:none}
 html[data-uistyle="flat"] .tracklist--collapsed .trackmeter-mini{display:block;position:absolute;z-index:3;right:0;top:0;bottom:0;width:14px;box-sizing:border-box;
-  background:var(--flat-mx-muted);border-left:1px solid var(--flat-mx-ctrl-line);pointer-events:none}   /* bingkai/tempat meter: solid + garis pembatas di sisi kiri */
-html[data-uistyle="flat"] .tracklist--collapsed .trackmeter-mini::before{content:"";position:absolute;inset:3px;background:var(--flat-mx-border)}   /* slot kosong di dalam bingkai (solid) */
-html[data-uistyle="flat"] .tracklist--collapsed .trackmeter-mini b{position:absolute;inset:3px 3px 3px 4px;display:block;background:var(--flat-mx-text);opacity:.5;transform:scaleY(0);transform-origin:bottom}   /* isi level: opacity diturunkan ke 50% (angka opacity di sini) */
+  background:var(--flat-mx-border);border-left:1px solid var(--flat-mx-ctrl-line);pointer-events:none}   /* bingkai meter: latar solid + garis pembatas di kiri */
+html[data-uistyle="flat"] .tracklist--collapsed .trackmeter-mini b{position:absolute;inset:0;display:block;background:var(--flat-mx-text);opacity:.5;transform:scaleY(0);transform-origin:bottom}   /* isi level memenuhi seluruh bingkai (lebar & tinggi penuh, tanpa jarak); opacity 50% */
 
 /* tombol tambah track */
 html[data-uistyle="flat"] .tracklist .addtrack{border-radius:0;margin:0;width:100%;background:var(--flat-card);color:var(--flat-text);border:0;border-bottom:1px solid var(--flat-line)}
