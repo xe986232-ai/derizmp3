@@ -42,9 +42,9 @@ const ICON = {
 };
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = (m: number): string => NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
-const MUTE_KEY = 'derizmp3.printerMute';
+const MUTE_KEY = 'derizmp3.printerMute', VOX_KEY = 'derizmp3.printerVocal';
 
-interface Sess { name: string; pt: PitchTrack; notes: Note[] }
+interface Sess { name: string; pt: PitchTrack; notes: Note[]; buf: AudioBuffer }   // buf: audio asli (diputar bareng nadanya)
 let root: HTMLElement | null = null, openFn: (() => void) | null = null;
 
 /** Dibuka dari kartu Printer di panel efek (fx-rack.ts). */
@@ -70,11 +70,12 @@ function build(): void {
         '<label>BPM<input type="number" class="prn__bpm" min="30" max="300" step="1" inputmode="numeric" value="120"></label>' +
         '<label>Grid<select class="prn__grid"><option value="0">Off</option><option value="0.5">1/8</option><option value="0.25">1/16</option></select></label>' +
         `<label>Key<select class="prn__key">${keyOpts}</select></label>` +
+        '<button type="button" class="prn__vox" title="Putar vokal asli bareng nadanya saat PLAY (sinkron)" aria-pressed="true">VOCAL</button>' +
         '<button type="button" class="prn__spd" title="Kecepatan cetak: FAST = beberapa detik, LIVE = sepanjang durasi vokal" aria-pressed="false">FAST</button>' +
       '</div>' +
       '<div class="prn__bar">' +
         `<button type="button" class="prn__b prn__rec" aria-label="Rekam vokal" title="Rekam vokal">${ICON.rec}<span>REC</span></button>` +
-        `<button type="button" class="prn__b prn__play" aria-label="Dengar melodi" title="Cetak ulang sepanjang durasi sambil membunyikan nadanya" disabled>${ICON.play}<span>PLAY</span></button>` +
+        `<button type="button" class="prn__b prn__play" aria-label="Dengar melodi" title="Putar sepanjang durasi: nada melodi + vokal asli (kalau VOCAL nyala), sinkron" disabled>${ICON.play}<span>PLAY</span></button>` +
         `<button type="button" class="prn__b prn__print" aria-label="Cetak ulang" title="Cetak ulang" disabled>${ICON.print}<span>PRINT</span></button>` +
         `<button type="button" class="prn__b prn__tear" aria-label="Sobek kertas: kirim ke pattern" title="Kirim nada ke pattern yang dipilih di timeline" disabled>${ICON.tear}<span>TEAR OFF</span></button>` +
         `<button type="button" class="prn__b prn__midi" aria-label="Simpan file MIDI" title="Simpan sebagai file .mid" disabled>${ICON.dl}<span>.MID</span></button>` +
@@ -87,7 +88,7 @@ function build(): void {
   const q = <T extends HTMLElement>(s: string): T => el.querySelector<T>(s)!;
   const win = q<HTMLElement>('.prn__win'), stat = q('.prn__stat'), stage = q('.prn__stage'), cv = q<HTMLCanvasElement>('.prn__cv'), g = cv.getContext('2d')!;
   const drop = q<HTMLButtonElement>('.prn__drop'), file = q<HTMLInputElement>('.prn__file');
-  const bpmIn = q<HTMLInputElement>('.prn__bpm'), gridSel = q<HTMLSelectElement>('.prn__grid'), keySel = q<HTMLSelectElement>('.prn__key'), spdBtn = q<HTMLButtonElement>('.prn__spd');
+  const bpmIn = q<HTMLInputElement>('.prn__bpm'), gridSel = q<HTMLSelectElement>('.prn__grid'), keySel = q<HTMLSelectElement>('.prn__key'), spdBtn = q<HTMLButtonElement>('.prn__spd'), voxBtn = q<HTMLButtonElement>('.prn__vox');
   const recBtn = q<HTMLButtonElement>('.prn__rec'), playBtn = q<HTMLButtonElement>('.prn__play'), printBtn = q<HTMLButtonElement>('.prn__print'), tearBtn = q<HTMLButtonElement>('.prn__tear'), midBtn = q<HTMLButtonElement>('.prn__midi'), muteBtn = q<HTMLButtonElement>('.prn__mute');
   dragWindow({ root: el, move: win, handle: '.prn__head' });
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -100,6 +101,8 @@ function build(): void {
   let ac: AudioContext | null = null, sfx: Sfx | null = null, loadTok = 0, statT = 0;
   let live = false, jobId = 0, worker: Worker | null = null;
   const jobs = new Map<number, { ok: (m: any) => void; fail: (e: Error) => void }>();   // eslint-disable-line @typescript-eslint/no-explicit-any
+  let vox = true; try { vox = localStorage.getItem(VOX_KEY) !== '0'; } catch { /* abaikan */ }   // putar vokal asli bareng nadanya (bawaan nyala)
+  let voxSrc: AudioBufferSourceNode | null = null, voxGain: GainNode | null = null;
   let mute = false; try { mute = localStorage.getItem(MUTE_KEY) === '1'; } catch { /* abaikan */ }
   const K = 30, HEAD_H = 52, X0 = 30;   // K = piksel per ketukan; HEAD_H = tinggi badan printer di atas kertas; X0 = tepi kiri area nada
 
@@ -110,6 +113,8 @@ function build(): void {
   const bpm = (): number => { const v = parseFloat(bpmIn.value); return v >= 30 && v <= 300 ? v : 120; };
   const syncMute = (): void => { muteBtn.innerHTML = mute ? ICON.mute : ICON.snd; muteBtn.setAttribute('aria-pressed', String(mute)); if (sfx) sfx.muted = mute; };
   syncMute();
+  const syncVox = (): void => { voxBtn.setAttribute('aria-pressed', String(vox)); if (voxGain) voxGain.gain.value = vox ? 0.9 : 0; };
+  syncVox();
   const enable = (): void => { const has = P.length > 0; playBtn.disabled = printBtn.disabled = tearBtn.disabled = midBtn.disabled = !has || recording; win.classList.toggle('is-off', !S); };
 
   // ---------- worker (analisis pitch: sama dengan MPCS) ----------
@@ -209,23 +214,35 @@ function build(): void {
 
   // ---------- animasi cetak ----------
   function stopAnim(finish = false): void {
-    cancelAnimationFrame(raf); animating = false; sfx?.stop();
+    cancelAnimationFrame(raf); animating = false; sfx?.stop(); stopVox();
     if (finish) TB = total;
     headTo = 0.5; headX = 0.5; setBtns(); draw();
   }
+  function stopVox(): void {
+    if (voxSrc) { try { voxSrc.stop(); } catch { /* sudah berhenti */ } voxSrc.disconnect(); voxSrc = null; }
+    voxGain?.disconnect(); voxGain = null;
+  }
   function run(asLive: boolean, withTones: boolean): void {
     if (!S || !P.length) return;
-    audio(); stopAnim();
+    const a = audio(); stopAnim();
     const spb = 60 / bpm(), secs = total * spb;
-    const dur = asLive ? Math.max(0.6, secs) : reduce ? 0.01 : Math.min(4, Math.max(1.6, secs * 0.25));
-    animating = true; TB = 0; let t0 = 0, next = 0, ended = false;
+    // PLAY: vokal asli ikut diputar dari detik 0 dan kertas mengikuti jam audio, jadi nada, kertas, dan vokal selalu sejajar (beat 0 = detik 0 audio)
+    const withVox = withTones && !!S.buf;
+    const dur = asLive ? Math.max(0.6, secs, withVox ? S.buf.duration : 0) : reduce ? 0.01 : Math.min(4, Math.max(1.6, secs * 0.25));
+    animating = true; TB = 0; let next = 0, ended = false;
+    const startAt = a.currentTime + 0.06;   // jeda kecil supaya vokal dan nada mulai bersamaan
+    if (withVox) {
+      voxSrc = a.createBufferSource(); voxSrc.buffer = S.buf;
+      voxGain = a.createGain(); voxGain.gain.value = vox ? 0.9 : 0;
+      voxSrc.connect(voxGain).connect(a.destination); voxSrc.start(startAt);
+    }
     setBtns();
     if (!withTones) sfx!.start();
-    const frame = (now: number): void => {
+    const frame = (): void => {
       if (!animating) return;
-      if (!t0) t0 = now;
-      const u = Math.min(1, (now - t0) / 1000 / dur);
-      TB = total * u;
+      const el = Math.max(0, a.currentTime - startAt);
+      const u = Math.min(1, el / dur);
+      TB = asLive ? Math.min(total, el / spb) : total * u;
       while (next < P.length && P[next].s <= TB) { const n = P[next++]; if (withTones) sfx!.tone(n.p, n.l * spb, n.v / 127); }
       const cur = P.find(n => n.s <= TB && TB < n.s + n.l);
       if (cur) { headTo = (cur.p - lo + 0.5) / (hi - lo + 1); if (!withTones) sfx!.zzt(cur.p, cur.v / 127); }
@@ -258,7 +275,7 @@ function build(): void {
       const r = await job({ type: 'analyze', x: mono, sr: buf.sampleRate }, [mono.buffer]);
       if (my !== loadTok) return;
       const notes: Note[] = r.notes; snapTargets(notes);   // sama dengan MPCS: target = semiton terdekat (dengan hysteresis)
-      S = { name, pt: r.pt as PitchTrack, notes };
+      S = { name, pt: r.pt as PitchTrack, notes, buf };
       rebuild(); TB = 0; enable();
       if (!P.length) { sfx?.jam(); say('PAPER JAM'); drop.hidden = false; layout(); return; }
       drop.hidden = true; layout(); run(live, false);
@@ -311,6 +328,7 @@ function build(): void {
   const reprint = (): void => { if (!S) return; stopAnim(); rebuild(); TB = total; enable(); info(); draw(); };
   bpmIn.addEventListener('change', reprint); gridSel.addEventListener('change', reprint); keySel.addEventListener('change', reprint);
   spdBtn.addEventListener('click', () => { live = !live; spdBtn.textContent = live ? 'LIVE' : 'FAST'; spdBtn.setAttribute('aria-pressed', String(live)); });
+  voxBtn.addEventListener('click', () => { vox = !vox; try { localStorage.setItem(VOX_KEY, vox ? '1' : '0'); } catch { /* abaikan */ } syncVox(); });   // bisa diganti saat sedang PLAY
   drop.addEventListener('click', () => file.click());
   file.addEventListener('change', () => { const f = file.files?.[0]; file.value = ''; if (f) loadFile(f); });
   recBtn.addEventListener('click', () => { void toggleRec(); });
