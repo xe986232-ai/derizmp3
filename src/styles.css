@@ -647,16 +647,6 @@ html.is-dock-dragging,html.is-dock-dragging *{cursor:ns-resize !important;user-s
 .fx__body{flex:1;min-height:0;overflow:auto;padding:18px 16px 24px;display:flex;flex-direction:column}
 .fx__top{display:flex;justify-content:center;flex:none;margin-bottom:18px}
 .fx__list{display:flex;flex-direction:column}
-/* pilihan Gaya UI (Default / Flat): terlihat, paling bawah tab Effect */
-.fx__uistyle{order:3;flex:none;margin-top:auto;padding-top:20px;display:flex;flex-direction:column;gap:8px}
-.fx__uistyle[hidden]{display:none}
-.fx__uistyle-t{font-size:12px;font-weight:600;color:var(--muted);padding-left:4px}
-.fx__uiseg{display:grid;grid-template-columns:1fr 1fr;padding:3px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid var(--line)}
-.fx__uibtn{height:32px;padding:0;border:0;border-radius:999px;background:transparent;color:var(--muted);font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:color .2s ease,background-color .2s ease}
-.fx__uibtn:hover{color:var(--text)}
-.fx__uibtn.is-on{background:var(--card);color:var(--text);box-shadow:var(--bevel)}
-.fx__uibtn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-@media (prefers-reduced-motion:reduce){.fx__uibtn{transition:none!important}}
 /* dua halaman: kartu halaman lain disembunyikan (tetap ada di DOM supaya urutan & state tidak berubah) */
 .fx__list[data-page="plugin"] [data-kind="effect"],.fx__list[data-page="effect"] [data-kind="plugin"]{display:none}
 /* tab Plugin | Effect: dua sisi kiri-kanan di bawah judul, langsung terlihat */
