@@ -185,7 +185,7 @@ html[data-uistyle="flat"] .tracklist .trackmeter__bar s{filter:none;
    Elemen .trackmeter-mini dibuat oleh track-meters.ts; tinggi isi = scaleY dari bawah. Tersembunyi saat panel terbuka. */
 html[data-uistyle="flat"] .tracklist .trackmeter-mini{display:none}
 html[data-uistyle="flat"] .tracklist--collapsed .trackmeter-mini{display:block;position:absolute;z-index:3;right:0;top:0;bottom:0;width:6px;
-  background:var(--flat-mx-raised);pointer-events:none}   /* batang ramping mentok kanan, tinggi penuh; latar kosong terang agar tidak terbaca sebagai kolom gelap */
+  background:color-mix(in srgb,var(--flat-mx-text) 9%,transparent);pointer-events:none}   /* batang ramping mentok kanan, tinggi penuh; latar kosong = bayangan tipis warna teks di atas card (menyatu dengan card terpilih maupun tidak, tidak terlihat bolong) */
 html[data-uistyle="flat"] .tracklist--collapsed .trackmeter-mini b{position:absolute;inset:0;display:block;background:var(--flat-mx-text);opacity:.5;transform:scaleY(0);transform-origin:bottom}   /* isi level memenuhi lebar batang; opacity 50% */
 
 /* tombol tambah track */
