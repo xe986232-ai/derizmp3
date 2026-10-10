@@ -9,6 +9,7 @@ import { encodeWavFloat } from './wav';
 import { DEMO, LIMITS, demoTrim, demoMarked, demoNotice } from './demo';
 import { encodeMp3Mono, encodeWav16Mono, saveBlob, type SaveFormat } from './mpcs-save';
 import { bringFront, dragWindow } from './win-drag';
+import { isFlat } from './ui-theme';
 
 const svg = (inner: string, size = 18): string =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
@@ -32,6 +33,16 @@ const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const BLACK = new Set([1, 3, 6, 8, 10]);
 const noteName = (m: number): string => { const r = Math.round(m); return NAMES[((r % 12) + 12) % 12] + (Math.floor(r / 12) - 1); };
 const fmtShift = (s: number): string => { const c = Math.round(s * 100); return (c > 0 ? '+' : '') + (Math.abs(c) % 100 === 0 ? c / 100 + ' st' : c + ' ct'); };
+
+// Warna canvas per gaya UI (atribut data-uistyle di <html>): Default = layar gelap + blok pink + garis oranye;
+// Flat = beige solid (sama dengan piano roll Flat), blok lavender, garis arang, playhead cyan. CSS jendelanya ada di flat-ui.css (bagian 20).
+const PAL = {
+  soft: { rowW: '#1b161d', rowB: '#120f14', oct: 'rgba(255,255,255,.07)', sec: 'rgba(255,255,255,.06)', secTxt: '#6c6c7c', sel: '#fff', wave: '#e0458a', cut: 'rgba(0,0,0,.6)', orig: 'rgba(255,255,255,.28)', res: '#ffc857',
+    ovWave: 'rgba(214,60,130,.35)', ovNote: '#ffc857', ovPlay: '#fff', ovBox: 'rgba(255,255,255,.9)', ovBoxFill: 'rgba(255,255,255,.08)' },
+  flat: { rowW: '#DDD3C2', rowB: '#D2C7B5', oct: 'rgba(166,157,143,.72)', sec: 'rgba(166,157,143,.55)', secTxt: '#68665F', sel: '#343536', wave: '#B98AD0', cut: 'rgba(52,53,54,.7)', orig: 'rgba(52,53,54,.35)', res: '#343536',
+    ovWave: '#B98AD0', ovNote: '#343536', ovPlay: '#39C6C7', ovBox: '#343536', ovBoxFill: 'rgba(52,53,54,.08)' }
+};
+const pal = (): typeof PAL.soft => (isFlat() ? PAL.flat : PAL.soft);
 
 // Tiga knob global (Lock = center, Human = variation, Glide = transition; nama kunci di kode tetap center / variation / transition). Markup & kelas sama dengan knob efek (fx-rack.ts) supaya gayanya menyatu dengan DAW.
 const knobSvg = '<svg viewBox="0 0 36 36" aria-hidden="true" class="circular-chart">' +
@@ -246,6 +257,7 @@ function build(): void {
   }
   const ro = new ResizeObserver(() => { if (!el.hidden) layout(); });
   ro.observe(stage);
+  window.addEventListener('derizmp3:ui', () => { if (!el.hidden) draw(); });   // ganti gaya UI (Default <-> Flat): tuts, grid, blok nada, dan peta sample digambar ulang dengan warna baru
 
   // Tuts MPCS: gaya "Ivory Capsule" (sama dengan piano roll): rel kiri gelap, tuts putih gading berujung kapsul, tuts hitam ebony berkilap
   // pendek di atasnya; tuts putih mengisi barisnya + setengah baris tuts hitam di sebelahnya. Tuts yang diratakan (lit) menyala pink.
@@ -256,6 +268,7 @@ function build(): void {
   function drawKeys(): void {
     gk.setTransform(dpr, 0, 0, dpr, 0, 0); gk.clearRect(0, 0, 44, viewH);
     if (!S) return;
+    if (isFlat()) { drawKeysFlat(S); return; }
     const s = S, off = scroll.scrollTop, hl = flatAt();   // hl: tuts tempat semua nada sedang diratakan (menyala)
     const RAIL = 5, WL = 44 - RAIL - 1, BL = 28, PINK = '#ff5c9e';
     const pcOf = (m: number): number => ((m % 12) + 12) % 12;
@@ -305,6 +318,39 @@ function build(): void {
     }
     gk.fillStyle = '#2c2c3d'; gk.fillRect(43, 0, 1, viewH);
   }
+  // Tuts gaya Flat (sama dengan tuts piano roll Flat): rel beige gelap, tuts putih krem dengan garis pemisah 1px, tuts hitam arang; tuts yang diratakan (lit) = magenta solid. Tanpa kapsul / gradien / bayangan.
+  function drawKeysFlat(s: Session): void {
+    const off = scroll.scrollTop, hl = flatAt(), RAIL = 5, WL = 44 - RAIL - 1, BL = 28, ACC = '#D85A94';
+    const pcOf = (m: number): number => ((m % 12) + 12) % 12;
+    const yOf = (m: number): number => (s.hi - m) * rowH - off;
+    const visible = (y: number): boolean => y < viewH + rowH && y + rowH * 2 > 0;
+    gk.fillStyle = '#C7BBA8'; gk.fillRect(0, 0, 44, viewH);
+    gk.fillStyle = '#BDB19E'; gk.fillRect(0, 0, RAIL, viewH);
+    gk.fillStyle = '#A69D8F'; gk.fillRect(RAIL - 1, 0, 1, viewH);
+    for (let m = s.lo; m <= s.hi; m++) {   // tuts putih
+      if (BLACK.has(pcOf(m))) continue;
+      const y = yOf(m); if (!visible(y)) continue;
+      const up = m + 1 <= s.hi && BLACK.has(pcOf(m + 1)), dn = m - 1 >= s.lo && BLACK.has(pcOf(m - 1));
+      const top = y + (up ? -rowH / 2 : 0), bot = y + rowH + (dn ? rowH / 2 : 0);
+      gk.fillStyle = m === hl ? ACC : '#F3EBDD'; gk.fillRect(RAIL, top, WL, bot - top - 1);
+      gk.fillStyle = '#A69D8F'; gk.fillRect(RAIL, bot - 1, WL, 1);
+      if (pcOf(m) === 0) { gk.fillStyle = '#B98AD0'; gk.fillRect(1, top + 2, 3, Math.max(2, bot - top - 5)); }   // penanda C di rel kiri
+    }
+    for (let m = s.lo; m <= s.hi; m++) {   // tuts hitam
+      if (!BLACK.has(pcOf(m))) continue;
+      const y = yOf(m); if (!visible(y)) continue;
+      gk.fillStyle = m === hl ? ACC : '#454545'; gk.fillRect(RAIL, y + 1, BL, rowH - 2);
+    }
+    gk.font = '600 9px system-ui,sans-serif'; gk.textBaseline = 'middle'; gk.textAlign = 'left';
+    for (let m = s.lo; m <= s.hi; m++) {   // nama nada
+      const y = yOf(m), p = pcOf(m), lit = m === hl;
+      if (!(rowH >= 13 || p === 0 || lit) || y > viewH || y + rowH < 0) continue;
+      gk.font = (p === 0 ? '700' : '600') + ' 9px system-ui,sans-serif';
+      gk.fillStyle = lit ? '#343536' : BLACK.has(p) ? '#F3EBDD' : p === 0 ? '#343536' : '#68665F';
+      gk.fillText(noteName(m), RAIL + 4, y + rowH / 2 + 0.5);
+    }
+    gk.fillStyle = '#A69D8F'; gk.fillRect(43, 0, 1, viewH);
+  }
 
   // peta seluruh sample: bentuk amplitudo + posisi nada + kotak jendela yang sedang terlihat. Ketuk / seret buat pindah.
   let ovProf: Float32Array | null = null, ovKey = '';
@@ -326,13 +372,14 @@ function build(): void {
         ovProf[px] = yt; ovProf[w + px] = yb;
       }
     }
-    go.fillStyle = 'rgba(214,60,130,.35)';
+    const P = pal();
+    go.fillStyle = P.ovWave;
     fillColumns(go, 0, 1, ovProf.subarray(0, w), ovProf.subarray(w, w * 2), w);
     const rows = S.hi - S.lo + 1, hopSec = S.pt.hop / S.pt.sr;
-    go.fillStyle = '#ffc857';
+    go.fillStyle = P.ovNote;
     for (const n of S.notes) go.fillRect(n.s * hopSec / S.dur * w, (S.hi + .5 - n.target) / rows * h - 1.5, Math.max(2, (n.e - n.s) * hopSec / S.dur * w), 3);
-    go.fillStyle = '#fff'; go.fillRect(Math.min(w - 1, playPos / S.dur * w), 0, 1.5, h);
-    go.strokeStyle = 'rgba(255,255,255,.9)'; go.lineWidth = 1.2; go.fillStyle = 'rgba(255,255,255,.08)';
+    go.fillStyle = P.ovPlay; go.fillRect(Math.min(w - 1, playPos / S.dur * w), 0, 1.5, h);
+    go.strokeStyle = P.ovBox; go.lineWidth = 1.2; go.fillStyle = P.ovBoxFill;
     const vx = scroll.scrollLeft / W * w, vw = Math.min(w, scroll.clientWidth / W * w), vy = scroll.scrollTop / H * h, vh = Math.min(h, viewH / H * h);
     go.beginPath(); go.roundRect(vx + .5, vy + .5, Math.max(4, vw - 1), Math.max(4, vh - 1), 3); go.fill(); go.stroke();
   }
@@ -355,21 +402,22 @@ function build(): void {
     if (!S) return;
     const { lo, hi, pt, notes, pk, sr } = S, hopSec = pt.hop / pt.sr;
     const sc = shiftCurve(pt, notes, undefined, kv);   // geseran per frame persis seperti yang dirender (target, knob, drift, vibrato), jadi garis = yang terdengar
+    const P = pal();   // warna sesuai gaya UI (Default / Flat)
     // baris semiton
     for (let m = lo; m <= hi; m++) {
       const y = (hi - m) * rowH, pc = ((m % 12) + 12) % 12;
-      g.fillStyle = BLACK.has(pc) ? '#120f14' : '#1b161d'; g.fillRect(0, y, W, rowH);
-      if (pc === 0) { g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(0, y + rowH - 1, W, 1); }
+      g.fillStyle = BLACK.has(pc) ? P.rowB : P.rowW; g.fillRect(0, y, W, rowH);
+      if (pc === 0) { g.fillStyle = P.oct; g.fillRect(0, y + rowH - 1, W, 1); }
     }
     // garis detik
     g.font = '9px system-ui,sans-serif'; g.textBaseline = 'top';
-    for (let s = 0; s <= S.dur; s++) { const x = Math.round(xOf(s)) + .5; g.fillStyle = 'rgba(255,255,255,.06)'; g.fillRect(x, 0, 1, H); g.fillStyle = '#6c6c7c'; g.fillText(s + 's', x + 3, 2); }
+    for (let s = 0; s <= S.dur; s++) { const x = Math.round(xOf(s)) + .5; g.fillStyle = P.sec; g.fillRect(x, 0, 1, H); g.fillStyle = P.secTxt; g.fillText(s + 's', x + 3, 2); }
     // nada
     notes.forEach((nt, i) => {
       const x0 = xOf((nt.s - .5) * hopSec), x1 = xOf((nt.e - .5) * hopSec), yc = yOf(nt.target);
       const on = i === sel || all;
       if (on) {   // tanpa card pink: hanya garis putih tipis penanda nada terpilih
-        g.strokeStyle = '#fff'; g.lineWidth = 1.5;
+        g.strokeStyle = P.sel; g.lineWidth = 1.5;
         g.beginPath(); g.roundRect(x0, yc - rowH * .5, Math.max(4, x1 - x0), rowH, Math.min(5, rowH / 2)); g.stroke();
       }
       // waveform sample asli (min/max per kolom pixel, satu polygon solid) mengikuti garis pitch hasil
@@ -391,10 +439,10 @@ function build(): void {
           if (yb - yt < 2 * px) { yt = m - px; yb = m + px; }   // minimal 2 pixel supaya bagian senyap tetap terlihat
           tops[i] = yt; bots[i] = yb;
         }
-        g.fillStyle = '#e0458a';
+        g.fillStyle = P.wave;
         fillColumns(g, xa, px, tops, bots, n);
       }
-      if (i > 0 && notes[i - 1].e >= nt.s && x1 - x0 > 6) { g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(Math.round(x0), yc - rowH * .5, 1, rowH); }   // garis potongan: nada ini menempel tepat di nada sebelumnya
+      if (i > 0 && notes[i - 1].e >= nt.s && x1 - x0 > 6) { g.fillStyle = P.cut; g.fillRect(Math.round(x0), yc - rowH * .5, 1, rowH); }   // garis potongan: nada ini menempel tepat di nada sebelumnya
       // pitch asli (redup, hanya kalau digeser) dan pitch hasil (oranye)
       const line = (add: number | Float32Array, style: string, w: number): void => {
         g.strokeStyle = style; g.lineWidth = w; g.beginPath();
@@ -402,8 +450,8 @@ function build(): void {
         g.stroke();
       };
       let moved = false; for (let f = nt.s; f < nt.e; f++) if (pt.f0[f] && Math.abs(sc[f]) > .01) { moved = true; break; }
-      if (moved) line(0, 'rgba(255,255,255,.28)', 1);   // pitch asli (redup) kalau hasilnya berbeda: digeser, drift, atau vibrato diubah
-      line(sc, '#ffc857', 1.4);
+      if (moved) line(0, P.orig, 1);   // pitch asli (redup) kalau hasilnya berbeda: digeser, drift, atau vibrato diubah
+      line(sc, P.res, 1.4);
     });
   }
 
@@ -764,7 +812,7 @@ function build(): void {
   // ---------- efek 3D: faceplate miring mengikuti kursor (mouse saja, mati di atas editor / saat drag / reduced-motion), kilau mengikuti arah cahaya ----------
   const untilt = (): void => { win.classList.remove('is-tilting'); win.style.setProperty('--rx', '0deg'); win.style.setProperty('--ry', '0deg'); win.style.setProperty('--mx', '50%'); win.style.setProperty('--my', '0%'); };
   el.addEventListener('pointermove', e => {
-    if (reduce || e.pointerType !== 'mouse') return;
+    if (reduce || isFlat() || e.pointerType !== 'mouse') return;   // Flat: jendela tidak miring 3D
     if (e.buttons || (e.target as Element).closest('.mpcs__stage, .mpcs__ov')) { untilt(); return; }
     const r = win.getBoundingClientRect(), px = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), py = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
     win.classList.add('is-tilting');
