@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { ivkDock, ivkSetCaps } from './ivory-keys';
-import { uiTheme, syncTrackColors, isFlat } from './ui-theme';
+import { uiTheme, syncTrackColors, isFlat, FLAT_CUSTOM_SWATCHES } from './ui-theme';
 import '@fontsource/syncopate/700.css';   // font judul plugin DERIZ (dibundel, tidak butuh internet)
 import '@fontsource/plus-jakarta-sans/latin-400.css';   // font gelembung tutorial (dibundel, tidak butuh internet)
 import '@fontsource/plus-jakarta-sans/latin-600.css';
@@ -362,7 +362,8 @@ function openColors(cont, it) {
 // ===== Customize (menu titik tiga track): warna pattern & warna note / waveform audio clip, per track =====
 // Disimpan sebagai variabel CSS di lane (--pat-color = latar pattern, --note-fill + --wave-fill = note mini & waveform). Kosong = ikut warna track / Pengaturan.
 const CUSTOM_VARS = {pattern: ['--pat-color'], note: ['--note-fill', '--wave-fill']};
-const CUSTOM_SWATCHES = ['#ffffff', '#000000', '#ff5c9e', '#a66cff', '#5b8ff3', '#2dd4bf', '#3fbf5f', '#f2b632', '#ff8a4c', '#ef4444', '#facc15', '#14b8a6'];
+const DEFAULT_CUSTOM_SWATCHES = ['#ffffff', '#000000', '#ff5c9e', '#a66cff', '#5b8ff3', '#2dd4bf', '#3fbf5f', '#f2b632', '#ff8a4c', '#ef4444', '#facc15', '#14b8a6'];
+const customSwatches = () => isFlat() ? FLAT_CUSTOM_SWATCHES : DEFAULT_CUSTOM_SWATCHES;   // tema Flat: pilihan warna dari palet gambar referensi
 const laneOfTrack = id => document.querySelector('.lane[data-track="' + id + '"]');
 function setLaneCustom(lane, kind, color) {   // color null = kembali ke bawaan
   if (!lane) return;
@@ -404,7 +405,7 @@ function openCustomColors(cont, it) {
   sub2.setAttribute('role', 'menu');
   const hex = /^#[0-9a-f]{6}$/i.test(cur) ? cur : '#ffffff';
   sub2.innerHTML = '<div class="track-menu__swatches">' +
-    CUSTOM_SWATCHES.map((c, i) => '<button class="track-menu__swatch' + (c.toLowerCase() === cur.toLowerCase() ? ' is-cur' : '') + '" data-c="' + c + '" style="background:' + c + ';--i:' + i + '" aria-label="Warna ' + c + '"></button>').join('') +
+    customSwatches().map((c, i) => '<button class="track-menu__swatch' + (c.toLowerCase() === cur.toLowerCase() ? ' is-cur' : '') + '" data-c="' + c + '" style="background:' + c + ';--i:' + i + '" aria-label="Warna ' + c + '"></button>').join('') +
     '</div>' +
     '<div class="track-menu__custom-row">' +
       '<label class="track-menu__pick" title="Pilih warna sendiri"><input type="color" value="' + hex + '" aria-label="Pilih warna sendiri"><span>Custom</span></label>' +
