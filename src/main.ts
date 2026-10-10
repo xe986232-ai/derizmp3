@@ -348,6 +348,7 @@ function openColors(cont, it) {
   sub.addEventListener('click', e => {
     const sw = e.target.closest('.track-menu__swatch');
     if (!sw) return;
+    delete cont.dataset.defColor;   // warna pilihan sendiri: tidak lagi dianggap warna bawaan tema
     cont.style.setProperty('--track-color', sw.dataset.c);
     const ln = document.querySelector('.lane[data-track="' + cont.dataset.track + '"]');
     if (ln) ln.style.setProperty('--track-color', sw.dataset.c);
@@ -1619,15 +1620,19 @@ const flatIns = ins => (ins && isFlat()) ? {...ins, c: FLAT_INS_COLOR[ins.n] || 
 // Warna yang sudah dari palet Flat / pilihan sendiri tidak disentuh. Dipakai untuk track bawaan, project tersimpan, dan saat pindah ke tema Flat.
 const LEGACY_TRACK_COLORS = new Set(['#ff5c9e', '#a66cff', '#5b8ff3', '#2dd4bf', '#3fbf5f', '#f2b632', '#ff8a4c', '#ef4444', '#14b8a6', '#5b3de8', '#22c7e8', '#f59e0b', '#facc15', '#ffffff', '#000000']);
 const flatColor = (c, ins) => (isFlat() && c && LEGACY_TRACK_COLORS.has(String(c).trim().toLowerCase())) ? (FLAT_INS_COLOR[ins] || '#B98AD0') : c;
-function flatRecolorTracks() {
-  if (!isFlat()) return;
-  document.querySelectorAll('.trkcard-wrap').forEach(cont => {
-    const cur = cont.style.getPropertyValue('--track-color').trim(), nc = flatColor(cur, cont.dataset.ins);
-    if (!cur || nc === cur) return;
-    cont.style.setProperty('--track-color', nc);
-    const lane = laneOfTrack(cont.dataset.track); if (lane) lane.style.setProperty('--track-color', nc);
-  });
+// Pergantian tema tidak boleh mencampur warna: warna asli track disimpan di data-def-color saat diganti ke warna Flat, lalu DIKEMBALIKAN saat tema bukan Flat.
+// Project yang disimpan juga memakai warna asli (data-def-color), jadi file project netral terhadap tema.
+function recolorTrack(cont) {
+  const cur = cont.style.getPropertyValue('--track-color').trim();
+  let nc = cur;
+  if (isFlat()) {
+    if (cont.dataset.defColor === undefined) { const f = flatColor(cur, cont.dataset.ins); if (f !== cur) { cont.dataset.defColor = cur; nc = f; } }
+  } else if (cont.dataset.defColor !== undefined) { nc = cont.dataset.defColor; delete cont.dataset.defColor; }
+  if (!cur || nc === cur) return;
+  cont.style.setProperty('--track-color', nc);
+  const lane = laneOfTrack(cont.dataset.track); if (lane) lane.style.setProperty('--track-color', nc);
 }
+function flatRecolorTracks() { document.querySelectorAll('.trkcard-wrap').forEach(recolorTrack); }
 window.addEventListener('derizmp3:ui', flatRecolorTracks);
 let addMenu = null, addBtn = null;
 let trackSeq = Math.max(1, ...[...document.querySelectorAll('.trkcard-wrap')].map(c => +c.dataset.track));
@@ -1716,14 +1721,14 @@ function duplicateTrack(src) {
   const sName = document.getElementById('track-name-' + sid).textContent;
   const base = sName.replace(/\s+\d+$/, ''), used = new Set([...document.querySelectorAll('.trkcard__title-btn span')].map(x => x.textContent));
   let n = 2; while (used.has(base + ' ' + n)) n++;
-  const name = base + ' ' + n, color = src.style.getPropertyValue('--track-color') || COLORS[0];
+  const name = base + ' ' + n, color = src.dataset.defColor || src.style.getPropertyValue('--track-color') || COLORS[0];
   const sPwr = src.querySelector('.trkcard__power'), sVol = src.querySelector('input[type=range]'), sPan = src.querySelector('.knob-input');
   const derizSrc = fxRack.derizIds(sid), derizState = fxRack.derizExport(sid), fxs = fxRack.fxExport(sid);
   if (DEMO && fxRack.derizCount() + derizSrc.length > LIMITS.derizPlugins) { demoNotice('derizplug'); return; }   // DEMO: salinan track tidak boleh melewati batas plugin DERIZ
   const pats = [...sLane.querySelectorAll('.pattern')].sort((a, b) => pl(a) - pl(b));
   const pans = sPan ? Math.round((+sPan.getAttribute('aria-valuenow') - 0.5) / 0.02) : 0;
 
-  addTrack({n: src.dataset.ins || 'Audio clip', c: color});
+  addTrack({n: src.dataset.ins || 'Audio clip', c: color}); flatRecolorTracks();
   const id = String(trackSeq);
   const cont = document.querySelector('.trkcard-wrap[data-track="' + id + '"]'), lane = lanesEl.querySelector('.lane[data-track="' + id + '"]');
   src.after(cont); sLane.after(lane);   // addTrack menaruh di paling bawah: pindahkan ke tepat di bawah track asal (card + lane)
@@ -2476,7 +2481,7 @@ function projectSnapshot() {
     const fxs = fxRack.fxExport(id);
     tracks.push({
       id, ins: c.dataset.ins || 'Audio clip', name: document.getElementById('track-name-' + id).textContent,
-      color: c.style.getPropertyValue('--track-color'), vol: sl ? +sl.value : 100,
+      color: c.dataset.defColor || c.style.getPropertyValue('--track-color'), vol: sl ? +sl.value : 100,
       ...(laneCustom(laneOfTrack(id), 'pattern') ? {pc: laneCustom(laneOfTrack(id), 'pattern')} : {}), ...(laneCustom(laneOfTrack(id), 'note') ? {wc: laneCustom(laneOfTrack(id), 'note')} : {}),
       off: !!pwr && pwr.getAttribute('aria-checked') === 'false', deriz: fxRack.derizIds(id).length, po: fxRack.derizPlainIndex(id), pats,
       ...(dz.some(x => x.z) ? {dz} : {}),
@@ -2518,11 +2523,12 @@ async function projectRestore(rec) {
   const trMap = {}, pending = [], pendingAuto = [];
   for (const t of d.tracks || []) {
     t.name = t.name || t.ins || 'Track'; t.vol = Number.isFinite(+t.vol) && t.vol !== null && t.vol !== '' ? +t.vol : 100;   // project lama / rusak: nama & volume tidak boleh jadi "undefined"
-    addTrack({n: t.ins, c: flatColor(t.color || COLORS[0], t.ins)});
+    addTrack({n: t.ins, c: t.color || COLORS[0]});
     const id = String(trackSeq); trMap[t.id] = id;
     const cont = document.querySelector('.trkcard-wrap[data-track="' + id + '"]'), lane = lanesEl.querySelector('.lane[data-track="' + id + '"]');
     document.getElementById('track-name-' + id).textContent = t.name;
     cont.querySelector('.trkcard__title-btn').title = t.name;
+    recolorTrack(cont);   // tema Flat: warna bawaan tema lama dipetakan ke palet Flat (warna asli tetap disimpan)
     if (typeof t.pc === 'string') setLaneCustom(lane, 'pattern', t.pc);   // Customize: warna pattern & note / waveform per track
     if (typeof t.wc === 'string') setLaneCustom(lane, 'note', t.wc);
     const sl = cont.querySelector('input[type=range]');
