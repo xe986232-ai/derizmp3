@@ -106,6 +106,7 @@ function build(): void {
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let S: Sess | null = null, P: PrintNote[] = [], total = 0;   // total = panjang kertas (ketukan)
+  let PL: PrintNote[] = [];   // nada untuk PLAY: waktu asli (tanpa grid) supaya pas dengan vokal; P (menempel grid) hanya untuk kertas / MIDI / pattern
   let TB = 0;               // posisi kertas: ketukan yang sedang berada di celah (kepala cetak)
   let headX = 0.5, headTo = 0.5;   // posisi kepala 0..1 (0 = nada terendah)
   let lo = 55, hi = 79;     // rentang nada yang digambar
@@ -161,9 +162,11 @@ function build(): void {
 
   // ---------- nada MIDI (tanpa knob: pembulatan penuh) ----------
   function rebuild(): void {
-    if (!S) { P = []; total = 0; return; }
+    if (!S) { P = []; PL = []; total = 0; return; }
     const kv = keySel.value, [r, m] = kv === 'off' ? [0, ''] : kv.split('-');
-    P = notesToPrint(S.notes, S.pt, { bpm: bpm(), grid: gridV(), scale: kv === 'off' ? null : { root: +r, mode: m as 'major' | 'minor' } });
+    const scale = kv === 'off' ? null : { root: +r, mode: m as 'major' | 'minor' };
+    P = notesToPrint(S.notes, S.pt, { bpm: bpm(), grid: gridV(), scale });
+    PL = gridV() > 0 ? notesToPrint(S.notes, S.pt, { bpm: bpm(), grid: 0, scale }) : P;   // tanpa grid: awal nada = awal vokal, tidak bergeser sampai ±1/2 langkah grid
     total = P.length ? Math.max(...P.map(n => n.s + n.l)) : 0;
     if (P.length) { lo = Math.min(...P.map(n => n.p)) - 1; hi = Math.max(...P.map(n => n.p)) + 1; if (hi - lo < 14) { const c = (hi + lo) / 2; lo = Math.floor(c - 7); hi = lo + 14; } }
     ink = P.length ? Math.min(1, P.length / 3) : 0;
@@ -269,7 +272,9 @@ function build(): void {
     const dur = asLive ? Math.max(0.6, withTones ? len : total * spb) : reduce ? 0.01 : Math.min(4, Math.max(1.6, total * spb * 0.25));
     mode = withTones ? 'play' : 'print';
     animating = true; TB = Math.min(total, from / spb); pos = from;
-    let next = P.findIndex(n => n.s >= TB - 1e-9); if (next < 0) next = P.length;   // nada yang sudah lewat tidak dibunyikan lagi
+    let next = P.findIndex(n => n.s >= TB - 1e-9); if (next < 0) next = P.length;   // nada yang sudah lewat tidak dibunyikan lagi (hanya untuk kertas / kepala cetak)
+    let nextT = PL.findIndex(n => n.s * spb >= from - 1e-6); if (nextT < 0) nextT = PL.length;   // indeks nada yang dibunyikan (PLAY)
+    const LOOK = 0.15;   // jadwalkan nada sampai 150 ms ke depan di jam audio, bukan dibunyikan saat frame animasi sempat jalan
     let ended = false;
     const startAt = a.currentTime + 0.06;   // jeda kecil supaya vokal dan nada mulai bersamaan
     if (withVox && from < S.buf.duration - 0.02) {
@@ -285,7 +290,13 @@ function build(): void {
       const u = Math.min(1, el / dur);
       TB = asLive ? Math.min(total, el / spb) : total * u;
       pos = asLive ? el : TB * spb;
-      while (next < P.length && P[next].s <= TB) { const n = P[next++]; if (withTones) sfx!.tone(n.p, n.l * spb, n.v / 127); }
+      while (next < P.length && P[next].s <= TB) next++;
+      if (withTones) {   // nada dijadwalkan tepat di jam audio yang sama dengan vokal: start = startAt + waktu nada (detik) - from
+        while (nextT < PL.length && PL[nextT].s * spb <= el + LOOK) {
+          const n = PL[nextT++];
+          sfx!.tone(n.p, n.l * spb, n.v / 127, Math.max(0, startAt + n.s * spb - from - a.currentTime));
+        }
+      }
       const cur = P.find(n => n.s <= TB && TB < n.s + n.l);
       if (cur) { headTo = (cur.p - lo + 0.5) / (hi - lo + 1); if (!withTones) sfx!.zzt(cur.p, cur.v / 127); }
       else { const nx = P.find(n => n.s > TB); if (nx) headTo = (nx.p - lo + 0.5) / (hi - lo + 1); }

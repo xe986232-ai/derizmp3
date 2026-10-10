@@ -47,7 +47,7 @@ export function createSfx(ac: AudioContext): Sfx {
       if (s.muted) return;
       const t = ac.currentTime + when, o = ac.createOscillator(), g = ac.createGain();
       o.type = 'triangle'; o.frequency.value = hz(midi);
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.32 * vel, t + 0.012);
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.32 * vel, t + 0.004);   // atak 4 ms linear: terdengar mulai tepat di awal nada (dulu 12 ms eksponensial = terasa telat)
       g.gain.setTargetAtTime(0.0001, t + Math.max(0.02, dur - 0.04), 0.03);
       o.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.2);
     },
