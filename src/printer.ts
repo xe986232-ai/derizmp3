@@ -10,7 +10,7 @@ import { snapTargets, toMono, type Note, type PitchTrack } from './mpcs-dsp';
 import { notesToPrint, writeMidiFile, type PrintNote } from './printer-midi';
 import { createSfx, type Sfx } from './printer-sfx';
 import { saveBlob } from './mpcs-save';
-import { DEMO, LIMITS, demoTrim } from './demo';
+import { DEMO, LIMITS } from './demo';
 import { bringFront, dragWindow } from './win-drag';
 
 /** Printer disembunyikan dari publik: tidak muncul di daftar plugin (tombol +). Hanya terlihat di `npm run dev`.
@@ -65,6 +65,16 @@ function build(): void {
       '<div class="prn__mid"><div class="prn__stage">' +
         '<canvas class="prn__cv" role="img" aria-label="Kertas cetak melodi. Seret naik turun untuk menggulung"></canvas>' +
         `<button type="button" class="prn__drop">${ICON.up}<span>Masukkan vokal</span><small>drop file audio, ketuk untuk memilih, atau tekan REC</small></button>` +
+        '<div class="prn__crop" hidden>' +
+          '<div class="prn__ch"><span>Trim audio</span><span class="prn__cl" role="status" aria-live="polite">0:00.0 – 0:00.0</span></div>' +
+          '<canvas class="prn__wv" role="img" aria-label="Gelombang audio. Seret pegangan kiri dan kanan untuk memilih bagian yang dicetak, seret bagian tengah untuk menggeser"></canvas>' +
+          '<div class="prn__cb">' +
+            `<button type="button" class="prn__b prn__cprev" title="Dengar bagian yang dipilih">${ICON.play}<span>PREVIEW</span></button>` +
+            '<button type="button" class="prn__b prn__call" title="Pilih seluruh audio">ALL</button>' +
+            `<button type="button" class="prn__b prn__ccancel" title="Batalkan">${ICON.close}<span>CANCEL</span></button>` +
+            `<button type="button" class="prn__b prn__cok" title="Cetak bagian yang dipilih">${ICON.print}<span>PRINT</span></button>` +
+          '</div>' +
+        '</div>' +
       '</div></div>' +
       '<div class="prn__prog">' +
         '<span class="prn__t prn__tc">0:00</span>' +
@@ -106,6 +116,7 @@ function build(): void {
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let S: Sess | null = null, P: PrintNote[] = [], total = 0;   // total = panjang kertas (ketukan)
+  let C: { buf: AudioBuffer; name: string; peaks: Float32Array; s: number; e: number } | null = null;   // sesi trim: audio yang baru dimuat, menunggu bagian yang dipilih (s..e, detik)
   let PL: PrintNote[] = [];   // nada untuk PLAY: waktu asli (tanpa grid) supaya pas dengan vokal; P (menempel grid) hanya untuk kertas / MIDI / pattern
   let TB = 0;               // posisi kertas: ketukan yang sedang berada di celah (kepala cetak)
   let headX = 0.5, headTo = 0.5;   // posisi kepala 0..1 (0 = nada terendah)
@@ -135,7 +146,7 @@ function build(): void {
     if (voxGain) voxGain.gain.setTargetAtTime(voxLevel(), voxGain.context.currentTime, 0.02);
   };
   syncVox();
-  const enable = (): void => { const has = P.length > 0; playBtn.disabled = printBtn.disabled = tearBtn.disabled = midBtn.disabled = !has || recording; win.classList.toggle('is-off', !S); };
+  const enable = (): void => { const has = P.length > 0; playBtn.disabled = printBtn.disabled = tearBtn.disabled = midBtn.disabled = !has || recording || !!C; win.classList.toggle('is-off', !S); };
 
   // ---------- worker (analisis pitch: sama dengan MPCS) ----------
   function getWorker(): Worker {
@@ -315,14 +326,24 @@ function build(): void {
   };
 
   // ---------- muat & analisis ----------
+  // Muat -> TRIM (pilih bagian yang mau dicetak) -> analisis. Kertas lama tetap utuh sampai PRINT ditekan, CANCEL mengembalikannya.
   async function loadWith(get: () => Promise<{ buf: AudioBuffer; name: string }>): Promise<void> {
     const my = ++loadTok;
-    stopAnim(); P = []; total = 0; pos = 0; updProg(); enable(); drop.hidden = true; say('READING AUDIO');
+    stopAnim(); stopPrev(); closeCrop(); drop.hidden = true; say('READING AUDIO');
     try {
       audio();
-      let { buf, name } = await get();
+      const { buf, name } = await get();
       if (my !== loadTok) return;
-      if (DEMO && buf.duration > LIMITS.mpcsSec) { buf = demoTrim(buf, LIMITS.mpcsSec); say(`DEMO · ${LIMITS.mpcsSec} DETIK PERTAMA`); }
+      openCrop(buf, name);
+    } catch (err) {
+      if (my !== loadTok) return;
+      sfx?.jam(); drop.hidden = P.length > 0; flash('PAPER JAM · ' + String((err as Error).message || 'gagal membaca'));
+    }
+  }
+  async function analyzeBuf(buf: AudioBuffer, name: string): Promise<void> {
+    const my = ++loadTok;
+    stopAnim(); P = []; PL = []; total = 0; pos = 0; updProg(); enable(); drop.hidden = true;
+    try {
       const mono = toMono(Array.from({ length: buf.numberOfChannels }, (_, c) => buf.getChannelData(c).slice()));
       say('READING 0%');
       const r = await job({ type: 'analyze', x: mono, sr: buf.sampleRate }, [mono.buffer]);
@@ -341,6 +362,114 @@ function build(): void {
     if (!isAudio(f)) { flash('BUKAN FILE AUDIO'); return; }
     void loadWith(async () => ({ buf: await audio().decodeAudioData(await f.arrayBuffer()), name: f.name.replace(/\.[^.]+$/, '') }));
   };
+
+  // ---------- trim: pilih bagian audio yang mau dicetak ----------
+  const crop = q<HTMLElement>('.prn__crop'), wv = q<HTMLCanvasElement>('.prn__wv'), wg = wv.getContext('2d')!, cLbl = q('.prn__cl');
+  const cPrev = q<HTMLButtonElement>('.prn__cprev'), cAll = q<HTMLButtonElement>('.prn__call'), cCancel = q<HTMLButtonElement>('.prn__ccancel'), cOk = q<HTMLButtonElement>('.prn__cok');
+  const NPK = 1200, MIN_SEL = 0.2;
+  let cPlay: AudioBufferSourceNode | null = null, cRaf = 0, cT0 = 0;
+  const clamp = (x: number, a: number, b: number): number => Math.max(a, Math.min(b, x));
+  const fmtS = (s: number): string => { const m = Math.floor(s / 60), r = s - m * 60; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1); };
+  const maxSel = (): number => DEMO ? LIMITS.mpcsSec : Infinity;   // demo: bagian yang dicetak dibatasi
+  function peaksOf(buf: AudioBuffer): Float32Array {   // puncak amplitudo per kolom (semua kanal), dinormalkan
+    const pk = new Float32Array(NPK), n = buf.length;
+    for (let c = 0; c < buf.numberOfChannels; c++) {
+      const d = buf.getChannelData(c);
+      for (let i = 0; i < NPK; i++) {
+        const a = Math.floor(i * n / NPK), b = Math.max(a + 1, Math.floor((i + 1) * n / NPK)), st = Math.max(1, Math.floor((b - a) / 48));
+        let m = pk[i]; for (let j = a; j < b; j += st) { const v = Math.abs(d[j]); if (v > m) m = v; }
+        pk[i] = m;
+      }
+    }
+    let mx = 1e-6; for (const v of pk) if (v > mx) mx = v;
+    for (let i = 0; i < NPK; i++) pk[i] /= mx;
+    return pk;
+  }
+  function drawCrop(playT?: number): void {
+    const w = wv.clientWidth, h = wv.clientHeight; if (!C || !w || !h) return;
+    const d = Math.min(2, devicePixelRatio || 1);
+    if (wv.width !== Math.round(w * d) || wv.height !== Math.round(h * d)) { wv.width = Math.round(w * d); wv.height = Math.round(h * d); }
+    wg.setTransform(d, 0, 0, d, 0, 0); wg.clearRect(0, 0, w, h);
+    const dur = C.buf.duration, xs = C.s / dur * w, xe = C.e / dur * w, mid = h / 2;
+    wg.fillStyle = 'rgba(255,255,255,.08)'; wg.fillRect(0, mid, w, 1);
+    for (let x = 0; x < w; x++) {
+      const a = Math.max(1, C.peaks[Math.min(NPK - 1, Math.floor(x / w * NPK))] * (mid - 6));
+      wg.fillStyle = x >= xs && x <= xe ? '#ffb347' : 'rgba(255,179,71,.28)'; wg.fillRect(x, mid - a, 1, a * 2);
+    }
+    wg.fillStyle = 'rgba(0,0,0,.4)'; wg.fillRect(0, 0, xs, h); wg.fillRect(xe, 0, w - xe, h);   // bagian di luar pilihan digelapkan
+    for (const x of [xs, xe]) {   // pegangan: garis amber + knob krem (sama dengan knob progres)
+      wg.fillStyle = '#ffb347'; wg.fillRect(x - 1.5, 0, 3, h);
+      wg.fillStyle = '#f7f3e6'; wg.strokeStyle = '#3a372f'; wg.lineWidth = 2; wg.beginPath(); wg.arc(x, mid, 7, 0, 6.3); wg.fill(); wg.stroke();
+    }
+    if (playT !== undefined) { wg.fillStyle = '#fff'; wg.fillRect(playT / dur * w - 0.5, 0, 1, h); }
+    cLbl.textContent = `${fmtS(C.s)} – ${fmtS(C.e)} · ${(C.e - C.s).toFixed(1)}s`;
+  }
+  function stopPrev(): void {
+    cancelAnimationFrame(cRaf);
+    if (cPlay) { const s = cPlay; cPlay = null; try { s.stop(); } catch { /* sudah berhenti */ } s.disconnect(); }
+    cPrev.innerHTML = `${ICON.play}<span>PREVIEW</span>`; drawCrop();
+  }
+  function startPrev(): void {
+    if (!C) return;
+    const a = audio(); stopPrev();
+    const src = a.createBufferSource(); src.buffer = C.buf; src.connect(a.destination);
+    const s0 = C.s; src.start(0, C.s, C.e - C.s); cPlay = src; cT0 = a.currentTime;
+    src.onended = () => { if (cPlay === src) stopPrev(); };
+    cPrev.innerHTML = `${ICON.stop}<span>STOP</span>`;
+    const tick = (): void => { if (!cPlay) return; drawCrop(s0 + a.currentTime - cT0); cRaf = requestAnimationFrame(tick); };
+    tick();
+  }
+  function openCrop(buf: AudioBuffer, name: string): void {
+    const mx = maxSel();
+    C = { buf, name, peaks: peaksOf(buf), s: 0, e: Math.min(buf.duration, mx) };
+    crop.hidden = false; win.classList.add('is-crop'); enable();
+    say(DEMO && buf.duration > mx ? `DEMO · MAKS ${LIMITS.mpcsSec} DETIK` : 'TRIM · PILIH BAGIAN');
+    drawCrop();
+  }
+  function closeCrop(): void { C = null; crop.hidden = true; win.classList.remove('is-crop'); enable(); }
+  function confirmCrop(): void {
+    if (!C) return;
+    const { buf, name, s, e } = C; stopPrev(); closeCrop();
+    const sr = buf.sampleRate, i0 = Math.floor(s * sr), i1 = Math.min(buf.length, Math.ceil(e * sr));
+    if (i0 <= 0 && i1 >= buf.length) { void analyzeBuf(buf, name); return; }   // seluruh audio: tidak perlu dipotong
+    const out = audio().createBuffer(buf.numberOfChannels, Math.max(1, i1 - i0), sr), fade = Math.min(Math.round(0.005 * sr), (i1 - i0) >> 1);
+    for (let c = 0; c < buf.numberOfChannels; c++) {
+      const dst = out.getChannelData(c); dst.set(buf.getChannelData(c).subarray(i0, i1));
+      if (i0 > 0) for (let i = 0; i < fade; i++) dst[i] *= i / fade;   // fade 5 ms di titik potong supaya tidak klik
+      if (i1 < buf.length) for (let i = 0; i < fade; i++) dst[dst.length - 1 - i] *= i / fade;
+    }
+    void analyzeBuf(out, name);
+  }
+  function cancelCrop(): void { stopPrev(); closeCrop(); drop.hidden = P.length > 0; info(); }
+  let cd: { mode: 's' | 'e' | 'm'; x0: number; s0: number; e0: number } | null = null;
+  function applyDrag(ev: PointerEvent): void {
+    if (!C || !cd) return;
+    const r = wv.getBoundingClientRect(); if (!r.width) return;
+    const dur = C.buf.duration, t = clamp((ev.clientX - r.left) / r.width, 0, 1) * dur, min = Math.min(MIN_SEL, dur), mx = maxSel();
+    if (cd.mode === 's') C.s = clamp(Math.max(t, C.e - mx), 0, C.e - min);
+    else if (cd.mode === 'e') C.e = clamp(Math.min(t, C.s + mx), C.s + min, dur);
+    else { const len = cd.e0 - cd.s0, s = clamp(cd.s0 + (ev.clientX - cd.x0) / r.width * dur, 0, dur - len); C.s = s; C.e = s + len; }
+    drawCrop();
+  }
+  wv.addEventListener('pointerdown', ev => {
+    if (!C) return;
+    stopPrev();
+    const r = wv.getBoundingClientRect(), px = ev.clientX - r.left, dur = C.buf.duration, xs = C.s / dur * r.width, xe = C.e / dur * r.width, near = 16;
+    let mode: 's' | 'e' | 'm';
+    if (Math.abs(px - xs) <= near && Math.abs(px - xs) <= Math.abs(px - xe)) mode = 's';
+    else if (Math.abs(px - xe) <= near) mode = 'e';
+    else if (px > xs && px < xe) mode = 'm';
+    else mode = Math.abs(px - xs) < Math.abs(px - xe) ? 's' : 'e';   // klik di luar pilihan: tepi terdekat loncat ke situ
+    cd = { mode, x0: ev.clientX, s0: C.s, e0: C.e }; wv.setPointerCapture(ev.pointerId); applyDrag(ev);
+  });
+  wv.addEventListener('pointermove', ev => { if (cd) applyDrag(ev); });
+  const endCd = (): void => { cd = null; };
+  wv.addEventListener('pointerup', endCd); wv.addEventListener('pointercancel', endCd);
+  new ResizeObserver(() => drawCrop()).observe(wv);
+  cPrev.addEventListener('click', () => { if (cPlay) stopPrev(); else startPrev(); });
+  cAll.addEventListener('click', () => { if (!C) return; stopPrev(); C.s = 0; C.e = Math.min(C.buf.duration, maxSel()); drawCrop(); });
+  cCancel.addEventListener('click', cancelCrop);
+  cOk.addEventListener('click', confirmCrop);
 
   // ---------- rekam ----------
   let recording = false, rec: MediaRecorder | null = null, recTick = 0;
@@ -390,7 +519,7 @@ function build(): void {
   tearBtn.addEventListener('click', tearOff);
   midBtn.addEventListener('click', saveMid);
   muteBtn.addEventListener('click', () => { mute = !mute; try { localStorage.setItem(MUTE_KEY, mute ? '1' : '0'); } catch { /* abaikan */ } syncMute(); });
-  q('.prn__close').addEventListener('click', () => { loadTok++; stopAnim(); if (recording) rec?.stop(); el.hidden = true; });
+  q('.prn__close').addEventListener('click', () => { loadTok++; stopAnim(); stopPrev(); closeCrop(); drop.hidden = P.length > 0; if (recording) rec?.stop(); el.hidden = true; });
   win.addEventListener('keydown', e => e.stopPropagation());   // pintasan DAW (Space, panah) tidak ikut jalan saat mengetik BPM
   win.addEventListener('keyup', e => e.stopPropagation());
   // drag & drop file audio ke jendela
@@ -414,7 +543,7 @@ function build(): void {
   track.addEventListener('pointerup', e => endScrub(e, true));
   track.addEventListener('pointercancel', e => endScrub(e, false));
   track.addEventListener('keydown', e => {
-    if (!S || !P.length || recording) return;
+    if (!S || !P.length || recording || C) return;
     const len = lenSec(); let t: number | null = null;
     if (e.key === 'ArrowRight') t = pos + 5; else if (e.key === 'ArrowLeft') t = pos - 5; else if (e.key === 'Home') t = 0; else if (e.key === 'End') t = len - 0.1;
     if (t !== null) { e.preventDefault(); seekTo(Math.max(0, Math.min(len, t))); }
