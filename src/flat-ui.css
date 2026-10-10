@@ -506,3 +506,81 @@ html[data-uistyle="flat"] .pr__velbtn:hover,
 html[data-uistyle="flat"] .pr__velbtn:focus-visible{color:var(--flat-ap-text);border-color:var(--flat-ap-text);background:var(--flat-ap-panel)}
 html[data-uistyle="flat"] .pr__velbtn:focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
 html[data-uistyle="flat"] .pattern__handle::before{width:8px;height:24px;margin-top:-12px}
+
+/* ---------- 19. Plugin DERIZ (sampler): kartu beige solid, layar krem, layout BARU = canvas penuh di atas, knob (Speed / Pitch / Volume) satu baris penuh di bawah canvas ----------
+   Hanya aktif di gaya Flat (semua selector diawali html[data-uistyle="flat"]); gaya Default memakai layout lama (knob Speed + Pitch di atas canvas, Volume di kanan; di jendela overlay knob di kolom kanan).
+   Gambar canvas (spektrogram, grid kosong, label sumbu) ikut tema lewat isFlat() di fx-rack.ts. Urutan DOM tidak diubah, jadi semua handler (seret garis start, zoom, drop file) tetap jalan. */
+
+/* kartu: tanpa gradien / sekrup / bayangan, tanpa miring 3D */
+html[data-uistyle="flat"] .fxc--deriz{padding:10px 12px 12px;background-image:none;background-color:var(--flat-ap-raised);transform:none;box-shadow:none}
+html[data-uistyle="flat"] .derizov .fxc--deriz{box-shadow:0 10px 24px -8px color-mix(in srgb,var(--flat-ap-text) 45%,transparent)}   /* jendela melayang: satu bayangan lembut agar terpisah dari timeline */
+html[data-uistyle="flat"] .fxc--deriz .fxc__head{min-height:26px}
+html[data-uistyle="flat"] .fxc--deriz .fxc__title{font-size:13px;letter-spacing:.24em;color:var(--flat-ap-text);-webkit-text-fill-color:currentColor;background:none;filter:none}
+html[data-uistyle="flat"] .fxc--deriz.is-off .fxc__title{color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .fxc--deriz .fxc__pwr{width:14px;height:14px;border-radius:3px;margin:0 4px;background:var(--flat-ap-accent);box-shadow:none}
+html[data-uistyle="flat"] .fxc--deriz.is-off .fxc__pwr{background:var(--flat-ap-gray);box-shadow:none}
+html[data-uistyle="flat"] .derizov .fxc--deriz .fxc__close{box-sizing:border-box;border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] .derizov .fxc--deriz .fxc__close:hover{background:var(--flat-ap-panel);color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] .derizov .fxc--deriz .fxc__close:active{background:var(--flat-ap-muted);transform:none}
+html[data-uistyle="flat"] .derizov .fxc--deriz .fxc__close:focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
+
+/* layout: grid 3 kolom. Baris 1 = canvas (penuh), baris 2 = bar geser zoom (+ tombol Ganti), baris 3 = Speed | Pitch | Volume */
+html[data-uistyle="flat"] .fxc--deriz .deriz__row{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:auto auto auto;column-gap:8px;row-gap:8px;align-items:center}
+html[data-uistyle="flat"] .fxc--deriz .deriz__knobs{display:contents}   /* Speed + Pitch jadi item grid langsung (sama seperti jendela overlay lama) */
+html[data-uistyle="flat"] .fxc--deriz .deriz__row .deriz__stage{grid-column:1 / -1;grid-row:1;align-self:stretch;height:132px;min-height:0;border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-key-white);box-shadow:none}
+html[data-uistyle="flat"] .derizov .fxc--deriz .deriz__row .deriz__stage{height:150px}
+html[data-uistyle="flat"] .fxc--deriz .deriz__row .deriz__stage.is-over{box-shadow:none;outline:2px solid var(--flat-ap-accent);outline-offset:-2px}
+html[data-uistyle="flat"] .fxc--deriz .deriz__knobs>.fxc__cell:nth-child(1){grid-column:1;grid-row:3;justify-self:center}
+html[data-uistyle="flat"] .fxc--deriz .deriz__knobs>.fxc__cell:nth-child(2){grid-column:2;grid-row:3;justify-self:center}
+html[data-uistyle="flat"] .fxc--deriz .deriz__row .deriz__vol{grid-column:3;grid-row:3;justify-self:center}
+html[data-uistyle="flat"] .fxc--deriz .deriz__knobs .fxc__cell,
+html[data-uistyle="flat"] .fxc--deriz .deriz__vol .fxc__cell{gap:5px}
+html[data-uistyle="flat"] .fxc--deriz :is(.deriz__knobs,.deriz__vol) .fxc__label{font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--flat-ap-text2)}
+
+/* layar: kaca & kilau dimatikan; bagian sebelum garis start diredupkan dengan arang transparan */
+html[data-uistyle="flat"] .fxc--deriz .deriz__glass{display:none}
+html[data-uistyle="flat"] .fxc--deriz .deriz__stage::before{background:color-mix(in srgb,var(--flat-ap-text) 20%,transparent)}
+html[data-uistyle="flat"] .fxc--deriz .deriz__start::before{width:2px;margin-left:-1px;border-radius:0;background:var(--flat-ap-text)}
+html[data-uistyle="flat"] .fxc--deriz .deriz__start::after{background:var(--flat-ap-text)}
+html[data-uistyle="flat"] .fxc--deriz .deriz__stage.is-dragging .deriz__start::before,
+html[data-uistyle="flat"] .fxc--deriz .deriz__stage.is-dragging .deriz__start::after{background:var(--flat-ap-accent)}
+html[data-uistyle="flat"] .fxc--deriz .deriz__start:focus-visible::before{box-shadow:0 0 0 2px var(--flat-ap-playhead)}
+html[data-uistyle="flat"] .fxc--deriz .deriz__play{width:2px;margin-left:-1px;background:var(--flat-ap-playhead)}   /* garis play = cyan seperti playhead */
+html[data-uistyle="flat"] .fxc--deriz .deriz__scan{background:linear-gradient(90deg,transparent 0,color-mix(in srgb,var(--flat-ap-accent) 30%,transparent) 100%);box-shadow:inset -2px 0 0 var(--flat-ap-accent)}
+
+/* tombol Upload audio (di tengah layar kosong) + Ganti */
+html[data-uistyle="flat"] .fxc--deriz .deriz__up{height:32px;border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] .fxc--deriz .deriz__up:hover{background:var(--flat-ap-panel);transform:translate(-50%,-50%)}
+html[data-uistyle="flat"] .fxc--deriz .deriz__up:active{background:var(--flat-ap-muted);transform:translate(-50%,-50%)}
+html[data-uistyle="flat"] .fxc--deriz .deriz__up:focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
+html[data-uistyle="flat"] .fxc--deriz .deriz__row .deriz__swap:not([hidden]){grid-column:3;grid-row:2;justify-self:end;align-self:center;height:20px;margin:0;padding:0 10px;border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none;font-size:10px;letter-spacing:.08em;transition:none}
+html[data-uistyle="flat"] .fxc--deriz .deriz__row .deriz__swap:hover{opacity:1;background:var(--flat-ap-panel);color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] .fxc--deriz .deriz__row .deriz__swap:active{background:var(--flat-ap-muted);transform:none;box-shadow:none}
+html[data-uistyle="flat"] .fxc--deriz .deriz__row .deriz__swap:focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
+
+/* bar geser zoom (tepat di bawah canvas): alur beige gelap + pegangan solid; saat tombol Ganti belum ada, bar selebar penuh */
+html[data-uistyle="flat"] .fxc--deriz .deriz__row .deriz__nav{grid-column:1 / span 2;grid-row:2;height:10px;border:1px solid var(--flat-ap-border);border-radius:2px;background:var(--flat-ap-muted);box-shadow:none}
+html[data-uistyle="flat"] .fxc--deriz .deriz__row:has(.deriz__swap[hidden]) .deriz__nav{grid-column:1 / -1}
+html[data-uistyle="flat"] .fxc--deriz .deriz__thumb{top:1px;bottom:1px;border-radius:1px;background:var(--flat-ap-ctrl-line);box-shadow:none}
+html[data-uistyle="flat"] .fxc--deriz .deriz__thumb::after{background:var(--flat-ap-inverse);box-shadow:none}
+html[data-uistyle="flat"] .fxc--deriz .deriz__nav:hover .deriz__thumb,
+html[data-uistyle="flat"] .fxc--deriz .deriz__nav.is-dragging .deriz__thumb{background:var(--flat-ap-text2)}
+@media (pointer:coarse){html[data-uistyle="flat"] .fxc--deriz .deriz__row .deriz__nav{height:16px}}
+
+/* knob: ikut gaya knob plugin Flat (cincin aksen + cakram abu gelap, lihat bagian 14); hanya bingkai & isi gelap bawaan DERIZ yang dibuang */
+html[data-uistyle="flat"] .fxc--deriz .fxk{width:44px;height:44px;border:0;background:none;box-shadow:none}
+html[data-uistyle="flat"] .derizov .fxc--deriz .fxk{width:40px;height:40px}
+html[data-uistyle="flat"] .fxc--deriz .fxk .knob-inner{background:none;box-shadow:none}
+html[data-uistyle="flat"] .fxc--deriz.is-off .fxk .circle{stroke:var(--flat-ap-gray)}
+
+/* keyboard di bawah plugin (jendela overlay): tuts putih krem, tuts hitam arang, tuts ditekan = magenta solid; garis pemisah 1px menggantikan rel logam */
+html[data-uistyle="flat"] .derizov .deriz__kb{--kc:var(--flat-ap-accent);margin-top:10px}
+html[data-uistyle="flat"] .derizov .deriz__kb::before{height:1px;border-radius:0;background:var(--flat-ap-border);box-shadow:none}
+html[data-uistyle="flat"] .derizov .deriz__keys{border-radius:0}
+html[data-uistyle="flat"] .derizov .deriz__keys .ivk__w{border-radius:0;background:var(--flat-ap-key-white);box-shadow:inset 0 0 0 1px var(--flat-ap-border)}
+html[data-uistyle="flat"] .derizov .deriz__keys .ivk__b{border-radius:0;background:var(--flat-ap-key-black);box-shadow:none}
+html[data-uistyle="flat"] .derizov .deriz__keys .ivk__b::before{display:none}
+html[data-uistyle="flat"] .derizov .deriz__keys .ivk__w.is-down{background:var(--kc);transform:none;box-shadow:inset 0 0 0 1px var(--flat-ap-border)}
+html[data-uistyle="flat"] .derizov .deriz__keys .ivk__b.is-down{background:color-mix(in srgb,var(--kc) 70%,var(--flat-ap-key-black));transform:none;box-shadow:none}
+html[data-uistyle="flat"] .derizov .deriz__keys .ivk__lbl{color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .derizov .deriz__keys .ivk__w.is-down .ivk__lbl{color:var(--flat-ap-inverse)}
