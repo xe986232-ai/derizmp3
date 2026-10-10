@@ -181,6 +181,14 @@ html[data-uistyle="flat"] .tracklist .trackmeter__bar b,
 html[data-uistyle="flat"] .tracklist .trackmeter__bar s{filter:none;
   background:linear-gradient(to top,var(--flat-meter-ok) 0 70%,var(--flat-meter-warn) 70% 88%,var(--flat-meter-clip) 88% 100%)}
 
+/* channel mixer ditutup: satu batang meter vertikal sederhana di kanan icon (mono, satu warna, tanpa segmen/glow/peak).
+   Elemen .trackmeter-mini dibuat oleh track-meters.ts; tinggi isi = scaleY dari bawah. Tersembunyi saat panel terbuka. */
+html[data-uistyle="flat"] .tracklist .trackmeter-mini{display:none}
+html[data-uistyle="flat"] .tracklist--collapsed .trackmeter-mini{display:block;position:absolute;z-index:3;right:6px;top:8px;bottom:8px;width:4px;overflow:hidden;
+  background:var(--flat-meter-empty);pointer-events:none}
+html[data-uistyle="flat"] .tracklist--collapsed .trackmeter-mini b{position:absolute;inset:0;display:block;background:var(--flat-text);transform:scaleY(0);transform-origin:bottom}
+html[data-tracksize="compact"][data-uistyle="flat"] .tracklist--collapsed .trackmeter-mini{top:5px;bottom:5px}
+
 /* tombol tambah track */
 html[data-uistyle="flat"] .tracklist .addtrack{border-radius:0;margin:0;width:100%;background:var(--flat-card);color:var(--flat-text);border:0;border-bottom:1px solid var(--flat-line)}
 html[data-uistyle="flat"] .tracklist .addtrack:hover{background:var(--flat-ctrl);color:var(--flat-text);transform:none}

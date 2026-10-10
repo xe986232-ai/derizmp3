@@ -1,8 +1,10 @@
 // Meter level stereo di card track (channel mixer): dua batang LED bersegmen (kiri & kanan) dengan glow dan peak hold.
 // Level dibaca tiap frame dari audio-engine, diubah ke dB (-54..0), attack cepat dan turun perlahan seperti meter DAW.
 // Meter hanya digambar saat channel mixer terbuka (saat ditutup, meter disembunyikan lewat CSS dan tidak dihitung).
+// Tema Flat, channel mixer DITUTUP: satu batang vertikal sederhana (mono = yang terbesar dari L/R) di kanan icon, satu warna, tanpa segmen/peak hold.
 
 import { trackLevels } from './audio-engine';
+import { isFlat } from './ui-theme';
 
 const NSEG = 14;                      // harus sama dengan --n di CSS .trackmeter
 const FLOOR_DB = -54;                 // di bawah ini dianggap kosong
@@ -40,10 +42,37 @@ export function initTrackMeters(): void {
     if (hot !== c.hot) { c.hot = hot; bar.dataset.l = String(hot); }
   };
 
+  // batang mini (tema Flat, panel ditutup): dibuat sekali per card, level lewat transform scaleY (tanpa segmen)
+  const mini = new Map<string, number>();
+  const miniOf = (el: HTMLElement): HTMLElement | null => {
+    let m = el.querySelector<HTMLElement>('.trackmeter-mini b');
+    if (!m) {
+      const host = el.querySelector<HTMLElement>('.trkcard');
+      if (!host) return null;
+      const i = document.createElement('i'); i.className = 'trackmeter-mini'; i.setAttribute('aria-hidden', 'true');
+      m = document.createElement('b'); i.appendChild(m); host.appendChild(i);
+    }
+    return m;
+  };
+
   const frame = (now: number) => {
     requestAnimationFrame(frame);
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
-    if (document.hidden || tlist?.classList.contains('tracklist--collapsed')) return;   // tersembunyi: tidak perlu dihitung
+    if (document.hidden) return;
+    if (tlist?.classList.contains('tracklist--collapsed')) {   // panel ditutup: hanya batang mini, dan hanya di tema Flat
+      if (!isFlat()) return;
+      document.querySelectorAll<HTMLElement>('.trkcard-wrap').forEach(el => {
+        const id = el.dataset.track!, b = miniOf(el);
+        if (!b) return;
+        let st = state.get(id);
+        if (!st) { st = [mkCh(), mkCh()]; state.set(id, st); }
+        const [pl, pr] = trackLevels(id);
+        step(st[0], pl, now, dt); step(st[1], pr, now, dt);
+        const v = Math.round(Math.max(st[0].v, st[1].v) * 100);   // 0..100, dibulatkan agar style tidak ditulis ulang tiap frame tanpa perubahan
+        if (mini.get(id) !== v) { mini.set(id, v); b.style.transform = `scaleY(${v / 100})`; }
+      });
+      return;
+    }
     document.querySelectorAll<HTMLElement>('.trkcard-wrap').forEach(el => {
       const id = el.dataset.track!, bars = el.querySelectorAll<HTMLElement>('.trackmeter__bar');
       if (bars.length < 2) return;
