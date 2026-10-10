@@ -1,0 +1,110 @@
+// Mesin MIDI untuk plugin Printer (Melody Printer): murni (tanpa DOM / Web Audio), jadi bisa dites di Node.
+//   Note hasil analisis MPCS (frame, pitch pecahan)  ->  nada MIDI bulat (ketukan)  ->  file .mid (SMF format 0).
+// Tanpa knob: setara Lock 100% / Human 0% / Glide 0%. Pitch selalu dibulatkan penuh ke semiton, tanpa vibrato dan luncuran.
+
+import type { Note, PitchTrack } from './mpcs-dsp';
+
+export interface PrintNote { p: number; s: number; l: number; v: number }   // p = nomor MIDI, s / l = ketukan (beat), v = velocity 1..127
+export interface PrintOpts {
+  bpm: number;
+  minMs?: number;       // nada lebih pendek dari ini dibuang (bawaan 60 ms)
+  mergeGapMs?: number;  // dua nada sama berurutan dengan jeda <= ini digabung (bawaan 40 ms)
+  grid?: number;        // 0 / kosong = tanpa kuantisasi ritme; 0.25 = 1/16, 0.5 = 1/8 (dalam ketukan)
+  scale?: { root: number; mode: 'major' | 'minor' } | null;   // kunci ke tangga nada (opsional)
+}
+
+const SCALES = { major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10] };
+
+export function snapToScale(p: number, root: number, mode: 'major' | 'minor'): number {
+  const set = SCALES[mode];
+  let best = p, bd = 99;
+  for (let d = -6; d <= 6; d++) {
+    const q = p + d, pc = (((q - root) % 12) + 12) % 12;
+    if (set.includes(pc) && Math.abs(d) < bd) { bd = Math.abs(d); best = q; }   // seri: yang lebih rendah menang (d naik dari -6)
+  }
+  return best;
+}
+
+const clamp = (x: number, a: number, b: number): number => Math.max(a, Math.min(b, x));
+
+/** Nada MPCS -> nada MIDI bulat. `pt` dipakai untuk waktu (hop / sr) dan kerasnya suara (rms -> velocity). */
+export function notesToPrint(notes: Note[], pt: PitchTrack, o: PrintOpts): PrintNote[] {
+  const bpm = o.bpm > 0 ? o.bpm : 120, minMs = o.minMs ?? 60, gapMs = o.mergeGapMs ?? 40;
+  const fs = pt.hop / pt.sr;   // detik per frame
+  const raw: { p: number; t0: number; t1: number; rms: number }[] = [];
+  for (const n of notes) {
+    const t0 = n.s * fs, t1 = n.e * fs;
+    if ((t1 - t0) * 1000 < minMs) continue;
+    let p = Math.round(Number.isFinite(n.target) ? n.target : n.midi);
+    if (o.scale) p = snapToScale(p, o.scale.root, o.scale.mode);
+    p = clamp(p, 0, 127);
+    let sum = 0, c = 0;
+    for (let f = n.s; f < n.e && f < pt.rms.length; f++) { sum += pt.rms[f]; c++; }
+    raw.push({ p, t0, t1, rms: c ? sum / c : 0 });
+  }
+  raw.sort((a, b) => a.t0 - b.t0);
+  // gabung nada sama yang berdempetan (tracker kadang memotong satu nada panjang jadi dua)
+  const mg: typeof raw = [];
+  for (const r of raw) {
+    const L = mg[mg.length - 1];
+    if (L && L.p === r.p && (r.t0 - L.t1) * 1000 <= gapMs) { L.rms = (L.rms * (L.t1 - L.t0) + r.rms * (r.t1 - r.t0)) / Math.max(1e-9, r.t1 - L.t0); L.t1 = Math.max(L.t1, r.t1); }
+    else mg.push({ ...r });
+  }
+  // velocity: rms dinormalkan ke nada terkeras, dipetakan 40..120
+  const peak = Math.max(1e-9, ...mg.map(r => r.rms));
+  const spb = 60 / bpm;   // detik per ketukan
+  const out: PrintNote[] = [];
+  for (const r of mg) {
+    let s = r.t0 / spb, e = r.t1 / spb;
+    if (o.grid && o.grid > 0) { s = Math.round(s / o.grid) * o.grid; e = Math.max(s + o.grid, Math.round(e / o.grid) * o.grid); }
+    const l = e - s; if (l <= 1e-6) continue;
+    out.push({ p: r.p, s, l, v: Math.round(clamp(40 + 80 * Math.sqrt(r.rms / peak), 1, 127)) });
+  }
+  // satu suara saja: potong nada yang menimpa nada berikutnya
+  for (let i = 0; i + 1 < out.length; i++) { const lim = out[i + 1].s - out[i].s; if (out[i].l > lim) out[i].l = Math.max(1e-3, lim); }
+  return out;
+}
+
+const vlq = (n: number): number[] => {
+  let v = Math.max(0, Math.round(n)); const b = [v & 0x7f];
+  while ((v >>= 7) > 0) b.unshift((v & 0x7f) | 0x80);
+  return b;
+};
+const u32 = (n: number): number[] => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+const u16 = (n: number): number[] => [(n >> 8) & 255, n & 255];
+
+export const PPQ = 480;
+
+/** Tulis file .mid (SMF format 0, satu track, satu channel). */
+export function writeMidiFile(notes: PrintNote[], bpm: number, name = 'Melody Printer'): Uint8Array {
+  const ev: { t: number; order: number; d: number[] }[] = [];
+  for (const n of notes) {
+    const on = Math.round(n.s * PPQ), off = Math.max(on + 1, Math.round((n.s + n.l) * PPQ));
+    ev.push({ t: on, order: 1, d: [0x90, n.p & 127, clamp(Math.round(n.v), 1, 127)] });
+    ev.push({ t: off, order: 0, d: [0x80, n.p & 127, 0] });   // note off lebih dulu daripada note on di tick yang sama
+  }
+  ev.sort((a, b) => a.t - b.t || a.order - b.order);
+  const tr: number[] = [];
+  const us = Math.round(60_000_000 / (bpm > 0 ? bpm : 120));
+  tr.push(0, 0xff, 0x51, 3, (us >> 16) & 255, (us >> 8) & 255, us & 255);
+  const nm = Array.from(new TextEncoder().encode(name));
+  tr.push(0, 0xff, 0x03, ...vlq(nm.length), ...nm);
+  let last = 0;
+  for (const e of ev) { tr.push(...vlq(e.t - last), ...e.d); last = e.t; }
+  tr.push(0, 0xff, 0x2f, 0);
+  return new Uint8Array([0x4d, 0x54, 0x68, 0x64, ...u32(6), ...u16(0), ...u16(1), ...u16(PPQ), 0x4d, 0x54, 0x72, 0x6b, ...u32(tr.length), ...tr]);
+}
+
+/** Baca balik .mid buatan writeMidiFile (untuk tes). */
+export function readMidiFile(b: Uint8Array): { bpm: number; ppq: number; notes: { p: number; on: number; off: number; v: number }[] } {
+  let i = 14; const ppq = (b[12] << 8) | b[13]; i += 8;
+  let t = 0, bpm = 120; const open = new Map<number, { on: number; v: number }>(), notes: { p: number; on: number; off: number; v: number }[] = [];
+  const rd = (): number => { let v = 0, c: number; do { c = b[i++]; v = (v << 7) | (c & 127); } while (c & 128); return v; };
+  while (i < b.length) {
+    t += rd(); const st = b[i++];
+    if (st === 0xff) { const ty = b[i++], len = rd(); if (ty === 0x51) bpm = 60_000_000 / ((b[i] << 16) | (b[i + 1] << 8) | b[i + 2]); i += len; if (ty === 0x2f) break; }
+    else if ((st & 0xf0) === 0x90) { const p = b[i++], v = b[i++]; if (v > 0) open.set(p, { on: t, v }); else { const o = open.get(p); if (o) { notes.push({ p, on: o.on, off: t, v: o.v }); open.delete(p); } } }
+    else if ((st & 0xf0) === 0x80) { const p = b[i++]; i++; const o = open.get(p); if (o) { notes.push({ p, on: o.on, off: t, v: o.v }); open.delete(p); } }
+  }
+  return { bpm, ppq, notes };
+}

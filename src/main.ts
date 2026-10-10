@@ -25,6 +25,7 @@ import { initMenuPanel, setProjectIO } from './menu-panel';
 import { dbgRun, dbgZoom } from './audio-debug';
 import { mpcsExport, mpcsImport } from './mpcs';
 import { setMgchordBridge, mgchordExport, mgchordImport } from './mgchord';
+import { setPrinterBridge } from './printer';
 import { setSpectrumBridge, restoreSpectrum } from './spectrum';
 import { setDrumsBridge, drumsRefresh, drumsSyncPlay, openDrums, DRUMS_HIDDEN } from './drums';
 import { drumRow, DRUM_KIT } from './drums-audio';
@@ -1517,7 +1518,7 @@ const fxRack = initFxRack(() => ({ ctx: audio(), dest: master }), patternBridge)
 initEffectsPanel(settled => { paintRuler(settled); patBarPlace(); }, () => { closeMenu(true); closeAddMenu(true); dismissAdd(true); fxRack.closePicker(true); });
 fxRack.show(selTrack ? selTrack.closest('.trkcard-wrap').dataset.track : null);
 // MGCHORD: kirim nada hasil progression ke pattern yang sedang dipilih di timeline (pattern dilebarkan kalau muat, nada lama diganti)
-setMgchordBridge({
+const mgBridge = {
   bpm: () => BPM,
   send(notes, beats) {
     const el = selPat && selPat.isConnected ? selPat : (lastPat && lastPat.isConnected ? lastPat : null);
@@ -1562,7 +1563,10 @@ setMgchordBridge({
     toast(msg);
     return {ok: true, msg};
   }
-});
+};
+setMgchordBridge(mgBridge);
+// Printer (Melody Printer, disembunyikan lihat PRINTER_HIDDEN): TEAR OFF mengirim nada ke pattern yang dipilih, memakai jalur kirim yang sama dengan MGCHORD
+setPrinterBridge({bpm: () => BPM, send: (notes, beats) => mgBridge.send(notes, beats)});
 // Drums: step sequencer membaca / menulis nada pattern yang sedang dipilih di timeline (track harus punya plugin Drums)
 {
   const drumsPat = () => { const el = selPat && selPat.isConnected ? selPat : (lastPat && lastPat.isConnected ? lastPat : null); return el && !el.dataset.clip && !el.dataset.auId && isDrumsTrack(el.parentElement.dataset.track) ? el : null; };

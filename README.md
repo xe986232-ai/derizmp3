@@ -225,3 +225,17 @@ Knob Speed DERIZ sekarang 0.25× (slow) sampai 4× (speed), tengah tetap 1×, sk
 Project lama otomatis dikonversi saat dibuka (penanda `spr` di knob DERIZ, `derizImport` di `src/fx-rack.ts`), jadi kecepatan yang tersimpan tetap terdengar sama. Sync all sample (`src/main.ts`) ikut memakai batas baru.
 Catatan: Automation Clip yang menggerakkan knob Speed di project lama menyimpan posisi knob (0-1), bukan kecepatan, jadi kurvanya perlu dicek ulang.
 Tes: `node --experimental-transform-types tools/deriz-speed-test.ts` (skala knob, konversi project lama, worklet bersih di 0.25× / 1× / 4×).
+
+## Printer (Melody Printer): vokal -> melody MIDI  [DISEMBUNYIKAN]
+Plugin yang "mencetak" melodi vokal. Upload / rekam vokal solo -> pitch dianalisis (Worker MPCS yang sama) -> nada dibulatkan penuh ke semiton (tanpa knob: setara Lock 100% / Human 0% / Glide 0%) -> dicetak di kertas: print head bergeser kiri-kanan mengikuti pitch (sumbu x), kertas keluar ke bawah mengikuti waktu (sumbu y). Seret / roda mouse untuk menggulung kertas.
+
+**Status: tersembunyi dari publik.** Kartunya tidak ada di daftar tombol + (halaman Plugin) pada build produksi. Penanda ada di `src/printer.ts`:
+```ts
+export const PRINTER_HIDDEN: boolean = !import.meta.env.DEV;   // true di build produksi; terlihat hanya di `npm run dev`
+```
+Untuk membukanya ke publik nanti: ubah menjadi `false` (satu-satunya perubahan yang dibutuhkan; bridge, kartu, dan gaya sudah terpasang). Seperti Drums (`DRUMS_HIDDEN`), kode dan project yang sudah berisi kartu Printer tetap jalan.
+
+Tombol: **REC** (rekam mik), **PLAY** (cetak sepanjang durasi sambil membunyikan nadanya), **PRINT** (cetak ulang), **TEAR OFF** (kirim nada ke pattern yang dipilih di timeline, lewat jalur kirim yang sama dengan MGCHORD), **.MID** (unduh file MIDI). Opsi: BPM (awal mengikuti proyek), Grid (kuantisasi ritme 1/8 / 1/16, bawaan Off), Key (kunci ke tangga nada, bawaan Off), FAST / LIVE (kecepatan cetak). Filter bawaan: nada < 60 ms dibuang, nada sama yang berdempetan (jeda <= 40 ms) digabung, monofonik.
+
+Kode: `src/printer-midi.ts` (mesin murni: nada -> nada MIDI -> file .mid, tanpa DOM), `src/printer.ts` (jendela + animasi), `src/printer-sfx.ts` (suara dot-matrix, Web Audio), blok "PRINTER" di `src/styles.css`, kartu di `src/fx-rack.ts`, bridge di `src/main.ts`.
+Tes: `node tools/printer-midi.ts` (vokal sintetis -> nada benar; file .mid ditulis lalu dibaca balik dan harus sama persis; kasus tepi).
