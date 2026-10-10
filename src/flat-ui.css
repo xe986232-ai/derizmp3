@@ -355,6 +355,10 @@ html[data-uistyle="flat"] .hist-btn:active:not(:disabled){transform:none;backgro
 html[data-uistyle="flat"] .hist-btn:disabled{opacity:1;background:var(--flat-ap-grid);color:var(--flat-ap-text2)}
 html[data-uistyle="flat"] .tp__btn .ico,
 html[data-uistyle="flat"] .tp .play .ico{width:18px;height:18px}
+/* tombol tengah transport (Mundur, Putar/Jeda, Maju cepat): warna isi = waveform / note tema Flat (--flat-ap-note, abu arang), ikon krem */
+html[data-uistyle="flat"] .tp__mid .tp__btn{background:var(--flat-ap-note);border-color:var(--flat-ap-note);color:var(--flat-ap-inverse)}
+html[data-uistyle="flat"] .tp__mid .tp__btn:hover{background:color-mix(in srgb,var(--flat-ap-note) 82%,var(--flat-ap-inverse));border-color:var(--flat-ap-note)}
+html[data-uistyle="flat"] .tp__mid .tp__btn:active{background:color-mix(in srgb,var(--flat-ap-note) 78%,var(--flat-ap-text))}
 html[data-uistyle="flat"] .pitch-btn.is-on{background:var(--flat-ap-accent);border-color:var(--flat-ap-accent);color:var(--flat-ap-text)}
 html[data-uistyle="flat"] .pitch-btn.is-on:hover:not(:disabled){background:var(--flat-ap-accent);border-color:var(--flat-ap-accent)}
 html[data-uistyle="flat"] .pitch-btn[aria-expanded="true"]{border-color:var(--flat-ap-text)}
