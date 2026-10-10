@@ -1615,6 +1615,20 @@ const INSTRUMENTS = [
 // Gaya UI Flat: track baru memakai warna palet Flat menurut jenisnya (audio = oranye, instrumen / MIDI = lavender, drum = teal); track lama & project tersimpan tidak berubah
 const FLAT_INS_COLOR = {'Audio clip': '#F5A044', 'Drums': '#5B9F9A'};
 const flatIns = ins => (ins && isFlat()) ? {...ins, c: FLAT_INS_COLOR[ins.n] || '#B98AD0'} : ins;
+// Gaya UI Flat: warna track yang masih warna bawaan tema lama (neon: biru, teal, ungu, dst) diganti ke warna palet Flat menurut jenis track (audio = oranye, drum = teal, lainnya = lavender).
+// Warna yang sudah dari palet Flat / pilihan sendiri tidak disentuh. Dipakai untuk track bawaan, project tersimpan, dan saat pindah ke tema Flat.
+const LEGACY_TRACK_COLORS = new Set(['#ff5c9e', '#a66cff', '#5b8ff3', '#2dd4bf', '#3fbf5f', '#f2b632', '#ff8a4c', '#ef4444', '#14b8a6', '#5b3de8', '#22c7e8', '#f59e0b', '#facc15', '#ffffff', '#000000']);
+const flatColor = (c, ins) => (isFlat() && c && LEGACY_TRACK_COLORS.has(String(c).trim().toLowerCase())) ? (FLAT_INS_COLOR[ins] || '#B98AD0') : c;
+function flatRecolorTracks() {
+  if (!isFlat()) return;
+  document.querySelectorAll('.trkcard-wrap').forEach(cont => {
+    const cur = cont.style.getPropertyValue('--track-color').trim(), nc = flatColor(cur, cont.dataset.ins);
+    if (!cur || nc === cur) return;
+    cont.style.setProperty('--track-color', nc);
+    const lane = laneOfTrack(cont.dataset.track); if (lane) lane.style.setProperty('--track-color', nc);
+  });
+}
+window.addEventListener('derizmp3:ui', flatRecolorTracks);
 let addMenu = null, addBtn = null;
 let trackSeq = Math.max(1, ...[...document.querySelectorAll('.trkcard-wrap')].map(c => +c.dataset.track));
 function closeAddMenu(instant) {
@@ -2410,6 +2424,7 @@ document.addEventListener('keydown', e => {   // Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shi
 histCur = histCapture(); histSync();
 
 initTrackMeters();   // meter level stereo di card track
+flatRecolorTracks();   // tema Flat: track bawaan memakai warna palet Flat
 
 // ===== Simpan / buka file project (menu kanan atas) =====
 // Disimpan: BPM, panjang timeline, track (jenis, nama, warna, volume, on/off), pattern (posisi, lebar, judul), nada piano roll
@@ -2503,7 +2518,7 @@ async function projectRestore(rec) {
   const trMap = {}, pending = [], pendingAuto = [];
   for (const t of d.tracks || []) {
     t.name = t.name || t.ins || 'Track'; t.vol = Number.isFinite(+t.vol) && t.vol !== null && t.vol !== '' ? +t.vol : 100;   // project lama / rusak: nama & volume tidak boleh jadi "undefined"
-    addTrack({n: t.ins, c: t.color || COLORS[0]});
+    addTrack({n: t.ins, c: flatColor(t.color || COLORS[0], t.ins)});
     const id = String(trackSeq); trMap[t.id] = id;
     const cont = document.querySelector('.trkcard-wrap[data-track="' + id + '"]'), lane = lanesEl.querySelector('.lane[data-track="' + id + '"]');
     document.getElementById('track-name-' + id).textContent = t.name;

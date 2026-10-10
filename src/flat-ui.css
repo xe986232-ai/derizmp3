@@ -302,6 +302,9 @@ html[data-uistyle="flat"] .playhead-head svg{display:none}
 html[data-uistyle="flat"] .playhead-head::after{content:"";display:block;width:10px;height:10px;background:currentColor;clip-path:polygon(0 0,100% 0,50% 100%)}
 html[data-uistyle="flat"] .pattern__ph{width:2px}
 
+/* Waveform & note: di tema Flat selalu warna palet gambar (abu gelap #454545); pilihan Pengaturan "Black" tidak menimpa di sini */
+html[data-uistyle="flat"]:root[data-wf="black"]{--note-fill:var(--flat-ap-note);--wave-fill:var(--flat-ap-note)}
+
 /* ---------- 12. Clip (MIDI = warna track lavender, audio = oranye; note & waveform gelap) ---------- */
 html[data-uistyle="flat"] .pattern{
   --flat-clip:var(--pat-color,var(--track-color,var(--flat-ap-lavender)));
