@@ -233,6 +233,8 @@ Plugin yang "mencetak" melodi vokal. Upload / rekam vokal solo -> pitch dianalis
 ```ts
 export const PRINTER_HIDDEN: boolean = !import.meta.env.DEV;   // true di build produksi; terlihat hanya di `npm run dev`
 ```
+**Cara membuka (rahasia, tanpa petunjuk di layar):** buka tab **Effect** di panel efek, lalu **tekan-tahan tombol +** sekitar 1,5 detik. Printer langsung ditambahkan ke track yang dipilih dan jendelanya terbuka (kalau sudah ada, jendelanya yang dibuka). Kartunya sendiri tampil di tab **Plugin**. Di tab Plugin, tekan-tahan + tetap untuk MGCHORD.
+
 Untuk membukanya ke publik nanti: ubah menjadi `false` (satu-satunya perubahan yang dibutuhkan; bridge, kartu, dan gaya sudah terpasang). Seperti Drums (`DRUMS_HIDDEN`), kode dan project yang sudah berisi kartu Printer tetap jalan.
 
 Tombol: **REC** (rekam mik), **PLAY** (cetak sepanjang durasi sambil membunyikan nadanya), **PRINT** (cetak ulang), **TEAR OFF** (kirim nada ke pattern yang dipilih di timeline, lewat jalur kirim yang sama dengan MGCHORD), **.MID** (unduh file MIDI). Opsi: BPM (awal mengikuti proyek), Grid (kuantisasi ritme 1/8 / 1/16, bawaan Off), Key (kunci ke tangga nada, bawaan Off), FAST / LIVE (kecepatan cetak). Filter bawaan: nada < 60 ms dibuang, nada sama yang berdempetan (jeda <= 40 ms) digabung, monofonik.

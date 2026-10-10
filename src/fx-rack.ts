@@ -1008,15 +1008,19 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     el.querySelector<HTMLButtonElement>('.fx-pick__item:not(:disabled)')?.focus({ preventScroll: true });
   };
 
-  // Rahasia: tekan-tahan "+" di tab Plugin (~1,5 detik) langsung menambahkan MGCHORD (atau membukanya kalau sudah ada); tidak ada petunjuk di layar.
+  // Rahasia (tidak ada petunjuk di layar): tekan-tahan "+" ~1,5 detik.
+  //  - tab Plugin: menambahkan MGCHORD (atau membukanya kalau sudah ada)
+  //  - tab Effect: menambahkan PRINTER (atau membukanya kalau sudah ada); Printer disembunyikan dari daftar + (PRINTER_HIDDEN)
   let holdT = 0, held = false;
   const holdStop = () => { clearTimeout(holdT); holdT = 0; };
   addBtn.addEventListener('pointerdown', () => {
     held = false; holdStop();
-    if (page !== 'plugin' || !cur || addBtn.disabled) return;
+    if (!cur || addBtn.disabled) return;
+    const secret: FxType = page === 'plugin' ? 'mgchord' : 'printer';
     holdT = window.setTimeout(() => {
       held = true; holdT = 0; closePicker();
-      if (fxs().some(f => f.type === 'mgchord')) openMg(); else addEffect('mgchord');
+      if (fxs().some(f => f.type === secret)) { if (secret === 'printer') openPrinter(); else openMg(); }
+      else addEffect(secret);
     }, 1500);
   });
   addBtn.addEventListener('pointerup', holdStop);
