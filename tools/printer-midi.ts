@@ -130,5 +130,19 @@ ok(r[1].p === 72, 'nada panjang di oktaf lain dibiarkan (lompatan melodi sungguh
 r = notesToPrint([N(0, 50, 60), N(55, 70, 72), N(75, 130, 67)], P, { bpm: 120 });      // tetangga berjauhan (60 vs 67): bukan pola salah oktaf
 ok(r[1].p === 72, 'lompatan oktaf dengan tetangga berjauhan dibiarkan');
 
+// ---- 6) pencilan konteks: nada pendek yang jauh dari sekitarnya (salah harmonik / noise) ----
+const melody = [N(0, 40, 64), N(50, 90, 66), N(100, 140, 68), N(150, 190, 66), N(200, 240, 64)];   // 400 ms tiap nada, sekitar E4-G#4
+r = notesToPrint([...melody.slice(0, 2), N(92, 98, 64 + 19), ...melody.slice(2)], P, { bpm: 120 });   // 60 ms, tepat 19 semiton (harmonik ke-3) di atas konteks
+ok(r.length === 5 && r.every(n => n.p >= 64 && n.p <= 68), `salah harmonik ke-3 (+19) dilipat ke konteks (${r.map(n => n.p).join(',')})`);
+r = notesToPrint([...melody.slice(0, 2), N(92, 98, 64 - 19), ...melody.slice(2)], P, { bpm: 120 });   // sub-harmonik (-19)
+ok(r.length === 5 && r.every(n => n.p >= 64 && n.p <= 68), `salah sub-harmonik (-19) dilipat ke konteks (${r.map(n => n.p).join(',')})`);
+r = notesToPrint([...melody.slice(0, 2), N(92, 98, 64 + 15), ...melody.slice(2)], P, { bpm: 120 });   // 15 semiton: bukan kelipatan harmonik, tak didukung -> noise, dibuang
+ok(r.length === 5 && r.every(n => n.p >= 64 && n.p <= 68), `nada pencilan pendek tanpa pendukung (bukan harmonik) dibuang (${r.map(n => n.p).join(',')})`);
+r = notesToPrint([N(0, 50, 60), N(60, 110, 60), N(120, 170, 60), N(180, 230, 60), N(240, 290, 60), N(300, 350, 72)], P, { bpm: 120 });   // 72: 500 ms, panjang -> tak disentuh
+ok(r[r.length - 1].p === 72, 'nada panjang (>= 350 ms) tidak pernah dibuang atau dilipat');
+const low = [N(0, 20, 52), N(25, 45, 52), N(50, 70, 52), N(75, 95, 52), N(100, 120, 52), N(125, 145, 52), N(150, 170, 52)];   // bagian rendah yang sah: banyak nada pendek sepitch saling mendukung
+r = notesToPrint([...low, N(172, 220, 71)], P, { bpm: 120 });
+ok(r.filter(n => n.p === 52).length >= 6, `bagian rendah yang sah (banyak nada pendek sepitch) tidak dibuang (${r.filter(n => n.p === 52).length} nada)`);
+
 console.log(fails ? `\n${fails} tes GAGAL` : '\nSemua tes lulus');
 process.exit(fails ? 1 : 0);

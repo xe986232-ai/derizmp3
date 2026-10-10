@@ -60,13 +60,35 @@ export function notesToPrint(notes: Note[], pt: PitchTrack, o: PrintOpts): Print
     if (L && L.p === r.p && (r.t0 - L.t1) * 1000 <= gapMs && !hasDip(L, r)) { L.rms = (L.rms * (L.t1 - L.t0) + r.rms * (r.t1 - r.t0)) / Math.max(1e-9, r.t1 - L.t0); L.t1 = Math.max(L.t1, r.t1); L.ef = Math.max(L.ef, r.ef); }
     else mg.push({ ...r });
   }
-  // lompatan oktaf palsu: nada pendek yang tepat satu oktaf di atas / bawah DUA tetangganya (yang sendiri berdekatan) hampir pasti salah oktaf dari tracker -> dilipat ke oktaf tetangga
-  for (let i = 1; i + 1 < mg.length; i++) {
-    const a = mg[i - 1], c = mg[i], b = mg[i + 1];
-    if (c.t1 - c.t0 >= 0.25 || c.t0 - a.t1 > 0.35 || b.t0 - c.t1 > 0.35 || Math.abs(a.p - b.p) > 4) continue;
-    const d1 = c.p - a.p, d2 = c.p - b.p;
-    if (Math.abs(d1) >= 10 && Math.abs(d1) <= 14 && Math.abs(d2) >= 10 && Math.abs(d2) <= 14 && Math.sign(d1) === Math.sign(d2)) c.p = clamp(c.p - 12 * Math.sign(d1), 0, 127);
+  // Nada pendek yang jauh dari konteksnya (nada-nada di sekitarnya, +-1,2 detik) hampir pasti salah deteksi tracker:
+  //   - selisihnya pas kelipatan harmonik (12 = oktaf, 19 = harmonik ke-3, 24 = dua oktaf) dan hasil lipatannya jatuh dekat konteks -> tracker mengunci harmonik / sub-harmonik: dilipat
+  //   - selain itu (napas, konsonan, desis, getaran noise terbaca sebagai nada: E6, A1, dst) dan nyaris tak didukung nada lain yang sepitch di sekitarnya -> dibuang
+  // Nada panjang (>= 350 ms) tidak pernah disentuh: itu lompatan melodi sungguhan. Bagian yang memang rendah / tinggi aman karena banyak nada lain yang sepitch mendukungnya.
+  const CTX = 1.2, SHORT = 0.35;
+  const mid = (r: { t0: number; t1: number }): number => (r.t0 + r.t1) / 2;
+  const drop = new Set<number>();
+  for (let i = 0; i < mg.length; i++) {
+    const c = mg[i]; if (c.t1 - c.t0 >= SHORT) continue;
+    const ctx: { p: number; l: number }[] = []; let support = 0;
+    for (let j = 0; j < mg.length; j++) { if (j === i || drop.has(j) || Math.abs(mid(mg[j]) - mid(c)) > CTX) continue; const l = mg[j].t1 - mg[j].t0; ctx.push({ p: mg[j].p, l }); if (Math.abs(mg[j].p - c.p) <= 2) support += l; }
+    if (ctx.length < 2) continue;
+    ctx.sort((a, b) => a.p - b.p);
+    let tot = 0; for (const k of ctx) tot += k.l;
+    let acc = 0, med = ctx[0].p; for (const k of ctx) { acc += k.l; if (acc >= tot / 2) { med = k.p; break; } }   // median berbobot panjang nada
+    const d = c.p - med;
+    if (Math.abs(d) < 9) continue;
+    const lone = support < 0.5;   // hampir tak ada nada lain yang sepitch di sekitarnya
+    let folded = false;
+    if (c.t1 - c.t0 < 0.25 || lone) {
+      for (const sh of [12, 19, 24]) {
+        if (Math.abs(Math.abs(d) - sh) > 1.5) continue;
+        const np = c.p - Math.sign(d) * sh;
+        if (Math.abs(np - med) <= 3) { c.p = clamp(np, 0, 127); folded = true; break; }
+      }
+    }
+    if (!folded && lone) drop.add(i);
   }
+  for (let i = mg.length - 1; i >= 0; i--) if (drop.has(i)) mg.splice(i, 1);
   // velocity: rms dinormalkan ke nada terkeras, dipetakan 40..120
   const peak = Math.max(1e-9, ...mg.map(r => r.rms));
   const spb = 60 / bpm;   // detik per ketukan
