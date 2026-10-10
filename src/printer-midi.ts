@@ -9,7 +9,7 @@ export interface PrintOpts {
   bpm: number;
   minMs?: number;       // nada lebih pendek dari ini dibuang (bawaan 60 ms)
   mergeGapMs?: number;  // dua nada sama berurutan dengan jeda <= ini digabung (bawaan 40 ms)
-  grid?: number;        // 0 / kosong = tanpa kuantisasi ritme; 0.25 = 1/16, 0.5 = 1/8 (dalam ketukan)
+  grid?: number;        // 0 / kosong = tanpa kuantisasi ritme; selain itu awal DAN akhir tiap nada menempel ke garis grid terdekat (dalam ketukan: 1 = 1/4, 0.5 = 1/8, 0.25 = 1/16, 0.125 = 1/32)
   scale?: { root: number; mode: 'major' | 'minor' } | null;   // kunci ke tangga nada (opsional)
 }
 
@@ -53,12 +53,24 @@ export function notesToPrint(notes: Note[], pt: PitchTrack, o: PrintOpts): Print
   // velocity: rms dinormalkan ke nada terkeras, dipetakan 40..120
   const peak = Math.max(1e-9, ...mg.map(r => r.rms));
   const spb = 60 / bpm;   // detik per ketukan
-  const out: PrintNote[] = [];
+  const g = o.grid && o.grid > 0 ? o.grid : 0;
+  const snap = (x: number): number => Math.round(Math.round(x / g) * g * 1e9) / 1e9;   // garis grid terdekat (dibulatkan 1e-9 supaya tidak ada sisa desimal)
+  const vel = (rms: number): number => Math.round(clamp(40 + 80 * Math.sqrt(rms / peak), 1, 127));
+  const out: PrintNote[] = [], raw0: number[] = [];   // raw0 = panjang asli (detik) tiap nada di out, untuk memilih pemenang kalau dua nada jatuh di langkah grid yang sama
   for (const r of mg) {
     let s = r.t0 / spb, e = r.t1 / spb;
-    if (o.grid && o.grid > 0) { s = Math.round(s / o.grid) * o.grid; e = Math.max(s + o.grid, Math.round(e / o.grid) * o.grid); }
+    if (g) {
+      // tiap nada menempel di grid terdekat: awal dan akhir sama-sama dibulatkan, panjang minimal satu langkah, jadi semua nada tepat di garis grid (tanpa geser / delay)
+      s = snap(s); e = snap(e); if (e < s + g - 1e-9) e = s + g;
+      const L = out[out.length - 1];
+      if (L && L.s >= s - 1e-9) {   // dua nada jatuh di langkah grid yang sama (suara tunggal): pitch sama digabung, pitch beda -> yang aslinya lebih panjang menang
+        if (L.p === r.p) L.l = Math.max(L.l, e - L.s);
+        else if (r.t1 - r.t0 > raw0[raw0.length - 1]) { out[out.length - 1] = { p: r.p, s: L.s, l: Math.max(e - L.s, g), v: vel(r.rms) }; raw0[raw0.length - 1] = r.t1 - r.t0; }
+        continue;
+      }
+    }
     const l = e - s; if (l <= 1e-6) continue;
-    out.push({ p: r.p, s, l, v: Math.round(clamp(40 + 80 * Math.sqrt(r.rms / peak), 1, 127)) });
+    out.push({ p: r.p, s, l, v: vel(r.rms) }); raw0.push(r.t1 - r.t0);
   }
   // satu suara saja: potong nada yang menimpa nada berikutnya
   for (let i = 0; i + 1 < out.length; i++) { const lim = out[i + 1].s - out[i].s; if (out[i].l > lim) out[i].l = Math.max(1e-3, lim); }

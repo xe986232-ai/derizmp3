@@ -91,5 +91,28 @@ ok(r[0].p === 60, 'opsi scale dipakai di notesToPrint');
 ok(notesToPrint([], P, { bpm: 120 }).length === 0 && readMidiFile(writeMidiFile([], 120)).notes.length === 0, 'tanpa nada: daftar kosong, file tetap valid');
 ok(notesToPrint([N(0, 50, 200)], P, { bpm: 120 })[0].p === 127, 'pitch di luar jangkauan dijepit ke 0..127');
 
+// ---- 4) snap ke grid: awal DAN akhir tiap nada harus tepat di garis grid terdekat ----
+const onGrid = (x: number, g: number): boolean => Math.abs(x / g - Math.round(x / g)) < 1e-6;
+for (const g of [1, 0.5, 0.25, 0.125]) {
+  const q = notesToPrint(notes, pt, { bpm: BPM, grid: g });
+  ok(q.length > 0 && q.every(n => onGrid(n.s, g) && onGrid(n.l, g) && n.l >= g - 1e-9), `vokal sintetis @grid ${g}: semua awal & panjang kelipatan grid, panjang >= 1 langkah (${q.length} nada)`);
+  ok(q.every((n, i) => i === 0 || n.s >= q[i - 1].s + q[i - 1].l - 1e-9) && q.every((n, i) => i === 0 || n.s > q[i - 1].s), `vokal sintetis @grid ${g}: urut, tidak ada nada menimpa / bertumpuk`);
+}
+const q16 = notesToPrint(notes, pt, { bpm: BPM, grid: 0.25 });
+ok(truth.every((t, i) => q16[i] && Math.abs(q16[i].s - Math.round(t.t0 / spb / 0.25) * 0.25) <= 0.25 + 1e-9), 'awal tiap nada paling jauh satu langkah (1/16) dari posisi aslinya, tidak melenceng lebih');
+// jitter manusia: 0.49 s / 1.51 s / 2.48 s @120 BPM = 0.98 / 3.02 / 4.96 ketukan -> harus 1.0 / 3.0 / 5.0
+r = notesToPrint([N(49, 99, 60), N(151, 199, 62), N(248, 298, 64)], P, { bpm: 120, grid: 0.25 });
+ok(r.map(n => n.s).join() === '1,3,5' && r.every(n => onGrid(n.l, 0.25)), `onset yang sedikit meleset menempel ke grid terdekat: ${r.map(n => n.s).join(', ')}`);
+// dua nada beda pitch jatuh di langkah yang sama (suara tunggal): yang aslinya lebih panjang menang, tidak ada nada 0.001 ketukan
+r = notesToPrint([N(100, 120, 60), N(105, 150, 64)], P, { bpm: 120, grid: 0.25 });
+ok(r.length === 1 && r[0].p === 64 && r[0].s === 2 && onGrid(r[0].l, 0.25), `tabrakan di langkah grid yang sama: satu nada tersisa (p=${r[0]?.p}, s=${r[0]?.s})`);
+r = notesToPrint([N(100, 150, 64), N(105, 120, 60)], P, { bpm: 120, grid: 0.25 });
+ok(r.length === 1 && r[0].p === 64, 'tabrakan: urutan masuk tidak mempengaruhi pemenang (yang lebih panjang)');
+// nada pendek tetap minimal satu langkah dan panjang dipotong ke awal nada berikutnya (keduanya di grid)
+r = notesToPrint([N(0, 8, 60), N(8, 50, 62)], P, { bpm: 120, grid: 0.5 });
+ok(r.length >= 1 && r.every(n => onGrid(n.s, 0.5) && onGrid(n.l, 0.5) && n.l >= 0.5 - 1e-9), 'nada sangat pendek diperpanjang ke minimal 1 langkah dan tetap di grid');
+const free = notesToPrint(notes, pt, { bpm: BPM, grid: 0 });
+ok(free.some(n => !onGrid(n.s, 0.25)), 'grid Off: waktu asli tidak diubah (tidak dipaksa ke grid)');
+
 console.log(fails ? `\n${fails} tes GAGAL` : '\nSemua tes lulus');
 process.exit(fails ? 1 : 0);

@@ -42,7 +42,7 @@ const ICON = {
 };
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = (m: number): string => NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
-const MUTE_KEY = 'derizmp3.printerMute', VOX_KEY = 'derizmp3.printerVocal', VOL_KEY = 'derizmp3.printerVocalVol';
+const MUTE_KEY = 'derizmp3.printerMute', VOX_KEY = 'derizmp3.printerVocal', VOL_KEY = 'derizmp3.printerVocalVol', GRID_KEY = 'derizmp3.printerGrid';
 
 interface Sess { name: string; pt: PitchTrack; notes: Note[]; buf: AudioBuffer }   // buf: audio asli (diputar bareng nadanya)
 let root: HTMLElement | null = null, openFn: (() => void) | null = null;
@@ -78,7 +78,7 @@ function build(): void {
       '</div>' +
       '<div class="prn__opts">' +
         '<label>BPM<input type="number" class="prn__bpm" min="30" max="300" step="1" inputmode="numeric" value="120"></label>' +
-        '<label>Grid<select class="prn__grid"><option value="0">Off</option><option value="0.5">1/8</option><option value="0.25">1/16</option></select></label>' +
+        '<label>Grid<select class="prn__grid"><option value="0">Off</option><option value="1">1/4</option><option value="0.5">1/8</option><option value="0.25" selected>1/16</option><option value="0.125">1/32</option></select></label>' +
         `<label>Key<select class="prn__key">${keyOpts}</select></label>` +
         '<label>Cetak<button type="button" class="prn__spd" title="Kecepatan cetak: FAST = beberapa detik, LIVE = sepanjang durasi vokal" aria-pressed="false">FAST</button></label>' +
       '</div>' +
@@ -98,6 +98,8 @@ function build(): void {
   const win = q<HTMLElement>('.prn__win'), stat = q('.prn__stat'), stage = q('.prn__stage'), cv = q<HTMLCanvasElement>('.prn__cv'), g = cv.getContext('2d')!;
   const drop = q<HTMLButtonElement>('.prn__drop'), file = q<HTMLInputElement>('.prn__file');
   const bpmIn = q<HTMLInputElement>('.prn__bpm'), gridSel = q<HTMLSelectElement>('.prn__grid'), keySel = q<HTMLSelectElement>('.prn__key'), spdBtn = q<HTMLButtonElement>('.prn__spd'), voxBtn = q<HTMLButtonElement>('.prn__vox');
+  try { const gv = localStorage.getItem(GRID_KEY); if (gv !== null && [...gridSel.options].some(o => o.value === gv)) gridSel.value = gv; } catch { /* abaikan */ }   // grid bawaan 1/16 (nada selalu menempel ke grid)
+  const gridV = (): number => parseFloat(gridSel.value) || 0;
   const track = q<HTMLElement>('.prn__track'), tcEl = q('.prn__tc'), ttEl = q('.prn__tt'), volIn = q<HTMLInputElement>('.prn__vol'), pctEl = q('.prn__pct'), mixEl = q('.prn__mix');
   const recBtn = q<HTMLButtonElement>('.prn__rec'), playBtn = q<HTMLButtonElement>('.prn__play'), printBtn = q<HTMLButtonElement>('.prn__print'), tearBtn = q<HTMLButtonElement>('.prn__tear'), midBtn = q<HTMLButtonElement>('.prn__midi'), muteBtn = q<HTMLButtonElement>('.prn__mute');
   dragWindow({ root: el, move: win, handle: '.prn__head' });
@@ -161,7 +163,7 @@ function build(): void {
   function rebuild(): void {
     if (!S) { P = []; total = 0; return; }
     const kv = keySel.value, [r, m] = kv === 'off' ? [0, ''] : kv.split('-');
-    P = notesToPrint(S.notes, S.pt, { bpm: bpm(), grid: parseFloat(gridSel.value) || 0, scale: kv === 'off' ? null : { root: +r, mode: m as 'major' | 'minor' } });
+    P = notesToPrint(S.notes, S.pt, { bpm: bpm(), grid: gridV(), scale: kv === 'off' ? null : { root: +r, mode: m as 'major' | 'minor' } });
     total = P.length ? Math.max(...P.map(n => n.s + n.l)) : 0;
     if (P.length) { lo = Math.min(...P.map(n => n.p)) - 1; hi = Math.max(...P.map(n => n.p)) + 1; if (hi - lo < 14) { const c = (hi + lo) / 2; lo = Math.floor(c - 7); hi = lo + 14; } }
     ink = P.length ? Math.min(1, P.length / 3) : 0;
@@ -198,6 +200,14 @@ function build(): void {
     g.fillStyle = 'rgba(80,110,160,.1)'; g.fillRect(pl + 18, py, 1, H - py); g.fillRect(pr - 19, py, 1, H - py);
     // garis tiap nada C
     if (S && P.length) {
+      // garis grid: tiap langkah grid (lebih tebal tiap ketukan, paling tebal tiap bar) supaya terlihat nada menempel di grid
+      const gs = gridV() || 1;
+      for (let b = Math.max(0, Math.floor((TB - (H - py) / K) / gs) * gs); b <= TB + 1e-9; b = Math.round((b + gs) * 1e6) / 1e6) {
+        const y = py + (TB - b) * K; if (y < py || y > H) continue;
+        const beat = Math.abs(b - Math.round(b)) < 1e-6, bar = beat && Math.round(b) % 4 === 0;
+        g.fillStyle = bar ? 'rgba(80,110,160,.32)' : beat ? 'rgba(80,110,160,.18)' : 'rgba(80,110,160,.08)';
+        g.fillRect(pl + 18, Math.round(y), pr - pl - 36, 1);
+      }
       g.font = '600 9px system-ui,sans-serif'; g.textAlign = 'center';
       for (let p = lo; p <= hi; p++) if (p % 12 === 0) { const x = xOfP(p) + colW() / 2; g.fillStyle = 'rgba(80,110,160,.2)'; g.fillRect(x, py, 1, H - py); g.fillStyle = 'rgba(80,110,160,.55)'; g.fillText(noteName(p), x, py + 12); }
       // nada tercetak: baris paling baru ada di celah, makin lama makin turun
@@ -358,7 +368,7 @@ function build(): void {
 
   // ---------- event ----------
   const reprint = (): void => { if (!S) return; stopAnim(); rebuild(); TB = total; pos = total * 60 / bpm(); enable(); info(); draw(); updProg(); };
-  bpmIn.addEventListener('change', reprint); gridSel.addEventListener('change', reprint); keySel.addEventListener('change', reprint);
+  bpmIn.addEventListener('change', reprint); gridSel.addEventListener('change', () => { try { localStorage.setItem(GRID_KEY, gridSel.value); } catch { /* abaikan */ } reprint(); }); keySel.addEventListener('change', reprint);
   spdBtn.addEventListener('click', () => { live = !live; spdBtn.textContent = live ? 'LIVE' : 'FAST'; spdBtn.setAttribute('aria-pressed', String(live)); });
   voxBtn.addEventListener('click', () => { vox = !vox; if (vox && vol === 0) vol = 0.8; try { localStorage.setItem(VOL_KEY, String(Math.round(vol * 100))); } catch { /* abaikan */ } try { localStorage.setItem(VOX_KEY, vox ? '1' : '0'); } catch { /* abaikan */ } syncVox(); });   // bisa diganti saat sedang PLAY
   drop.addEventListener('click', () => file.click());
