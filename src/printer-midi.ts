@@ -31,7 +31,7 @@ const clamp = (x: number, a: number, b: number): number => Math.max(a, Math.min(
 export function notesToPrint(notes: Note[], pt: PitchTrack, o: PrintOpts): PrintNote[] {
   const bpm = o.bpm > 0 ? o.bpm : 120, minMs = o.minMs ?? 60, gapMs = o.mergeGapMs ?? 40;
   const fs = pt.hop / pt.sr;   // detik per frame
-  const raw: { p: number; t0: number; t1: number; rms: number }[] = [];
+  const raw: { p: number; t0: number; t1: number; rms: number; sf: number; ef: number }[] = [];   // sf / ef = frame awal / akhir (untuk cek energi di celah)
   for (const n of notes) {
     const t0 = n.s * fs, t1 = n.e * fs;
     if ((t1 - t0) * 1000 < minMs) continue;
@@ -40,15 +40,32 @@ export function notesToPrint(notes: Note[], pt: PitchTrack, o: PrintOpts): Print
     p = clamp(p, 0, 127);
     let sum = 0, c = 0;
     for (let f = n.s; f < n.e && f < pt.rms.length; f++) { sum += pt.rms[f]; c++; }
-    raw.push({ p, t0, t1, rms: c ? sum / c : 0 });
+    raw.push({ p, t0, t1, rms: c ? sum / c : 0, sf: n.s, ef: n.e });
   }
   raw.sort((a, b) => a.t0 - b.t0);
-  // gabung nada sama yang berdempetan (tracker kadang memotong satu nada panjang jadi dua)
+  // Lembah energi di antara dua nada = penyanyi mengulang nada ("ta-ta-ta"), BUKAN satu nada yang dipotong tracker. Energi di celah jatuh di bawah separuh tepinya.
+  const lev = pt.env ?? pt.rms;
+  const peakAt = (a: number, b: number): number => { let m = 0; for (let f = Math.max(0, a); f <= Math.min(lev.length - 1, b); f++) if (lev[f] > m) m = lev[f]; return m; };
+  const hasDip = (L: { ef: number }, R: { sf: number }): boolean => {
+    const lo = Math.max(0, L.ef - 1), hi = Math.min(lev.length - 1, R.sf + 1);
+    if (hi < lo) return false;
+    let mn = Infinity; for (let f = lo; f <= hi; f++) if (lev[f] < mn) mn = lev[f];
+    const edge = Math.min(peakAt(L.ef - 5, L.ef - 1), peakAt(R.sf, R.sf + 4));
+    return edge > 0 && mn < 0.5 * edge;
+  };
+  // gabung nada sama yang berdempetan (tracker kadang memotong satu nada panjang jadi dua), kecuali ada lembah energi di antaranya
   const mg: typeof raw = [];
   for (const r of raw) {
     const L = mg[mg.length - 1];
-    if (L && L.p === r.p && (r.t0 - L.t1) * 1000 <= gapMs) { L.rms = (L.rms * (L.t1 - L.t0) + r.rms * (r.t1 - r.t0)) / Math.max(1e-9, r.t1 - L.t0); L.t1 = Math.max(L.t1, r.t1); }
+    if (L && L.p === r.p && (r.t0 - L.t1) * 1000 <= gapMs && !hasDip(L, r)) { L.rms = (L.rms * (L.t1 - L.t0) + r.rms * (r.t1 - r.t0)) / Math.max(1e-9, r.t1 - L.t0); L.t1 = Math.max(L.t1, r.t1); L.ef = Math.max(L.ef, r.ef); }
     else mg.push({ ...r });
+  }
+  // lompatan oktaf palsu: nada pendek yang tepat satu oktaf di atas / bawah DUA tetangganya (yang sendiri berdekatan) hampir pasti salah oktaf dari tracker -> dilipat ke oktaf tetangga
+  for (let i = 1; i + 1 < mg.length; i++) {
+    const a = mg[i - 1], c = mg[i], b = mg[i + 1];
+    if (c.t1 - c.t0 >= 0.25 || c.t0 - a.t1 > 0.35 || b.t0 - c.t1 > 0.35 || Math.abs(a.p - b.p) > 4) continue;
+    const d1 = c.p - a.p, d2 = c.p - b.p;
+    if (Math.abs(d1) >= 10 && Math.abs(d1) <= 14 && Math.abs(d2) >= 10 && Math.abs(d2) <= 14 && Math.sign(d1) === Math.sign(d2)) c.p = clamp(c.p - 12 * Math.sign(d1), 0, 127);
   }
   // velocity: rms dinormalkan ke nada terkeras, dipetakan 40..120
   const peak = Math.max(1e-9, ...mg.map(r => r.rms));

@@ -114,5 +114,21 @@ ok(r.length >= 1 && r.every(n => onGrid(n.s, 0.5) && onGrid(n.l, 0.5) && n.l >= 
 const free = notesToPrint(notes, pt, { bpm: BPM, grid: 0 });
 ok(free.some(n => !onGrid(n.s, 0.25)), 'grid Off: waktu asli tidak diubah (tidak dipaksa ke grid)');
 
+// ---- 5) nada berulang vs nada yang dipotong tracker; salah oktaf ----
+// rms 0.3 di mana-mana, kecuali lembah (0.0) di frame [a, b): penyanyi berhenti sebentar = nada diulang
+const dipPt = (frames: number, a: number, b: number) => { const p = mkPt(frames); for (let f = a; f < b; f++) p.rms[f] = 0; return p; };
+r = notesToPrint([N(0, 50, 64), N(53, 100, 64)], dipPt(400, 48, 54), { bpm: 120 });   // jeda 30 ms, energi jatuh ke 0 -> dua nada
+ok(r.length === 2, 'nada sama + lembah energi di celah: tetap dua nada (nada berulang, bukan dipotong tracker)');
+r = notesToPrint([N(0, 50, 64), N(53, 100, 64)], P, { bpm: 120 });                     // jeda yang sama, energi rata -> satu nada
+ok(r.length === 1, 'nada sama + celah tanpa lembah energi: tetap digabung jadi satu');
+r = notesToPrint([N(0, 20, 64), N(20, 40, 64), N(40, 60, 64), N(60, 80, 64)], dipPt(400, 19, 21), { bpm: 120 });
+ok(r.length === 2 && r[0].l > 0.3, 'hanya celah yang punya lembah energi yang memisahkan nada');
+r = notesToPrint([N(0, 50, 60), N(55, 70, 72), N(75, 130, 61)], P, { bpm: 120 });      // nada pendek (150 ms) tepat satu oktaf di atas dua tetangga yang berdekatan
+ok(r.length === 3 && r[1].p === 60, `lompatan oktaf palsu pada nada pendek dilipat ke oktaf tetangga (p=${r[1]?.p})`);
+r = notesToPrint([N(0, 50, 60), N(55, 120, 72), N(125, 180, 61)], P, { bpm: 120 });    // nada 650 ms: lompatan oktaf sungguhan, dibiarkan
+ok(r[1].p === 72, 'nada panjang di oktaf lain dibiarkan (lompatan melodi sungguhan)');
+r = notesToPrint([N(0, 50, 60), N(55, 70, 72), N(75, 130, 67)], P, { bpm: 120 });      // tetangga berjauhan (60 vs 67): bukan pola salah oktaf
+ok(r[1].p === 72, 'lompatan oktaf dengan tetangga berjauhan dibiarkan');
+
 console.log(fails ? `\n${fails} tes GAGAL` : '\nSemua tes lulus');
 process.exit(fails ? 1 : 0);
