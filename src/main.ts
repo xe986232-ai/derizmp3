@@ -2016,7 +2016,7 @@ function setTrackSize(v) {
   patBarPlace();                                  // toolbar pattern ikut turun / naik sesuai lane
   setTimeout(patBarPlace, REDUCE ? 0 : 340);      // dan sekali lagi setelah animasi tinggi selesai
 }
-initPlaylistMenu(document.getElementById('playlistMoreToggle') as HTMLButtonElement, {isAutoScroll: () => autoScroll, setAutoScroll, getTrackSize: () => trackSize, setTrackSize});
+initPlaylistMenu(document.getElementById('playlistMoreToggle') as HTMLButtonElement, {isAutoScroll: () => autoScroll, setAutoScroll, getTrackSize: () => trackSize, setTrackSize, onTutorial: () => window.dispatchEvent(new CustomEvent('derizmp3:tutorial'))});
 // Saat terkunci di tengah, playhead TIDAK lagi memakai animasi CSS (jam compositor beda dengan scroll di main thread -> posisi relatifnya bergetar).
 // Playhead dan scrollLeft dihitung dari satu nilai (posBars, jam halus) dan ditulis di frame yang sama, jadi playhead diam di layar dan timeline
 // yang bergulir. Offset scroll di-snap ke piksel fisik (browser membulatkannya) dan playhead mengikuti nilai yang sama, jadi tidak ada getar sub-piksel.
@@ -2608,5 +2608,5 @@ setExportIO({
   },
   toast,
 });
-initTutorial();   // tombol gelembung chat + tutorial langkah demi langkah (semua menu)
+initTutorial();   // tutorial langkah demi langkah (semua menu); dibuka dari menu titik tiga di pojok panel track (item "Tutorial") atau otomatis saat pertama kali
 demoMount();   // DEMO: lencana + jendela info (tidak ada efek di build penuh)

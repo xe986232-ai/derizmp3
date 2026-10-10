@@ -8,9 +8,11 @@ export interface PlaylistMenuOptions {
   setAutoScroll(on: boolean): void;
   getTrackSize(): string;
   setTrackSize(size: string): void;
+  onTutorial?(): void;   // item "Tutorial" (di bawah View): membuka tutorial langkah demi langkah; tanpa callback ini item tidak ditampilkan
 }
 
 const ICON_EYE = '<svg class="ico-ln" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>';
+const ICON_HELP = '<svg class="ico-ln" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/></svg>';
 const ICON_SCROLL = '<svg class="ico-ln" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true"><path d="m18 8 4 4-4 4"/><path d="M2 12h20"/><path d="m6 8-4 4 4 4"/></svg>';
 const ICON_VERT = '<svg class="ico-ln" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true"><path d="M12 2v20"/><path d="m8 18 4 4 4-4"/><path d="m8 6 4-4 4 4"/></svg>';
 const ICON_CHEV = '<svg class="track-menu__chev ico-ln" viewBox="0 0 24 24" width="14" height="14" stroke-width="2.4" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>';
@@ -143,7 +145,9 @@ export function initPlaylistMenu(btn: HTMLButtonElement, opts: PlaylistMenuOptio
     if (menu) return;
     const el = makeCard(
       '<button role="menuitem" class="track-menu__item" data-act="view" aria-haspopup="menu" aria-expanded="false">' +
-        '<span class="ico">' + ICON_EYE + '</span><span>View</span>' + ICON_CHEV + '</button>');
+        '<span class="ico">' + ICON_EYE + '</span><span>View</span>' + ICON_CHEV + '</button>' +
+      (opts.onTutorial ? '<button role="menuitem" class="track-menu__item" data-act="tutorial">' +
+        '<span class="ico">' + ICON_HELP + '</span><span>Tutorial</span></button>' : ''));
     el.setAttribute('aria-label', 'Opsi playlist');
     const r = btn.getBoundingClientRect(), m = el.getBoundingClientRect();   // tombol di pojok kiri atas layar: menu terbuka ke bawah, rata kiri dengan tombol
     el.style.left = Math.max(8, Math.min(r.left, innerWidth - m.width - 8)) + 'px';
@@ -152,8 +156,10 @@ export function initPlaylistMenu(btn: HTMLButtonElement, opts: PlaylistMenuOptio
     menu = el;
     btn.setAttribute('aria-expanded', 'true');
     el.addEventListener('click', e => {
-      const it = (e.target as HTMLElement).closest<HTMLElement>('[data-act="view"]');
-      if (it) openView(it);
+      const t = e.target as HTMLElement;
+      const it = t.closest<HTMLElement>('[data-act="view"]');
+      if (it) { openView(it); return; }
+      if (t.closest('[data-act="tutorial"]')) { close(true); opts.onTutorial?.(); }   // menu ditutup seketika dulu supaya gelembung tutorial tidak terhalang
     });
     document.addEventListener('pointerdown', onOutside, true);
     document.addEventListener('keydown', onKey, true);

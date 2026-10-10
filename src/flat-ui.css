@@ -468,11 +468,11 @@ html[data-uistyle="flat"] .pr-menu .pr__mtoggle[aria-checked="true"] .pr__sw{bac
 
 /* ---------- 17. Tombol melayang, toolbar pattern, pop-up putih: semuanya kotak 3px beige berborder 1px ---------- */
 html[data-uistyle="flat"] .fxc__title{color:var(--flat-ap-text)}
-html[data-uistyle="flat"] :is(.menu-btn,.landscape-btn,.tut-btn){width:34px;height:34px;border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;opacity:1}
+html[data-uistyle="flat"] :is(.menu-btn,.landscape-btn){width:34px;height:34px;border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;opacity:1}
 html[data-uistyle="flat"] .menu-btn::before{display:none}
-html[data-uistyle="flat"] :is(.menu-btn,.landscape-btn,.tut-btn):hover{background:var(--flat-ap-panel);transform:none;border-color:var(--flat-ap-border)}
-html[data-uistyle="flat"] :is(.menu-btn,.landscape-btn,.tut-btn):active{background:var(--flat-ap-muted);transform:none}
-html[data-uistyle="flat"] :is(.menu-btn,.landscape-btn,.tut-btn):focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
+html[data-uistyle="flat"] :is(.menu-btn,.landscape-btn):hover{background:var(--flat-ap-panel);transform:none;border-color:var(--flat-ap-border)}
+html[data-uistyle="flat"] :is(.menu-btn,.landscape-btn):active{background:var(--flat-ap-muted);transform:none}
+html[data-uistyle="flat"] :is(.menu-btn,.landscape-btn):focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
 html[data-uistyle="flat"] .menu-btn .menu-btn__ic{color:var(--flat-ap-text)}
 
 html[data-uistyle="flat"] .pat-btn{width:auto;min-width:46px;height:32px;padding:0 10px;border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text);font-size:13px;font-weight:500;box-shadow:none}

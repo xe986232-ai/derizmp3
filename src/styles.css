@@ -2119,11 +2119,6 @@ html.is-pat-jelly #playhead{visibility:hidden}   /* selama pattern dibawa bebas,
 @media (max-height:560px) and (orientation:landscape){.demo__badge{bottom:4px;left:6px;padding:3px 8px;font-size:9px}.demo__card{font-size:12px;padding:12px}.demo__card h3{font-size:14px}}
 
 /* ===== Tutorial: gelembung chat putih, teks hitam (flat: tanpa bayangan / glow) ===== */
-.tut-btn{position:fixed;z-index:450;top:calc(env(safe-area-inset-top,0px) + 6px);right:calc(env(safe-area-inset-right,0px) + 96px);width:34px;height:34px;padding:0;border:0;border-radius:50%;background:#fff;color:#000;display:grid;place-items:center;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .15s var(--ease-spring),opacity .2s ease}
-.tut-btn svg{width:19px;height:19px}
-.tut-btn:active{transform:scale(.94)}
-.tut-btn:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
-body:has(.pr.is-open) .tut-btn,body.tut-on .tut-btn{opacity:0;pointer-events:none}
 .tut{position:fixed;inset:0;z-index:950;pointer-events:none;font-family:'Plus Jakarta Sans',system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .tut[hidden],.tut__ring[hidden],.tut__btn[hidden]{display:none}
 .tut__ring{position:fixed;box-sizing:border-box;border:2px solid #fff;border-radius:12px;pointer-events:none;transition:left .28s var(--ease-spring),top .28s var(--ease-spring),width .28s var(--ease-spring),height .28s var(--ease-spring)}

@@ -1,5 +1,5 @@
 // Tutorial: gelembung chat (putih, teks hitam) yang menempel ke tiap menu dan menjelaskan fungsinya satu per satu.
-// Tombol pembuka ada di pojok kanan atas (kiri tombol menu). Pertama kali aplikasi dibuka, tutorial menawarkan diri sekali.
+// Pembukanya: item "Tutorial" di menu titik tiga pojok panel track (playlist-menu.ts, kirim event 'derizmp3:tutorial'). Pertama kali aplikasi dibuka, tutorial menawarkan diri sekali.
 // Menambah langkah: tambahkan objek di STEPS (selector `targets` disorot dengan bingkai; kosong = gelembung di tengah layar).
 // Langkah yang targetnya tidak tampil (mis. fitur versi penuh yang disembunyikan di demo) dilewati otomatis.
 
@@ -23,7 +23,7 @@ const SET = (attr: string): string => `.mp__page[data-page="settings"] .mp__card
 
 const STEPS: Step[] = [
   { title: 'Halo, selamat datang!', primary: 'Mulai',
-    text: 'Ini tutorial singkat Melvox. Aku tunjukkan fungsi tiap menu satu per satu. Kamu bisa menutupnya kapan saja, dan membukanya lagi lewat tombol gelembung chat di pojok kanan atas.' },
+    text: 'Ini tutorial singkat Melvox. Aku tunjukkan fungsi tiap menu satu per satu. Kamu bisa menutupnya kapan saja, dan membukanya lagi lewat menu titik tiga di pojok panel track (pilih Tutorial).' },
 
   { title: 'Tambahkan track', targets: ['.addtrack'], prefer: ['right', 'top', 'bottom'],
     text: 'Mulai dari sini. Ketuk untuk memilih instrumen track: Audio clip, Supersaw, atau DERIZ.' + (DEMO ? ` Di versi demo dibatasi ${LIMITS.tracks} track.` : '') },
@@ -87,7 +87,7 @@ const STEPS: Step[] = [
   { title: 'Piano roll',
     text: 'Buka piano roll lewat tombol Edit di toolbar pattern. Di dalamnya, ketuk atau seret penggaris untuk memindahkan playhead, pakai menu Slide pada note yang dipilih, dan panel Velocity di bawah untuk mengatur kekuatan tiap note.' },
   { title: 'Selesai!', primary: 'Selesai',
-    text: 'Sekarang kamu sudah kenal semua menunya. Buka tutorial ini lagi kapan saja lewat tombol gelembung chat di pojok kanan atas.' },
+    text: 'Sekarang kamu sudah kenal semua menunya. Buka tutorial ini lagi kapan saja lewat menu titik tiga di pojok panel track (pilih Tutorial).' },
 ];
 
 const $ = <E extends HTMLElement = HTMLElement>(s: string): E | null => document.querySelector<E>(s);
@@ -95,7 +95,6 @@ const sleep = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms))
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const wait = (ms: number): Promise<void> => (REDUCE ? Promise.resolve() : sleep(ms));
 
-const ICON_CHAT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/></svg>';
 
 const seen = (): boolean => { try { return localStorage.getItem(SEEN_KEY) === '1'; } catch { return true; } };
 const markSeen = (): void => { try { localStorage.setItem(SEEN_KEY, '1'); } catch { /* abaikan */ } };
@@ -108,13 +107,10 @@ const visible = (el: Element | null): el is HTMLElement => {
 };
 
 export function initTutorial(): void {
-  if (document.getElementById('tutBtn')) return;
+  if (document.querySelector('.tut')) return;
 
-  const launch = document.createElement('button');
-  launch.type = 'button'; launch.id = 'tutBtn'; launch.className = 'tut-btn';
-  launch.setAttribute('aria-label', 'Buka tutorial'); launch.title = 'Tutorial';
-  launch.innerHTML = ICON_CHAT;
-
+  // Tombol pembuka tutorial tidak lagi melayang di layar: item "Tutorial" ada di menu titik tiga pojok panel track (playlist-menu.ts),
+  // yang memicu event 'derizmp3:tutorial' (lihat di bawah). Setelah tutorial selesai fokus kembali ke tombol titik tiga itu.
   const root = document.createElement('div');
   root.className = 'tut'; root.hidden = true;
   root.innerHTML =
@@ -127,7 +123,7 @@ export function initTutorial(): void {
         '<h3 class="tut__title"></h3><p class="tut__text"></p>' +
         '<div class="tut__nav"><button type="button" class="tut__btn" data-a="prev">Kembali</button><button type="button" class="tut__btn tut__btn--go" data-a="next">Lanjut</button></div>' +
       '</div></div>';
-  document.body.append(launch, root);
+  document.body.append(root);
 
   const ring = root.querySelector<HTMLElement>('.tut__ring')!;
   const bubble = root.querySelector<HTMLElement>('.tut__bubble')!;
@@ -280,7 +276,7 @@ export function initTutorial(): void {
     const menuBtn = $<HTMLButtonElement>('#menuBtn');
     closeTrackMenu();
     if (menuBtn?.classList.contains('is-open')) menuBtn.click();
-    launch.focus({ preventScroll: true });
+    $<HTMLButtonElement>('#playlistMoreToggle')?.focus({ preventScroll: true });
   }
 
   // ---------- event: ditangani di fase capture window supaya ketukan di gelembung tidak menutup menu / panel di belakangnya ----------
@@ -304,7 +300,7 @@ export function initTutorial(): void {
   }, true);
   window.addEventListener('keyup', e => { if (active && e.key === ' ' && inside(e)) e.stopPropagation(); }, true);
 
-  launch.addEventListener('click', () => { void start(); });
+  window.addEventListener('derizmp3:tutorial', () => { void start(); });
 
   // pertama kali dibuka: tawarkan tutorial sekali (kalau piano roll sedang tidak terbuka)
   if (!seen()) setTimeout(() => { if (!seen() && !active && !$('.pr.is-open')) void start(); }, 1200);
