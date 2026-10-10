@@ -11,6 +11,29 @@ export interface PrintOpts {
   mergeGapMs?: number;  // dua nada sama berurutan dengan jeda <= ini digabung (bawaan 40 ms)
   grid?: number;        // 0 / kosong = tanpa kuantisasi ritme; selain itu awal DAN akhir tiap nada menempel ke garis grid terdekat (dalam ketukan: 1 = 1/4, 0.5 = 1/8, 0.25 = 1/16, 0.125 = 1/32)
   scale?: { root: number; mode: 'major' | 'minor' } | null;   // kunci ke tangga nada (opsional)
+  onsetMs?: number;     // awal nada ditarik mundur ke awal suara yang terdengar (konsonan / napas pendek / atak), paling jauh sejauh ini (bawaan 90 ms; 0 = mati)
+}
+
+// Awal nada dari tracker pitch = frame pertama yang dinyatakan bernada. Suara yang terdengar biasanya mulai lebih dulu (konsonan tak bersuara t/k/s/h, napas pendek,
+// atak pelan, beberapa siklus pertama fonasi yang belum periodik), jadi nada terasa "layback". Dua aturan, dibatasi onsetMs dan nada sebelumnya:
+//   a) lead-in: blok energik (>= 12% puncak awal nada) yang menyambung ke awal nada DAN dimulai dari frame sepi di dalam jendela = konsonan / napas pendek milik suku kata ini -> nada mulai di tepi naiknya.
+//      Blok yang tidak punya frame sepi di dalam jendela (napas panjang, ekor nada lalu, noise ruangan keras) bukan lead-in -> tidak dipakai.
+//   b) kalau tidak ada lead-in: tarik mundur selama energi masih naik dan masih >= 22% puncak awal nada (tanjakan atak).
+const ONSET_LOW = 0.12;
+const ONSET_THR = 0.22;
+const ONSET_PEAK_FRAMES = 14;   // puncak acuan = energi tertinggi di ~80 ms pertama nada
+const ONSET_GAP = 3;            // celah sepi <= 3 frame (~17 ms: penutupan / VOT stop pendek) dijembatani, supaya hasilnya tidak bergantung fase frame
+
+/** Awal blok energik (lev >= low) yang menyambung ke frame sf; celah sepi <= gap frame dijembatani. -1 = blok tidak punya frame sepi di dalam [lo, sf) (bukan lead-in). */
+function leadIn(lev: ArrayLike<number>, sf: number, lo: number, low: number, gap: number): number {
+  let b = sf;
+  while (b - 1 >= lo) {
+    if (lev[b - 1] >= low) { b--; continue; }
+    let k = 1; while (k <= gap && b - 1 - k >= lo && lev[b - 1 - k] < low) k++;
+    if (k <= gap && b - 1 - k >= lo && lev[b - 1 - k] >= low) { b = b - 1 - k; continue; }   // energi muncul lagi setelah celah pendek: masih satu blok
+    return b;   // celah sepi (atau awal jendela) di sebelum blok: di sinilah suara mulai
+  }
+  return -1;
 }
 
 const SCALES = { major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10] };
@@ -43,8 +66,25 @@ export function notesToPrint(notes: Note[], pt: PitchTrack, o: PrintOpts): Print
     raw.push({ p, t0, t1, rms: c ? sum / c : 0, sf: n.s, ef: n.e });
   }
   raw.sort((a, b) => a.t0 - b.t0);
-  // Lembah energi di antara dua nada = penyanyi mengulang nada ("ta-ta-ta"), BUKAN satu nada yang dipotong tracker. Energi di celah jatuh di bawah separuh tepinya.
   const lev = pt.env ?? pt.rms;
+  // Koreksi onset (lihat ONSET_LOW / ONSET_THR). Pengaman: tidak melewati nada sebelumnya; nada yang menyambung (legato) tidak disentuh karena batasnya ditentukan pitch, bukan energi;
+  // tanpa tanjakan atau lead-in (energi rata) tidak ada yang berubah.
+  const backF = Math.floor(Math.max(0, o.onsetMs ?? 90) / 1000 / fs);
+  if (backF > 0) {
+    for (let i = 0; i < raw.length; i++) {
+      const r = raw[i], pe = i ? raw[i - 1].ef : 0;
+      if (i && r.sf - pe <= 2) continue;
+      let ref = 0; for (let f = r.sf; f < Math.min(r.ef, r.sf + ONSET_PEAK_FRAMES, lev.length); f++) if (lev[f] > ref) ref = lev[f];
+      if (ref <= 0) continue;
+      const lo = Math.max(i ? pe + 1 : 0, r.sf - backF);
+      const b = leadIn(lev, r.sf, lo, ONSET_LOW * ref, ONSET_GAP);
+      let f = r.sf;
+      if (b >= 0) f = b;   // a) ada frame sepi sebelum blok energik: tepi naiknya = awal suku kata
+      else while (f - 1 >= lo && lev[f - 1] >= ONSET_THR * ref && lev[f - 1] < lev[f]) f--;   // b)
+      if (f < r.sf) { r.sf = f; r.t0 = f * fs; }
+    }
+  }
+  // Lembah energi di antara dua nada = penyanyi mengulang nada ("ta-ta-ta"), BUKAN satu nada yang dipotong tracker. Energi di celah jatuh di bawah separuh tepinya.
   const peakAt = (a: number, b: number): number => { let m = 0; for (let f = Math.max(0, a); f <= Math.min(lev.length - 1, b); f++) if (lev[f] > m) m = lev[f]; return m; };
   const hasDip = (L: { ef: number }, R: { sf: number }): boolean => {
     const lo = Math.max(0, L.ef - 1), hi = Math.min(lev.length - 1, R.sf + 1);

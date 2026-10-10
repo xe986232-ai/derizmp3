@@ -6,6 +6,7 @@ import { analyze, snapTargets } from '../src/mpcs-dsp.ts';
 import { notesToPrint, writeMidiFile, readMidiFile, snapToScale, PPQ } from '../src/printer-midi.ts';
 
 const SR = 44100, hz = (m: number): number => 440 * 2 ** ((m - 69) / 12);
+let seed2 = 1; const rnd2 = (): number => { seed2 = (seed2 * 1664525 + 1013904223) >>> 0; return seed2 / 4294967296 * 2 - 1; };   // derau deterministik
 let fails = 0;
 const ok = (c: boolean, msg: string): void => { console.log((c ? 'OK   ' : 'GAGAL') + ' ' + msg); if (!c) fails++; };
 
@@ -143,6 +144,53 @@ ok(r[r.length - 1].p === 72, 'nada panjang (>= 350 ms) tidak pernah dibuang atau
 const low = [N(0, 20, 52), N(25, 45, 52), N(50, 70, 52), N(75, 95, 52), N(100, 120, 52), N(125, 145, 52), N(150, 170, 52)];   // bagian rendah yang sah: banyak nada pendek sepitch saling mendukung
 r = notesToPrint([...low, N(172, 220, 71)], P, { bpm: 120 });
 ok(r.filter(n => n.p === 52).length >= 6, `bagian rendah yang sah (banyak nada pendek sepitch) tidak dibuang (${r.filter(n => n.p === 52).length} nada)`);
+
+// ---- 7) koreksi onset: awal nada ditarik ke awal suara yang terdengar (konsonan / napas pendek / atak), dengan pengaman ----
+// 1 frame = 10 ms (hop 441 @ 44100), jendela koreksi bawaan 90 ms = 9 frame, 120 BPM: 1 detik = 2 ketukan. Energi (env) diatur frame demi frame.
+const envPt = (fill: (e: Float32Array) => void) => { const p = mkPt(400), e = new Float32Array(400); fill(e); return { ...p, env: e }; };
+const startOf = (rr: { s: number }[], i = 0): number => rr[i].s / 2;   // detik
+// a) konsonan 30 ms (frame 17-19), celah sepi 2 frame (dijembatani), vokal energik mulai frame 22; tracker baru menyatakan nada di frame 24
+const cons = envPt(e => { e.fill(0.3, 22); e.fill(0.08, 17, 20); });
+r = notesToPrint([N(24, 80, 62)], cons, { bpm: 120 });
+ok(Math.abs(startOf(r) - 0.17) < 1e-6, `lead-in konsonan (+ celah pendek) ditarik ke awal suara: ${startOf(r).toFixed(3)} s (harus 0.170)`);
+r = notesToPrint([N(24, 80, 62)], cons, { bpm: 120, onsetMs: 0 });
+ok(Math.abs(startOf(r) - 0.24) < 1e-6, 'onsetMs: 0 mematikan koreksi (awal tetap dari tracker)');
+// b) burst + penutupan 70 ms (> celah yang dijembatani): burst bukan bagian suku kata ini, nada mulai di tepi naik vokal
+const stop = envPt(e => { e.fill(0.3, 22); e.fill(0.08, 10, 15); });
+r = notesToPrint([N(24, 80, 62)], stop, { bpm: 120 });
+ok(Math.abs(startOf(r) - 0.22) < 1e-6, `burst yang terpisah penutupan panjang tidak ikut: ${startOf(r).toFixed(3)} s (harus 0.220)`);
+// c) napas panjang tanpa frame sepi di dalam jendela: bukan lead-in, awal tetap
+const breath = envPt(e => { e.fill(0.3, 24); e.fill(0.06, 10, 24); });
+r = notesToPrint([N(24, 80, 62)], breath, { bpm: 120 });
+ok(Math.abs(startOf(r) - 0.24) < 1e-6, `napas / noise panjang bukan lead-in: ${startOf(r).toFixed(3)} s (harus 0.240)`);
+// d) ekor nada sebelumnya yang masih energik tidak ditarik masuk ke nada berikutnya
+const tail = envPt(e => { e.fill(0.3, 0, 20); for (let f = 20; f < 40; f++) e[f] = 0.15 - 0.05 * (f - 20) / 19; e.fill(0.3, 40); });
+r = notesToPrint([N(0, 20, 60), N(40, 90, 62)], tail, { bpm: 120 });
+ok(r.length === 2 && startOf(r, 1) >= 0.39 - 1e-6, `ekor nada lalu tidak ditarik ke nada berikutnya: ${startOf(r, 1).toFixed(3)} s (>= 0.390)`);
+// e) nada menyambung (legato) tidak disentuh energi
+const leg = envPt(e => { e.fill(0.3, 0); e.fill(0.05, 25, 31); });
+r = notesToPrint([N(0, 30, 60), N(31, 80, 62)], leg, { bpm: 120 });
+ok(r.length === 2 && Math.abs(startOf(r, 1) - 0.31) < 1e-6, 'nada menyambung (legato): batas tetap dari pitch');
+// f) satu nada tidak pernah dimajukan melewati ujung nada sebelumnya
+const near = envPt(e => { e.fill(0.3, 0, 20); e.fill(0, 20, 26); e.fill(0.3, 26); });
+r = notesToPrint([N(0, 20, 60), N(30, 90, 62)], near, { bpm: 120 });
+ok(r.length === 2 && startOf(r, 1) >= 0.2 - 1e-6 && startOf(r, 1) <= 0.26 + 1e-6, `awal nada kedua tidak melewati ujung nada pertama: ${startOf(r, 1).toFixed(3)} s`);
+// g) vokal sintetis + aspirasi 40 ms yang menempel ke vokal (nada 1, 3, 5 sesudah jeda): awal harus di awal aspirasi, bukan di awal vokal; nada lain tidak berubah
+{
+  const xa = synth(truth); seed2 = 987; let lpN = 0;
+  for (const i of [0, 2, 4]) {
+    const s0 = Math.round((truth[i].t0 - 0.04) * SR), s1 = Math.round(truth[i].t0 * SR);
+    for (let t = s0; t < s1; t++) { const w = rnd2(); lpN += 0.2 * (w - lpN); xa[t] += 0.3 * (w - lpN) * Math.min(1, (t - s0) / (0.006 * SR)); }
+  }
+  const A = analyze(xa, SR); snapTargets(A.notes);
+  const on = notesToPrint(A.notes, A.pt, { bpm: BPM, grid: 0 }), off = notesToPrint(A.notes, A.pt, { bpm: BPM, grid: 0, onsetMs: 0 });
+  ok(on.length === truth.length && off.length === truth.length, `aspirasi: jumlah nada tetap ${on.length}/${truth.length}`);
+  ok(on.every((n, i) => n.p === Math.round(truth[i].midi)), 'aspirasi: pitch semua nada tetap benar');
+  const lag = (g: { s: number }[], i: number): number => (g[i].s * spb - truth[i].t0) * 1000;
+  ok([0, 2, 4].every(i => lag(off, i) > -10), `tanpa koreksi: tracker mulai di vokal (${[0, 2, 4].map(i => lag(off, i).toFixed(0)).join(', ')} ms)`);
+  ok([0, 2, 4].every(i => Math.abs(lag(on, i) + 40) < 25), `dengan koreksi: awal di awal aspirasi, ~ -40 ms dari vokal (${[0, 2, 4].map(i => lag(on, i).toFixed(0)).join(', ')} ms)`);
+  ok([1, 3].every(i => Math.abs(lag(on, i) - lag(off, i)) < 25), 'nada tanpa aspirasi tidak ikut bergeser lebih dari 25 ms');
+}
 
 console.log(fails ? `\n${fails} tes GAGAL` : '\nSemua tes lulus');
 process.exit(fails ? 1 : 0);
