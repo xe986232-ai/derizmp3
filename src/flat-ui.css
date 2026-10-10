@@ -149,8 +149,11 @@ html[data-uistyle="flat"] .tracklist .trkcard__arm i{border-radius:50%}
 html[data-uistyle="flat"] .tracklist .sm{background:var(--flat-ctrl);border-radius:3px}
 html[data-uistyle="flat"] .tracklist .sm__btn{border-radius:3px;color:var(--flat-text)}
 
-/* knob pan: lingkaran isi krem + outline 2px + penunjuk gelap 2px; tanpa kilau, tanpa efek membesar */
-html[data-uistyle="flat"] .tracklist .trkcard__pan .circle-inner{fill:var(--flat-ctrl-strong);stroke:var(--flat-ctrl-line);stroke-width:2.2}
+/* knob pan: lingkaran outline saja + penunjuk gelap 2px; tanpa isi, tanpa kilau, tanpa efek membesar */
+html[data-uistyle="flat"] .tracklist .trkcard__pan .circle-inner{fill:none;stroke:color-mix(in srgb,var(--flat-ctrl-line) 65%,var(--flat-mx-raised));stroke-width:2.2}   /* knob pan: hanya outline (tanpa isi), warna agak terang */
+html[data-uistyle="flat"] .tracklist .trkcard__pan .circle-bg,
+html[data-uistyle="flat"] .tracklist .trkcard__pan .circle,
+html[data-uistyle="flat"] .tracklist .trkcard__pan .circle-inner-stroke{display:none}   /* cincin nilai & garis dalam disembunyikan: satu outline saja, posisi pan dibaca dari penunjuk */
 html[data-uistyle="flat"] .tracklist .trkcard__pan .knob-pos{stroke:var(--flat-text);stroke-width:2.6}
 html[data-uistyle="flat"] .tracklist .trkcard__pan .knob-input:hover,
 html[data-uistyle="flat"] .tracklist .trkcard__pan .knob-input.is-dragging{transform:none}
