@@ -292,6 +292,8 @@ export function initMenuPanel(): MenuPanel {
   // ===== Pengaturan: Gaya UI (atribut data-uistyle di <html>: soft = bawaan, flat = sudut lancip) =====
   // Kartu pilihannya tersembunyi. Buka/tutup dengan menahan judul "Menu" di bagian atas panel (status buka disimpan).
   const STYLE_KEY = 'derizmp3.uistyle', STYLE_UNLOCK_KEY = 'derizmp3.uistyle.unlock';
+  // Ubah ke true kalau kartu pilihan Gaya UI (Default / Flat) mau ditampilkan lagi di Pengaturan
+  const SHOW_STYLE_CARD = false;
   const styleCard = panel.querySelector<HTMLElement>('[data-uistyle-card]') as HTMLElement;
   const styleBtns = [...panel.querySelectorAll<HTMLButtonElement>('[data-uistyle]')];
   const setUiStyle = (v: string, save: boolean): void => {
@@ -304,10 +306,10 @@ export function initMenuPanel(): MenuPanel {
   styleBtns.forEach(b => b.addEventListener('click', () => setUiStyle(b.dataset.uistyle as string, true)));
   let styleSaved = 'soft', styleUnlocked = false;
   try {
-    styleSaved = localStorage.getItem(STYLE_KEY) || 'soft'; styleUnlocked = localStorage.getItem(STYLE_UNLOCK_KEY) === '1';
+    styleSaved = localStorage.getItem(STYLE_KEY) || 'soft'; styleUnlocked = SHOW_STYLE_CARD && localStorage.getItem(STYLE_UNLOCK_KEY) === '1';
     // cadangan kalau klik-tahan tidak jalan di suatu perangkat: buka aplikasi dengan ?uistyle=buka (atau ?uistyle=tutup untuk menyembunyikan lagi)
     const uq = new URLSearchParams(location.search).get('uistyle');
-    if (uq === 'buka' || uq === 'tutup') { styleUnlocked = uq === 'buka'; localStorage.setItem(STYLE_UNLOCK_KEY, styleUnlocked ? '1' : '0'); }
+    if (SHOW_STYLE_CARD && (uq === 'buka' || uq === 'tutup')) { styleUnlocked = uq === 'buka'; localStorage.setItem(STYLE_UNLOCK_KEY, styleUnlocked ? '1' : '0'); }
   } catch { /* abaikan */ }
   styleCard.hidden = !styleUnlocked;
   setUiStyle(styleSaved, false);
@@ -316,6 +318,7 @@ export function initMenuPanel(): MenuPanel {
   let styleHoldT = 0, styleHoldX = 0, styleHoldY = 0;
   const styleHoldClear = (): void => { if (styleHoldT) { clearTimeout(styleHoldT); styleHoldT = 0; } };
   setGo.addEventListener('pointerdown', e => {
+    if (!SHOW_STYLE_CARD) return;
     styleHoldClear(); styleHoldX = e.clientX; styleHoldY = e.clientY;
     styleHoldT = window.setTimeout(() => {
       styleHoldT = 0;
@@ -331,16 +334,10 @@ export function initMenuPanel(): MenuPanel {
   // di Android, tahan lama memicu menu konteks / seleksi teks bawaan browser yang membatalkan pointer (pointercancel) sebelum 0,7 detik; tahan itu dimatikan di judul ini
   setGo.addEventListener('contextmenu', e => e.preventDefault());
 
-  // Tombol rahasia pindah Gaya UI (Default <-> Flat): tak terlihat, di pojok kanan-bawah halaman utama Menu (lihat .mp__uisw di styles.css).
-  // Sekali tap langsung ganti gaya, tanpa membuka kartu di Pengaturan. Disembunyikan dari pembaca layar dan tidak ikut urutan Tab.
-  const uiSw = document.createElement('button');
-  uiSw.type = 'button'; uiSw.className = 'mp__uisw'; uiSw.tabIndex = -1; uiSw.setAttribute('aria-hidden', 'true');
-  (panel.querySelector('.mp__panel') as HTMLElement).appendChild(uiSw);
-  uiSw.addEventListener('click', () => {
-    const next = document.documentElement.dataset.uistyle === 'flat' ? 'soft' : 'flat';
-    setUiStyle(next, true);
-    if (navigator.vibrate) { try { navigator.vibrate(18); } catch { /* abaikan */ } }
-    io && io.toast(next === 'flat' ? 'Gaya UI: Flat' : 'Gaya UI: Default', 1500);
+  // Tombol rahasia pindah Gaya UI sekarang ada di paling bawah tab Effect di panel efek (fx-rack.ts). Di sini cukup sinkronkan tombol kartu bila gaya diganti dari sana.
+  window.addEventListener('derizmp3:ui', () => {
+    const val = document.documentElement.dataset.uistyle === 'flat' ? 'flat' : 'soft';
+    styleBtns.forEach(b => { const on = b.dataset.uistyle === val; b.classList.toggle('is-on', on); b.setAttribute('aria-checked', String(on)); });
   });
 
   // ===== Pengaturan: Waveform & bar color (disimpan di browser, diterapkan lewat atribut data-wf di <html>) =====

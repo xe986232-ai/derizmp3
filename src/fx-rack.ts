@@ -900,6 +900,20 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   // Tombol "+": di atas saat belum ada efek, pindah ke bawah daftar setelah ada efek (dengan animasi geser halus)
   // ---------- dua halaman: Plugin | Effect (tab kiri-kanan langsung terlihat, bukan di dalam tombol / menu) ----------
   const pagesEl = document.getElementById('fxPages')!;
+  // Pilihan Gaya UI (Default / Flat): terlihat di paling bawah tab Effect.
+  const uiStyleEl = document.getElementById('fxUiStyle') as HTMLElement;
+  const uiBtns = [...uiStyleEl.querySelectorAll<HTMLButtonElement>('[data-sty]')];
+  const syncUiStyle = (): void => {
+    const val = document.documentElement.dataset.uistyle === 'flat' ? 'flat' : 'soft';
+    uiBtns.forEach(b => { const on = b.dataset.sty === val; b.classList.toggle('is-on', on); b.setAttribute('aria-checked', String(on)); });
+  };
+  uiBtns.forEach(b => b.addEventListener('click', () => {
+    const val = b.dataset.sty === 'flat' ? 'flat' : 'soft';
+    if (val === 'flat') document.documentElement.dataset.uistyle = 'flat'; else delete document.documentElement.dataset.uistyle;
+    try { localStorage.setItem('derizmp3.uistyle', val); } catch { /* penyimpanan diblokir: tetap berlaku sampai halaman ditutup */ }
+    window.dispatchEvent(new CustomEvent('derizmp3:ui'));   // ruler / piano roll (canvas) menggambar ulang dengan warna gaya baru
+  }));
+  window.addEventListener('derizmp3:ui', syncUiStyle);
   const pageBtns = [...pagesEl.querySelectorAll<HTMLButtonElement>('.fx__page')];
   let page: FxPage = 'plugin';
   const ADD_LABEL: Record<FxPage, string> = { plugin: 'Tambah plugin', effect: 'Tambah efek' };
@@ -907,6 +921,8 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     list.dataset.page = page; pagesEl.dataset.page = page;
     pageBtns.forEach(b => { const on = b.dataset.page === page; b.setAttribute('aria-selected', String(on)); b.tabIndex = on ? 0 : -1; });
     addBtn.setAttribute('aria-label', ADD_LABEL[page]); addBtn.title = ADD_LABEL[page];
+    uiStyleEl.hidden = page !== 'effect';   // pilihan Gaya UI hanya tampil di tab Effect
+    syncUiStyle();
   }
   function setPage(next: FxPage, focus = false): void {
     if (next === page) return;
