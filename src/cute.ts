@@ -6,6 +6,17 @@
 import { ACCEPT as AUDIO_ACCEPT, isAudio } from './audio-upload-card';
 import { encodeWavFloatMulti } from './wav';
 import { bringFront, dragWindow } from './win-drag';
+import { isFlat } from './ui-theme';
+
+// Warna canvas per gaya UI (atribut data-uistyle di <html>): Default = layar gelap + waveform teal bergradasi + playhead putih menyala;
+// Flat = beige solid, waveform arang solid (aturan Flat: waveform selalu abu arang), seleksi magenta, playhead cyan tanpa glow. CSS jendelanya ada di flat-ui.css (bagian 21).
+const PAL = {
+  soft: { grid: 'rgba(148,170,210,.1)', label: 'rgba(138,154,181,.8)', mid: 'rgba(255,255,255,.1)', wave: '', selFill: 'rgba(94,234,212,.16)', selWave: .55, edge: '#5eead4', head: '#fff', glow: true,
+    barTrack: 'rgba(255,255,255,.1)', barThumb: 'rgba(154,245,230,.7)' },
+  flat: { grid: 'rgba(166,157,143,.55)', label: '#68665F', mid: 'rgba(143,136,125,.6)', wave: '#454545', selFill: 'rgba(216,90,148,.18)', selWave: 1, edge: '#D85A94', head: '#39C6C7', glow: false,
+    barTrack: 'rgba(143,136,125,.35)', barThumb: '#8F887D' }
+};
+const pal = (): typeof PAL.soft => (isFlat() ? PAL.flat : PAL.soft);
 
 const svg = (inner: string, size = 18): string =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
@@ -97,7 +108,7 @@ function build(): void {
   // ---------- efek 3D: jendela miring tipis mengikuti kursor (mouse saja, mati di atas canvas / saat drag / reduced-motion), kilau mengikuti arah cahaya ----------
   const untilt = (): void => { win.classList.remove('is-tilting'); win.style.setProperty('--rx', '0deg'); win.style.setProperty('--ry', '0deg'); win.style.setProperty('--mx', '50%'); win.style.setProperty('--my', '0%'); };
   el.addEventListener('pointermove', e => {
-    if (reduce || e.pointerType !== 'mouse') return;
+    if (reduce || isFlat() || e.pointerType !== 'mouse') return;   // Flat: jendela tidak miring 3D
     if (e.buttons || (e.target as Element).closest('.cute__stage')) { untilt(); return; }
     const r = win.getBoundingClientRect(), px = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), py = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
     win.classList.add('is-tilting');
@@ -157,20 +168,21 @@ function build(): void {
   }
   const ro = new ResizeObserver(() => { if (!el.hidden) layout(); });
   ro.observe(stage);
+  window.addEventListener('derizmp3:ui', () => { if (!el.hidden) draw(); });   // ganti gaya UI (Default <-> Flat): waveform, grid, seleksi, dan playhead digambar ulang dengan warna baru
 
   function draw(): void {
     g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
     if (!S) return;
-    const mid = H / 2, amp = H / 2 - 8;
+    const mid = H / 2, amp = H / 2 - 8, P = pal();   // P: warna sesuai gaya UI (Default / Flat)
     // grid waktu
     const span = ve - vs, step = niceStep(span / Math.max(2, W / 90)), dec = step >= 1 ? 0 : Math.min(3, Math.ceil(-Math.log10(step) - 1e-9));
     g.font = '600 9px system-ui,sans-serif'; g.textBaseline = 'bottom';
     for (let i = Math.ceil(vs / step - 1e-9); i * step <= ve + 1e-6; i++) {
       const t = i * step, x = Math.round(xOf(t)) + .5, f = fmt(t);
-      g.fillStyle = 'rgba(148,170,210,.1)'; g.fillRect(x - .5, 0, 1, H);
-      g.fillStyle = 'rgba(138,154,181,.8)'; g.fillText(t >= 60 ? f.slice(0, f.length - (dec ? 3 - dec : 4)) : t.toFixed(dec) + 's', x + 4, H - 3 - (span < S.dur - 1e-6 ? 5 : 0));
+      g.fillStyle = P.grid; g.fillRect(x - .5, 0, 1, H);
+      g.fillStyle = P.label; g.fillText(t >= 60 ? f.slice(0, f.length - (dec ? 3 - dec : 4)) : t.toFixed(dec) + 's', x + 4, H - 3 - (span < S.dur - 1e-6 ? 5 : 0));
     }
-    g.fillStyle = 'rgba(255,255,255,.1)'; g.fillRect(0, Math.round(mid), W, 1);
+    g.fillStyle = P.mid; g.fillRect(0, Math.round(mid), W, 1);
     // waveform: satu polygon solid (sisi atas kiri->kanan, sisi bawah kanan->kiri)
     const { mn, mx, norm } = S.pk, nb = mn.length, cols = Math.max(1, Math.floor(W)), sr = S.buf.sampleRate, ns = S.buf.length;
     const fine = (span / cols) * sr < (ns / nb) * 1.5;   // tampilan sudah lebih rapat dari bucket puncak: baca langsung dari sampel supaya tetap tajam saat di-zoom
@@ -189,8 +201,8 @@ function build(): void {
       }
       tops[x] = mid - Math.max(hi * norm, 0.004) * amp; bots[x] = mid - Math.min(lo * norm, -0.004) * amp;
     }
-    const grad = g.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, '#9af5e6'); grad.addColorStop(.5, '#5eead4'); grad.addColorStop(1, '#9af5e6');
+    let grad: string | CanvasGradient = P.wave;   // Flat: arang solid
+    if (!P.wave) { const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, '#9af5e6'); gr.addColorStop(.5, '#5eead4'); gr.addColorStop(1, '#9af5e6'); grad = gr; }
     g.fillStyle = grad; g.globalAlpha = sel ? .62 : 1;
     g.beginPath(); g.moveTo(0, bots[0]);
     for (let x = 0; x < cols; x++) g.lineTo(x + .5, bots[x]);
@@ -199,26 +211,27 @@ function build(): void {
     // seleksi: bagian terpilih menyala, tepi putih dengan pegangan kecil
     if (sel) {
       const x1 = xOf(sel.a), x2 = xOf(sel.b);
-      g.fillStyle = 'rgba(94,234,212,.16)'; g.fillRect(x1, 0, x2 - x1, H);
-      g.save(); g.beginPath(); g.rect(x1, 0, x2 - x1, H); g.clip(); g.fillStyle = grad; g.globalAlpha = .55;
+      g.fillStyle = P.selFill; g.fillRect(x1, 0, x2 - x1, H);
+      g.save(); g.beginPath(); g.rect(x1, 0, x2 - x1, H); g.clip(); g.fillStyle = grad; g.globalAlpha = P.selWave;
       g.beginPath(); g.moveTo(0, bots[0]);
       for (let x = 0; x < cols; x++) g.lineTo(x + .5, bots[x]);
       for (let x = cols - 1; x >= 0; x--) g.lineTo(x + .5, tops[x]);
       g.closePath(); g.fill(); g.restore();
-      g.fillStyle = '#5eead4'; g.fillRect(x1 - 1, 0, 2, H); g.fillRect(x2 - 1, 0, 2, H);
+      g.fillStyle = P.edge; g.fillRect(x1 - 1, 0, 2, H); g.fillRect(x2 - 1, 0, 2, H);
       for (const x of [x1, x2]) { g.beginPath(); g.roundRect(x - 4, mid - 12, 8, 24, 3); g.fill(); }
     }
     // playhead
     const px = Math.round(xOf(playPos));
     if (px >= -6 && px <= W + 6) {
-      g.fillStyle = '#fff'; g.shadowColor = 'rgba(255,255,255,.6)'; g.shadowBlur = 4; g.fillRect(px - 1, 0, 2, H); g.shadowBlur = 0;
+      g.fillStyle = P.head; if (P.glow) { g.shadowColor = 'rgba(255,255,255,.6)'; g.shadowBlur = 4; }   // glow hanya di gaya Default
+      g.fillRect(px - 1, 0, 2, H); g.shadowBlur = 0;
       g.beginPath(); g.moveTo(px - 6, 0); g.lineTo(px + 6, 0); g.lineTo(px, 8); g.closePath(); g.fill();
     }
     // bilah geser (hanya saat di-zoom): posisi + lebar jendela tampilan terhadap seluruh audio
     if (span < S.dur - 1e-6) {
       const tw = Math.max(24, (span / S.dur) * W), tx = (vs / S.dur) * W;
-      g.fillStyle = 'rgba(255,255,255,.1)'; g.beginPath(); g.roundRect(0, H - 6, W, 3, 1.5); g.fill();
-      g.fillStyle = 'rgba(154,245,230,.7)'; g.beginPath(); g.roundRect(Math.min(W - tw, tx), H - 7, tw, 5, 2.5); g.fill();
+      g.fillStyle = P.barTrack; g.beginPath(); g.roundRect(0, H - 6, W, 3, 1.5); g.fill();
+      g.fillStyle = P.barThumb; g.beginPath(); g.roundRect(Math.min(W - tw, tx), H - 7, tw, 5, 2.5); g.fill();
     }
   }
 

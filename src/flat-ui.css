@@ -697,3 +697,155 @@ html[data-uistyle="flat"] .mpcs__play.is-on:hover:not(:disabled),
 html[data-uistyle="flat"] .mpcs__play.is-on:active:not(:disabled){background:var(--flat-ap-accent);border-color:var(--flat-ap-accent);color:var(--flat-ap-text);box-shadow:none}
 html[data-uistyle="flat"] .mpcs__play:disabled{opacity:1;background:var(--flat-ap-grid);border-color:var(--flat-ap-border);color:var(--flat-ap-text2)}
 html[data-uistyle="flat"] .mpcs__play:focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
+
+/* ---------- 21. Plugin CUTE (pemotong audio): kartu di panel efek + jendela ----------
+   Hanya aktif di gaya Flat; gaya Default tetap "enamel teal" bevel tebal + layar kaca. Gambar canvas (waveform, grid, seleksi, playhead) ikut gaya lewat isFlat() di cute.ts.
+   Aturan sama dengan MPCS: beige solid, border 1px, sudut kotak 3-4px, tanpa kaca / bayangan / glow / miring 3D. */
+
+/* kartu ringkas di panel efek (CUTE + MGCHORD memakai markup yang sama) */
+html[data-uistyle="flat"] :is(.fxc--cute,.fxc--mgchord){background-image:none;background-color:var(--flat-ap-raised);transform:none;box-shadow:none}
+html[data-uistyle="flat"] :is(.fxc--cute,.fxc--mgchord) .fxc__title{font-size:13px;letter-spacing:.24em;color:var(--flat-ap-text);text-shadow:none}
+html[data-uistyle="flat"] :is(.fxc--cute,.fxc--mgchord) .fxc__led{width:12px;height:12px;border-radius:3px;background:var(--flat-ap-accent);box-shadow:none}
+html[data-uistyle="flat"] :is(.fxc--cute,.fxc--mgchord) :is(.fxc__open,.fxc__more){border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none;transition:background-color .15s ease}
+html[data-uistyle="flat"] :is(.fxc--cute,.fxc--mgchord) :is(.fxc__open,.fxc__more):hover{background:var(--flat-ap-panel);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] :is(.fxc--cute,.fxc--mgchord) :is(.fxc__open,.fxc__more):active,
+html[data-uistyle="flat"] :is(.fxc--cute,.fxc--mgchord) .fxc__more[aria-expanded="true"]{background:var(--flat-ap-muted);color:var(--flat-ap-text);transform:none;box-shadow:none}
+
+/* cangkang jendela */
+html[data-uistyle="flat"] .cute__back{background:color-mix(in srgb,var(--flat-ap-text) 28%,transparent)}
+html[data-uistyle="flat"] .cute__win{--accent:var(--flat-ap-accent);--accent-soft:color-mix(in srgb,var(--flat-ap-accent) 30%,transparent);--ink:var(--flat-ap-text);--mute:var(--flat-ap-text2);--line:var(--flat-ap-border);
+  border:1px solid var(--flat-ap-ctrl-line);border-radius:4px;background:var(--flat-ap-panel);color:var(--flat-ap-text);transform:none;box-shadow:none;transition:none}
+html[data-uistyle="flat"] .cute__win.is-drop{box-shadow:inset 0 0 0 2px var(--flat-ap-accent)}   /* file diseret di atas jendela: bingkai magenta solid, tanpa glow */
+html[data-uistyle="flat"] .cute__glass{display:none}
+html[data-uistyle="flat"] .cute__stage::after{display:none}
+
+/* header: strip beige solid + pemisah 1px; LED kotak solid; judul datar; layar status krem */
+html[data-uistyle="flat"] .cute__head{background:var(--flat-ap-panel);border-bottom:1px solid var(--flat-ap-border);box-shadow:none}
+html[data-uistyle="flat"] .cute__led{width:12px;height:12px;border-radius:3px;background:var(--flat-ap-accent);box-shadow:none;transition:background-color .15s ease}
+html[data-uistyle="flat"] .cute__win.is-off .cute__led{background:var(--flat-ap-gray);box-shadow:none}
+html[data-uistyle="flat"] .cute__title{font-size:13px;letter-spacing:.24em;color:var(--flat-ap-text);text-shadow:none}
+html[data-uistyle="flat"] .cute__win.is-off .cute__title{color:var(--flat-ap-text2);text-shadow:none}
+html[data-uistyle="flat"] .cute__lcd{border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-key-white);box-shadow:none}
+html[data-uistyle="flat"] .cute__stat{color:var(--flat-ap-text);text-shadow:none}
+
+/* tombol header (seret, tutup) + tombol GANTI */
+html[data-uistyle="flat"] :is(.cute__close,.cute__drag){box-sizing:border-box;border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none;transition:background-color .15s ease}
+html[data-uistyle="flat"] :is(.cute__close,.cute__drag):hover:not(:disabled){background:var(--flat-ap-panel);color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] :is(.cute__close,.cute__drag):active:not(:disabled){background:var(--flat-ap-muted);transform:none;box-shadow:none}
+html[data-uistyle="flat"] .cute__swap{border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none;transition:background-color .15s ease}
+html[data-uistyle="flat"] .cute__swap:hover{background:var(--flat-ap-panel);color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] .cute__swap:active{background:var(--flat-ap-muted);transform:none}
+html[data-uistyle="flat"] :is(.cute__close,.cute__drag,.cute__swap,.cute__zbtn,.cute__play,.cute__drop):focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
+
+/* ikon yang melayang saat hasil diseret ke DERIZ / MPCS / timeline */
+html[data-uistyle="flat"] .cute__ghost{border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] .cute__ghost.is-hot{border-color:var(--flat-ap-accent);box-shadow:none;outline:2px solid var(--flat-ap-accent)}
+
+/* layar waveform: beige terang berbingkai 1px (cincin tanpa blur); zona drop = garis putus-putus 1px */
+html[data-uistyle="flat"] .cute__stage{border-radius:3px;background:var(--flat-ap-raised);box-shadow:0 0 0 1px var(--flat-ap-border)}
+html[data-uistyle="flat"] .cute__drop{border:1px dashed var(--flat-ap-ctrl-line);border-radius:3px;color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .cute__drop small{color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .cute__drop:hover,
+html[data-uistyle="flat"] .cute__win.is-drop .cute__drop{border-color:var(--flat-ap-accent);background:color-mix(in srgb,var(--flat-ap-accent) 10%,transparent);color:var(--flat-ap-text)}
+
+/* bar bawah: zoom out / Play / zoom in = tombol kotak 3px; Play = arang + ikon krem (seperti tombol tengah transport), saat memutar = magenta solid */
+html[data-uistyle="flat"] .cute__zbtn{border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:inset 0 0 0 1px var(--flat-ap-border);transition:background-color .15s ease}
+html[data-uistyle="flat"] .cute__zbtn:hover:not(:disabled){background:var(--flat-ap-panel)}
+html[data-uistyle="flat"] .cute__zbtn:active:not(:disabled){background:var(--flat-ap-muted);transform:none}
+html[data-uistyle="flat"] .cute__zbtn:disabled{opacity:1;background:var(--flat-ap-grid);color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .cute__play{border-radius:3px;background:var(--flat-ap-note);color:var(--flat-ap-inverse);box-shadow:none;transition:background-color .15s ease}
+html[data-uistyle="flat"] .cute__play svg{filter:none}
+html[data-uistyle="flat"] .cute__play:hover:not(:disabled){background:color-mix(in srgb,var(--flat-ap-note) 82%,var(--flat-ap-inverse))}
+html[data-uistyle="flat"] .cute__play:active:not(:disabled){background:color-mix(in srgb,var(--flat-ap-note) 78%,var(--flat-ap-text));transform:none;box-shadow:none}
+html[data-uistyle="flat"] .cute__play.is-on,
+html[data-uistyle="flat"] .cute__play.is-on:hover:not(:disabled),
+html[data-uistyle="flat"] .cute__play.is-on:active:not(:disabled){background:var(--flat-ap-accent);color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] .cute__play:disabled{opacity:1;background:var(--flat-ap-grid);color:var(--flat-ap-text2);box-shadow:none;filter:none}
+
+/* ---------- 22. Plugin MGCHORD (pembuat chord progression): jendela + keyboard vertikal di kanan ----------
+   Hanya aktif di gaya Flat; gaya Default tetap panel biru terang. Warna biru / putih bawaan diganti palet beige: blok chord lavender, terpilih = magenta,
+   tuts putih krem + tuts hitam arang, dropdown / tombol kotak berborder 1px, tanpa bayangan / glow. Gambar canvas (strip gelombang, piano roll) ikut gaya lewat isFlat() di mgchord.ts. */
+
+html[data-uistyle="flat"] .mgc__win{border:1px solid var(--flat-ap-ctrl-line);border-radius:4px;background:var(--flat-ap-panel);color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] .mgc__win button:focus-visible,
+html[data-uistyle="flat"] .mgc__win select:focus-visible,
+html[data-uistyle="flat"] .mgc__ch:focus-visible,
+html[data-uistyle="flat"] .mgc__h:focus-visible,
+html[data-uistyle="flat"] .mgc__dnd:focus-visible,
+html[data-uistyle="flat"] .mgc__pn:focus-within{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
+
+/* header: strip beige + pemisah 1px; logo teks arang (lampu kecil di logo ikut warna palet) */
+html[data-uistyle="flat"] .mgc__head{background:var(--flat-ap-panel);color:var(--flat-ap-text2);border-bottom:1px solid var(--flat-ap-border)}
+html[data-uistyle="flat"] .mgc__logo{color:var(--flat-ap-text);-webkit-text-stroke:0;text-shadow:none}
+html[data-uistyle="flat"] .mgc__logo svg path:nth-child(1){stroke:var(--flat-ap-teal)}
+html[data-uistyle="flat"] .mgc__logo svg path:nth-child(2){stroke:var(--flat-ap-orange)}
+html[data-uistyle="flat"] .mgc__logo svg path:nth-child(3){fill:var(--flat-ap-orange);stroke:var(--flat-ap-orange-dark)}
+html[data-uistyle="flat"] .mgc__pn{border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .mgc__save{border-radius:3px;background:var(--flat-ap-teal);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .mgc__save:hover{background:var(--flat-ap-teal-dark);color:var(--flat-ap-inverse)}
+html[data-uistyle="flat"] .mgc__pow{color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .mgc__x{box-sizing:border-box;border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .mgc__x:hover{background:var(--flat-ap-panel);color:var(--flat-ap-text)}
+
+/* baris kontrol: dropdown Style / Sound / Keys, segmen Major-Minor, tombol Bars, undo / redo / hapus, dadu */
+html[data-uistyle="flat"] :is(.mgc__cdb,.mgc__bars,.mgc__ur button){box-sizing:border-box;border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text);transition:background-color .15s ease}
+html[data-uistyle="flat"] :is(.mgc__cdb,.mgc__bars,.mgc__ur button):hover,
+html[data-uistyle="flat"] .mgc__cdb[aria-expanded="true"]{background:var(--flat-ap-panel);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .mgc__cdb::after{border-color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .mgc__sg{box-sizing:border-box;border:1px solid var(--flat-ap-border);border-radius:3px}
+html[data-uistyle="flat"] .mgc__sg button{background:var(--flat-ap-raised);color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .mgc__sg button:not(.is-on):hover{background:var(--flat-ap-panel);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .mgc__sg button.is-on{background:var(--flat-ap-accent);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .mgc__big{box-sizing:border-box;border:1px solid var(--flat-ap-border);border-radius:4px;background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none;transition:background-color .15s ease}
+html[data-uistyle="flat"] .mgc__big:hover{background:var(--flat-ap-panel)}
+html[data-uistyle="flat"] .mgc__big:active{transform:none;background:var(--flat-ap-muted)}
+
+/* strip gelombang, penggaris bar, blok chord, piano roll */
+html[data-uistyle="flat"] .mgc__spec{outline:1px solid var(--flat-ap-border);outline-offset:-1px;border-radius:3px;background:var(--flat-ap-raised)}
+html[data-uistyle="flat"] .mgc__marks{color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .mgc__marks i{border-left:1px solid var(--flat-ap-border)}
+html[data-uistyle="flat"] .mgc__empty{border:1px dashed var(--flat-ap-ctrl-line);border-radius:3px;color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .mgc__ch{border-radius:3px;background:var(--flat-ap-lavender);color:var(--flat-ap-text);box-shadow:inset 0 0 0 1px var(--flat-ap-lavender-dark);transition:background-color .12s ease}
+html[data-uistyle="flat"] .mgc__ch.is-sel{background:var(--flat-ap-accent);color:var(--flat-ap-text);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--flat-ap-accent) 55%,var(--flat-ap-text))}
+html[data-uistyle="flat"] .mgc__h:hover{background:color-mix(in srgb,var(--flat-ap-text) 16%,transparent)}
+html[data-uistyle="flat"] .mgc__roll{box-sizing:border-box;border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised)}
+
+/* bar bawah: Play = arang + ikon krem (memutar = magenta), seret / unduh = kotak beige berborder */
+html[data-uistyle="flat"] .mgc__go{box-sizing:border-box;border:1px solid var(--flat-ap-note);border-radius:4px;background:var(--flat-ap-note);color:var(--flat-ap-inverse);box-shadow:none;transition:background-color .15s ease}
+html[data-uistyle="flat"] .mgc__go:hover{background:color-mix(in srgb,var(--flat-ap-note) 82%,var(--flat-ap-inverse))}
+html[data-uistyle="flat"] .mgc__go:active{transform:none;background:color-mix(in srgb,var(--flat-ap-note) 78%,var(--flat-ap-text))}
+html[data-uistyle="flat"] .mgc__go.is-on,
+html[data-uistyle="flat"] .mgc__go.is-on:hover,
+html[data-uistyle="flat"] .mgc__go.is-on:active{background:var(--flat-ap-accent);border-color:var(--flat-ap-accent);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] :is(.mgc__drag,.mgc__dl){box-sizing:border-box;border:1px solid var(--flat-ap-border);border-radius:4px;background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none;transition:background-color .15s ease}
+html[data-uistyle="flat"] :is(.mgc__drag,.mgc__dl):hover{background:var(--flat-ap-panel);box-shadow:none}
+html[data-uistyle="flat"] :is(.mgc__drag,.mgc__dl):active{transform:none;background:var(--flat-ap-muted)}
+html[data-uistyle="flat"] .mgc__dnd{color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .mgc__dnd:hover{color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .mgc__bpm{color:var(--flat-ap-text2)}
+
+/* ikon yang melayang saat chord diseret ke timeline, chip nama chord, toast, popup dropdown */
+html[data-uistyle="flat"] .mgc__ghost{box-sizing:border-box;border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] .mgc__ghost.is-hot{border-color:var(--flat-ap-accent);box-shadow:none;outline:2px solid var(--flat-ap-accent)}
+html[data-uistyle="flat"] .mgc__chip{border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] .mgc__toast{border-radius:3px;background:var(--flat-ap-note);color:var(--flat-ap-inverse)}
+html[data-uistyle="flat"] .mgc__pop{border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none;scrollbar-color:var(--flat-ap-ctrl-line) transparent}
+html[data-uistyle="flat"] .mgc__po{border-radius:2px;color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .mgc__po:hover,
+html[data-uistyle="flat"] .mgc__po:focus-visible{background:var(--flat-ap-panel);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .mgc__po.is-on,
+html[data-uistyle="flat"] .mgc__po.is-on:hover,
+html[data-uistyle="flat"] .mgc__po.is-on:focus-visible{background:var(--flat-ap-accent);color:var(--flat-ap-text)}
+
+/* kartu keyboard vertikal: panel beige, tuts putih krem berpemisah 1px, tuts hitam arang; tuts ditekan = magenta solid (tanpa geser / glow) */
+html[data-uistyle="flat"] .mgc__kbd{border:1px solid var(--flat-ap-ctrl-line);border-radius:4px;background:var(--flat-ap-panel);color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] .mgc__kbt{color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .mgc__wk{border-radius:0;color:var(--flat-ap-text);background:var(--flat-ap-key-white);box-shadow:inset 0 -1px 0 var(--flat-ap-border);transition:background-color .1s ease}
+html[data-uistyle="flat"] .mgc__bk{border-radius:0;background:var(--flat-ap-key-black);box-shadow:none;transition:background-color .1s ease}
+html[data-uistyle="flat"] .mgc__bk::before{display:none}
+html[data-uistyle="flat"] .mgc__wk span{color:var(--flat-ap-text2)}
+html[data-uistyle="flat"] .mgc__bk span{color:var(--flat-ap-inverse)}
+html[data-uistyle="flat"] .mgc__wk.pressed{background:var(--flat-ap-accent);transform:none;box-shadow:inset 0 -1px 0 var(--flat-ap-border)}
+html[data-uistyle="flat"] .mgc__bk.pressed{background:color-mix(in srgb,var(--flat-ap-accent) 70%,var(--flat-ap-key-black));transform:none;box-shadow:none}
+html[data-uistyle="flat"] .mgc__wk.pressed span{color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .mgc__bk.pressed span{color:var(--flat-ap-inverse)}
