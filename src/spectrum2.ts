@@ -34,7 +34,8 @@ const FLAT_COLORS: SpecColors = {
   areaFill: [[0, 'rgba(141,112,168,.12)'], [0.5, 'rgba(185,138,208,.55)'], [0.85, 'rgba(245,160,68,.70)'], [1, 'rgba(217,130,50,.85)']],
   areaLine: [[0, '#8D70A8'], [0.5, '#B98AD0'], [0.85, '#F5A044'], [1, '#D98232']],
 };
-export const specColors = (): SpecColors => isFlat() ? FLAT_COLORS : DEF_COLORS;
+const flatNow = (): boolean => { try { return isFlat(); } catch { return false; } };   // aman di lingkungan tanpa document.documentElement (tes Node)
+export const specColors = (): SpecColors => flatNow() ? FLAT_COLORS : DEF_COLORS;
 let C: SpecColors = DEF_COLORS;   // diperbarui di awal draw()
 
 export const FFT2 = 8192;           // analyser frekuensi: jendela ~170 ms @48 kHz, bass rapat (5,9 Hz per bin)
@@ -141,7 +142,7 @@ export class SpectrumStyle2 {
   private lmSr = 0;
   // ganti tema (default <-> Flat): bangun ulang palet spectrogram, warna waveform multi-band kembali ke lavender tema itu, dan spectrogram dibersihkan
   applyTheme(): void {
-    const f = isFlat(); if (f === this.flatPal) return;
+    const f = flatNow(); if (f === this.flatPal) return;
     this.flatPal = f; this.pal = buildPalette(f);
     const m: [number, number, number] = f ? [185, 138, 208] : [179, 161, 247]; this.wCol = [m[0], m[1], m[2]]; this.wColS = [m[0], m[1], m[2]];
     if (this.sg.width) this.clearSg();
