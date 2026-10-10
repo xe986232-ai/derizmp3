@@ -57,8 +57,9 @@ function build(): void {
   const el = document.createElement('div');
   el.className = 'prn'; el.hidden = true;
   const keyOpts = '<option value="off">Off</option>' + (['major', 'minor'] as const).map(m => `<optgroup label="${m === 'major' ? 'Mayor' : 'Minor'}">${NAMES.map((n, i) => `<option value="${i}-${m}">${n} ${m === 'major' ? 'mayor' : 'minor'}</option>`).join('')}</optgroup>`).join('');
+  const screws = (['tl', 'tr', 'bl', 'br'] as const).map(c => `<i class="prn__screw prn__screw--${c}" aria-hidden="true"></i>`).join('');   // baut hiasan di empat sudut cangkang
   el.innerHTML =
-    '<div class="prn__win is-off" role="dialog" aria-label="PRINTER" tabindex="-1">' +
+    '<div class="prn__win is-off" role="dialog" aria-label="PRINTER" tabindex="-1">' + screws +
       `<header class="prn__head"><i class="prn__led" aria-hidden="true"></i><span class="prn__title">PRINTER</span><div class="prn__lcd"><span class="prn__stat" role="status" aria-live="polite">READY</span></div>` +
         `<button type="button" class="prn__mute" aria-label="Suara printer" title="Suara printer">${ICON.snd}</button>` +
         `<button type="button" class="prn__close" aria-label="Tutup PRINTER">${ICON.close}</button></header>` +
@@ -99,6 +100,7 @@ function build(): void {
         `<button type="button" class="prn__b prn__tear" aria-label="Sobek kertas: kirim ke pattern" title="Kirim nada ke pattern yang dipilih di timeline" disabled>${ICON.tear}<span>TEAR OFF</span></button>` +
         `<button type="button" class="prn__b prn__midi" aria-label="Simpan file MIDI" title="Simpan sebagai file .mid" disabled>${ICON.dl}<span>.MID</span></button>` +
       '</div>' +
+      '<div class="prn__foot" aria-hidden="true"><span>MELODY PRINTER · MP-16</span><i class="prn__vents"></i></div>' +
       `<input type="file" class="prn__file" accept="${AUDIO_ACCEPT}" hidden>` +
     '</div>';
   document.body.appendChild(el);
@@ -130,7 +132,7 @@ function build(): void {
   let vol = 0.8; try { const v = parseInt(localStorage.getItem(VOL_KEY) ?? '', 10); if (v >= 0 && v <= 100) vol = v / 100; } catch { /* abaikan */ }   // volume vokal 0..1
   let pos = 0, scrubbing = false, mode: 'play' | 'print' | null = null;   // pos = posisi putar (detik)
   let mute = false; try { mute = localStorage.getItem(MUTE_KEY) === '1'; } catch { /* abaikan */ }
-  const K = 30, HEAD_H = 52, X0 = 30;   // K = piksel per ketukan; HEAD_H = tinggi badan printer di atas kertas; X0 = tepi kiri area nada
+  const K = 30, HEAD_H = 60, X0 = 30;   // K = piksel per ketukan; HEAD_H = tinggi badan printer di atas kertas; X0 = tepi kiri area nada
 
   // ---------- status (layar LCD) ----------
   const info = (): void => { stat.textContent = S ? (P.length ? `${P.length} NOTES · ${Math.round(bpm())} BPM` : 'PAPER JAM') : 'READY'; };
@@ -142,7 +144,7 @@ function build(): void {
   const voxLevel = (): number => vox ? vol : 0;
   const syncVox = (): void => {
     voxBtn.setAttribute('aria-pressed', String(vox)); mixEl.classList.toggle('is-off', !vox);
-    volIn.value = String(Math.round(vol * 100)); pctEl.textContent = Math.round(vol * 100) + '%';
+    volIn.value = String(Math.round(vol * 100)); pctEl.textContent = Math.round(vol * 100) + '%'; volIn.style.setProperty('--v', Math.round(vol * 100) + '%');   // --v = isi amber slider
     if (voxGain) voxGain.gain.setTargetAtTime(voxLevel(), voxGain.context.currentTime, 0.02);
   };
   syncVox();
@@ -196,22 +198,48 @@ function build(): void {
     if (!W) return;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, W, H);
-    // badan printer
+    // badan printer: cangkang plastik krem dengan bevel; rel logam; jendela cetak cekung; bibir celah kertas
     const body = g.createLinearGradient(0, 0, 0, HEAD_H);
-    body.addColorStop(0, '#d8d3c6'); body.addColorStop(1, '#a9a393');
+    body.addColorStop(0, '#f1ede1'); body.addColorStop(0.5, '#dad5c5'); body.addColorStop(1, '#b3ad9b');
     g.fillStyle = body; g.fillRect(0, 0, W, HEAD_H);
+    g.fillStyle = 'rgba(255,255,255,.85)'; g.fillRect(0, 0, W, 1.5);   // kilau tepi atas
+    g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(0, 7, W, 1); g.fillStyle = 'rgba(255,255,255,.6)'; g.fillRect(0, 8, W, 1);   // alur sambungan panel
+    // rel kepala: batang logam (terang di atas, gelap di bawah) + bayangan jatuh + dudukan di kedua ujung
+    const rg = g.createLinearGradient(0, 18, 0, 26);
+    rg.addColorStop(0, '#fcfbf6'); rg.addColorStop(0.3, '#d9d6ca'); rg.addColorStop(0.65, '#8f8b7d'); rg.addColorStop(1, '#4d4a40');
+    g.fillStyle = 'rgba(0,0,0,.28)'; g.fillRect(14, 26, W - 28, 2);
+    g.fillStyle = rg; g.fillRect(12, 18, W - 24, 8);
+    for (const bx of [7, W - 19]) {
+      const bg = g.createLinearGradient(0, 12, 0, 34); bg.addColorStop(0, '#d6d1c1'); bg.addColorStop(1, '#8f8979');
+      g.fillStyle = bg; g.beginPath(); g.roundRect(bx, 12, 12, 22, 3); g.fill();
+      g.strokeStyle = 'rgba(0,0,0,.4)'; g.lineWidth = 1; g.stroke();
+      g.fillStyle = 'rgba(255,255,255,.7)'; g.fillRect(bx + 2, 13, 8, 1);
+      g.fillStyle = '#5b574c'; g.beginPath(); g.arc(bx + 6, 23, 2.2, 0, 6.3); g.fill();
+    }
+    // jendela cetak (cekung) + bibir celah
+    g.fillStyle = '#16140f'; g.beginPath(); g.roundRect(12, 41, W - 24, 12, 3); g.fill();
+    const wsh = g.createLinearGradient(0, 41, 0, 49); wsh.addColorStop(0, 'rgba(0,0,0,.75)'); wsh.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = wsh; g.fillRect(12, 41, W - 24, 8);
+    g.fillStyle = 'rgba(255,255,255,.55)'; g.fillRect(14, 53, W - 28, 1);   // tepi bawah bingkai jendela menangkap cahaya
+    const lip = g.createLinearGradient(0, 54, 0, HEAD_H); lip.addColorStop(0, '#aaa493'); lip.addColorStop(1, '#8a8474');
+    g.fillStyle = lip; g.fillRect(0, 54, W, HEAD_H - 54);
     g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(0, HEAD_H - 1, W, 1);
-    // rel kepala
-    g.fillStyle = '#6d695d'; g.fillRect(14, 20, W - 28, 3);
-    g.fillStyle = 'rgba(255,255,255,.5)'; g.fillRect(14, 19, W - 28, 1);
-    // kertas
+    // baki + kertas
     const py = HEAD_H, pl = 8, pr = W - 8;
+    g.fillStyle = '#23221d'; g.fillRect(0, py, W, H - py);   // baki gelap di kiri-kanan kertas
     g.save(); g.beginPath(); g.rect(pl, py, pr - pl, H - py); g.clip();
-    g.fillStyle = '#f5f2e9'; g.fillRect(pl, py, pr - pl, H - py);
-    // lubang tractor (ikut bergerak bersama kertas)
-    const off = (TB * K) % 18; g.fillStyle = '#c9c4b3';
-    for (let y = py + off - 18; y < H; y += 18) { g.beginPath(); g.arc(pl + 8, y, 2.4, 0, 6.3); g.arc(pr - 8, y, 2.4, 0, 6.3); g.fill(); }
-    g.fillStyle = 'rgba(80,110,160,.1)'; g.fillRect(pl + 18, py, 1, H - py); g.fillRect(pr - 19, py, 1, H - py);
+    const pg = g.createLinearGradient(pl, 0, pr, 0);   // kertas sedikit menggelap di tepi: kesan melengkung di atas rol
+    pg.addColorStop(0, '#e1ddcf'); pg.addColorStop(0.06, '#f6f3ea'); pg.addColorStop(0.94, '#f6f3ea'); pg.addColorStop(1, '#dedacc');
+    g.fillStyle = pg; g.fillRect(pl, py, pr - pl, H - py);
+    g.fillStyle = 'rgba(120,110,80,.07)'; g.fillRect(pl, py, 19, H - py); g.fillRect(pr - 19, py, 19, H - py);   // jalur tractor sedikit lebih gelap
+    g.fillStyle = 'rgba(80,110,160,.28)';   // garis perforasi putus-putus
+    for (let y = py; y < H; y += 4) { g.fillRect(pl + 18, y, 1, 2); g.fillRect(pr - 19, y, 1, 2); }
+    // lubang tractor (ikut bergerak bersama kertas): tampak berlubang tembus ke baki, tepi bawahnya menangkap cahaya
+    const off = (TB * K) % 18;
+    for (let y = py + off - 18; y < H; y += 18) for (const cx of [pl + 9, pr - 9]) {
+      g.fillStyle = '#2a2822'; g.beginPath(); g.arc(cx, y, 3, 0, 6.3); g.fill();
+      g.strokeStyle = 'rgba(255,255,255,.8)'; g.lineWidth = 1; g.beginPath(); g.arc(cx, y, 3.5, 0.25, Math.PI - 0.25); g.stroke();
+    }
     // garis tiap nada C
     if (S && P.length) {
       // garis grid: tiap langkah grid (lebih tebal tiap ketukan, paling tebal tiap bar) supaya terlihat nada menempel di grid
@@ -239,18 +267,44 @@ function build(): void {
       g.fillStyle = 'rgba(90,90,110,.4)'; g.font = '700 11px system-ui,sans-serif'; g.textAlign = 'center'; g.fillText('NO PAPER', W / 2, py + 56);
     }
     // bayangan di bawah celah: kertas tampak keluar dari dalam mesin
-    const sh = g.createLinearGradient(0, py, 0, py + 18); sh.addColorStop(0, 'rgba(0,0,0,.4)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = sh; g.fillRect(pl, py, pr - pl, 18);
+    const sh = g.createLinearGradient(0, py, 0, py + 26);
+    sh.addColorStop(0, 'rgba(0,0,0,.55)'); sh.addColorStop(0.35, 'rgba(0,0,0,.2)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = sh; g.fillRect(pl, py, pr - pl, 26);
+    g.fillStyle = 'rgba(0,0,0,.16)'; g.fillRect(pl, py, 1, H - py); g.fillRect(pr - 1, py, 1, H - py);   // tebal tepi kertas
     g.restore();
     // celah kertas
-    g.fillStyle = '#1b1a17'; g.beginPath(); g.roundRect(pl - 2, HEAD_H - 5, pr - pl + 4, 6, 3); g.fill();
-    // kepala cetak
+    g.fillStyle = '#0f0e0a'; g.beginPath(); g.roundRect(pl - 2, HEAD_H - 4, pr - pl + 4, 6, 3); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(pl, HEAD_H - 4, pr - pl, 1);
+    // kepala cetak: kereta di atas rel (bayangan jatuh, sisi kiri terang, kanan gelap); bergetar halus saat mencetak
     const hx = Math.max(X0, Math.min(W - X0, X0 + headX * (W - X0 * 2)));
-    g.fillStyle = '#5b574c'; g.fillRect(hx - 13, 11, 26, 20);
-    g.fillStyle = ink ? '#e4572e' : '#8d897b'; g.fillRect(hx - 9, 14, 18, 9);   // kartrid tinta (abu-abu = tinta habis)
-    g.fillStyle = 'rgba(255,255,255,.35)'; g.fillRect(hx - 13, 11, 26, 2);
-    g.fillStyle = '#1b1a17'; g.fillRect(hx - 2, 31, 4, HEAD_H - 36);   // jarum menuju celah
-    if (animating) { g.fillStyle = 'rgba(255,200,120,.9)'; g.fillRect(hx - 2, HEAD_H - 6, 4, 3); }
+    const jit = animating && !reduce ? (Math.random() - 0.5) * 0.8 : 0;
+    const cx0 = hx - 17, cy0 = 10, cw = 34, ch = 28;
+    g.save(); g.translate(0, jit);
+    g.save(); g.shadowColor = 'rgba(0,0,0,.5)'; g.shadowBlur = 7 * dpr; g.shadowOffsetY = 3 * dpr;   // bayangan canvas tidak ikut skala dpr
+    g.fillStyle = '#5b574c'; g.beginPath(); g.roundRect(cx0, cy0, cw, ch, 5); g.fill(); g.restore();
+    const cg = g.createLinearGradient(cx0, 0, cx0 + cw, 0);
+    cg.addColorStop(0, '#9b968a'); cg.addColorStop(0.45, '#6f6b5f'); cg.addColorStop(1, '#443f36');
+    g.fillStyle = cg; g.beginPath(); g.roundRect(cx0, cy0, cw, ch, 5); g.fill();
+    const ct = g.createLinearGradient(0, cy0, 0, cy0 + 10); ct.addColorStop(0, 'rgba(255,255,255,.4)'); ct.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = ct; g.beginPath(); g.roundRect(cx0, cy0, cw, 10, [5, 5, 0, 0]); g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 1; g.beginPath(); g.roundRect(cx0 + 0.5, cy0 + 0.5, cw - 1, ch - 1, 5); g.stroke();
+    g.fillStyle = 'rgba(255,255,255,.4)'; g.fillRect(cx0 + 5, cy0 + 1, cw - 10, 1);
+    // kartrid tinta (abu-abu = tinta habis)
+    const ik = g.createLinearGradient(0, cy0 + 6, 0, cy0 + 18);
+    if (ink) { ik.addColorStop(0, '#ff8a5c'); ik.addColorStop(1, '#c9361c'); } else { ik.addColorStop(0, '#a9a598'); ik.addColorStop(1, '#6d695d'); }
+    g.fillStyle = ik; g.beginPath(); g.roundRect(hx - 11, cy0 + 6, 22, 12, 3); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.35)'; g.fillRect(hx - 9, cy0 + 7, 18, 3);   // kilau tutup kartrid
+    g.strokeStyle = 'rgba(0,0,0,.5)'; g.beginPath(); g.roundRect(hx - 10.5, cy0 + 6.5, 21, 11, 3); g.stroke();
+    // blok nozzle + jarum menuju celah
+    g.fillStyle = '#34312a'; g.beginPath(); g.roundRect(hx - 8, cy0 + ch - 3, 16, 8, 2); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.25)'; g.fillRect(hx - 7, cy0 + ch - 2, 14, 1);
+    const nd = g.createLinearGradient(hx - 1.5, 0, hx + 1.5, 0); nd.addColorStop(0, '#f2efe4'); nd.addColorStop(1, '#6d695d');
+    g.fillStyle = nd; g.fillRect(hx - 1.5, cy0 + ch + 5, 3, HEAD_H - 4 - (cy0 + ch + 5));
+    g.restore();
+    if (animating) {   // percikan hangat di titik jarum menyentuh kertas
+      const gl = g.createRadialGradient(hx, HEAD_H - 4, 0, hx, HEAD_H - 4, 14); gl.addColorStop(0, 'rgba(255,205,130,.95)'); gl.addColorStop(1, 'rgba(255,179,71,0)');
+      g.fillStyle = gl; g.fillRect(hx - 14, HEAD_H - 18, 28, 30);
+    }
   }
 
   // ---------- progres & animasi cetak ----------
