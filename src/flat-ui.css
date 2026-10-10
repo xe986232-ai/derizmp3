@@ -222,16 +222,16 @@ html[data-uistyle="flat"]{
   --flat-pl-bg:var(--flat-ap-bg);               /* latar area kerja (di bawah baris track terakhir / di luar ujung timeline) */
   --flat-pl-lane:var(--flat-ap-raised);         /* baris track */
   --flat-pl-lane-alt:var(--flat-ap-raised);     /* tanpa selang-seling: lane kosong tidak diberi warna berbeda (spec 5) */
-  --flat-pl-ruler:var(--flat-ap-panel);         /* strip ruler (48px, menyambung dengan strip atas mixer) */
+  --flat-pl-ruler:#3A3A3A;                      /* card di belakang ruler: warna waveform (#454545) digelapkan sedikit */
   --flat-pl-line:var(--flat-ap-border);         /* garis pemisah baris & garis bawah ruler */
   /* grid: bar = garis solid; ketukan, 1/16, dst = warna dasar (R,G,B) x alpha zoom (--beat-a, --sub-a, --mid-a, --fine-a) x gain */
   --flat-pl-grid-bar:var(--flat-ap-border);     /* garis tiap bar */
   --flat-pl-grid:166,157,143;     /* warna dasar garis ketukan & lebih halus (= --flat-ap-border, format R,G,B) */
   --flat-pl-grid-gain:5;          /* pengali alpha zoom: garis ketukan harus tipis tapi terbaca di latar beige */
   /* ruler (dibaca juga oleh main.ts untuk canvas) */
-  --flat-pl-tick-a:#3A3A3A;       /* tick bar + angka: warna waveform (#454545) digelapkan sedikit */
-  --flat-pl-tick-b:#4D4D4D;       /* tick ketukan + label ketukan: turunan abu waveform */
-  --flat-pl-tick-c:#666666;       /* tick 1/16 + label 1/16 (hex biasa: dibaca main.ts untuk canvas, tidak boleh pakai var()/color-mix) */
+  --flat-pl-tick-a:#DDD3C2;       /* tick bar + angka: krem terang agar terbaca di atas card ruler gelap */
+  --flat-pl-tick-b:#BDB19E;       /* tick ketukan + label ketukan */
+  --flat-pl-tick-c:#A69D8F;       /* tick 1/16 + label 1/16 (hex biasa: dibaca main.ts untuk canvas, tidak boleh pakai var()/color-mix) */
   /* penunjuk */
   --flat-pl-play:var(--flat-ap-playhead);     /* playhead: cyan solid, tanpa glow */
   --flat-pl-focus:var(--flat-ap-orange);      /* baris target saat drop / seret */
