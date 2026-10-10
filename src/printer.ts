@@ -42,7 +42,7 @@ const ICON = {
 };
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = (m: number): string => NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
-const MUTE_KEY = 'derizmp3.printerMute', VOX_KEY = 'derizmp3.printerVocal';
+const MUTE_KEY = 'derizmp3.printerMute', VOX_KEY = 'derizmp3.printerVocal', VOL_KEY = 'derizmp3.printerVocalVol';
 
 interface Sess { name: string; pt: PitchTrack; notes: Note[]; buf: AudioBuffer }   // buf: audio asli (diputar bareng nadanya)
 let root: HTMLElement | null = null, openFn: (() => void) | null = null;
@@ -66,12 +66,21 @@ function build(): void {
         '<canvas class="prn__cv" role="img" aria-label="Kertas cetak melodi. Seret naik turun untuk menggulung"></canvas>' +
         `<button type="button" class="prn__drop">${ICON.up}<span>Masukkan vokal</span><small>drop file audio, ketuk untuk memilih, atau tekan REC</small></button>` +
       '</div></div>' +
+      '<div class="prn__prog">' +
+        '<span class="prn__t prn__tc">0:00</span>' +
+        '<div class="prn__track" role="slider" tabindex="0" aria-label="Posisi putar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" title="Klik / seret untuk loncat posisi"><i class="prn__fill"></i><i class="prn__knob"></i></div>' +
+        '<span class="prn__t prn__tt">0:00</span>' +
+      '</div>' +
+      '<div class="prn__mix">' +
+        '<button type="button" class="prn__vox" title="Putar vokal asli bareng nadanya saat PLAY (sinkron)" aria-pressed="true">VOCAL</button>' +
+        '<input type="range" class="prn__vol" min="0" max="100" step="1" value="80" aria-label="Volume vokal">' +
+        '<span class="prn__pct">80%</span>' +
+      '</div>' +
       '<div class="prn__opts">' +
         '<label>BPM<input type="number" class="prn__bpm" min="30" max="300" step="1" inputmode="numeric" value="120"></label>' +
         '<label>Grid<select class="prn__grid"><option value="0">Off</option><option value="0.5">1/8</option><option value="0.25">1/16</option></select></label>' +
         `<label>Key<select class="prn__key">${keyOpts}</select></label>` +
-        '<button type="button" class="prn__vox" title="Putar vokal asli bareng nadanya saat PLAY (sinkron)" aria-pressed="true">VOCAL</button>' +
-        '<button type="button" class="prn__spd" title="Kecepatan cetak: FAST = beberapa detik, LIVE = sepanjang durasi vokal" aria-pressed="false">FAST</button>' +
+        '<label>Cetak<button type="button" class="prn__spd" title="Kecepatan cetak: FAST = beberapa detik, LIVE = sepanjang durasi vokal" aria-pressed="false">FAST</button></label>' +
       '</div>' +
       '<div class="prn__bar">' +
         `<button type="button" class="prn__b prn__rec" aria-label="Rekam vokal" title="Rekam vokal">${ICON.rec}<span>REC</span></button>` +
@@ -89,6 +98,7 @@ function build(): void {
   const win = q<HTMLElement>('.prn__win'), stat = q('.prn__stat'), stage = q('.prn__stage'), cv = q<HTMLCanvasElement>('.prn__cv'), g = cv.getContext('2d')!;
   const drop = q<HTMLButtonElement>('.prn__drop'), file = q<HTMLInputElement>('.prn__file');
   const bpmIn = q<HTMLInputElement>('.prn__bpm'), gridSel = q<HTMLSelectElement>('.prn__grid'), keySel = q<HTMLSelectElement>('.prn__key'), spdBtn = q<HTMLButtonElement>('.prn__spd'), voxBtn = q<HTMLButtonElement>('.prn__vox');
+  const track = q<HTMLElement>('.prn__track'), tcEl = q('.prn__tc'), ttEl = q('.prn__tt'), volIn = q<HTMLInputElement>('.prn__vol'), pctEl = q('.prn__pct'), mixEl = q('.prn__mix');
   const recBtn = q<HTMLButtonElement>('.prn__rec'), playBtn = q<HTMLButtonElement>('.prn__play'), printBtn = q<HTMLButtonElement>('.prn__print'), tearBtn = q<HTMLButtonElement>('.prn__tear'), midBtn = q<HTMLButtonElement>('.prn__midi'), muteBtn = q<HTMLButtonElement>('.prn__mute');
   dragWindow({ root: el, move: win, handle: '.prn__head' });
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -103,6 +113,8 @@ function build(): void {
   const jobs = new Map<number, { ok: (m: any) => void; fail: (e: Error) => void }>();   // eslint-disable-line @typescript-eslint/no-explicit-any
   let vox = true; try { vox = localStorage.getItem(VOX_KEY) !== '0'; } catch { /* abaikan */ }   // putar vokal asli bareng nadanya (bawaan nyala)
   let voxSrc: AudioBufferSourceNode | null = null, voxGain: GainNode | null = null;
+  let vol = 0.8; try { const v = parseInt(localStorage.getItem(VOL_KEY) ?? '', 10); if (v >= 0 && v <= 100) vol = v / 100; } catch { /* abaikan */ }   // volume vokal 0..1
+  let pos = 0, scrubbing = false, mode: 'play' | 'print' | null = null;   // pos = posisi putar (detik)
   let mute = false; try { mute = localStorage.getItem(MUTE_KEY) === '1'; } catch { /* abaikan */ }
   const K = 30, HEAD_H = 52, X0 = 30;   // K = piksel per ketukan; HEAD_H = tinggi badan printer di atas kertas; X0 = tepi kiri area nada
 
@@ -113,7 +125,12 @@ function build(): void {
   const bpm = (): number => { const v = parseFloat(bpmIn.value); return v >= 30 && v <= 300 ? v : 120; };
   const syncMute = (): void => { muteBtn.innerHTML = mute ? ICON.mute : ICON.snd; muteBtn.setAttribute('aria-pressed', String(mute)); if (sfx) sfx.muted = mute; };
   syncMute();
-  const syncVox = (): void => { voxBtn.setAttribute('aria-pressed', String(vox)); if (voxGain) voxGain.gain.value = vox ? 0.9 : 0; };
+  const voxLevel = (): number => vox ? vol : 0;
+  const syncVox = (): void => {
+    voxBtn.setAttribute('aria-pressed', String(vox)); mixEl.classList.toggle('is-off', !vox);
+    volIn.value = String(Math.round(vol * 100)); pctEl.textContent = Math.round(vol * 100) + '%';
+    if (voxGain) voxGain.gain.setTargetAtTime(voxLevel(), voxGain.context.currentTime, 0.02);
+  };
   syncVox();
   const enable = (): void => { const has = P.length > 0; playBtn.disabled = printBtn.disabled = tearBtn.disabled = midBtn.disabled = !has || recording; win.classList.toggle('is-off', !S); };
 
@@ -212,59 +229,74 @@ function build(): void {
     if (animating) { g.fillStyle = 'rgba(255,200,120,.9)'; g.fillRect(hx - 2, HEAD_H - 6, 4, 3); }
   }
 
-  // ---------- animasi cetak ----------
-  function stopAnim(finish = false): void {
-    cancelAnimationFrame(raf); animating = false; sfx?.stop(); stopVox();
-    if (finish) TB = total;
-    headTo = 0.5; headX = 0.5; setBtns(); draw();
+  // ---------- progres & animasi cetak ----------
+  const lenSec = (): number => S && P.length ? Math.max(total * 60 / bpm(), S.buf.duration) : 0;   // panjang bar progres (detik): nada terakhir atau vokal, mana yang lebih panjang
+  const fmt = (s: number): string => { const r = Math.max(0, Math.round(s)); return Math.floor(r / 60) + ':' + String(r % 60).padStart(2, '0'); };
+  function updProg(preview?: number): void {
+    const len = lenSec(), p = Math.max(0, Math.min(len, preview ?? pos)), f = len > 0 ? p / len : 0;
+    track.style.setProperty('--p', f.toFixed(4));
+    tcEl.textContent = fmt(p); ttEl.textContent = fmt(len);
+    track.setAttribute('aria-valuenow', String(Math.round(f * 100)));
+    track.setAttribute('aria-valuetext', `${fmt(p)} dari ${fmt(len)}`);
   }
   function stopVox(): void {
     if (voxSrc) { try { voxSrc.stop(); } catch { /* sudah berhenti */ } voxSrc.disconnect(); voxSrc = null; }
     voxGain?.disconnect(); voxGain = null;
   }
-  function run(asLive: boolean, withTones: boolean): void {
+  function stopAnim(finish = false): void {
+    cancelAnimationFrame(raf); animating = false; mode = null; sfx?.stop(); stopVox();
+    if (finish) { TB = total; pos = Math.max(pos, total * 60 / bpm()); }
+    headTo = 0.5; headX = 0.5; setBtns(); draw(); if (!scrubbing) updProg();
+  }
+  /** asLive: jalan sesuai durasi asli; withTones: mode PLAY (nada + vokal asli); from: mulai dari detik ke-berapa (hanya PLAY / LIVE). */
+  function run(asLive: boolean, withTones: boolean, from = 0): void {
     if (!S || !P.length) return;
     const a = audio(); stopAnim();
-    const spb = 60 / bpm(), secs = total * spb;
-    // PLAY: vokal asli ikut diputar dari detik 0 dan kertas mengikuti jam audio, jadi nada, kertas, dan vokal selalu sejajar (beat 0 = detik 0 audio)
+    const spb = 60 / bpm(), len = lenSec();
+    // PLAY: vokal asli ikut diputar dan kertas mengikuti jam audio, jadi nada, kertas, dan vokal selalu sejajar (beat 0 = detik 0 audio)
     const withVox = withTones && !!S.buf;
-    const dur = asLive ? Math.max(0.6, secs, withVox ? S.buf.duration : 0) : reduce ? 0.01 : Math.min(4, Math.max(1.6, secs * 0.25));
-    animating = true; TB = 0; let next = 0, ended = false;
+    from = asLive ? Math.max(0, Math.min(from, len - 0.05)) : 0;
+    const dur = asLive ? Math.max(0.6, withTones ? len : total * spb) : reduce ? 0.01 : Math.min(4, Math.max(1.6, total * spb * 0.25));
+    mode = withTones ? 'play' : 'print';
+    animating = true; TB = Math.min(total, from / spb); pos = from;
+    let next = P.findIndex(n => n.s >= TB - 1e-9); if (next < 0) next = P.length;   // nada yang sudah lewat tidak dibunyikan lagi
+    let ended = false;
     const startAt = a.currentTime + 0.06;   // jeda kecil supaya vokal dan nada mulai bersamaan
-    if (withVox) {
+    if (withVox && from < S.buf.duration - 0.02) {
       voxSrc = a.createBufferSource(); voxSrc.buffer = S.buf;
-      voxGain = a.createGain(); voxGain.gain.value = vox ? 0.9 : 0;
-      voxSrc.connect(voxGain).connect(a.destination); voxSrc.start(startAt);
+      voxGain = a.createGain(); voxGain.gain.value = voxLevel();
+      voxSrc.connect(voxGain).connect(a.destination); voxSrc.start(startAt, from);
     }
     setBtns();
     if (!withTones) sfx!.start();
     const frame = (): void => {
       if (!animating) return;
-      const el = Math.max(0, a.currentTime - startAt);
+      const el = from + Math.max(0, a.currentTime - startAt);
       const u = Math.min(1, el / dur);
       TB = asLive ? Math.min(total, el / spb) : total * u;
+      pos = asLive ? el : TB * spb;
       while (next < P.length && P[next].s <= TB) { const n = P[next++]; if (withTones) sfx!.tone(n.p, n.l * spb, n.v / 127); }
       const cur = P.find(n => n.s <= TB && TB < n.s + n.l);
       if (cur) { headTo = (cur.p - lo + 0.5) / (hi - lo + 1); if (!withTones) sfx!.zzt(cur.p, cur.v / 127); }
       else { const nx = P.find(n => n.s > TB); if (nx) headTo = (nx.p - lo + 0.5) / (hi - lo + 1); }
       headX += (headTo - headX) * 0.35;
       say((withTones ? 'PLAYING ' : 'PRINTING ') + Math.round(u * 100) + '%');
-      draw();
+      draw(); if (!scrubbing) updProg();
       if (u < 1) { raf = requestAnimationFrame(frame); return; }
       if (!ended) { ended = true; animating = false; sfx!.stop(); if (!withTones) sfx!.ding(); stopAnim(true); flash(ink < 1 ? `LOW INK · ${P.length} NOTES` : `DONE · ${P.length} NOTES`); }
     };
     raf = requestAnimationFrame(frame);
   }
   const setBtns = (): void => {
-    playBtn.innerHTML = animating && live ? `${ICON.stop}<span>STOP</span>` : `${ICON.play}<span>PLAY</span>`;
-    printBtn.innerHTML = animating && !live ? `${ICON.stop}<span>STOP</span>` : `${ICON.print}<span>PRINT</span>`;
+    playBtn.innerHTML = mode === 'play' ? `${ICON.stop}<span>STOP</span>` : `${ICON.play}<span>PLAY</span>`;
+    printBtn.innerHTML = mode === 'print' ? `${ICON.stop}<span>STOP</span>` : `${ICON.print}<span>PRINT</span>`;
     enable();
   };
 
   // ---------- muat & analisis ----------
   async function loadWith(get: () => Promise<{ buf: AudioBuffer; name: string }>): Promise<void> {
     const my = ++loadTok;
-    stopAnim(); P = []; total = 0; enable(); drop.hidden = true; say('READING AUDIO');
+    stopAnim(); P = []; total = 0; pos = 0; updProg(); enable(); drop.hidden = true; say('READING AUDIO');
     try {
       audio();
       let { buf, name } = await get();
@@ -325,15 +357,15 @@ function build(): void {
   }
 
   // ---------- event ----------
-  const reprint = (): void => { if (!S) return; stopAnim(); rebuild(); TB = total; enable(); info(); draw(); };
+  const reprint = (): void => { if (!S) return; stopAnim(); rebuild(); TB = total; pos = total * 60 / bpm(); enable(); info(); draw(); updProg(); };
   bpmIn.addEventListener('change', reprint); gridSel.addEventListener('change', reprint); keySel.addEventListener('change', reprint);
   spdBtn.addEventListener('click', () => { live = !live; spdBtn.textContent = live ? 'LIVE' : 'FAST'; spdBtn.setAttribute('aria-pressed', String(live)); });
-  voxBtn.addEventListener('click', () => { vox = !vox; try { localStorage.setItem(VOX_KEY, vox ? '1' : '0'); } catch { /* abaikan */ } syncVox(); });   // bisa diganti saat sedang PLAY
+  voxBtn.addEventListener('click', () => { vox = !vox; if (vox && vol === 0) vol = 0.8; try { localStorage.setItem(VOL_KEY, String(Math.round(vol * 100))); } catch { /* abaikan */ } try { localStorage.setItem(VOX_KEY, vox ? '1' : '0'); } catch { /* abaikan */ } syncVox(); });   // bisa diganti saat sedang PLAY
   drop.addEventListener('click', () => file.click());
   file.addEventListener('change', () => { const f = file.files?.[0]; file.value = ''; if (f) loadFile(f); });
   recBtn.addEventListener('click', () => { void toggleRec(); });
-  printBtn.addEventListener('click', () => { if (animating && !live) stopAnim(true); else run(live, false); });
-  playBtn.addEventListener('click', () => { if (animating && live) stopAnim(true); else run(true, true); });
+  printBtn.addEventListener('click', () => { if (mode === 'print') stopAnim(true); else run(live, false); });
+  playBtn.addEventListener('click', () => { if (mode === 'play') { stopAnim(); info(); } else run(true, true); });   // STOP = jeda: posisi tetap, klik bar progres untuk lanjut
   tearBtn.addEventListener('click', tearOff);
   midBtn.addEventListener('click', saveMid);
   muteBtn.addEventListener('click', () => { mute = !mute; try { localStorage.setItem(MUTE_KEY, mute ? '1' : '0'); } catch { /* abaikan */ } syncMute(); });
@@ -346,12 +378,33 @@ function build(): void {
   win.addEventListener('drop', e => { win.classList.remove('is-drop'); const f = e.dataTransfer?.files[0]; if (f) { e.preventDefault(); loadFile(f); } });
   // gulung kertas: seret naik / turun atau roda mouse (setelah selesai dicetak)
   let drag: { y: number; tb: number } | null = null;
-  const scrollTo = (tb: number): void => { TB = Math.max(0, Math.min(total, tb)); draw(); };
+  const scrollTo = (tb: number): void => { TB = Math.max(0, Math.min(total, tb)); pos = TB * 60 / bpm(); draw(); updProg(); };
   cv.addEventListener('pointerdown', e => { if (animating || !P.length) return; drag = { y: e.clientY, tb: TB }; cv.setPointerCapture(e.pointerId); });
   cv.addEventListener('pointermove', e => { if (drag) scrollTo(drag.tb + (e.clientY - drag.y) / K); });
   const endDrag = (): void => { drag = null; };
   cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
   cv.addEventListener('wheel', e => { if (animating || !P.length) return; e.preventDefault(); scrollTo(TB - e.deltaY / K); }, { passive: false });
+  // progres: klik / seret bar untuk loncat posisi (otomatis PLAY dari titik itu); panah kiri-kanan = 5 detik
+  const seekTo = (sec: number): void => { if (!S || !P.length || recording) return; run(true, true, sec); };
+  const fracOf = (e: PointerEvent): number => { const r = track.getBoundingClientRect(); return r.width ? Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) : 0; };
+  track.addEventListener('pointerdown', e => { if (!S || !P.length || recording) return; scrubbing = true; track.setPointerCapture(e.pointerId); updProg(fracOf(e) * lenSec()); });
+  track.addEventListener('pointermove', e => { if (scrubbing) updProg(fracOf(e) * lenSec()); });
+  const endScrub = (e: PointerEvent, go: boolean): void => { if (!scrubbing) return; scrubbing = false; if (go) seekTo(fracOf(e) * lenSec()); else updProg(); };
+  track.addEventListener('pointerup', e => endScrub(e, true));
+  track.addEventListener('pointercancel', e => endScrub(e, false));
+  track.addEventListener('keydown', e => {
+    if (!S || !P.length || recording) return;
+    const len = lenSec(); let t: number | null = null;
+    if (e.key === 'ArrowRight') t = pos + 5; else if (e.key === 'ArrowLeft') t = pos - 5; else if (e.key === 'Home') t = 0; else if (e.key === 'End') t = len - 0.1;
+    if (t !== null) { e.preventDefault(); seekTo(Math.max(0, Math.min(len, t))); }
+  });
+  // volume vokal: geser slider; kalau VOCAL sedang mati, menggeser slider menyalakannya lagi
+  volIn.addEventListener('input', () => {
+    vol = Math.max(0, Math.min(1, (+volIn.value || 0) / 100));
+    if (!vox && vol > 0) { vox = true; try { localStorage.setItem(VOX_KEY, '1'); } catch { /* abaikan */ } }
+    try { localStorage.setItem(VOL_KEY, String(Math.round(vol * 100))); } catch { /* abaikan */ }
+    syncVox();
+  });
   new ResizeObserver(layout).observe(stage);
 
   openFn = () => {
