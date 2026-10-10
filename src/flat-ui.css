@@ -229,9 +229,9 @@ html[data-uistyle="flat"]{
   --flat-pl-grid:166,157,143;     /* warna dasar garis ketukan & lebih halus (= --flat-ap-border, format R,G,B) */
   --flat-pl-grid-gain:5;          /* pengali alpha zoom: garis ketukan harus tipis tapi terbaca di latar beige */
   /* ruler (dibaca juga oleh main.ts untuk canvas) */
-  --flat-pl-tick-a:#3A3A3A;       /* tick bar + angka: warna waveform (#454545) digelapkan sedikit */
-  --flat-pl-tick-b:#4D4D4D;       /* tick ketukan + label ketukan: turunan abu waveform */
-  --flat-pl-tick-c:#666666;       /* tick 1/16 + label 1/16 (hex biasa: dibaca main.ts untuk canvas, tidak boleh pakai var()/color-mix) */
+  --flat-pl-tick-a:#68665F;       /* tick bar + angka */
+  --flat-pl-tick-b:#8F887D;       /* tick ketukan + label ketukan */
+  --flat-pl-tick-c:#A69D8F;       /* tick 1/16 + label 1/16 */
   /* penunjuk */
   --flat-pl-play:var(--flat-ap-playhead);     /* playhead: cyan solid, tanpa glow */
   --flat-pl-focus:var(--flat-ap-orange);      /* baris target saat drop / seret */
