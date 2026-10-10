@@ -26,6 +26,7 @@ import { dbgRun, dbgZoom } from './audio-debug';
 import { mpcsExport, mpcsImport } from './mpcs';
 import { setMgchordBridge, mgchordExport, mgchordImport } from './mgchord';
 import { setPrinterBridge } from './printer';
+import { setBpmtuneBridge } from './bpmtune';
 import { setSpectrumBridge, restoreSpectrum } from './spectrum';
 import { setDrumsBridge, drumsRefresh, drumsSyncPlay, openDrums, DRUMS_HIDDEN } from './drums';
 import { drumRow, DRUM_KIT } from './drums-audio';
@@ -1567,6 +1568,7 @@ const mgBridge = {
 setMgchordBridge(mgBridge);
 // Printer (Melody Printer, disembunyikan lihat PRINTER_HIDDEN): TEAR OFF mengirim nada ke pattern yang dipilih, memakai jalur kirim yang sama dengan MGCHORD
 setPrinterBridge({bpm: () => BPM, send: (notes, beats) => mgBridge.send(notes, beats)});
+setBpmtuneBridge({getBpm: () => BPM, setBpm: v => setBpm(v)});   // BPMTUNE: tombol SET mengirim tempo ke BPM project
 // Drums: step sequencer membaca / menulis nada pattern yang sedang dipilih di timeline (track harus punya plugin Drums)
 {
   const drumsPat = () => { const el = selPat && selPat.isConnected ? selPat : (lastPat && lastPat.isConnected ? lastPat : null); return el && !el.dataset.clip && !el.dataset.auId && isDrumsTrack(el.parentElement.dataset.track) ? el : null; };

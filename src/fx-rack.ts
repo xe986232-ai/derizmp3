@@ -15,6 +15,7 @@ import { openMpcs } from './mpcs';
 import { openCute } from './cute';
 import { openDrums, DRUMS_HIDDEN } from './drums';
 import { openPrinter, PRINTER_HIDDEN } from './printer';
+import { openBpmtune } from './bpmtune';   // BPMTUNE (BPM finder + tuner): tidak ada di daftar tombol +, dimunculkan lewat tekan-tahan + di tab Plugin
 
 // MGCHORD gratis dan tampil di daftar plugin saat tombol "+" ditekan di tab Plugin (tekan-tahan "+" ~1,5 detik tetap jadi jalan pintas).
 import { openMgchord } from './mgchord';
@@ -28,7 +29,7 @@ import type { DelayParams } from './delay-fx';
 import { EQ_COLORS, bandOf, bandVals, hitNode, hzAt, dbAt, paintEqCanvas, eqReadout, specActive, type EqSpec } from './eq-ui';
 import { DELAY_PARAMS, delayHtml, paintDk, paintDelayUi, paintMeter, linkedPartner } from './delay-ui';
 
-type FxType = 'reverb' | 'eq' | 'filter' | 'deesser' | 'delay' | 'supersaw' | 'deriz' | 'mpcs' | 'cute' | 'mgchord' | 'drums' | 'printer';
+type FxType = 'reverb' | 'eq' | 'filter' | 'deesser' | 'delay' | 'supersaw' | 'deriz' | 'mpcs' | 'cute' | 'mgchord' | 'drums' | 'printer' | 'bpmtune';
 // DERIZ: audio yang di-upload ke canvas plugin (buffer disimpan untuk tahap berikutnya; peaks + max khusus untuk menggambar waveform)
 interface DerizData { name: string; dur: number; buf: AudioBuffer; start: number; zoom: number; view: number; spec: Spec | null; busy?: number; }   // start: posisi garis start, 0..1 dari durasi; zoom >= 1: jendela terlihat = [view, view + 1/zoom] dari durasi; spec: spektrogram (null selagi dianalisis, busy = persen)
 // Spektrogram: frames x ROWS nilai dB (0..255 = -100..0 dBFS), baris 0 = frekuensi terendah (skala log); lut = palet warna yang disesuaikan dengan level puncak
@@ -99,6 +100,7 @@ const EFFECTS: EffectDef[] = [
   ], synth: true },   // plugin DERIZ: spektrogram + upload + knob; satu bawaan track DERIZ (dari "+ Tambahkan track"), sisanya bisa ditambah dari daftar efek (banyak DERIZ per track)
   { type: 'mpcs', name: 'MPCS', params: [], synth: true },
   { type: 'printer', name: 'PRINTER', params: [], synth: true },   // plugin PRINTER (Melody Printer): vokal -> melody MIDI; kartu ringkas, jendelanya terpisah (printer.ts). Disembunyikan dari daftar + (PRINTER_HIDDEN)
+  { type: 'bpmtune', name: 'BPMTUNE', params: [], synth: true },   // plugin BPMTUNE: BPM finder + tuner; kartu ringkas, jendelanya terpisah (bpmtune.ts). Tidak ada di daftar + (lihat openPicker)
   { type: 'cute', name: 'CUTE', params: [], synth: true },   // plugin CUTE: pemotong audio; kartu ringkas, jendelanya terpisah (cute.ts)
   { type: 'mgchord', name: 'MGCHORD', params: [], synth: true },   // plugin MGCHORD: pembuat chord progression; kartu ringkas, editornya jendela terpisah (mgchord.ts)   // plugin MPCS: kartu ringkas di panel; editornya jendela terpisah (mpcs.ts), dibuka lewat kartu ini
   {   // plugin Drums: step sequencer di jendela terpisah (drums.ts); suara disintesis (drums-audio.ts). Pattern track ini dibunyikan sebagai hit drum
@@ -457,6 +459,12 @@ function cardHtml(fx: Fx, i: number): string {
       `<button type="button" class="fxc__open fxc__pr" aria-label="Buka PRINTER" title="Buka PRINTER">${ICON_OPEN}</button>` +
       `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi PRINTER" title="Opsi">${ICON_MORE}</button></header></section>`;
   }
+  if (fx.type === 'bpmtune') {   // BPMTUNE: kartu ringkas (judul + buka + titik tiga); isinya ada di jendela BPMTUNE
+    return `<section class="fxc fxc--bt" data-fx="${fx.id}" data-kind="plugin" style="--i:${i}" aria-label="BPMTUNE">` +
+      `<header class="fxc__head"><i class="fxc__led" aria-hidden="true"></i><h3 class="fxc__name"><button type="button" class="fxc__title fxc__bt" title="Buka BPMTUNE">BPMTUNE</button></h3>` +
+      `<button type="button" class="fxc__open fxc__bt" aria-label="Buka BPMTUNE" title="Buka BPMTUNE">${ICON_OPEN}</button>` +
+      `<button type="button" class="fxc__more" aria-haspopup="menu" aria-expanded="false" aria-label="Opsi BPMTUNE" title="Opsi">${ICON_MORE}</button></header></section>`;
+  }
   if (fx.type === 'cute') {   // CUTE: kartu ringkas (judul + buka + titik tiga); isinya ada di jendela CUTE
     return `<section class="fxc fxc--cute" data-fx="${fx.id}" data-kind="plugin" style="--i:${i}" aria-label="CUTE">` +
       `<header class="fxc__head"><i class="fxc__led" aria-hidden="true"></i><h3 class="fxc__name"><button type="button" class="fxc__title fxc__cu" title="Buka CUTE">CUTE</button></h3>` +
@@ -586,7 +594,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   let ovOpen: { card: HTMLElement; ph: HTMLElement; opener: HTMLElement | null } | null = null;
   let autoOpen: { track: string; id: number } | null = null;   // DERIZ baru ditambahkan: dibuka otomatis begitu track-nya terpilih
   const onOvKey = (e: KeyboardEvent): void => {
-    if (e.key !== 'Escape' || (e.target as Element | null)?.closest?.('.cute')) return;   // Esc di dalam CUTE hanya menutup CUTE (dual plugin)
+    if (e.key !== 'Escape' || (e.target as Element | null)?.closest?.('.cute, .bt')) return;   // Esc di dalam CUTE / BPMTUNE hanya menutup jendelanya sendiri (dual plugin)
     e.preventDefault(); e.stopPropagation();
     closeOverlay();
   };
@@ -1009,17 +1017,17 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   };
 
   // Rahasia (tidak ada petunjuk di layar): tekan-tahan "+" ~1,5 detik.
-  //  - tab Plugin: menambahkan MGCHORD (atau membukanya kalau sudah ada)
+  //  - tab Plugin: menambahkan BPMTUNE (atau membukanya kalau sudah ada); BPMTUNE tidak ada di daftar +
   //  - tab Effect: menambahkan PRINTER (atau membukanya kalau sudah ada); Printer disembunyikan dari daftar + (PRINTER_HIDDEN)
   let holdT = 0, held = false;
   const holdStop = () => { clearTimeout(holdT); holdT = 0; };
   addBtn.addEventListener('pointerdown', () => {
     held = false; holdStop();
     if (!cur || addBtn.disabled) return;
-    const secret: FxType = page === 'plugin' ? 'mgchord' : 'printer';
+    const secret: FxType = page === 'plugin' ? 'bpmtune' : 'printer';
     holdT = window.setTimeout(() => {
       held = true; holdT = 0; closePicker();
-      if (fxs().some(f => f.type === secret)) { if (secret === 'printer') openPrinter(); else openMg(); }
+      if (fxs().some(f => f.type === secret)) { if (secret === 'printer') openPrinter(); else openBpmtune(); }
       else addEffect(secret);
     }, 1500);
   });
@@ -1154,6 +1162,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     openAuto();
     if (type === 'mpcs') openMpcs();   // langsung terbuka, seperti DERIZ
     if (type === 'cute') openCute();
+    if (type === 'bpmtune') openBpmtune();
     if (type === 'mgchord') openMgchord();
     if (type === 'drums') openDrums();
     if (type === 'printer') openPrinter();
@@ -1215,7 +1224,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   }
 
   function removeEffect(card: HTMLElement): void {
-    const fx = find(card); if (!fx || !cur || (defOf(fx.type).synth && fx.type !== 'deriz' && fx.type !== 'mpcs' && fx.type !== 'cute' && fx.type !== 'mgchord' && fx.type !== 'drums' && fx.type !== 'printer')) return;
+    const fx = find(card); if (!fx || !cur || (defOf(fx.type).synth && fx.type !== 'deriz' && fx.type !== 'mpcs' && fx.type !== 'cute' && fx.type !== 'bpmtune' && fx.type !== 'mgchord' && fx.type !== 'drums' && fx.type !== 'printer')) return;
     hideTip();
     if (fx.type === 'deriz') {   // lepas sampler-nya; nada di pattern track ini tetap disimpan (lihat patterns.removed)
       const e = synths.get(fx.id); if (e) { synths.delete(fx.id); void e.p.then(x => x.dispose(), () => { /* gagal dibuat */ }); }
@@ -1625,15 +1634,15 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
   const untilt = (c: HTMLElement): void => { c.classList.remove('is-tilting'); c.style.setProperty('--rx', '0deg'); c.style.setProperty('--ry', '0deg'); c.style.setProperty('--mx', '50%'); c.style.setProperty('--my', '0%'); };
   onRoots('pointermove', e => {
     if (reduce || e.pointerType !== 'mouse' || sd) return;
-    const card = (e.target as Element).closest<HTMLElement>('.fxc--deriz, .fxc--cute');
-    document.querySelectorAll<HTMLElement>('.fxc--deriz.is-tilting, .fxc--cute.is-tilting').forEach(c => { if (c !== card) untilt(c); });
+    const card = (e.target as Element).closest<HTMLElement>('.fxc--deriz, .fxc--cute, .fxc--bt');
+    document.querySelectorAll<HTMLElement>('.fxc--deriz.is-tilting, .fxc--cute.is-tilting, .fxc--bt.is-tilting').forEach(c => { if (c !== card) untilt(c); });
     if (!card || card.closest('.derizov')) return;   // di overlay tidak miring (mengganggu saat main keyboard)
     const r = card.getBoundingClientRect(), px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
     card.classList.add('is-tilting');
     card.style.setProperty('--ry', ((px - .5) * 7).toFixed(2) + 'deg'); card.style.setProperty('--rx', ((.5 - py) * 5).toFixed(2) + 'deg');
     card.style.setProperty('--mx', (px * 100).toFixed(1) + '%'); card.style.setProperty('--my', (py * 100).toFixed(1) + '%');
   });
-  onRoots('pointerleave', () => document.querySelectorAll<HTMLElement>('.fxc--deriz.is-tilting, .fxc--cute.is-tilting').forEach(untilt));
+  onRoots('pointerleave', () => document.querySelectorAll<HTMLElement>('.fxc--deriz.is-tilting, .fxc--cute.is-tilting, .fxc--bt.is-tilting').forEach(untilt));
 
   onRoots('click', e => {
     const t = e.target as Element, card = t.closest<HTMLElement>('.fxc');
@@ -1643,6 +1652,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
     if (t.closest('.dly__sum')) { openOverlay(card); return; }
     if (t.closest('.fxc__mp')) { openMpcs(); return; }
     if (t.closest('.fxc__cu')) { openCute(); return; }
+    if (t.closest('.fxc__bt')) { openBpmtune(); return; }
     if (t.closest('.fxc__mg')) { openMg(); return; }
     if (t.closest('.fxc__dr')) { openDrums(); return; }
     if (t.closest('.fxc__pr')) { openPrinter(); return; }
@@ -1757,7 +1767,7 @@ export function initFxRack(host: () => AudioHost, patterns?: PatternBridge): FxR
       const k = cnt.get(type) ?? 0; cnt.set(type, k + 1);
       let fx = (racks.get(track) ?? []).filter(f => f.type === type)[k];
       if (!fx) {
-        if (d.synth && type !== 'mpcs' && type !== 'cute' && type !== 'mgchord' && type !== 'drums' && type !== 'printer') continue;   // plugin instrumen hanya ada kalau track-nya memang jenis itu (MPCS boleh dipasang di track mana pun)
+        if (d.synth && type !== 'mpcs' && type !== 'cute' && type !== 'bpmtune' && type !== 'mgchord' && type !== 'drums' && type !== 'printer') continue;   // plugin instrumen hanya ada kalau track-nya memang jenis itu (MPCS boleh dipasang di track mana pun)
         const v: Record<string, number> = {}; d.params.forEach(q => { v[q.key] = q.def; });
         fx = { id: ++seq, type, on: true, min: false, v };
         racks.set(track, [...(racks.get(track) ?? []), fx]);
