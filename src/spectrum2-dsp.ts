@@ -94,20 +94,24 @@ export function loudestPeak(db: Float32Array, sr: number, minDb = -62): Loudest 
 const STOPS: [number, number, number, number][] = [
   [0.00, 14, 14, 20], [0.16, 34, 26, 86], [0.40, 112, 84, 206], [0.64, 179, 161, 247], [0.84, 126, 226, 240], [1.00, 255, 250, 234],
 ];
-export function paletteAt(v: number): [number, number, number] {
-  const x = clamp(v, 0, 1);
-  for (let i = 1; i < STOPS.length; i++) {
-    if (x <= STOPS[i][0]) {
-      const p = STOPS[i - 1], q = STOPS[i], t = (x - p[0]) / (q[0] - p[0]);
+// Palet Flat (tema Flat, latar panel krem #C7BBA8): 0 = sama dengan latar panel, lalu lavender muda -> lavender -> oranye -> magenta (warna dari palet gambar referensi)
+const STOPS_FLAT: [number, number, number, number][] = [
+  [0.00, 199, 187, 168], [0.20, 210, 178, 222], [0.45, 185, 138, 208], [0.70, 245, 160, 68], [0.88, 217, 130, 50], [1.00, 216, 90, 148],
+];
+export function paletteAt(v: number, flat = false): [number, number, number] {
+  const S = flat ? STOPS_FLAT : STOPS, x = clamp(v, 0, 1);
+  for (let i = 1; i < S.length; i++) {
+    if (x <= S[i][0]) {
+      const p = S[i - 1], q = S[i], t = (x - p[0]) / (q[0] - p[0]);
       return [p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t, p[3] + (q[3] - p[3]) * t];
     }
   }
-  const e = STOPS[STOPS.length - 1]; return [e[1], e[2], e[3]];
+  const e = S[S.length - 1]; return [e[1], e[2], e[3]];
 }
 // 256 warna RGBA berurutan (Uint8ClampedArray, 1 piksel = 4 byte), alfa penuh
-export function buildPalette(): Uint8ClampedArray {
+export function buildPalette(flat = false): Uint8ClampedArray {
   const out = new Uint8ClampedArray(256 * 4);
-  for (let i = 0; i < 256; i++) { const [r, g, b] = paletteAt(i / 255); out[i * 4] = r; out[i * 4 + 1] = g; out[i * 4 + 2] = b; out[i * 4 + 3] = 255; }
+  for (let i = 0; i < 256; i++) { const [r, g, b] = paletteAt(i / 255, flat); out[i * 4] = r; out[i * 4 + 1] = g; out[i * 4 + 2] = b; out[i * 4 + 3] = 255; }
   return out;
 }
 // Lengkung kontras spectrogram: lantai derau sedikit digelapkan supaya yang penting menonjol
@@ -133,8 +137,10 @@ export function bandEnergies(db: Float32Array, sr: number, out: BandEnergy): voi
   }
   out.low = p[0]; out.mid = p[1]; out.high = p[2];
 }
-const C_LOW: [number, number, number] = [255, 107, 129], C_MID: [number, number, number] = [179, 161, 247], C_HIGH: [number, number, number] = [126, 226, 240];   // koral, lavender, cyan
-export function waveRGB(e: BandEnergy, out: [number, number, number] = [0, 0, 0]): [number, number, number] {
+const C_LOW0: [number, number, number] = [255, 107, 129], C_MID0: [number, number, number] = [179, 161, 247], C_HIGH0: [number, number, number] = [126, 226, 240];   // koral, lavender, cyan
+const F_LOW: [number, number, number] = [245, 160, 68], F_MID: [number, number, number] = [185, 138, 208], F_HIGH: [number, number, number] = [91, 159, 154];   // gaya Flat: oranye, lavender, teal
+export function waveRGB(e: BandEnergy, out: [number, number, number] = [0, 0, 0], flat = false): [number, number, number] {
+  const C_LOW = flat ? F_LOW : C_LOW0, C_MID = flat ? F_MID : C_MID0, C_HIGH = flat ? F_HIGH : C_HIGH0;
   // bobot relatif terhadap rentang terkuat, dipangkatkan 3: rentang yang jelas dominan mewarnai kolom, yang seimbang bercampur
   const mx = Math.max(e.low, e.mid, e.high);
   if (mx < 0.02) { out[0] = C_MID[0]; out[1] = C_MID[1]; out[2] = C_MID[2]; return out; }

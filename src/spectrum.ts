@@ -5,7 +5,7 @@
 // Saklar nyala/mati + pilihan kecepatan ada di Pengaturan (menu-panel.ts). Tampil sebagai strip polos selebar layar yang menempel di dasar (tanpa bingkai / tombol); tidak modal, jadi Space / pintasan DAW tetap jalan.
 
 import { PitchDetector, PitchTracker, TraceBuilder, Envelope, AutoGain, shape, clamp } from './spectrum-dsp';
-import { SpectrumStyle2, FFT2 } from './spectrum2';
+import { SpectrumStyle2, FFT2, specColors } from './spectrum2';
 
 export interface SpectrumBridge { tap(): AudioNode | null }   // titik ambil audio: keluaran master (guardOut di main.ts)
 let bridge: SpectrumBridge | null = null;
@@ -19,7 +19,8 @@ const SPEEDS = SPECTRUM_SPEEDS;
 // Gaya 1 = gelombang (riwayat amplitudo + scope langsung, ranah waktu); Gaya 2 = spektrum (spectrogram bergulir + analyzer bar, ranah frekuensi; spectrum2.ts)
 export const SPECTRUM_STYLES = [{ k: '1', label: 'Gaya 1' }, { k: '2', label: 'Gaya 2' }];
 const SPEED_KEY = 'derizmp3.spectrum.speed', ON_KEY = 'derizmp3.spectrum.on', STYLE_KEY = 'derizmp3.spectrum.style';
-const FILL = '#b3a1f7', OUTLINE = '#f4f0ff';   // riwayat = isi solid tanpa outline; scope langsung = garis saja tanpa isi (tanpa gradasi / glow)
+// Warna (isi riwayat, garis scope, garis tengah) diambil dari specColors() menurut tema: default = lavender neon, Flat = lavender #B98AD0 + garis abu waveform #8F8F8F.
+// Riwayat = isi solid tanpa outline; scope langsung = garis saja tanpa isi (tanpa gradasi / glow)
 
 let root: HTMLElement | null = null, openFn: (() => void) | null = null, closeFn: (() => void) | null = null, restyleFn: (() => void) | null = null;
 let speed = 1, on = false, style = 0;   // kecepatan gulir (indeks SPEEDS; bawaan Normal), status nyala (bawaan MATI), gaya (indeks SPECTRUM_STYLES; bawaan Gaya 1): semuanya diingat di browser
@@ -137,7 +138,8 @@ function build(): void {
     g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
     if (style === 1) { s2.draw(g); return; }   // Gaya 2: spectrogram + analyzer (spectrum2.ts)
     const mid = H / 2, amp = H / 2 - 7, xs = Math.round(W * SPLIT), live = W - xs, np = tops.length;
-    g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(0, Math.round(mid), W, 1);
+    const C = specColors();
+    g.fillStyle = C.ink(.07); g.fillRect(0, Math.round(mid), W, 1);
 
     // riwayat: posisi kolom ke-i = xs - (frac + i) * pxPerCol; kolom yang sedang terisi ada di x = xs, jadi geseran halus sampai ke sub-piksel
     const pxCol = SPEEDS[speed].pps * env.binSec, frac = env.frac, sc = gainH.scale;
@@ -150,7 +152,7 @@ function build(): void {
     }
     for (let p = 0; p < np; p++) { const a = Math.max(tops[p], 0.004); bots[p] = mid + a * amp; tops[p] = mid - a * amp; }
     // riwayat: isi solid satu warna saja, tanpa outline (sama seperti referensi); tanpa gradasi, inti, atau glow
-    g.fillStyle = FILL;
+    g.fillStyle = C.fill;
     g.beginPath(); g.moveTo(0, mid);
     for (let p = 0; p < np; p++) g.lineTo(Math.min(xs, p * STEP), tops[p]);
     for (let p = np - 1; p >= 0; p--) g.lineTo(Math.min(xs, p * STEP), bots[p]);
@@ -167,7 +169,7 @@ function build(): void {
       // scope langsung: hanya garis (tanpa isi)
       g.beginPath();
       for (let i = 0; i < m; i++) { const y = mid - clamp(trace[i] * ls, -1, 1) * amp * 0.96; if (i) g.lineTo(xs + i * k * live, y); else g.moveTo(xs, y); }
-      g.lineJoin = 'round'; g.lineWidth = 1.5; g.strokeStyle = OUTLINE; g.stroke();
+      g.lineJoin = 'round'; g.lineWidth = 1.5; g.strokeStyle = C.outline; g.stroke();
     }
   }
 
@@ -238,5 +240,6 @@ function build(): void {
     el.classList.toggle('spec--s2', style === 1);
     connect(); resetState(); layout(); start();
   };
+  window.addEventListener('derizmp3:ui', () => { if (!el.hidden && !closing) { resetState(); draw(); } });   // ganti tema (default <-> Flat): warna strip ikut berganti
   document.addEventListener('visibilitychange', () => { if (!el.hidden) { if (document.hidden) stop(); else { resetState(); start(); } } });
 }

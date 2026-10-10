@@ -15,6 +15,27 @@ import {
   type BandEnergy,
 } from './spectrum2-dsp';
 import { noteName, AutoGain, shape } from './spectrum-dsp';
+import { isFlat } from './ui-theme';
+
+// Warna strip Spectrum per tema. Tema default = indigo/lavender neon di latar gelap (nilai lama, tidak diubah); tema Flat = palet gambar referensi di latar krem (lavender, oranye, teal, hijau/kuning meter, magenta, teks #343536).
+export interface SpecColors {
+  flat: boolean; ink: (a: number) => string; fill: string; outline: string; hot: string; cool: string; hold: string; dot: string; peakLine: string; scope: string;
+  meter: [number, string][]; areaFill: [number, string][]; areaLine: [number, string][];
+}
+const DEF_COLORS: SpecColors = {
+  flat: false, ink: a => `rgba(255,255,255,${a})`, fill: '#b3a1f7', outline: '#f4f0ff', hot: '#ff6b81', cool: '#7ee2f0', hold: 'rgba(255,250,234,.95)', dot: 'rgba(179,161,247,.55)', peakLine: 'rgba(255,250,234,.32)', scope: '#f4f0ff',
+  meter: [[0, '#3a2a8a'], [0.62, '#9d86ee'], [0.86, '#7ee2f0'], [1, '#ff6b81']],
+  areaFill: [[0, 'rgba(58,42,138,.10)'], [0.5, 'rgba(157,134,238,.45)'], [0.85, 'rgba(126,226,240,.70)'], [1, 'rgba(255,250,234,.85)']],
+  areaLine: [[0, '#6a55d0'], [0.5, '#b3a1f7'], [0.85, '#7ee2f0'], [1, '#fffaea']],
+};
+const FLAT_COLORS: SpecColors = {
+  flat: true, ink: a => `rgba(52,53,54,${Math.min(1, a * 1.6).toFixed(3)})`, fill: '#B98AD0', outline: '#8F8F8F', hot: '#D85A94', cool: '#5B9F9A', hold: '#343536', dot: 'rgba(141,112,168,.6)', peakLine: 'rgba(52,53,54,.35)', scope: '#8F8F8F',
+  meter: [[0, '#79B86A'], [0.7, '#79B86A'], [0.88, '#E5C65A'], [1, '#F5A044']],
+  areaFill: [[0, 'rgba(141,112,168,.12)'], [0.5, 'rgba(185,138,208,.55)'], [0.85, 'rgba(245,160,68,.70)'], [1, 'rgba(217,130,50,.85)']],
+  areaLine: [[0, '#8D70A8'], [0.5, '#B98AD0'], [0.85, '#F5A044'], [1, '#D98232']],
+};
+export const specColors = (): SpecColors => isFlat() ? FLAT_COLORS : DEF_COLORS;
+let C: SpecColors = DEF_COLORS;   // diperbarui di awal draw()
 
 export const FFT2 = 8192;           // analyser frekuensi: jendela ~170 ms @48 kHz, bass rapat (5,9 Hz per bin)
 const GAP = 10;                     // jarak antar modul (px CSS); garis pemisah di tengahnya
@@ -45,6 +66,7 @@ export interface S2Input {
 
 export class SpectrumStyle2 {
   private pal = buildPalette();
+  private flatPal = false;
   private rects: Rect[] = [];
   private W = 0; private H = 0; private sr = 48000; private bins = FFT2 / 2;
   // spectrogram
@@ -117,9 +139,17 @@ export class SpectrumStyle2 {
     if (!this.lm || this.lmSr !== this.sr) { this.lm = new LoudnessMeter(this.sr); this.lmSr = this.sr; }
   }
   private lmSr = 0;
+  // ganti tema (default <-> Flat): bangun ulang palet spectrogram, warna waveform multi-band kembali ke lavender tema itu, dan spectrogram dibersihkan
+  applyTheme(): void {
+    const f = isFlat(); if (f === this.flatPal) return;
+    this.flatPal = f; this.pal = buildPalette(f);
+    const m: [number, number, number] = f ? [185, 138, 208] : [179, 161, 247]; this.wCol = [m[0], m[1], m[2]]; this.wColS = [m[0], m[1], m[2]];
+    if (this.sg.width) this.clearSg();
+  }
   private clearSg(): void { this.sgx.fillStyle = `rgb(${this.pal[0]},${this.pal[1]},${this.pal[2]})`; this.sgx.fillRect(0, 0, this.sg.width, this.sg.height); }
 
   reset(): void {
+    this.applyTheme();
     this.bars.reset(); this.target.fill(0); this.haveRows = false; this.sgAcc = 0; this.readout = ''; this.readAge = 99;
     if (this.sg.width) this.clearSg();
     this.wAmp.fill(0); this.wRms.fill(0); this.wHead = 0; this.wAcc = 0; this.wLast = 0; this.wLastR = 0; this.wGain.reset();
@@ -170,7 +200,7 @@ export class SpectrumStyle2 {
       let sq = 0; for (let i = Math.max(0, inp.mono.length - n); i < inp.mono.length; i++) sq += inp.mono[i] * inp.mono[i];
       const rms = Math.sqrt(sq / n);
       this.wGain.update(pk, dt);
-      bandEnergies(inp.db, inp.sr, this.wEnergy); waveRGB(this.wEnergy, this.wCol);
+      bandEnergies(inp.db, inp.sr, this.wEnergy); waveRGB(this.wEnergy, this.wCol, this.flatPal);
       const ks = 1 - Math.exp(-dt / 0.08); for (let i = 0; i < 3; i++) this.wColS[i] += (this.wCol[i] - this.wColS[i]) * ks;
       const curPk = Math.max(pk, this.wLast * Math.exp(-dt / 0.07)), curRms = Math.max(rms, this.wLastR * Math.exp(-dt / 0.1));   // naik seketika, turun halus
       this.wAcc += dt * pps;
@@ -207,6 +237,7 @@ export class SpectrumStyle2 {
   // ---------- gambar (g sudah diberi setTransform(dpr) oleh pemanggil; koordinat = piksel CSS) ----------
   draw(g: CanvasRenderingContext2D): void {
     const H = this.H; if (!this.W || !H) return;
+    C = specColors();
     g.save();
     for (let i = 0; i < this.rects.length; i++) {
       const r = this.rects[i];
@@ -220,7 +251,7 @@ export class SpectrumStyle2 {
         case 'bars': this.drawBars(g, r.w, H); break;
       }
       g.restore();
-      if (i < this.rects.length - 1) { g.fillStyle = 'rgba(255,255,255,.10)'; g.fillRect(r.x + r.w + GAP / 2, 6, 1, H - 12); }
+      if (i < this.rects.length - 1) { g.fillStyle = C.ink(.10); g.fillRect(r.x + r.w + GAP / 2, 6, 1, H - 12); }
     }
     g.restore();
   }
@@ -231,8 +262,8 @@ export class SpectrumStyle2 {
     g.font = FONT; g.textBaseline = 'middle';
     for (const [hz, label] of TICKS) {
       const y = Math.round(H - hzToPos(hz) * H) + 0.5;
-      g.fillStyle = 'rgba(255,255,255,.10)'; g.fillRect(0, y - 0.5, w, 1);
-      g.fillStyle = 'rgba(255,255,255,.45)'; g.fillText(label, w - 4 - g.measureText(label).width, Math.min(H - 6, Math.max(6, y - 6)));
+      g.fillStyle = C.ink(.10); g.fillRect(0, y - 0.5, w, 1);
+      g.fillStyle = C.ink(.45); g.fillText(label, w - 4 - g.measureText(label).width, Math.min(H - 6, Math.max(6, y - 6)));
     }
     g.save(); g.globalCompositeOperation = 'destination-out';   // tepi kiri memudar ("keluar" dari layar)
     const fw = Math.min(30, w * 0.2), fade = g.createLinearGradient(0, 0, fw, 0); fade.addColorStop(0, 'rgba(0,0,0,1)'); fade.addColorStop(1, 'rgba(0,0,0,0)');
@@ -242,7 +273,7 @@ export class SpectrumStyle2 {
   private drawWave(g: CanvasRenderingContext2D, w: number, H: number): void {
     const len = this.wAmp.length; if (!len) return;
     const mid = H / 2, amp = H / 2 - 5, sc = this.wGain.scale, fw = Math.min(28, w * 0.2);
-    g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(0, Math.round(mid), w, 1);
+    g.fillStyle = C.ink(.07); g.fillRect(0, Math.round(mid), w, 1);
     const off = Math.max(0, len - w);   // kolom lebih lama dari lebar modul tidak digambar
     for (let x = 0; x < Math.min(w, len); x++) {
       const i = (this.wHead + off + x) % len, fade = x < fw ? x / fw : 1;
@@ -260,35 +291,35 @@ export class SpectrumStyle2 {
     let top: number;
     if (compact) {   // strip rendah (sama tinggi dengan Gaya 1): satu baris "−8.0 LU", batang di bawahnya
       g.font = FONT_BIG; const wn = g.measureText(val).width; g.font = FONT; const wu = g.measureText('LU').width, x0 = cx - (wn + 3 + wu) / 2;
-      g.textAlign = 'left'; g.font = FONT_BIG; g.fillStyle = 'rgba(255,255,255,.92)'; g.fillText(val, x0, 2);
-      g.font = FONT; g.fillStyle = 'rgba(255,255,255,.45)'; g.fillText('LU', x0 + wn + 3, 5);
+      g.textAlign = 'left'; g.font = FONT_BIG; g.fillStyle = C.ink(.92); g.fillText(val, x0, 2);
+      g.font = FONT; g.fillStyle = C.ink(.45); g.fillText('LU', x0 + wn + 3, 5);
       top = 19;
     } else {
       g.textAlign = 'center';
-      g.font = FONT; g.fillStyle = 'rgba(255,255,255,.45)'; g.fillText('LUFS', cx, 3);
-      g.font = FONT_BIG; g.fillStyle = 'rgba(255,255,255,.92)'; g.fillText(val, cx, 13);
+      g.font = FONT; g.fillStyle = C.ink(.45); g.fillText('LUFS', cx, 3);
+      g.font = FONT_BIG; g.fillStyle = C.ink(.92); g.fillText(val, cx, 13);
       const pkMax = Math.max(this.holdL, this.holdR);
-      g.font = FONT; g.fillStyle = pkMax > -1 ? '#ff6b81' : 'rgba(255,255,255,.55)'; g.fillText('pk ' + (pkMax > -100 ? pkMax.toFixed(1) : '−∞'), cx, 29);
+      g.font = FONT; g.fillStyle = pkMax > -1 ? C.hot : C.ink(.55); g.fillText('pk ' + (pkMax > -100 ? pkMax.toFixed(1) : '−∞'), cx, 29);
       top = 44;
     }
     g.textAlign = 'left';
     const base = H - PAD_B, ah = base - top; if (ah < 10) return;
     const bw = clamp(Math.floor((w - 24) / 2), 6, 14), gp = 5, x0 = Math.round(cx - bw - gp / 2);
     const grad = g.createLinearGradient(0, base, 0, top);
-    grad.addColorStop(0, '#3a2a8a'); grad.addColorStop(0.62, '#9d86ee'); grad.addColorStop(0.86, '#7ee2f0'); grad.addColorStop(1, '#ff6b81');
+    for (const [o, col] of C.meter) grad.addColorStop(o, col);
     for (let c = 0; c < 2; c++) {
       const x = x0 + c * (bw + gp), lv = dbToMeter(c ? dR : dL), hd = dbToMeter(c ? this.holdR : this.holdL);
-      g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(x, top, bw, ah);
+      g.fillStyle = C.ink(.07); g.fillRect(x, top, bw, ah);
       g.fillStyle = grad; g.fillRect(x, base - lv * ah, bw, lv * ah);
-      if (hd > 0.01) { g.fillStyle = 'rgba(255,250,234,.95)'; g.fillRect(x, base - hd * ah - 1, bw, 1.5); }
+      if (hd > 0.01) { g.fillStyle = C.hold; g.fillRect(x, base - hd * ah - 1, bw, 1.5); }
     }
-    g.fillStyle = 'rgba(255,255,255,.18)'; for (const db of [-6, -18, -36]) g.fillRect(x0 - 4, Math.round(base - dbToMeter(db) * ah), 2 * bw + gp + 8, 1);   // garis bantu -6 / -18 / -36 dBFS
+    g.fillStyle = C.ink(.18); for (const db of [-6, -18, -36]) g.fillRect(x0 - 4, Math.round(base - dbToMeter(db) * ah), 2 * bw + gp + 8, 1);   // garis bantu -6 / -18 / -36 dBFS
   }
 
   private drawStereo(g: CanvasRenderingContext2D, w: number, H: number): void {
     const corrH = 8, areaH = H - corrH - 6, R = Math.max(10, Math.min(w / 2 - 4, areaH / 2)), cx = w / 2, cy = 4 + areaH / 2;
     // bingkai: belah ketupat (sumbu L/R diputar 45°) + sumbu tengah
-    g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 1;
+    g.strokeStyle = C.ink(.12); g.lineWidth = 1;
     g.beginPath(); g.moveTo(cx, cy - R); g.lineTo(cx + R, cy); g.lineTo(cx, cy + R); g.lineTo(cx - R, cy); g.closePath(); g.stroke();
     g.beginPath(); g.moveTo(cx, cy - R); g.lineTo(cx, cy + R); g.moveTo(cx - R, cy); g.lineTo(cx + R, cy); g.stroke();
     // titik berjejak: kanvas khusus yang dipudarkan tiap frame
@@ -296,7 +327,7 @@ export class SpectrumStyle2 {
     if (sw && sh) {
       sx.save(); sx.globalCompositeOperation = 'destination-out'; sx.fillStyle = 'rgba(0,0,0,.28)'; sx.fillRect(0, 0, sw, sh); sx.restore();
       const k = R * this.gGain.scale;   // gGain.scale = 0.92 / puncak: titik terjauh ~92% jari-jari
-      sx.save(); sx.globalCompositeOperation = 'lighter'; sx.fillStyle = 'rgba(179,161,247,.55)';
+      sx.save(); sx.globalCompositeOperation = 'lighter'; sx.fillStyle = C.dot;
       for (let i = 0; i < this.gn; i++) {
         const x = cx + clamp(this.gx[i] * k, -R, R), y = cy - clamp(this.gy[i] * k, -R, R);
         sx.fillRect(x - 0.7, y - 0.7, 1.4, 1.4);
@@ -306,32 +337,32 @@ export class SpectrumStyle2 {
     }
     // batang korelasi fase: -1 (kiri) .. 0 .. +1 (kanan)
     const bx = 6, bw = w - 12, by = H - PAD_B - corrH / 2 - 1;
-    g.fillStyle = 'rgba(255,255,255,.10)'; g.fillRect(bx, by - 1.5, bw, 3);
-    g.fillStyle = 'rgba(255,255,255,.25)'; g.fillRect(bx + bw / 2 - 0.5, by - 4, 1, 8);
+    g.fillStyle = C.ink(.10); g.fillRect(bx, by - 1.5, bw, 3);
+    g.fillStyle = C.ink(.25); g.fillRect(bx + bw / 2 - 0.5, by - 4, 1, 8);
     const mx = bx + (this.corr * 0.5 + 0.5) * bw;
-    g.fillStyle = this.corr < -0.1 ? '#ff6b81' : '#7ee2f0'; g.fillRect(mx - 1.5, by - 4, 3, 8);
+    g.fillStyle = this.corr < -0.1 ? C.hot : C.cool; g.fillRect(mx - 1.5, by - 4, 3, 8);
   }
 
   private drawScope(g: CanvasRenderingContext2D, w: number, H: number): void {
     const mid = H / 2, amp = H / 2 - 7, t = this.scope.trace, m = t.length;
-    g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(0, Math.round(mid), w, 1);
+    g.fillStyle = C.ink(.07); g.fillRect(0, Math.round(mid), w, 1);
     if (!this.scope.ok || m < 2) return;
     g.beginPath();
     for (let i = 0; i < m; i++) { const x = (i / (m - 1)) * (w - 2) + 1, y = mid - clamp(t[i] * this.scope.scale, -1, 1) * amp * 0.96; if (i) g.lineTo(x, y); else g.moveTo(x, y); }
-    g.lineJoin = 'round'; g.lineWidth = 1.5; g.strokeStyle = '#f4f0ff'; g.stroke();
+    g.lineJoin = 'round'; g.lineWidth = 1.5; g.strokeStyle = C.scope; g.stroke();
   }
 
   // kurva area halus (Catmull-Rom) dengan gradasi, garis tipis di tepi atas, dan garis puncak redup; sumbu frekuensi log
   private drawBars(g: CanvasRenderingContext2D, w: number, H: number): void {
     const nb = this.bars.n; if (nb < 2) return;
     const top = 14, base = H - PAD_B, ah = base - top, dx = w / nb;
-    g.fillStyle = 'rgba(255,255,255,.06)';
+    g.fillStyle = C.ink(.06);
     for (const q of [0.33, 0.66]) g.fillRect(0, Math.round(base - q * ah), w, 1);
     g.font = FONT; g.textBaseline = 'alphabetic';
     for (const [hz, label] of TICKS) {   // garis vertikal tipis + label di tepi bawah
       const x = Math.round(hzToPos(hz) * w) + 0.5;
-      g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(x - 0.5, top, 1, ah);
-      g.fillStyle = 'rgba(255,255,255,.35)'; g.fillText(label, x + 3, base - 2);
+      g.fillStyle = C.ink(.07); g.fillRect(x - 0.5, top, 1, ah);
+      g.fillStyle = C.ink(.35); g.fillText(label, x + 3, base - 2);
     }
     const curve = (arr: Float32Array, closeDown: boolean): void => {
       const X = (i: number): number => (i + 0.5) * dx, Y = (i: number): number => base - clamp(arr[clamp(i, 0, nb - 1)], 0, 1) * ah;
@@ -344,13 +375,13 @@ export class SpectrumStyle2 {
       if (closeDown) { g.lineTo(w, Y(nb - 1)); g.lineTo(w, base); g.closePath(); }
     };
     const fill = g.createLinearGradient(0, base, 0, top);
-    fill.addColorStop(0, 'rgba(58,42,138,.10)'); fill.addColorStop(0.5, 'rgba(157,134,238,.45)'); fill.addColorStop(0.85, 'rgba(126,226,240,.70)'); fill.addColorStop(1, 'rgba(255,250,234,.85)');
+    for (const [o, col] of C.areaFill) fill.addColorStop(o, col);
     curve(this.bars.level, true); g.fillStyle = fill; g.fill();
     const line = g.createLinearGradient(0, base, 0, top);
-    line.addColorStop(0, '#6a55d0'); line.addColorStop(0.5, '#b3a1f7'); line.addColorStop(0.85, '#7ee2f0'); line.addColorStop(1, '#fffaea');
+    for (const [o, col] of C.areaLine) line.addColorStop(o, col);
     curve(this.bars.level, false); g.lineJoin = 'round'; g.lineWidth = 1.4; g.strokeStyle = line; g.stroke();
-    curve(this.bars.peak, false); g.lineWidth = 1; g.strokeStyle = 'rgba(255,250,234,.32)'; g.stroke();   // garis puncak redup (penahan + jatuh)
-    if (this.readout) { g.font = FONT; g.textBaseline = 'top'; g.textAlign = 'right'; g.fillStyle = 'rgba(255,255,255,.7)'; g.fillText(this.readout, w - 6, 2); g.textAlign = 'left'; }
+    curve(this.bars.peak, false); g.lineWidth = 1; g.strokeStyle = C.peakLine; g.stroke();   // garis puncak redup (penahan + jatuh)
+    if (this.readout) { g.font = FONT; g.textBaseline = 'top'; g.textAlign = 'right'; g.fillStyle = C.ink(.7); g.fillText(this.readout, w - 6, 2); g.textAlign = 'left'; }
   }
 }
 

@@ -191,6 +191,9 @@ html[data-uistyle="flat"] .tracklist--collapsed .trackmeter-mini{display:block;p
   background:color-mix(in srgb,var(--flat-mx-text) 9%,transparent);pointer-events:none}   /* batang ramping mentok kanan, tinggi penuh; latar kosong = bayangan tipis warna teks di atas card (menyatu dengan card terpilih maupun tidak, tidak terlihat bolong) */
 html[data-uistyle="flat"] .tracklist--collapsed .trackmeter-mini b{position:absolute;inset:0;display:block;background:var(--flat-mx-text);opacity:.5;transform:scaleY(0);transform-origin:bottom}   /* isi level memenuhi lebar batang; opacity 50% */
 
+/* ---------- SPECTRUM (strip di dasar layar): panel krem + garis atas 1px, tanpa gelap neon. Warna gambar (lavender, garis abu, dst) ada di spectrum2.ts (specColors) ---------- */
+html[data-uistyle="flat"] .spec__win{background:var(--flat-ap-panel);border-top:1px solid var(--flat-ap-border);box-shadow:none}
+
 /* tombol tambah track */
 html[data-uistyle="flat"] .tracklist .addtrack{border-radius:0;margin:0;width:100%;background:var(--flat-card);color:var(--flat-text);border:0;border-bottom:1px solid var(--flat-line)}
 html[data-uistyle="flat"] .tracklist .addtrack:hover{background:var(--flat-ctrl);color:var(--flat-text);transform:none}
