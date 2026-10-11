@@ -144,7 +144,7 @@ html[data-uistyle="flat"] .tracklist .ico-btn[aria-expanded="true"]{background:v
 html[data-uistyle="flat"] .tracklist .trkcard__arm{border-radius:3px;border:1px solid var(--flat-line);background:var(--flat-ctrl);color:var(--flat-text);font-weight:600}
 html[data-uistyle="flat"] .tracklist .trkcard__arm:hover{background:var(--flat-ctrl-hover)}
 html[data-uistyle="flat"] .tracklist .trkcard__arm:active{background:var(--flat-ctrl-press);transform:none}
-html[data-uistyle="flat"] .tracklist .trkcard__arm[aria-checked="true"]{background:var(--flat-solo);border-color:var(--flat-solo-line);color:var(--flat-text)}
+html[data-uistyle="flat"] .tracklist .trkcard__arm[aria-checked="true"]{background:var(--flat-solo);border-color:var(--flat-solo-line);color:var(--flat-on-accent)}
 html[data-uistyle="flat"] .tracklist .trkcard__arm i{border-radius:50%}
 html[data-uistyle="flat"] .tracklist .sm{background:var(--flat-ctrl);border-radius:3px}
 html[data-uistyle="flat"] .tracklist .sm__btn{border-radius:3px;color:var(--flat-text)}
@@ -294,6 +294,9 @@ html[data-uistyle="flat"]{
   --flat-ap-key-white:#F3EBDD;
   --flat-ap-key-black:#454545;
   --flat-ap-note:#454545;         /* not MIDI & waveform di dalam clip */
+  --flat-ap-on-color:var(--flat-ap-text);   /* teks / garis di atas warna solid terang (clip, tombol aktif, tombol teal) */
+  --flat-ap-screen:var(--flat-ap-key-white); /* latar layar (stage DERIZ, LCD MPCS / CUTE) */
+  --flat-ap-scrim:var(--flat-ap-text);      /* warna tirai di belakang jendela & bayangan jendela melayang */
 }
 
 /* ---------- 10. Latar aplikasi ---------- */
@@ -319,14 +322,14 @@ html[data-uistyle="flat"] .pattern{
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--flat-clip) 68%,var(--flat-ap-text));
   animation:none;transition:background-color .15s ease}
 html[data-uistyle="flat"] .pattern:hover{filter:none}
-html[data-uistyle="flat"] .pattern__head{height:18px;border-radius:2px 2px 0 0;background:color-mix(in srgb,var(--flat-ap-text) 12%,transparent);color:var(--flat-ap-text);font-weight:500}
+html[data-uistyle="flat"] .pattern__head{height:18px;border-radius:2px 2px 0 0;background:color-mix(in srgb,var(--flat-ap-on-color) 12%,transparent);color:var(--flat-ap-on-color);font-weight:500}
 html[data-uistyle="flat"] .pattern__notes{border-radius:0 0 2px 2px}
 html[data-uistyle="flat"] .pattern__wave,
 html[data-uistyle="flat"] .pattern__auto{border-radius:0 0 2px 2px}
 html[data-uistyle="flat"] .pattern__notes rect{fill:var(--note-fill,var(--flat-ap-note))}
 html[data-uistyle="flat"] .pattern__wave path{fill:var(--wave-fill,var(--flat-ap-note))}
-html[data-uistyle="flat"] .pattern__auto-fill{fill:color-mix(in srgb,var(--flat-ap-text) 16%,transparent)}
-html[data-uistyle="flat"] .pattern__auto-line{stroke:var(--flat-ap-text)}
+html[data-uistyle="flat"] .pattern__auto-fill{fill:color-mix(in srgb,var(--flat-ap-on-color) 16%,transparent)}
+html[data-uistyle="flat"] .pattern__auto-line{stroke:var(--flat-ap-on-color)}
 html[data-uistyle="flat"] .pattern-ghost{border-radius:2px;background:color-mix(in srgb,var(--flat-ap-text) 8%,transparent)}
 /* seleksi: border tegas lebih gelap (tanpa glow) + handle resize kotak solid */
 html[data-uistyle="flat"] .pattern::after{border:2px solid color-mix(in srgb,var(--flat-clip) 55%,var(--flat-ap-text));border-radius:2px}
@@ -359,7 +362,7 @@ html[data-uistyle="flat"] .tp .play .ico{width:18px;height:18px}
 html[data-uistyle="flat"] .tp__mid .tp__btn{background:var(--flat-ap-note);border-color:var(--flat-ap-note);color:var(--flat-ap-inverse)}
 html[data-uistyle="flat"] .tp__mid .tp__btn:hover{background:color-mix(in srgb,var(--flat-ap-note) 82%,var(--flat-ap-inverse));border-color:var(--flat-ap-note)}
 html[data-uistyle="flat"] .tp__mid .tp__btn:active{background:color-mix(in srgb,var(--flat-ap-note) 78%,var(--flat-ap-text))}
-html[data-uistyle="flat"] .pitch-btn.is-on{background:var(--flat-ap-accent);border-color:var(--flat-ap-accent);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .pitch-btn.is-on{background:var(--flat-ap-accent);border-color:var(--flat-ap-accent);color:var(--flat-ap-on-color)}
 html[data-uistyle="flat"] .pitch-btn.is-on:hover:not(:disabled){background:var(--flat-ap-accent);border-color:var(--flat-ap-accent)}
 html[data-uistyle="flat"] .pitch-btn[aria-expanded="true"]{border-color:var(--flat-ap-text)}
 html[data-uistyle="flat"] :is(.tp__btn,.hist-btn,.kbd__btn):focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
@@ -437,7 +440,7 @@ html[data-uistyle="flat"] .mp__imp:hover{background:var(--flat-ap-panel)}
 html[data-uistyle="flat"] .mp__imp--bad{color:var(--flat-danger)}
 html[data-uistyle="flat"] .mp__inp{border-radius:3px;border:1px solid var(--flat-ap-border);background:var(--flat-ap-raised);color:var(--flat-ap-text)}
 html[data-uistyle="flat"] .mp__inp::placeholder{color:var(--flat-ap-text2)}
-html[data-uistyle="flat"] .mp__prim{border-radius:4px;background:var(--flat-ap-teal);color:var(--flat-ap-text);filter:none}
+html[data-uistyle="flat"] .mp__prim{border-radius:4px;background:var(--flat-ap-teal);color:var(--flat-ap-on-color);filter:none}
 html[data-uistyle="flat"] .mp__prim:hover{filter:none;background:var(--flat-ap-teal-dark);color:var(--flat-ap-inverse)}
 html[data-uistyle="flat"] .mp__prim--bad{background:var(--flat-ap-raised);color:var(--flat-danger);border:1px solid var(--flat-ap-border)}
 html[data-uistyle="flat"] .mp__prim--bad:hover{background:var(--flat-ap-panel);color:var(--flat-danger)}
@@ -457,7 +460,7 @@ html[data-uistyle="flat"] .pr__lbl{color:var(--flat-ap-text2)}
 html[data-uistyle="flat"] .pr__btn{border-radius:3px;color:var(--flat-ap-text2);width:34px;height:32px}
 html[data-uistyle="flat"] .pr__btn:hover{background:var(--flat-ap-panel);color:var(--flat-ap-text)}
 html[data-uistyle="flat"] .pr__btn:active{transform:none;background:var(--flat-ap-muted)}
-html[data-uistyle="flat"] .pr__btn.on{background:var(--flat-ap-accent);color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] .pr__btn.on{background:var(--flat-ap-accent);color:var(--flat-ap-on-color);box-shadow:none}
 html[data-uistyle="flat"] .pr__btn:disabled{opacity:1;color:var(--flat-ap-gray)}
 html[data-uistyle="flat"] .pr__snap{color:var(--flat-ap-text2)}
 html[data-uistyle="flat"] :is(.pr__btn,.pr__snap):focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
@@ -482,7 +485,7 @@ html[data-uistyle="flat"] .menu-btn .menu-btn__ic{color:var(--flat-ap-text)}
 html[data-uistyle="flat"] .pat-btn{width:auto;min-width:46px;height:32px;padding:0 10px;border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text);font-size:13px;font-weight:500;box-shadow:none}
 html[data-uistyle="flat"] .pat-btn:hover{transform:none;background:var(--flat-ap-panel)}
 html[data-uistyle="flat"] .pat-btn:active{transform:none;background:var(--flat-ap-muted)}
-html[data-uistyle="flat"] .pat-btn.is-on{background:var(--flat-ap-accent);color:var(--flat-ap-text);border-color:var(--flat-ap-accent)}
+html[data-uistyle="flat"] .pat-btn.is-on{background:var(--flat-ap-accent);color:var(--flat-ap-on-color);border-color:var(--flat-ap-accent)}
 html[data-uistyle="flat"] .pat-btn[aria-pressed="false"]{background:var(--flat-ap-grid);color:var(--flat-ap-text2)}
 html[data-uistyle="flat"] .pat-btn[aria-pressed="true"]{background:var(--flat-ap-raised);color:var(--flat-ap-text)}
 html[data-uistyle="flat"] .pat-btn:focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
@@ -500,7 +503,7 @@ html[data-uistyle="flat"] .clip-card__val,
 html[data-uistyle="flat"] .clip-card__hint{color:var(--flat-ap-text2)}
 html[data-uistyle="flat"] :is(.clip-card__input,.clip-card__step){border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text)}
 html[data-uistyle="flat"] .clip-card__input:focus{border:2px solid var(--flat-ap-playhead);background:var(--flat-ap-raised)}
-html[data-uistyle="flat"] .clip-card__go{border-radius:4px;background:var(--flat-ap-teal);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .clip-card__go{border-radius:4px;background:var(--flat-ap-teal);color:var(--flat-ap-on-color)}
 html[data-uistyle="flat"] :is(.pr-menu,.pr-snapcard,.add-menu,.track-menu:not(.mixer-menu)){background:var(--flat-ap-raised);color:var(--flat-ap-text);border:1px solid var(--flat-ap-border);border-radius:3px;box-shadow:none}
 
 /* ---------- 18. Sisa detail: LED snap solid (tanpa glow), tombol velocity, handle clip ---------- */
@@ -517,7 +520,7 @@ html[data-uistyle="flat"] .pattern__handle::before{width:8px;height:24px;margin-
 
 /* kartu: tanpa gradien / sekrup / bayangan, tanpa miring 3D */
 html[data-uistyle="flat"] .fxc--deriz{padding:10px 12px 12px;background-image:none;background-color:var(--flat-ap-raised);transform:none;box-shadow:none}
-html[data-uistyle="flat"] .derizov .fxc--deriz{box-shadow:0 10px 24px -8px color-mix(in srgb,var(--flat-ap-text) 45%,transparent)}   /* jendela melayang: satu bayangan lembut agar terpisah dari timeline */
+html[data-uistyle="flat"] .derizov .fxc--deriz{box-shadow:0 10px 24px -8px color-mix(in srgb,var(--flat-ap-scrim) 45%,transparent)}   /* jendela melayang: satu bayangan lembut agar terpisah dari timeline */
 html[data-uistyle="flat"] .fxc--deriz .fxc__head{min-height:26px}
 html[data-uistyle="flat"] .fxc--deriz .fxc__title{font-size:13px;letter-spacing:.24em;color:var(--flat-ap-text);-webkit-text-fill-color:currentColor;background:none;filter:none}
 html[data-uistyle="flat"] .fxc--deriz.is-off .fxc__title{color:var(--flat-ap-text2)}
@@ -531,7 +534,7 @@ html[data-uistyle="flat"] .derizov .fxc--deriz .fxc__close:focus-visible{outline
 /* layout: grid 3 kolom. Baris 1 = canvas (penuh), baris 2 = bar geser zoom (+ tombol Ganti), baris 3 = Speed | Pitch | Volume */
 html[data-uistyle="flat"] .fxc--deriz .deriz__row{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:auto auto auto;column-gap:8px;row-gap:8px;align-items:center}
 html[data-uistyle="flat"] .fxc--deriz .deriz__knobs{display:contents}   /* Speed + Pitch jadi item grid langsung (sama seperti jendela overlay lama) */
-html[data-uistyle="flat"] .fxc--deriz .deriz__row .deriz__stage{grid-column:1 / -1;grid-row:1;align-self:stretch;height:132px;min-height:0;border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-key-white);box-shadow:none}
+html[data-uistyle="flat"] .fxc--deriz .deriz__row .deriz__stage{grid-column:1 / -1;grid-row:1;align-self:stretch;height:132px;min-height:0;border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-screen);box-shadow:none}
 html[data-uistyle="flat"] .derizov .fxc--deriz .deriz__row .deriz__stage{height:150px}
 html[data-uistyle="flat"] .fxc--deriz .deriz__row .deriz__stage.is-over{box-shadow:none;outline:2px solid var(--flat-ap-accent);outline-offset:-2px}
 html[data-uistyle="flat"] .fxc--deriz .deriz__knobs>.fxc__cell:nth-child(1){grid-column:1;grid-row:3;justify-self:center}
@@ -543,7 +546,7 @@ html[data-uistyle="flat"] .fxc--deriz :is(.deriz__knobs,.deriz__vol) .fxc__label
 
 /* layar: kaca & kilau dimatikan; bagian sebelum garis start diredupkan dengan arang transparan */
 html[data-uistyle="flat"] .fxc--deriz .deriz__glass{display:none}
-html[data-uistyle="flat"] .fxc--deriz .deriz__stage::before{background:color-mix(in srgb,var(--flat-ap-text) 20%,transparent)}
+html[data-uistyle="flat"] .fxc--deriz .deriz__stage::before{background:color-mix(in srgb,var(--flat-ap-scrim) 20%,transparent)}
 html[data-uistyle="flat"] .fxc--deriz .deriz__start::before{width:2px;margin-left:-1px;border-radius:0;background:var(--flat-ap-text)}
 html[data-uistyle="flat"] .fxc--deriz .deriz__start::after{background:var(--flat-ap-text)}
 html[data-uistyle="flat"] .fxc--deriz .deriz__stage.is-dragging .deriz__start::before,
@@ -603,7 +606,7 @@ html[data-uistyle="flat"] :is(.fxc--mpcs .fxc__open,.fxc--mpcs .fxc__more):activ
 html[data-uistyle="flat"] .fxc--mpcs .fxc__more[aria-expanded="true"]{background:var(--flat-ap-muted);color:var(--flat-ap-text);transform:none}
 
 /* cangkang jendela: kartu beige solid berborder 1px, tanpa kaca / bayangan / miring 3D (JS tilt juga dimatikan di Flat) */
-html[data-uistyle="flat"] .mpcs__back{background:color-mix(in srgb,var(--flat-ap-text) 28%,transparent)}
+html[data-uistyle="flat"] .mpcs__back{background:color-mix(in srgb,var(--flat-ap-scrim) 28%,transparent)}
 html[data-uistyle="flat"] .mpcs__win{--accent:var(--flat-ap-accent);--accent-soft:color-mix(in srgb,var(--flat-ap-accent) 30%,transparent);border:1px solid var(--flat-ap-ctrl-line);border-radius:4px;background:var(--flat-ap-raised);color:var(--flat-ap-text);transform:none;box-shadow:none;transition:none}
 html[data-uistyle="flat"] .mpcs__glass{display:none}
 
@@ -615,7 +618,7 @@ html[data-uistyle="flat"] .mpcs__led{width:12px;height:12px;border-radius:3px;ba
 html[data-uistyle="flat"] .mpcs__win.is-off .mpcs__led{background:var(--flat-ap-gray);box-shadow:none}
 html[data-uistyle="flat"] .mpcs__title{font-size:13px;letter-spacing:.24em;color:var(--flat-ap-text);text-shadow:none}
 @media (max-width:420px){html[data-uistyle="flat"] .mpcs__title{letter-spacing:.2em}}
-html[data-uistyle="flat"] .mpcs__lcd{border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-key-white);box-shadow:none}
+html[data-uistyle="flat"] .mpcs__lcd{border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-screen);box-shadow:none}
 html[data-uistyle="flat"] .mpcs__stat{color:var(--flat-ap-text);text-shadow:none}
 
 /* tombol header (download, layar penuh, seret, tutup): kotak 3px beige berborder 1px */
@@ -671,7 +674,7 @@ html[data-uistyle="flat"] .mpcs__up:active:not(:disabled){background:var(--flat-
 html[data-uistyle="flat"] .mpcs__up:disabled{opacity:1;background:var(--flat-ap-grid);color:var(--flat-ap-text2)}
 html[data-uistyle="flat"] .mpcs__up:focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
 html[data-uistyle="flat"] .mpcs__up.mpcs__all.is-on,
-html[data-uistyle="flat"] .mpcs__up.mpcs__all.is-on:hover:not(:disabled){background:var(--flat-ap-accent);border-color:var(--flat-ap-accent);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .mpcs__up.mpcs__all.is-on:hover:not(:disabled){background:var(--flat-ap-accent);border-color:var(--flat-ap-accent);color:var(--flat-ap-on-color)}
 
 /* knob Glide / Human / Lock: ikut knob plugin Flat (cincin aksen 3px + cakram abu gelap, penunjuk krem); bingkai & isi gelap bawaan MPCS dibuang */
 html[data-uistyle="flat"] .mpcs__knob .fxk{border:0;background:none;box-shadow:none}
@@ -694,7 +697,7 @@ html[data-uistyle="flat"] .mpcs__play:hover:not(:disabled){background:color-mix(
 html[data-uistyle="flat"] .mpcs__play:active:not(:disabled){background:color-mix(in srgb,var(--flat-ap-note) 78%,var(--flat-ap-text));transform:none;box-shadow:none}
 html[data-uistyle="flat"] .mpcs__play.is-on,
 html[data-uistyle="flat"] .mpcs__play.is-on:hover:not(:disabled),
-html[data-uistyle="flat"] .mpcs__play.is-on:active:not(:disabled){background:var(--flat-ap-accent);border-color:var(--flat-ap-accent);color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] .mpcs__play.is-on:active:not(:disabled){background:var(--flat-ap-accent);border-color:var(--flat-ap-accent);color:var(--flat-ap-on-color);box-shadow:none}
 html[data-uistyle="flat"] .mpcs__play:disabled{opacity:1;background:var(--flat-ap-grid);border-color:var(--flat-ap-border);color:var(--flat-ap-text2)}
 html[data-uistyle="flat"] .mpcs__play:focus-visible{outline:2px solid var(--flat-ap-playhead);outline-offset:1px}
 
@@ -712,7 +715,7 @@ html[data-uistyle="flat"] :is(.fxc--cute,.fxc--mgchord) :is(.fxc__open,.fxc__mor
 html[data-uistyle="flat"] :is(.fxc--cute,.fxc--mgchord) .fxc__more[aria-expanded="true"]{background:var(--flat-ap-muted);color:var(--flat-ap-text);transform:none;box-shadow:none}
 
 /* cangkang jendela */
-html[data-uistyle="flat"] .cute__back{background:color-mix(in srgb,var(--flat-ap-text) 28%,transparent)}
+html[data-uistyle="flat"] .cute__back{background:color-mix(in srgb,var(--flat-ap-scrim) 28%,transparent)}
 html[data-uistyle="flat"] .cute__win{--accent:var(--flat-ap-accent);--accent-soft:color-mix(in srgb,var(--flat-ap-accent) 30%,transparent);--ink:var(--flat-ap-text);--mute:var(--flat-ap-text2);--line:var(--flat-ap-border);
   border:1px solid var(--flat-ap-ctrl-line);border-radius:4px;background:var(--flat-ap-panel);color:var(--flat-ap-text);transform:none;box-shadow:none;transition:none}
 html[data-uistyle="flat"] .cute__win.is-drop{box-shadow:inset 0 0 0 2px var(--flat-ap-accent)}   /* file diseret di atas jendela: bingkai magenta solid, tanpa glow */
@@ -725,7 +728,7 @@ html[data-uistyle="flat"] .cute__led{width:12px;height:12px;border-radius:3px;ba
 html[data-uistyle="flat"] .cute__win.is-off .cute__led{background:var(--flat-ap-gray);box-shadow:none}
 html[data-uistyle="flat"] .cute__title{font-size:13px;letter-spacing:.24em;color:var(--flat-ap-text);text-shadow:none}
 html[data-uistyle="flat"] .cute__win.is-off .cute__title{color:var(--flat-ap-text2);text-shadow:none}
-html[data-uistyle="flat"] .cute__lcd{border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-key-white);box-shadow:none}
+html[data-uistyle="flat"] .cute__lcd{border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-screen);box-shadow:none}
 html[data-uistyle="flat"] .cute__stat{color:var(--flat-ap-text);text-shadow:none}
 
 /* tombol header (seret, tutup) + tombol GANTI */
@@ -759,7 +762,7 @@ html[data-uistyle="flat"] .cute__play:hover:not(:disabled){background:color-mix(
 html[data-uistyle="flat"] .cute__play:active:not(:disabled){background:color-mix(in srgb,var(--flat-ap-note) 78%,var(--flat-ap-text));transform:none;box-shadow:none}
 html[data-uistyle="flat"] .cute__play.is-on,
 html[data-uistyle="flat"] .cute__play.is-on:hover:not(:disabled),
-html[data-uistyle="flat"] .cute__play.is-on:active:not(:disabled){background:var(--flat-ap-accent);color:var(--flat-ap-text);box-shadow:none}
+html[data-uistyle="flat"] .cute__play.is-on:active:not(:disabled){background:var(--flat-ap-accent);color:var(--flat-ap-on-color);box-shadow:none}
 html[data-uistyle="flat"] .cute__play:disabled{opacity:1;background:var(--flat-ap-grid);color:var(--flat-ap-text2);box-shadow:none;filter:none}
 
 /* ---------- 22. Plugin MGCHORD (pembuat chord progression): jendela + keyboard vertikal di kanan ----------
@@ -781,7 +784,7 @@ html[data-uistyle="flat"] .mgc__logo svg path:nth-child(1){stroke:var(--flat-ap-
 html[data-uistyle="flat"] .mgc__logo svg path:nth-child(2){stroke:var(--flat-ap-orange)}
 html[data-uistyle="flat"] .mgc__logo svg path:nth-child(3){fill:var(--flat-ap-orange);stroke:var(--flat-ap-orange-dark)}
 html[data-uistyle="flat"] .mgc__pn{border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text)}
-html[data-uistyle="flat"] .mgc__save{border-radius:3px;background:var(--flat-ap-teal);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .mgc__save{border-radius:3px;background:var(--flat-ap-teal);color:var(--flat-ap-on-color)}
 html[data-uistyle="flat"] .mgc__save:hover{background:var(--flat-ap-teal-dark);color:var(--flat-ap-inverse)}
 html[data-uistyle="flat"] .mgc__pow{color:var(--flat-ap-text2)}
 html[data-uistyle="flat"] .mgc__x{box-sizing:border-box;border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised);color:var(--flat-ap-text)}
@@ -795,7 +798,7 @@ html[data-uistyle="flat"] .mgc__cdb::after{border-color:var(--flat-ap-text2)}
 html[data-uistyle="flat"] .mgc__sg{box-sizing:border-box;border:1px solid var(--flat-ap-border);border-radius:3px}
 html[data-uistyle="flat"] .mgc__sg button{background:var(--flat-ap-raised);color:var(--flat-ap-text2)}
 html[data-uistyle="flat"] .mgc__sg button:not(.is-on):hover{background:var(--flat-ap-panel);color:var(--flat-ap-text)}
-html[data-uistyle="flat"] .mgc__sg button.is-on{background:var(--flat-ap-accent);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .mgc__sg button.is-on{background:var(--flat-ap-accent);color:var(--flat-ap-on-color)}
 html[data-uistyle="flat"] .mgc__big{box-sizing:border-box;border:1px solid var(--flat-ap-border);border-radius:4px;background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none;transition:background-color .15s ease}
 html[data-uistyle="flat"] .mgc__big:hover{background:var(--flat-ap-panel)}
 html[data-uistyle="flat"] .mgc__big:active{transform:none;background:var(--flat-ap-muted)}
@@ -805,8 +808,8 @@ html[data-uistyle="flat"] .mgc__spec{outline:1px solid var(--flat-ap-border);out
 html[data-uistyle="flat"] .mgc__marks{color:var(--flat-ap-text2)}
 html[data-uistyle="flat"] .mgc__marks i{border-left:1px solid var(--flat-ap-border)}
 html[data-uistyle="flat"] .mgc__empty{border:1px dashed var(--flat-ap-ctrl-line);border-radius:3px;color:var(--flat-ap-text2)}
-html[data-uistyle="flat"] .mgc__ch{border-radius:3px;background:var(--flat-ap-lavender);color:var(--flat-ap-text);box-shadow:inset 0 0 0 1px var(--flat-ap-lavender-dark);transition:background-color .12s ease}
-html[data-uistyle="flat"] .mgc__ch.is-sel{background:var(--flat-ap-accent);color:var(--flat-ap-text);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--flat-ap-accent) 55%,var(--flat-ap-text))}
+html[data-uistyle="flat"] .mgc__ch{border-radius:3px;background:var(--flat-ap-lavender);color:var(--flat-ap-on-color);box-shadow:inset 0 0 0 1px var(--flat-ap-lavender-dark);transition:background-color .12s ease}
+html[data-uistyle="flat"] .mgc__ch.is-sel{background:var(--flat-ap-accent);color:var(--flat-ap-on-color);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--flat-ap-accent) 55%,var(--flat-ap-text))}
 html[data-uistyle="flat"] .mgc__h:hover{background:color-mix(in srgb,var(--flat-ap-text) 16%,transparent)}
 html[data-uistyle="flat"] .mgc__roll{box-sizing:border-box;border:1px solid var(--flat-ap-border);border-radius:3px;background:var(--flat-ap-raised)}
 
@@ -816,7 +819,7 @@ html[data-uistyle="flat"] .mgc__go:hover{background:color-mix(in srgb,var(--flat
 html[data-uistyle="flat"] .mgc__go:active{transform:none;background:color-mix(in srgb,var(--flat-ap-note) 78%,var(--flat-ap-text))}
 html[data-uistyle="flat"] .mgc__go.is-on,
 html[data-uistyle="flat"] .mgc__go.is-on:hover,
-html[data-uistyle="flat"] .mgc__go.is-on:active{background:var(--flat-ap-accent);border-color:var(--flat-ap-accent);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .mgc__go.is-on:active{background:var(--flat-ap-accent);border-color:var(--flat-ap-accent);color:var(--flat-ap-on-color)}
 html[data-uistyle="flat"] :is(.mgc__drag,.mgc__dl){box-sizing:border-box;border:1px solid var(--flat-ap-border);border-radius:4px;background:var(--flat-ap-raised);color:var(--flat-ap-text);box-shadow:none;transition:background-color .15s ease}
 html[data-uistyle="flat"] :is(.mgc__drag,.mgc__dl):hover{background:var(--flat-ap-panel);box-shadow:none}
 html[data-uistyle="flat"] :is(.mgc__drag,.mgc__dl):active{transform:none;background:var(--flat-ap-muted)}
@@ -835,7 +838,7 @@ html[data-uistyle="flat"] .mgc__po:hover,
 html[data-uistyle="flat"] .mgc__po:focus-visible{background:var(--flat-ap-panel);color:var(--flat-ap-text)}
 html[data-uistyle="flat"] .mgc__po.is-on,
 html[data-uistyle="flat"] .mgc__po.is-on:hover,
-html[data-uistyle="flat"] .mgc__po.is-on:focus-visible{background:var(--flat-ap-accent);color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .mgc__po.is-on:focus-visible{background:var(--flat-ap-accent);color:var(--flat-ap-on-color)}
 
 /* kartu keyboard vertikal: panel beige, tuts putih krem berpemisah 1px, tuts hitam arang; tuts ditekan = magenta solid (tanpa geser / glow) */
 html[data-uistyle="flat"] .mgc__kbd{border:1px solid var(--flat-ap-ctrl-line);border-radius:4px;background:var(--flat-ap-panel);color:var(--flat-ap-text);box-shadow:none}
@@ -847,11 +850,76 @@ html[data-uistyle="flat"] .mgc__wk span{color:var(--flat-ap-text2)}
 html[data-uistyle="flat"] .mgc__bk span{color:var(--flat-ap-inverse)}
 html[data-uistyle="flat"] .mgc__wk.pressed{background:var(--flat-ap-accent);transform:none;box-shadow:inset 0 -1px 0 var(--flat-ap-border)}
 html[data-uistyle="flat"] .mgc__bk.pressed{background:color-mix(in srgb,var(--flat-ap-accent) 70%,var(--flat-ap-key-black));transform:none;box-shadow:none}
-html[data-uistyle="flat"] .mgc__wk.pressed span{color:var(--flat-ap-text)}
+html[data-uistyle="flat"] .mgc__wk.pressed span{color:var(--flat-ap-on-color)}
 html[data-uistyle="flat"] .mgc__bk.pressed span{color:var(--flat-ap-inverse)}
 
 /* ---------- Sub-tema Flat (atribut data-flatstyle di <html>) ----------
-   Style 1 = palet di atas (Muted Flat Industrial) dan tidak butuh override apa pun.
-   Style berikutnya cukup menimpa token --flat-ap-* / --flat-mx-* lewat html[data-uistyle="flat"][data-flatstyle="N"]{...}
-   (warna track & swatch di ui-theme.ts serta warna canvas di spectrum2.ts / piano-roll.ts ikut dibedakan per style saat style itu ditambah). */
+   Style 1 = palet di atas (Muted Flat Industrial, beige / taupe) dan tidak butuh override apa pun.
+   Style berikutnya cukup menimpa token lewat html[data-uistyle="flat"][data-flatstyle="N"]{...}; semua aturan di atas membaca token, jadi tidak ada selector yang diulang.
+   Warna di TS / canvas ada di FLAT_COLS (ui-theme.ts): nilainya harus tetap sama dengan token di sini. */
 html[data-uistyle="flat"] .mp__flatsub{margin-top:10px}
+
+/* ---------- Style 2: Midnight Slate (UI gelap) ----------
+   Grafit kebiruan, teks terang, aksen tetap solid (tanpa glow). Warna di atas fill terang (clip, tombol aktif, tombol teal) memakai tinta gelap lewat --flat-ap-on-color / --flat-on-color.
+   Warna track (lavender, oranye, teal, dst) sama dengan Style 1 supaya track yang sudah ada tidak berganti warna. */
+html[data-uistyle="flat"][data-flatstyle="2"]{
+  color-scheme:dark;
+  /* palet mixer */
+  --flat-mx-bg:#14161B;
+  --flat-mx-panel:#1B1E25;
+  --flat-mx-raised:#232730;
+  --flat-mx-muted:#101216;
+  --flat-mx-border:#343A46;
+  --flat-mx-ctrl-line:#4B5362;
+  --flat-mx-text:#E7E9EE;
+  --flat-mx-text2:#98A0AE;
+  --flat-mx-lavender:#B98AD0;
+  --flat-mx-teal:#3DBDB4;
+  --flat-mx-teal-dark:#247870;
+  --flat-mx-playhead:#4FD1E0;
+  --flat-mx-accent:#FF6B9D;
+  --flat-mx-green:#5FCF80;
+  --flat-mx-yellow:#F0C64E;
+  --flat-mx-orange:#F5A044;
+  --flat-mx-gray:#6B7280;
+  --flat-on-accent:#14161B;      /* glyph di atas aksen / warna track: tinta gelap, bukan teks terang */
+  --flat-on-color:#14161B;
+  /* palet aplikasi */
+  --flat-ap-bg:#14161B;
+  --flat-ap-panel:#1B1E25;
+  --flat-ap-raised:#232730;
+  --flat-ap-muted:#101216;
+  --flat-ap-border:#343A46;
+  --flat-ap-grid:#2A2F39;
+  --flat-ap-ctrl-line:#4B5362;
+  --flat-ap-text:#E7E9EE;
+  --flat-ap-text2:#98A0AE;
+  --flat-ap-inverse:#F2F3F6;
+  --flat-ap-lavender:#B98AD0;
+  --flat-ap-lavender-dark:#8D70A8;
+  --flat-ap-orange:#F5A044;
+  --flat-ap-orange-dark:#D98232;
+  --flat-ap-teal:#3DBDB4;
+  --flat-ap-teal-dark:#247870;
+  --flat-ap-playhead:#4FD1E0;
+  --flat-ap-accent:#FF6B9D;
+  --flat-ap-green:#5FCF80;
+  --flat-ap-yellow:#F0C64E;
+  --flat-ap-gray:#6B7280;
+  --flat-ap-key-white:#E4E6EB;
+  --flat-ap-key-black:#0E1014;
+  --flat-ap-note:#0E1014;        /* note & waveform di dalam clip: hampir hitam di atas warna track */
+  --flat-ap-on-color:#14161B;
+  --flat-ap-screen:#101318;      /* layar DERIZ / MPCS / CUTE ikut gelap */
+  --flat-ap-scrim:#000;
+  /* playlist */
+  --flat-pl-grid:120,130,148;    /* garis ketukan: lebih TERANG dari lane (di Style 1 lebih gelap dari lane) */
+  --flat-pl-grid-gain:3;
+  --flat-pl-tick-a:#98A0AE;
+  --flat-pl-tick-b:#6E7685;
+  --flat-pl-tick-c:#4B5362;
+}
+
+/* Style 2: penyesuaian kontras (cakram knob & tanda power memakai nilai Style 1 yang dirancang untuk latar terang) */
+html[data-uistyle="flat"][data-flatstyle="2"] :is(.fxc .circular-chart,.mpcs__knob) .circle-inner{fill:var(--flat-ap-ctrl-line)}   /* cakram knob: abu kebiruan, penunjuk terang tetap terbaca */
+html[data-uistyle="flat"][data-flatstyle="2"] .fxc__pwr::after{background:var(--flat-ap-on-color)}   /* tanda power gelap di atas pink */

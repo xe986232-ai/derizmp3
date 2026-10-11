@@ -10,7 +10,7 @@ import { derizSpeed, derizSpeedKnob, derizSpeedFromV1, SPEED_VER } from './deriz
 import { setReverb, setEq, setFilter, setDeesser, setDelay, delayLevels, reverbSeconds, reverbPreSec, reverbToneHz, reverbLowHz, eqDb, EQ_BANDS, eqHz, eqFreqV, eqQ, eqQV, EQ_RANGE_DB, eqSpectrum, EQ_FFT_BINS, filterMode, filterHz, deesserHz, deesserThr, deesserMaxDb, decodeStandalone, trackInput } from './audio-engine';
 import { DerizSynth } from './deriz-synth';
 import { ivkKey } from './ivory-keys';
-import { isFlat } from './ui-theme';
+import { isFlat, isFlatDark } from './ui-theme';
 import { dbgSched, dbgSent, dbgSpec } from './audio-debug';
 import { openMpcs } from './mpcs';
 import { openCute } from './cute';
@@ -336,7 +336,7 @@ function paintDeriz(card: HTMLElement, fx: Fx): void {
   const g = cv.getContext('2d')!;
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.clearRect(0, 0, W, H);
-  const gl = Math.max(1, Math.round(dpr)), z = fx.deriz, sp = z?.spec, flat = isFlat();   // flat: layar krem terang, tinta arang (#343536); default: layar gelap, tinta putih
+  const gl = Math.max(1, Math.round(dpr)), z = fx.deriz, sp = z?.spec, flat = isFlat() && !isFlatDark();   // flat Style 1: layar krem terang, tinta arang (#343536); default & Flat Style 2: layar gelap, tinta putih
   if (!z || !sp) {   // belum ada audio / masih dianalisis: grid layar kosong
     const ink = flat ? '52,53,54' : '255,255,255';
     g.fillStyle = `rgba(${ink},${flat ? .1 : .05})`;

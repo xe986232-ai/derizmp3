@@ -6,7 +6,7 @@
 
 import { DEMO, LIMITS, demoNotice } from './demo';
 import { dragWindow } from './win-drag';
-import { isFlat } from './ui-theme';
+import { isFlat, flatMemo, rgbaOf } from './ui-theme';
 import { createMaster, loadPiano, voiceTone, VOICES, type Voice } from './mgchord-audio';
 import {
   NOTE_NAMES, PRESETS, SCALES, STYLES, STYLE_INFO,
@@ -90,10 +90,11 @@ const KW = 0;                            // tidak ada kolom tuts di piano roll (
 const PAL = {
   soft: { wave: '#bcd2ff', waveGlow: true, bg: '#f6f9ff', rowB: 'rgba(63,111,216,.06)', oct: 'rgba(63,111,216,.2)', selSlot: 'rgba(63,111,216,.07)', bar: 'rgba(63,111,216,.22)', beat: 'rgba(63,111,216,.08)',
     noteA: '#6f9cf5', noteB: '#3f6fd8', actA: '#ffd77f', actB: '#f2b632', peg: '#f2b632', empty: 'rgba(63,111,216,.55)', ph: '#3f6fd8', trail: true },
-  flat: { wave: '#454545', waveGlow: false, bg: '#DDD3C2', rowB: '#D2C7B5', oct: 'rgba(166,157,143,.72)', selSlot: 'rgba(216,90,148,.14)', bar: 'rgba(166,157,143,.9)', beat: 'rgba(166,157,143,.45)',
-    noteA: '#B98AD0', noteB: '#B98AD0', actA: '#D85A94', actB: '#D85A94', peg: '#F5A044', empty: '#68665F', ph: '#39C6C7', trail: false }
 };
-const pal = (): typeof PAL.soft => (isFlat() ? PAL.flat : PAL.soft);
+// Flat: warna dibaca dari palet style Flat yang aktif (Style 1 beige, Style 2 gelap; FLAT_COLS di ui-theme.ts)
+const FLAT_PAL = flatMemo(c => ({ wave: c.wave, waveGlow: false, bg: c.raised, rowB: c.bg, oct: rgbaOf(c.border, .72), selSlot: rgbaOf(c.accent, .14), bar: rgbaOf(c.border, .9), beat: rgbaOf(c.border, .45),
+  noteA: c.lavender, noteB: c.lavender, actA: c.accent, actB: c.accent, peg: c.orange, empty: c.text2, ph: c.playhead, trail: false }));
+const pal = (): typeof PAL.soft => (isFlat() ? FLAT_PAL() : PAL.soft);
 
 
 // ---------- suara preview: piano + mixing (mgchord-audio.ts), AudioContext sendiri ----------

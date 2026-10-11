@@ -9,7 +9,7 @@ import { encodeWavFloat } from './wav';
 import { DEMO, LIMITS, demoTrim, demoMarked, demoNotice } from './demo';
 import { encodeMp3Mono, encodeWav16Mono, saveBlob, type SaveFormat } from './mpcs-save';
 import { bringFront, dragWindow } from './win-drag';
-import { isFlat } from './ui-theme';
+import { isFlat, flatMemo, flatCols, rgbaOf } from './ui-theme';
 
 const svg = (inner: string, size = 18): string =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
@@ -39,10 +39,11 @@ const fmtShift = (s: number): string => { const c = Math.round(s * 100); return 
 const PAL = {
   soft: { rowW: '#1b161d', rowB: '#120f14', oct: 'rgba(255,255,255,.07)', sec: 'rgba(255,255,255,.06)', secTxt: '#6c6c7c', sel: '#fff', wave: '#e0458a', cut: 'rgba(0,0,0,.6)', orig: 'rgba(255,255,255,.28)', res: '#ffc857',
     ovWave: 'rgba(214,60,130,.35)', ovNote: '#ffc857', ovPlay: '#fff', ovBox: 'rgba(255,255,255,.9)', ovBoxFill: 'rgba(255,255,255,.08)' },
-  flat: { rowW: '#DDD3C2', rowB: '#D2C7B5', oct: 'rgba(166,157,143,.72)', sec: 'rgba(166,157,143,.55)', secTxt: '#68665F', sel: '#343536', wave: '#B98AD0', cut: 'rgba(52,53,54,.7)', orig: 'rgba(52,53,54,.35)', res: '#343536',
-    ovWave: '#B98AD0', ovNote: '#343536', ovPlay: '#39C6C7', ovBox: '#343536', ovBoxFill: 'rgba(52,53,54,.08)' }
 };
-const pal = (): typeof PAL.soft => (isFlat() ? PAL.flat : PAL.soft);
+// Flat: warna dibaca dari palet style Flat yang aktif (Style 1 beige, Style 2 gelap; FLAT_COLS di ui-theme.ts)
+const FLAT_PAL = flatMemo(c => ({ rowW: c.raised, rowB: c.bg, oct: rgbaOf(c.border, .72), sec: rgbaOf(c.border, .55), secTxt: c.text2, sel: c.text, wave: c.lavender, cut: rgbaOf(c.scrim, .7), orig: rgbaOf(c.scrim, .35), res: c.text,
+  ovWave: c.lavender, ovNote: c.text, ovPlay: c.playhead, ovBox: c.text, ovBoxFill: rgbaOf(c.scrim, .08) }));
+const pal = (): typeof PAL.soft => (isFlat() ? FLAT_PAL() : PAL.soft);
 
 // Tiga knob global (Lock = center, Human = variation, Glide = transition; nama kunci di kode tetap center / variation / transition). Markup & kelas sama dengan knob efek (fx-rack.ts) supaya gayanya menyatu dengan DAW.
 const knobSvg = '<svg viewBox="0 0 36 36" aria-hidden="true" class="circular-chart">' +
@@ -320,36 +321,36 @@ function build(): void {
   }
   // Tuts gaya Flat (sama dengan tuts piano roll Flat): rel beige gelap, tuts putih krem dengan garis pemisah 1px, tuts hitam arang; tuts yang diratakan (lit) = magenta solid. Tanpa kapsul / gradien / bayangan.
   function drawKeysFlat(s: Session): void {
-    const off = scroll.scrollTop, hl = flatAt(), RAIL = 5, WL = 44 - RAIL - 1, BL = 28, ACC = '#D85A94';
+    const off = scroll.scrollTop, hl = flatAt(), RAIL = 5, WL = 44 - RAIL - 1, BL = 28, fc = flatCols(), ACC = fc.accent;
     const pcOf = (m: number): number => ((m % 12) + 12) % 12;
     const yOf = (m: number): number => (s.hi - m) * rowH - off;
     const visible = (y: number): boolean => y < viewH + rowH && y + rowH * 2 > 0;
-    gk.fillStyle = '#C7BBA8'; gk.fillRect(0, 0, 44, viewH);
-    gk.fillStyle = '#BDB19E'; gk.fillRect(0, 0, RAIL, viewH);
-    gk.fillStyle = '#A69D8F'; gk.fillRect(RAIL - 1, 0, 1, viewH);
+    gk.fillStyle = fc.panel; gk.fillRect(0, 0, 44, viewH);
+    gk.fillStyle = fc.muted; gk.fillRect(0, 0, RAIL, viewH);
+    gk.fillStyle = fc.border; gk.fillRect(RAIL - 1, 0, 1, viewH);
     for (let m = s.lo; m <= s.hi; m++) {   // tuts putih
       if (BLACK.has(pcOf(m))) continue;
       const y = yOf(m); if (!visible(y)) continue;
       const up = m + 1 <= s.hi && BLACK.has(pcOf(m + 1)), dn = m - 1 >= s.lo && BLACK.has(pcOf(m - 1));
       const top = y + (up ? -rowH / 2 : 0), bot = y + rowH + (dn ? rowH / 2 : 0);
-      gk.fillStyle = m === hl ? ACC : '#F3EBDD'; gk.fillRect(RAIL, top, WL, bot - top - 1);
-      gk.fillStyle = '#A69D8F'; gk.fillRect(RAIL, bot - 1, WL, 1);
-      if (pcOf(m) === 0) { gk.fillStyle = '#B98AD0'; gk.fillRect(1, top + 2, 3, Math.max(2, bot - top - 5)); }   // penanda C di rel kiri
+      gk.fillStyle = m === hl ? ACC : fc.keyWhite; gk.fillRect(RAIL, top, WL, bot - top - 1);
+      gk.fillStyle = fc.border; gk.fillRect(RAIL, bot - 1, WL, 1);
+      if (pcOf(m) === 0) { gk.fillStyle = fc.lavender; gk.fillRect(1, top + 2, 3, Math.max(2, bot - top - 5)); }   // penanda C di rel kiri
     }
     for (let m = s.lo; m <= s.hi; m++) {   // tuts hitam
       if (!BLACK.has(pcOf(m))) continue;
       const y = yOf(m); if (!visible(y)) continue;
-      gk.fillStyle = m === hl ? ACC : '#454545'; gk.fillRect(RAIL, y + 1, BL, rowH - 2);
+      gk.fillStyle = m === hl ? ACC : fc.keyBlack; gk.fillRect(RAIL, y + 1, BL, rowH - 2);
     }
     gk.font = '600 9px system-ui,sans-serif'; gk.textBaseline = 'middle'; gk.textAlign = 'left';
     for (let m = s.lo; m <= s.hi; m++) {   // nama nada
       const y = yOf(m), p = pcOf(m), lit = m === hl;
       if (!(rowH >= 13 || p === 0 || lit) || y > viewH || y + rowH < 0) continue;
       gk.font = (p === 0 ? '700' : '600') + ' 9px system-ui,sans-serif';
-      gk.fillStyle = lit ? '#343536' : BLACK.has(p) ? '#F3EBDD' : p === 0 ? '#343536' : '#68665F';
+      gk.fillStyle = lit ? fc.onColor : BLACK.has(p) ? fc.inverse : p === 0 ? fc.onColor : fc.keyText2;
       gk.fillText(noteName(m), RAIL + 4, y + rowH / 2 + 0.5);
     }
-    gk.fillStyle = '#A69D8F'; gk.fillRect(43, 0, 1, viewH);
+    gk.fillStyle = fc.border; gk.fillRect(43, 0, 1, viewH);
   }
 
   // peta seluruh sample: bentuk amplitudo + posisi nada + kotak jendela yang sedang terlihat. Ketuk / seret buat pindah.

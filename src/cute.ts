@@ -6,17 +6,18 @@
 import { ACCEPT as AUDIO_ACCEPT, isAudio } from './audio-upload-card';
 import { encodeWavFloatMulti } from './wav';
 import { bringFront, dragWindow } from './win-drag';
-import { isFlat } from './ui-theme';
+import { isFlat, flatMemo, rgbaOf } from './ui-theme';
 
 // Warna canvas per gaya UI (atribut data-uistyle di <html>): Default = layar gelap + waveform teal bergradasi + playhead putih menyala;
 // Flat = beige solid, waveform arang solid (aturan Flat: waveform selalu abu arang), seleksi magenta, playhead cyan tanpa glow. CSS jendelanya ada di flat-ui.css (bagian 21).
 const PAL = {
   soft: { grid: 'rgba(148,170,210,.1)', label: 'rgba(138,154,181,.8)', mid: 'rgba(255,255,255,.1)', wave: '', selFill: 'rgba(94,234,212,.16)', selWave: .55, edge: '#5eead4', head: '#fff', glow: true,
     barTrack: 'rgba(255,255,255,.1)', barThumb: 'rgba(154,245,230,.7)' },
-  flat: { grid: 'rgba(166,157,143,.55)', label: '#68665F', mid: 'rgba(143,136,125,.6)', wave: '#454545', selFill: 'rgba(216,90,148,.18)', selWave: 1, edge: '#D85A94', head: '#39C6C7', glow: false,
-    barTrack: 'rgba(143,136,125,.35)', barThumb: '#8F887D' }
 };
-const pal = (): typeof PAL.soft => (isFlat() ? PAL.flat : PAL.soft);
+// Flat: warna dibaca dari palet style Flat yang aktif (Style 1 beige, Style 2 gelap; FLAT_COLS di ui-theme.ts)
+const FLAT_PAL = flatMemo(c => ({ grid: rgbaOf(c.border, .55), label: c.text2, mid: rgbaOf(c.ctrlLine, .6), wave: c.wave, selFill: rgbaOf(c.accent, .18), selWave: 1, edge: c.accent, head: c.playhead, glow: false,
+  barTrack: rgbaOf(c.ctrlLine, .35), barThumb: c.ctrlLine }));
+const pal = (): typeof PAL.soft => (isFlat() ? FLAT_PAL() : PAL.soft);
 
 const svg = (inner: string, size = 18): string =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;

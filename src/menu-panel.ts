@@ -67,9 +67,10 @@ const PROFILE_PAGE = FULL
           '<div class="mp__sub"><span>Warna Flat</span></div>' +
           '<div class="mp__seg mp__seg--wrap" role="radiogroup" aria-label="Warna Flat">' +
             '<button type="button" class="mp__segbtn" role="radio" data-flatstyle="1">Style 1</button>' +
+            '<button type="button" class="mp__segbtn" role="radio" data-flatstyle="2">Style 2</button>' +
           '</div>' +
         '</div>' +
-        '<p class="mp__hint">Flat: sudut lancip, tanpa glow, warna solid. Di dalam Flat ada pilihan warna (Style 1 = beige / lavender / oranye).</p>' +
+        '<p class="mp__hint">Flat: sudut lancip, tanpa glow, warna solid. Di dalam Flat ada pilihan warna: Style 1 = terang (beige), Style 2 = gelap (Midnight Slate).</p>' +
       '</div>' +
       '<div class="mp__card mp__item" style="--i:5">' +
         '<button type="button" class="mp__prim mp__prim--bad" data-signout>Keluar dari akun</button>' +
@@ -305,7 +306,7 @@ export function initMenuPanel(): MenuPanel {
   // Sub-tema Flat: atribut data-flatstyle di <html> (hanya ada saat Gaya UI = Flat). Style 1 = palet Muted Flat Industrial (bawaan di flat-ui.css);
   // style berikutnya cukup menimpa token --flat-* lewat html[data-uistyle="flat"][data-flatstyle="N"].
   const FLATSTYLE_KEY = 'derizmp3.flatstyle';
-  const FLAT_STYLES = ['1'];
+  const FLAT_STYLES = ['1', '2'];
   const flatSub = panel.querySelector<HTMLElement>('[data-flatsub]');
   const flatBtns = [...panel.querySelectorAll<HTMLButtonElement>('[data-flatstyle]')];
   const paintFlatStyle = (): void => {
