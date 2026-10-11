@@ -12,6 +12,7 @@ import { installState, promptInstall, onInstallChange } from './pwa';
 import { FULL, getProfile, initialOf, loadProfile, onProfile, removeAvatar, saveName, shownName, uploadAvatar } from './account';
 import { signOut } from './license';
 import { SHOP_CAT, SHOP_PAGE, initShopPage } from './shop-page';
+import { playLogoTransition, isLogoTransitionRunning } from './logo-transition';
 import { SPECTRUM_SPEEDS, SPECTRUM_STYLES, isSpectrumOn, setSpectrumOn, getSpectrumSpeed, setSpectrumSpeed, getSpectrumStyle, setSpectrumStyle } from './spectrum';
 
 // Jembatan ke main.ts (yang memegang data timeline): snapshot dan pemulihan project
@@ -333,7 +334,15 @@ export function initMenuPanel(): MenuPanel {
     window.dispatchEvent(new CustomEvent('derizmp3:ui'));   // ruler / piano roll (canvas) menggambar ulang dengan warna gaya baru
     if (save) { try { localStorage.setItem(STYLE_KEY, val); } catch { /* penyimpanan diblokir: tetap berlaku sampai halaman ditutup */ } }
   };
-  styleBtns.forEach(b => b.addEventListener('click', () => setUiStyle(b.dataset.uistyle as string, true)));
+  // Ganti Default <-> Flat: animasi logo Melvox menutupi layar, gaya baru diterapkan saat layar tertutup (src/logo-transition.ts).
+  // Klik pada gaya yang sudah aktif tidak memutar animasi; Style 1 / Style 2 (sub-tema Flat) juga tidak.
+  styleBtns.forEach(b => b.addEventListener('click', () => {
+    if (isLogoTransitionRunning()) return;
+    const next = b.dataset.uistyle === 'flat' ? 'flat' : 'soft';
+    const cur = document.documentElement.dataset.uistyle === 'flat' ? 'flat' : 'soft';
+    if (next === cur) { setUiStyle(next, true); return; }
+    playLogoTransition(() => setUiStyle(next, true));
+  }));
   flatBtns.forEach(b => b.addEventListener('click', () => { flatStyleSaved = b.dataset.flatstyle as string; setFlatStyle(flatStyleSaved, true); }));
   let styleSaved = 'soft';
   try { styleSaved = localStorage.getItem(STYLE_KEY) || 'soft'; } catch { /* abaikan */ }
