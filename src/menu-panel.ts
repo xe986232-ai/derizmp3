@@ -63,7 +63,13 @@ const PROFILE_PAGE = FULL
           '<button type="button" class="mp__segbtn" role="radio" data-uistyle="soft">Default</button>' +
           '<button type="button" class="mp__segbtn" role="radio" data-uistyle="flat">Flat</button>' +
         '</div>' +
-        '<p class="mp__hint">Flat: sudut lancip, tanpa glow, warna terang. Tahap 1: baru di channel mixer.</p>' +
+        '<div class="mp__flatsub" data-flatsub hidden>' +
+          '<div class="mp__sub"><span>Warna Flat</span></div>' +
+          '<div class="mp__seg mp__seg--wrap" role="radiogroup" aria-label="Warna Flat">' +
+            '<button type="button" class="mp__segbtn" role="radio" data-flatstyle="1">Style 1</button>' +
+          '</div>' +
+        '</div>' +
+        '<p class="mp__hint">Flat: sudut lancip, tanpa glow, warna solid. Di dalam Flat ada pilihan warna (Style 1 = beige / lavender / oranye).</p>' +
       '</div>' +
       '<div class="mp__card mp__item" style="--i:5">' +
         '<button type="button" class="mp__prim mp__prim--bad" data-signout>Keluar dari akun</button>' +
@@ -296,14 +302,38 @@ export function initMenuPanel(): MenuPanel {
     const val = document.documentElement.dataset.uistyle === 'flat' ? 'flat' : 'soft';
     styleBtns.forEach(b => { const on = b.dataset.uistyle === val; b.classList.toggle('is-on', on); b.setAttribute('aria-checked', String(on)); });
   };
+  // Sub-tema Flat: atribut data-flatstyle di <html> (hanya ada saat Gaya UI = Flat). Style 1 = palet Muted Flat Industrial (bawaan di flat-ui.css);
+  // style berikutnya cukup menimpa token --flat-* lewat html[data-uistyle="flat"][data-flatstyle="N"].
+  const FLATSTYLE_KEY = 'derizmp3.flatstyle';
+  const FLAT_STYLES = ['1'];
+  const flatSub = panel.querySelector<HTMLElement>('[data-flatsub]');
+  const flatBtns = [...panel.querySelectorAll<HTMLButtonElement>('[data-flatstyle]')];
+  const paintFlatStyle = (): void => {
+    const isFlatOn = document.documentElement.dataset.uistyle === 'flat', cur = document.documentElement.dataset.flatstyle || '1';
+    if (flatSub) flatSub.hidden = !isFlatOn;
+    flatBtns.forEach(b => { const on = b.dataset.flatstyle === cur; b.classList.toggle('is-on', on); b.setAttribute('aria-checked', String(on)); });
+  };
+  const setFlatStyle = (v: string, save: boolean): void => {
+    const val = FLAT_STYLES.includes(v) ? v : '1';
+    if (document.documentElement.dataset.uistyle === 'flat') document.documentElement.dataset.flatstyle = val; else delete document.documentElement.dataset.flatstyle;
+    paintFlatStyle();
+    window.dispatchEvent(new CustomEvent('derizmp3:ui'));   // canvas (ruler, piano roll, spectrum) menggambar ulang dengan style baru
+    if (save) { try { localStorage.setItem(FLATSTYLE_KEY, val); } catch { /* penyimpanan diblokir: tetap berlaku sampai halaman ditutup */ } }
+  };
+  let flatStyleSaved = '1';
+  try { flatStyleSaved = localStorage.getItem(FLATSTYLE_KEY) || '1'; } catch { /* abaikan */ }
+
   const setUiStyle = (v: string, save: boolean): void => {
     const val = v === 'flat' ? 'flat' : 'soft';
-    if (val === 'flat') document.documentElement.dataset.uistyle = 'flat'; else delete document.documentElement.dataset.uistyle;
+    if (val === 'flat') { document.documentElement.dataset.uistyle = 'flat'; document.documentElement.dataset.flatstyle = FLAT_STYLES.includes(flatStyleSaved) ? flatStyleSaved : '1'; }
+    else { delete document.documentElement.dataset.uistyle; delete document.documentElement.dataset.flatstyle; }
     paintUiStyle();
+    paintFlatStyle();
     window.dispatchEvent(new CustomEvent('derizmp3:ui'));   // ruler / piano roll (canvas) menggambar ulang dengan warna gaya baru
     if (save) { try { localStorage.setItem(STYLE_KEY, val); } catch { /* penyimpanan diblokir: tetap berlaku sampai halaman ditutup */ } }
   };
   styleBtns.forEach(b => b.addEventListener('click', () => setUiStyle(b.dataset.uistyle as string, true)));
+  flatBtns.forEach(b => b.addEventListener('click', () => { flatStyleSaved = b.dataset.flatstyle as string; setFlatStyle(flatStyleSaved, true); }));
   let styleSaved = 'soft';
   try { styleSaved = localStorage.getItem(STYLE_KEY) || 'soft'; } catch { /* abaikan */ }
   setUiStyle(styleSaved, false);

@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { ivkDock, ivkSetCaps } from './ivory-keys';
-import { uiTheme, syncTrackColors, isFlat, FLAT_CUSTOM_SWATCHES } from './ui-theme';
+import { uiTheme, syncTrackColors, isFlat, flatStyle, FLAT_CUSTOM_SWATCHES } from './ui-theme';
 import '@fontsource/syncopate/700.css';   // font judul plugin DERIZ (dibundel, tidak butuh internet)
 import '@fontsource/plus-jakarta-sans/latin-400.css';   // font gelembung tutorial (dibundel, tidak butuh internet)
 import '@fontsource/plus-jakarta-sans/latin-600.css';
@@ -85,7 +85,7 @@ let rp = {x0: -1, x1: -1, bar: 0};
 // per kombinasi (gaya, tema) supaya getComputedStyle tidak dipanggil tiap repaint saat zoom / scroll.
 let rulerKey = '', rulerCols: [string, string, string] = ['#9486ad', '#6f6385', '#5a4f70'];
 function rulerColors(): [string, string, string] {
-  const root = document.documentElement, flat = root.dataset.uistyle === 'flat', ut = uiTheme(), key = (flat ? 'flat' : 'soft') + '/' + ut;
+  const root = document.documentElement, flat = root.dataset.uistyle === 'flat', ut = uiTheme(), key = (flat ? 'flat' + flatStyle() : 'soft') + '/' + ut;
   if (key === rulerKey) return rulerCols;
   rulerKey = key;
   if (flat) {

@@ -849,3 +849,9 @@ html[data-uistyle="flat"] .mgc__wk.pressed{background:var(--flat-ap-accent);tran
 html[data-uistyle="flat"] .mgc__bk.pressed{background:color-mix(in srgb,var(--flat-ap-accent) 70%,var(--flat-ap-key-black));transform:none;box-shadow:none}
 html[data-uistyle="flat"] .mgc__wk.pressed span{color:var(--flat-ap-text)}
 html[data-uistyle="flat"] .mgc__bk.pressed span{color:var(--flat-ap-inverse)}
+
+/* ---------- Sub-tema Flat (atribut data-flatstyle di <html>) ----------
+   Style 1 = palet di atas (Muted Flat Industrial) dan tidak butuh override apa pun.
+   Style berikutnya cukup menimpa token --flat-ap-* / --flat-mx-* lewat html[data-uistyle="flat"][data-flatstyle="N"]{...}
+   (warna track & swatch di ui-theme.ts serta warna canvas di spectrum2.ts / piano-roll.ts ikut dibedakan per style saat style itu ditambah). */
+html[data-uistyle="flat"] .mp__flatsub{margin-top:10px}

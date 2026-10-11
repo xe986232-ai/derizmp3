@@ -15,6 +15,8 @@ export const TRACK_COLORS: Record<UiTheme, string[]> = {
 };
 // Gaya UI Flat (atribut data-uistyle="flat"): warna track mengikuti palet Muted Flat Industrial (lavender = MIDI, oranye = audio, teal, dst)
 export const isFlat = (): boolean => document.documentElement.dataset.uistyle === 'flat';
+// Sub-tema Flat (atribut data-flatstyle, hanya ada saat Flat aktif): '1' = Style 1 = palet Muted Flat Industrial (bawaan). Style lain menyusul.
+export const flatStyle = (): string => document.documentElement.dataset.flatstyle || '1';
 // Pilihan warna menu Customize (Color pattern / Color note) di tema Flat: 12 warna dari palet gambar referensi (lavender, oranye, teal, hijau/kuning meter, cyan playhead, magenta, white key, teks gelap)
 export const FLAT_CUSTOM_SWATCHES = ['#B98AD0', '#8D70A8', '#F5A044', '#D98232', '#5B9F9A', '#397F7A', '#79B86A', '#E5C65A', '#39C6C7', '#D85A94', '#F3EBDD', '#343536'];
 export const FLAT_TRACK_COLORS = ['#B98AD0', '#F5A044', '#5B9F9A', '#D85A94', '#8D70A8', '#D98232', '#397F7A', '#79B86A'];
