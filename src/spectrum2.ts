@@ -15,7 +15,7 @@ import {
   type BandEnergy,
 } from './spectrum2-dsp';
 import { noteName, AutoGain, shape } from './spectrum-dsp';
-import { isFlat, isFlatDark } from './ui-theme';
+import { isFlat, flatStyle, flatCols, rgbArr } from './ui-theme';
 
 // Warna strip Spectrum per tema. Tema default = indigo/lavender neon di latar gelap (nilai lama, tidak diubah); tema Flat = palet gambar referensi di latar krem (lavender, oranye, teal, hijau/kuning meter, magenta, teks #343536).
 export interface SpecColors {
@@ -34,16 +34,8 @@ const FLAT_COLORS: SpecColors = {
   areaFill: [[0, 'rgba(141,112,168,.12)'], [0.5, 'rgba(185,138,208,.55)'], [0.85, 'rgba(245,160,68,.70)'], [1, 'rgba(217,130,50,.85)']],
   areaLine: [[0, '#8D70A8'], [0.5, '#B98AD0'], [0.85, '#F5A044'], [1, '#D98232']],
 };
-// Flat Style 2 (UI gelap): tinta terang (#E7E9EE), meter hijau -> kuning -> oranye, area lavender -> oranye. Sama dengan palet FLAT_COLS['2'] di ui-theme.ts.
-const FLAT_DARK_COLORS: SpecColors = {
-  flat: true, ink: a => `rgba(231,233,238,${Math.min(1, a).toFixed(3)})`, fill: '#B98AD0', outline: '#98A0AE', hot: '#FF6B9D', cool: '#3DBDB4', hold: '#E7E9EE', dot: 'rgba(185,138,208,.55)', peakLine: 'rgba(231,233,238,.32)', scope: '#B98AD0',
-  meter: [[0, '#5FCF80'], [0.7, '#5FCF80'], [0.88, '#F0C64E'], [1, '#F5A044']],
-  areaFill: [[0, 'rgba(141,112,168,.10)'], [0.5, 'rgba(185,138,208,.45)'], [0.85, 'rgba(245,160,68,.65)'], [1, 'rgba(255,196,122,.85)']],
-  areaLine: [[0, '#8D70A8'], [0.5, '#B98AD0'], [0.85, '#F5A044'], [1, '#FFC47A']],
-};
 const flatNow = (): boolean => { try { return isFlat(); } catch { return false; } };   // aman di lingkungan tanpa document.documentElement (tes Node)
-const flatDarkNow = (): boolean => { try { return isFlatDark(); } catch { return false; } };
-export const specColors = (): SpecColors => flatDarkNow() ? FLAT_DARK_COLORS : flatNow() ? FLAT_COLORS : DEF_COLORS;
+export const specColors = (): SpecColors => flatNow() ? FLAT_COLORS : DEF_COLORS;
 let C: SpecColors = DEF_COLORS;   // diperbarui di awal draw()
 
 export const FFT2 = 8192;           // analyser frekuensi: jendela ~170 ms @48 kHz, bass rapat (5,9 Hz per bin)
@@ -75,9 +67,8 @@ export interface S2Input {
 
 export class SpectrumStyle2 {
   private pal = buildPalette();
-  private flatPal = false;      // true = palet spectrogram Flat terang (Style 1); Style 2 (gelap) memakai palet gelap bawaan
-  private flatBands = false;    // warna waveform multi-band versi Flat (oranye / lavender / teal), berlaku untuk semua style Flat
-  private themeKey = 'd';
+  private flatPal = false;
+  private themeKey = 'd';   // 'd' = default, 'f1' / 'f2' = Flat Style 1 / 2 (palet spectrogram dibangun ulang saat berubah)
   private rects: Rect[] = [];
   private W = 0; private H = 0; private sr = 48000; private bins = FFT2 / 2;
   // spectrogram
@@ -152,8 +143,9 @@ export class SpectrumStyle2 {
   private lmSr = 0;
   // ganti tema (default <-> Flat): bangun ulang palet spectrogram, warna waveform multi-band kembali ke lavender tema itu, dan spectrogram dibersihkan
   applyTheme(): void {
-    const f = flatNow(), dark = flatDarkNow(), key = f ? (dark ? 'fd' : 'f') : 'd'; if (key === this.themeKey) return;
-    this.themeKey = key; this.flatBands = f; this.flatPal = f && !dark; this.pal = buildPalette(this.flatPal);
+    const f = flatNow(); let key = 'd'; try { if (f) key = 'f' + flatStyle(); } catch { /* tes Node */ }
+    if (key === this.themeKey) return;
+    this.themeKey = key; this.flatPal = f; this.pal = buildPalette(f, f ? rgbArr(flatCols().panel) : undefined);   // Flat: warna dasar spectrogram = panel style aktif
     const m: [number, number, number] = f ? [185, 138, 208] : [179, 161, 247]; this.wCol = [m[0], m[1], m[2]]; this.wColS = [m[0], m[1], m[2]];
     if (this.sg.width) this.clearSg();
   }
@@ -211,7 +203,7 @@ export class SpectrumStyle2 {
       let sq = 0; for (let i = Math.max(0, inp.mono.length - n); i < inp.mono.length; i++) sq += inp.mono[i] * inp.mono[i];
       const rms = Math.sqrt(sq / n);
       this.wGain.update(pk, dt);
-      bandEnergies(inp.db, inp.sr, this.wEnergy); waveRGB(this.wEnergy, this.wCol, this.flatBands);
+      bandEnergies(inp.db, inp.sr, this.wEnergy); waveRGB(this.wEnergy, this.wCol, this.flatPal);
       const ks = 1 - Math.exp(-dt / 0.08); for (let i = 0; i < 3; i++) this.wColS[i] += (this.wCol[i] - this.wColS[i]) * ks;
       const curPk = Math.max(pk, this.wLast * Math.exp(-dt / 0.07)), curRms = Math.max(rms, this.wLastR * Math.exp(-dt / 0.1));   // naik seketika, turun halus
       this.wAcc += dt * pps;

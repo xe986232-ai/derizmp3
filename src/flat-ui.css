@@ -859,67 +859,60 @@ html[data-uistyle="flat"] .mgc__bk.pressed span{color:var(--flat-ap-inverse)}
    Warna di TS / canvas ada di FLAT_COLS (ui-theme.ts): nilainya harus tetap sama dengan token di sini. */
 html[data-uistyle="flat"] .mp__flatsub{margin-top:10px}
 
-/* ---------- Style 2: Midnight Slate (UI gelap) ----------
-   Grafit kebiruan, teks terang, aksen tetap solid (tanpa glow). Warna di atas fill terang (clip, tombol aktif, tombol teal) memakai tinta gelap lewat --flat-ap-on-color / --flat-on-color.
-   Warna track (lavender, oranye, teal, dst) sama dengan Style 1 supaya track yang sudah ada tidak berganti warna. */
+/* ---------- Style 2: Studio Gray (abu-abu terang netral) ----------
+   Struktur sama dengan Style 1 (teks gelap di atas latar terang); hanya hue yang berbeda: abu netral kebiruan tipis menggantikan beige hangat, aksen sedikit lebih dingin.
+   Warna track (lavender, oranye, teal, dst) sama dengan Style 1 supaya track yang sudah ada tidak berganti warna.
+   Warna di TS / canvas ada di FLAT_COLS['2'] (ui-theme.ts): nilainya harus tetap sama dengan token di sini. */
 html[data-uistyle="flat"][data-flatstyle="2"]{
-  color-scheme:dark;
   /* palet mixer */
-  --flat-mx-bg:#14161B;
-  --flat-mx-panel:#1B1E25;
-  --flat-mx-raised:#232730;
-  --flat-mx-muted:#101216;
-  --flat-mx-border:#343A46;
-  --flat-mx-ctrl-line:#4B5362;
-  --flat-mx-text:#E7E9EE;
-  --flat-mx-text2:#98A0AE;
+  --flat-mx-bg:#D9DBDF;
+  --flat-mx-panel:#CDD0D5;
+  --flat-mx-raised:#E6E8EB;
+  --flat-mx-muted:#C0C4CA;
+  --flat-mx-border:#AEB3BB;
+  --flat-mx-ctrl-line:#8E949E;
+  --flat-mx-text:#26292E;
+  --flat-mx-text2:#50565F;
   --flat-mx-lavender:#B98AD0;
-  --flat-mx-teal:#3DBDB4;
-  --flat-mx-teal-dark:#247870;
-  --flat-mx-playhead:#4FD1E0;
-  --flat-mx-accent:#FF6B9D;
-  --flat-mx-green:#5FCF80;
-  --flat-mx-yellow:#F0C64E;
+  --flat-mx-teal:#4C9F9A;
+  --flat-mx-teal-dark:#357F7A;
+  --flat-mx-playhead:#1FB5D6;
+  --flat-mx-accent:#E0568F;
+  --flat-mx-green:#6BB86A;
+  --flat-mx-yellow:#E5C65A;
   --flat-mx-orange:#F5A044;
-  --flat-mx-gray:#6B7280;
-  --flat-on-accent:#14161B;      /* glyph di atas aksen / warna track: tinta gelap, bukan teks terang */
-  --flat-on-color:#14161B;
+  --flat-mx-gray:#8F9399;
   /* palet aplikasi */
-  --flat-ap-bg:#14161B;
-  --flat-ap-panel:#1B1E25;
-  --flat-ap-raised:#232730;
-  --flat-ap-muted:#101216;
-  --flat-ap-border:#343A46;
-  --flat-ap-grid:#2A2F39;
-  --flat-ap-ctrl-line:#4B5362;
-  --flat-ap-text:#E7E9EE;
-  --flat-ap-text2:#98A0AE;
-  --flat-ap-inverse:#F2F3F6;
+  --flat-ap-bg:#D9DBDF;
+  --flat-ap-panel:#CDD0D5;
+  --flat-ap-raised:#E6E8EB;
+  --flat-ap-muted:#C0C4CA;
+  --flat-ap-border:#AEB3BB;
+  --flat-ap-grid:#BCC0C7;
+  --flat-ap-ctrl-line:#8E949E;
+  --flat-ap-text:#26292E;
+  --flat-ap-text2:#50565F;
+  --flat-ap-inverse:#F4F5F7;
   --flat-ap-lavender:#B98AD0;
   --flat-ap-lavender-dark:#8D70A8;
   --flat-ap-orange:#F5A044;
   --flat-ap-orange-dark:#D98232;
-  --flat-ap-teal:#3DBDB4;
-  --flat-ap-teal-dark:#247870;
-  --flat-ap-playhead:#4FD1E0;
-  --flat-ap-accent:#FF6B9D;
-  --flat-ap-green:#5FCF80;
-  --flat-ap-yellow:#F0C64E;
-  --flat-ap-gray:#6B7280;
-  --flat-ap-key-white:#E4E6EB;
-  --flat-ap-key-black:#0E1014;
-  --flat-ap-note:#0E1014;        /* note & waveform di dalam clip: hampir hitam di atas warna track */
-  --flat-ap-on-color:#14161B;
-  --flat-ap-screen:#101318;      /* layar DERIZ / MPCS / CUTE ikut gelap */
-  --flat-ap-scrim:#000;
+  --flat-ap-teal:#4C9F9A;
+  --flat-ap-teal-dark:#357F7A;
+  --flat-ap-playhead:#1FB5D6;
+  --flat-ap-accent:#E0568F;
+  --flat-ap-green:#6BB86A;
+  --flat-ap-yellow:#E5C65A;
+  --flat-ap-gray:#8F9399;
+  --flat-ap-key-white:#F4F5F7;
+  --flat-ap-key-black:#3A3D42;
+  --flat-ap-note:#3A3D42;        /* note & waveform di dalam clip */
+  --flat-ap-on-color:#26292E;
+  --flat-ap-screen:#F4F5F7;      /* layar DERIZ / MPCS / CUTE */
+  --flat-ap-scrim:#26292E;
   /* playlist */
-  --flat-pl-grid:120,130,148;    /* garis ketukan: lebih TERANG dari lane (di Style 1 lebih gelap dari lane) */
-  --flat-pl-grid-gain:3;
-  --flat-pl-tick-a:#98A0AE;
-  --flat-pl-tick-b:#6E7685;
-  --flat-pl-tick-c:#4B5362;
+  --flat-pl-grid:174,179,187;    /* = --flat-ap-border dalam format R,G,B */
+  --flat-pl-tick-a:#50565F;
+  --flat-pl-tick-b:#8E949E;
+  --flat-pl-tick-c:#AEB3BB;
 }
-
-/* Style 2: penyesuaian kontras (cakram knob & tanda power memakai nilai Style 1 yang dirancang untuk latar terang) */
-html[data-uistyle="flat"][data-flatstyle="2"] :is(.fxc .circular-chart,.mpcs__knob) .circle-inner{fill:var(--flat-ap-ctrl-line)}   /* cakram knob: abu kebiruan, penunjuk terang tetap terbaca */
-html[data-uistyle="flat"][data-flatstyle="2"] .fxc__pwr::after{background:var(--flat-ap-on-color)}   /* tanda power gelap di atas pink */

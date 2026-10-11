@@ -19,7 +19,7 @@ export interface NoteData { p: number; s: number; l: number; sl?: boolean; v?: n
 type Tool = 'draw' | 'select' | 'erase' | 'pan';
 
 import { VEL_MIN, velOf, velAlpha } from './velocity';
-import { uiTheme, syncTrackColors, isFlat, isFlatDark, flatCols, rgbTriplet, rgbaOf } from './ui-theme';
+import { uiTheme, syncTrackColors, isFlat, flatCols, rgbTriplet, rgbaOf } from './ui-theme';
 const P_MIN = 24, P_MAX = 108, ROWS = P_MAX - P_MIN + 1;   // C1..C8
 const KEY_W = 64, RULER_H = 32, BEATS_PER_BAR = 4;
 // Panjang grid (bar) bisa diatur di Pengaturan: 4..50, bawaan 15. Disimpan di browser; tidak pernah lebih pendek dari nada terjauh.
@@ -156,7 +156,7 @@ const UI_PR = {
   get flat() { const c = flatCols(); return { g: rgbTriplet(c.border), bg: c.raised, rowWhite: c.raised, rowBlack: c.bg, ruler: c.panel, rulerLine: c.border, rulerText: c.text, t1: c.tickA, t2: c.tickB, t3: c.tickC }; }
 };
 // pengali pekat garis grid: latar terang butuh garis lebih tegas daripada latar gelap
-const gridMul = (): number => isFlatDark() ? 1.3 : isFlat() ? 2.4 : 1;
+const gridMul = (): number => isFlat() ? 2.4 : 1;
 function applyUiPalette(): void {
   const u = UI_PR[isFlat() ? 'flat' : uiTheme()], m = gridMul();
   GRID = u.g;

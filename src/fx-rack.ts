@@ -10,7 +10,7 @@ import { derizSpeed, derizSpeedKnob, derizSpeedFromV1, SPEED_VER } from './deriz
 import { setReverb, setEq, setFilter, setDeesser, setDelay, delayLevels, reverbSeconds, reverbPreSec, reverbToneHz, reverbLowHz, eqDb, EQ_BANDS, eqHz, eqFreqV, eqQ, eqQV, EQ_RANGE_DB, eqSpectrum, EQ_FFT_BINS, filterMode, filterHz, deesserHz, deesserThr, deesserMaxDb, decodeStandalone, trackInput } from './audio-engine';
 import { DerizSynth } from './deriz-synth';
 import { ivkKey } from './ivory-keys';
-import { isFlat, isFlatDark } from './ui-theme';
+import { isFlat, flatStyle, flatCols, rgbArr } from './ui-theme';
 import { dbgSched, dbgSent, dbgSpec } from './audio-debug';
 import { openMpcs } from './mpcs';
 import { openCute } from './cute';
@@ -34,7 +34,7 @@ type FxType = 'reverb' | 'eq' | 'filter' | 'deesser' | 'delay' | 'supersaw' | 'd
 // DERIZ: audio yang di-upload ke canvas plugin (buffer disimpan untuk tahap berikutnya; peaks + max khusus untuk menggambar waveform)
 interface DerizData { name: string; dur: number; buf: AudioBuffer; start: number; zoom: number; view: number; spec: Spec | null; busy?: number; }   // start: posisi garis start, 0..1 dari durasi; zoom >= 1: jendela terlihat = [view, view + 1/zoom] dari durasi; spec: spektrogram (null selagi dianalisis, busy = persen)
 // Spektrogram: frames x ROWS nilai dB (0..255 = -100..0 dBFS), baris 0 = frekuensi terendah (skala log); lut = palet warna yang disesuaikan dengan level puncak
-interface Spec { frames: number; hop: number; fmin: number; fmax: number; d: Uint8Array; lut: Uint32Array; top: number; lutFlat?: Uint32Array }   // top + lutFlat: palet tema Flat dibuat saat pertama dipakai (dari level puncak yang sama), jadi ganti tema tidak perlu analisis ulang   // cols: cache min/max per kolom pixel device (dihitung ulang hanya kalau lebar canvas berubah)   // start: posisi garis start, 0..1 dari durasi
+interface Spec { frames: number; hop: number; fmin: number; fmax: number; d: Uint8Array; lut: Uint32Array; top: number; lutFlat?: Uint32Array; lutFlatKey?: string }   // top + lutFlat: palet tema Flat dibuat saat pertama dipakai (dari level puncak yang sama), jadi ganti tema tidak perlu analisis ulang   // cols: cache min/max per kolom pixel device (dihitung ulang hanya kalau lebar canvas berubah)   // start: posisi garis start, 0..1 dari durasi
 interface Fx { id: number; type: FxType; on: boolean; min: boolean; tab?: number; v: Record<string, number>; deriz?: DerizData; tok?: number; }
 interface Param { key: string; label: string; hint?: string; def: number; fmt: (v: number) => string; bipolar?: boolean; slider?: boolean; tab?: string; fmtFx?: (v: number, all: Record<string, number>) => string; steps?: number | ((all: Record<string, number>) => number); dk?: boolean; }   // fmtFx: format yang bergantung parameter lain; steps: posisi diskrit (0 = kontinu); dk: knob gaya Delay   // tab: nama kategori (plugin dengan tab)   // bipolar: arc dari tengah (seperti knob pan); slider: slider vertikal, bukan knob
 interface EffectDef { type: FxType; name: string; params: Param[]; synth?: boolean; }   // synth: plugin instrumen (otomatis ada di track synth)
@@ -240,7 +240,7 @@ const PALETTE: [number, number[]][] = [[0, [2, 4, 10]], [.3, [8, 40, 70]], [.6, 
 const FLAT_PALETTE: [number, number[]][] = [[0, [243, 235, 221]], [.28, [214, 190, 226]], [.55, [185, 138, 208]], [.8, [141, 112, 168]], [1, [52, 53, 54]]];
 
 function makeLut(topV: number, flat = false): Uint32Array {
-  const lut = new Uint32Array(256), top = topV / 2.55 - 100, pal = flat ? FLAT_PALETTE : PALETTE;
+  const lut = new Uint32Array(256), top = topV / 2.55 - 100, pal = flat ? [[0, rgbArr(flatCols().screen)] as [number, number[]], ...FLAT_PALETTE.slice(1)] : PALETTE;   // flat: stop pertama = warna layar style aktif (Style 1 krem, Style 2 abu terang)
   for (let v = 0; v < 256; v++) {
     const t = Math.pow(Math.max(0, Math.min(1, (v / 2.55 - 100 - (top - SPEC_RANGE)) / SPEC_RANGE)), 1.15);
     let k = 1; while (k < pal.length - 1 && pal[k][0] < t) k++;
@@ -336,7 +336,7 @@ function paintDeriz(card: HTMLElement, fx: Fx): void {
   const g = cv.getContext('2d')!;
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.clearRect(0, 0, W, H);
-  const gl = Math.max(1, Math.round(dpr)), z = fx.deriz, sp = z?.spec, flat = isFlat() && !isFlatDark();   // flat Style 1: layar krem terang, tinta arang (#343536); default & Flat Style 2: layar gelap, tinta putih
+  const gl = Math.max(1, Math.round(dpr)), z = fx.deriz, sp = z?.spec, flat = isFlat();   // flat: layar terang (warna layar mengikuti style Flat), tinta arang (#343536); default: layar gelap, tinta putih
   if (!z || !sp) {   // belum ada audio / masih dianalisis: grid layar kosong
     const ink = flat ? '52,53,54' : '255,255,255';
     g.fillStyle = `rgba(${ink},${flat ? .1 : .05})`;
@@ -347,7 +347,7 @@ function paintDeriz(card: HTMLElement, fx: Fx): void {
     g.fillStyle = cl; g.fillRect(0, Math.round(H / 2 - gl / 2), W, gl);
     return;
   }
-  const pad = Math.round(DERIZ_PAD * dpr), cols = Math.max(1, W - pad * 2), R = SPEC_ROWS, d = sp.d, lut = flat ? (sp.lutFlat ??= makeLut(sp.top, true)) : sp.lut;
+  const pad = Math.round(DERIZ_PAD * dpr), cols = Math.max(1, W - pad * 2), R = SPEC_ROWS, d = sp.d, lut = flat ? (sp.lutFlatKey === flatStyle() && sp.lutFlat ? sp.lutFlat : (sp.lutFlatKey = flatStyle(), sp.lutFlat = makeLut(sp.top, true))) : sp.lut;
   const img = g.createImageData(cols, H), px = new Uint32Array(img.data.buffer);
   const s0 = z.view * z.buf.length, span = z.buf.length / z.zoom, vec = new Float32Array(R);
   const rA = new Int32Array(H), rT = new Float32Array(H);   // baris layar -> baris spektrogram (0 = frekuensi terendah, di bawah)

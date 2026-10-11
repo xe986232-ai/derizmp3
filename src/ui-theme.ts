@@ -15,11 +15,9 @@ export const TRACK_COLORS: Record<UiTheme, string[]> = {
 };
 // Gaya UI Flat (atribut data-uistyle="flat"): warna track mengikuti palet Muted Flat Industrial (lavender = MIDI, oranye = audio, teal, dst)
 export const isFlat = (): boolean => document.documentElement.dataset.uistyle === 'flat';
-// Sub-tema Flat (atribut data-flatstyle, hanya ada saat Flat aktif): "1" = Style 1 = Muted Flat Industrial (beige, bawaan), "2" = Style 2 = Midnight Slate (gelap).
+// Sub-tema Flat (atribut data-flatstyle, hanya ada saat Flat aktif): "1" = Style 1 = Muted Flat Industrial (beige, bawaan), "2" = Style 2 = Studio Gray (abu-abu terang).
 export const flatStyle = (): string => document.documentElement.dataset.flatstyle || '1';
-// Style 2 = Midnight Slate (UI gelap). Warna track (FLAT_TRACK_COLORS) sengaja dipakai bersama semua style: nada tengah yang terbaca di latar terang maupun gelap,
-// jadi track / clip yang sudah ada tidak berubah warna saat ganti style.
-export const isFlatDark = (): boolean => isFlat() && flatStyle() === '2';
+// Style 2 = Studio Gray (abu-abu terang netral). Warna track (FLAT_TRACK_COLORS) sengaja dipakai bersama semua style, jadi track / clip yang sudah ada tidak berubah warna saat ganti style.
 
 // Palet UI Flat untuk bagian yang digambar lewat canvas / JS. Nilainya HARUS sama dengan token --flat-ap-* di flat-ui.css
 // (Style 1 = blok dasar, Style 2 = html[data-flatstyle="2"]); CSS tetap sumber utama, tabel ini hanya cermin untuk canvas.
@@ -37,14 +35,15 @@ const FLAT_COLS: Record<string, FlatCols> = {
     lavender: '#B98AD0', lavenderDark: '#8D70A8', orange: '#F5A044', orangeDark: '#D98232', teal: '#5B9F9A', tealDark: '#397F7A', playhead: '#39C6C7', accent: '#D85A94',
     green: '#79B86A', yellow: '#E5C65A', gray: '#8F8F8F', keyWhite: '#F3EBDD', keyBlack: '#454545', note: '#454545', screen: '#F3EBDD', onColor: '#343536',
     keyText2: '#68665F', wave: '#454545', scrim: '#343536', tickA: '#68665F', tickB: '#8F887D', tickC: '#A69D8F' },
-  // Style 2: Midnight Slate (grafit kebiruan gelap)
-  '2': { bg: '#14161B', panel: '#1B1E25', raised: '#232730', muted: '#101216', border: '#343A46', grid: '#2A2F39', ctrlLine: '#4B5362', text: '#E7E9EE', text2: '#98A0AE', inverse: '#F2F3F6',
-    lavender: '#B98AD0', lavenderDark: '#8D70A8', orange: '#F5A044', orangeDark: '#D98232', teal: '#3DBDB4', tealDark: '#247870', playhead: '#4FD1E0', accent: '#FF6B9D',
-    green: '#5FCF80', yellow: '#F0C64E', gray: '#6B7280', keyWhite: '#E4E6EB', keyBlack: '#0E1014', note: '#0E1014', screen: '#101318', onColor: '#14161B',
-    keyText2: '#5B6270', wave: '#B9BFCC', scrim: '#000000', tickA: '#98A0AE', tickB: '#6E7685', tickC: '#4B5362' }
+  // Style 2: Studio Gray (abu-abu terang netral kebiruan tipis)
+  '2': { bg: '#D9DBDF', panel: '#CDD0D5', raised: '#E6E8EB', muted: '#C0C4CA', border: '#AEB3BB', grid: '#BCC0C7', ctrlLine: '#8E949E', text: '#26292E', text2: '#50565F', inverse: '#F4F5F7',
+    lavender: '#B98AD0', lavenderDark: '#8D70A8', orange: '#F5A044', orangeDark: '#D98232', teal: '#4C9F9A', tealDark: '#357F7A', playhead: '#1FB5D6', accent: '#E0568F',
+    green: '#6BB86A', yellow: '#E5C65A', gray: '#8F9399', keyWhite: '#F4F5F7', keyBlack: '#3A3D42', note: '#3A3D42', screen: '#F4F5F7', onColor: '#26292E',
+    keyText2: '#50565F', wave: '#3A3D42', scrim: '#26292E', tickA: '#50565F', tickB: '#8E949E', tickC: '#AEB3BB' }
 };
 export const flatCols = (): FlatCols => FLAT_COLS[flatStyle()] || FLAT_COLS['1'];
-// '#RRGGBB' -> 'r,g,b' dan rgba(...) dengan alpha
+// '#RRGGBB' -> [r,g,b]; 'r,g,b'; rgba(...) dengan alpha
+export const rgbArr = (hex: string): [number, number, number] => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 export const rgbTriplet = (hex: string): string => { const n = parseInt(hex.slice(1), 16); return ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255); };
 export const rgbaOf = (hex: string, a: number): string => 'rgba(' + rgbTriplet(hex) + ',' + a + ')';
 // objek palet canvas yang dibangun dari FlatCols dan di-cache per style (dipanggil tiap frame, jadi tidak boleh membuat objek baru terus-menerus)

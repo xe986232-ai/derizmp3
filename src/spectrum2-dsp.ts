@@ -98,8 +98,8 @@ const STOPS: [number, number, number, number][] = [
 const STOPS_FLAT: [number, number, number, number][] = [
   [0.00, 199, 187, 168], [0.20, 210, 178, 222], [0.45, 185, 138, 208], [0.70, 245, 160, 68], [0.88, 217, 130, 50], [1.00, 216, 90, 148],
 ];
-export function paletteAt(v: number, flat = false): [number, number, number] {
-  const S = flat ? STOPS_FLAT : STOPS, x = clamp(v, 0, 1);
+export function paletteAt(v: number, flat = false, base?: [number, number, number]): [number, number, number] {
+  const S = flat ? (base ? [[0, base[0], base[1], base[2]] as [number, number, number, number], ...STOPS_FLAT.slice(1)] : STOPS_FLAT) : STOPS, x = clamp(v, 0, 1);
   for (let i = 1; i < S.length; i++) {
     if (x <= S[i][0]) {
       const p = S[i - 1], q = S[i], t = (x - p[0]) / (q[0] - p[0]);
@@ -109,9 +109,9 @@ export function paletteAt(v: number, flat = false): [number, number, number] {
   const e = S[S.length - 1]; return [e[1], e[2], e[3]];
 }
 // 256 warna RGBA berurutan (Uint8ClampedArray, 1 piksel = 4 byte), alfa penuh
-export function buildPalette(flat = false): Uint8ClampedArray {
+export function buildPalette(flat = false, base?: [number, number, number]): Uint8ClampedArray {
   const out = new Uint8ClampedArray(256 * 4);
-  for (let i = 0; i < 256; i++) { const [r, g, b] = paletteAt(i / 255, flat); out[i * 4] = r; out[i * 4 + 1] = g; out[i * 4 + 2] = b; out[i * 4 + 3] = 255; }
+  for (let i = 0; i < 256; i++) { const [r, g, b] = paletteAt(i / 255, flat, base); out[i * 4] = r; out[i * 4 + 1] = g; out[i * 4 + 2] = b; out[i * 4 + 3] = 255; }
   return out;
 }
 // Lengkung kontras spectrogram: lantai derau sedikit digelapkan supaya yang penting menonjol

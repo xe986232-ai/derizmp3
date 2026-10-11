@@ -70,7 +70,7 @@ const PROFILE_PAGE = FULL
             '<button type="button" class="mp__segbtn" role="radio" data-flatstyle="2">Style 2</button>' +
           '</div>' +
         '</div>' +
-        '<p class="mp__hint">Flat: sudut lancip, tanpa glow, warna solid. Di dalam Flat ada pilihan warna: Style 1 = terang (beige), Style 2 = gelap (Midnight Slate).</p>' +
+        '<p class="mp__hint">Flat: sudut lancip, tanpa glow, warna solid. Di dalam Flat ada pilihan warna: Style 1 = beige hangat, Style 2 = abu-abu terang (Studio Gray).</p>' +
       '</div>' +
       '<div class="mp__card mp__item" style="--i:5">' +
         '<button type="button" class="mp__prim mp__prim--bad" data-signout>Keluar dari akun</button>' +
