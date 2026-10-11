@@ -1,12 +1,15 @@
 // Transisi logo Melvox (animasi logo v11) yang diputar menutupi layar saat Gaya UI diganti Default <-> Flat.
 // Alur: overlay fade-in cepat -> gaya UI diganti saat layar sudah tertutup (callback `swap`) -> animasi logo jalan sampai
 // tile membanjiri layar -> overlay fade-out. Tap overlay = lewati. Gerak dikurangi (prefers-reduced-motion) = ganti langsung tanpa animasi.
+// Warna ikut gaya UI: latar = warna gaya lama, tile (yang membanjiri layar) = warna latar gaya baru, batang M = teks gaya baru, bar & titik = aksen gaya baru,
+// jadi akhir flood sama persis dengan latar UI baru dan fade-out nyaris tak terlihat.
 // Isi animasi (seek) disalin dari melvox-logo-animation-v11-916.html; bedanya hanya viewBox menyesuaikan rasio layar & flood diperbesar.
+
+import type { Swatch } from './ui-theme';
 
 const END = 2.7;              // overlay berhenti di akhir flood (c = 2.7)
 const FADE_IN = 0.18;         // detik: overlay muncul, ganti gaya dilakukan setelah ini
 const FADE_OUT = 0.32;        // detik: overlay hilang setelah animasi selesai
-const COLORS = ['#f23aa9', '#17171c'];
 const K = 300 / 512;          // lebar tile = 300 dari 540
 const BARS = [{ cx: 292, cy: 253, h: 102 }, { cx: 350, cy: 256, h: 192 }, { cx: 405, cy: 257, h: 280 }];
 
@@ -24,33 +27,33 @@ const reducedMotion = (): boolean => {
   try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
 };
 
-// Putar transisi. `swap` dipanggil tepat satu kali, saat layar tertutup overlay. Mengembalikan false kalau transisi sedang jalan (swap tidak dipanggil).
-export function playLogoTransition(swap: () => void): boolean {
+// Putar transisi. `from` = warna gaya lama, `to` = warna gaya baru. `swap` dipanggil tepat satu kali, saat layar tertutup overlay. Mengembalikan false kalau transisi sedang jalan (swap tidak dipanggil).
+export function playLogoTransition(swap: () => void, from: Swatch, to: Swatch): boolean {
   if (running) return false;
   if (reducedMotion()) { swap(); return true; }
   running = true;
 
   const root = document.createElement('div');
   root.setAttribute('aria-hidden', 'true');
-  root.style.cssText = 'position:fixed;inset:0;z-index:2147483000;opacity:0;touch-action:none;cursor:pointer;background:' + COLORS[0] + ';';
+  root.style.cssText = 'position:fixed;inset:0;z-index:2147483000;opacity:0;touch-action:none;cursor:pointer;background:' + from.bg + ';';
   root.innerHTML =
     '<svg xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;display:block" preserveAspectRatio="xMidYMid meet">' +
       '<defs><clipPath id="mlx-clip"><rect width="512" height="512" rx="112"/></clipPath></defs>' +
-      '<rect data-r="bg" x="-6000" y="-6000" width="12540" height="12960" fill="' + COLORS[0] + '"/>' +
+      '<rect data-r="bg" x="-6000" y="-6000" width="12540" height="12960" fill="' + from.bg + '"/>' +
       '<g data-r="gTile">' +
-        '<rect data-r="tile" width="512" height="512" rx="112" fill="' + COLORS[1] + '"/>' +
+        '<rect data-r="tile" width="512" height="512" rx="112" fill="' + to.bg + '"/>' +
         '<g clip-path="url(#mlx-clip)">' +
-          '<rect data-r="stem" x="88" y="118" width="32" height="280" rx="16" fill="#f0eef5"/>' +
-          '<g transform="rotate(43.1 182 207)"><rect data-r="diag" x="59.1" y="191" width="245.8" height="32" rx="16" fill="#f0eef5"/></g>' +
-          '<g data-r="bars"><rect data-r="b0" fill="' + COLORS[0] + '"/><rect data-r="b1" fill="' + COLORS[0] + '"/><rect data-r="b2" fill="' + COLORS[0] + '"/></g>' +
+          '<rect data-r="stem" x="88" y="118" width="32" height="280" rx="16" fill="' + to.text + '"/>' +
+          '<g transform="rotate(43.1 182 207)"><rect data-r="diag" x="59.1" y="191" width="245.8" height="32" rx="16" fill="' + to.text + '"/></g>' +
+          '<g data-r="bars"><rect data-r="b0" fill="' + to.accent + '"/><rect data-r="b1" fill="' + to.accent + '"/><rect data-r="b2" fill="' + to.accent + '"/></g>' +
         '</g>' +
       '</g>' +
-      '<g data-r="gDot"><rect data-r="dot" width="512" height="512" rx="112" fill="' + COLORS[0] + '"/></g>' +
+      '<g data-r="gDot"><rect data-r="dot" width="512" height="512" rx="112" fill="' + to.accent + '"/></g>' +
     '</svg>';
 
   const q = (n: string): SVGElement => root.querySelector('[data-r="' + n + '"]') as SVGElement;
   const svg = root.querySelector('svg') as SVGSVGElement;
-  const el = { bg: q('bg'), tile: q('tile'), gTile: q('gTile'), stem: q('stem'), diag: q('diag'), bars: q('bars'), gDot: q('gDot'), dot: q('dot'), b: [q('b0'), q('b1'), q('b2')] };
+  const el = { gTile: q('gTile'), stem: q('stem'), diag: q('diag'), bars: q('bars'), gDot: q('gDot'), b: [q('b0'), q('b1'), q('b2')] };
 
   // viewBox mengikuti rasio layar: area 540x960 (pusat 270,480) selalu muat utuh, sisanya diperluas supaya flood menutup seluruh layar
   let flood = 5;
@@ -67,12 +70,6 @@ export function playLogoTransition(swap: () => void): boolean {
 
   const seek = (t: number): void => {
     const c = Math.min(t, END);
-    const bgC = COLORS[0], tileC = COLORS[1];   // satu siklus saja (k = 0)
-    el.bg.setAttribute('fill', bgC);
-    el.tile.setAttribute('fill', tileC);
-    el.dot.setAttribute('fill', bgC);
-    el.b.forEach(b => b.setAttribute('fill', bgC));
-
     // tile tumbuh dari titik, lalu di akhir membesar sampai memenuhi layar
     const isFlood = c >= 2.55;
     let s: number;
@@ -111,9 +108,9 @@ export function playLogoTransition(swap: () => void): boolean {
       r.setAttribute('rx', lerp(17, 7.4, shr).toFixed(2));
     });
 
-    // titik pink jadi tile berikutnya, ikut membesar saat tile lama memenuhi layar
+    // titik aksen menyusut hilang ke dalam banjir warna (akhir animasi = layar polos berwarna latar gaya baru)
     el.gDot.setAttribute('display', isFlood ? 'inline' : 'none');
-    el.gDot.setAttribute('transform', G(lerp(34 / 512, 0.1, inC(prog(c, 2.55, 0.15)))));
+    el.gDot.setAttribute('transform', G(lerp(34 / 512, 0, inC(prog(c, 2.55, 0.15)))));
   };
 
   seek(0);

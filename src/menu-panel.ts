@@ -13,6 +13,7 @@ import { FULL, getProfile, initialOf, loadProfile, onProfile, removeAvatar, save
 import { signOut } from './license';
 import { SHOP_CAT, SHOP_PAGE, initShopPage } from './shop-page';
 import { playLogoTransition, isLogoTransitionRunning } from './logo-transition';
+import { themeSwatch, flatStyle } from './ui-theme';
 import { SPECTRUM_SPEEDS, SPECTRUM_STYLES, isSpectrumOn, setSpectrumOn, getSpectrumSpeed, setSpectrumSpeed, getSpectrumStyle, setSpectrumStyle } from './spectrum';
 
 // Jembatan ke main.ts (yang memegang data timeline): snapshot dan pemulihan project
@@ -341,7 +342,7 @@ export function initMenuPanel(): MenuPanel {
     const next = b.dataset.uistyle === 'flat' ? 'flat' : 'soft';
     const cur = document.documentElement.dataset.uistyle === 'flat' ? 'flat' : 'soft';
     if (next === cur) { setUiStyle(next, true); return; }
-    playLogoTransition(() => setUiStyle(next, true));
+    playLogoTransition(() => setUiStyle(next, true), themeSwatch(cur, flatStyle()), themeSwatch(next, flatStyleSaved));
   }));
   flatBtns.forEach(b => b.addEventListener('click', () => { flatStyleSaved = b.dataset.flatstyle as string; setFlatStyle(flatStyleSaved, true); }));
   let styleSaved = 'soft';

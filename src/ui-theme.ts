@@ -42,6 +42,13 @@ const FLAT_COLS: Record<string, FlatCols> = {
     keyText2: '#50565F', wave: '#3A3D42', scrim: '#26292E', tickA: '#50565F', tickB: '#8E949E', tickC: '#AEB3BB' }
 };
 export const flatCols = (): FlatCols => FLAT_COLS[flatStyle()] || FLAT_COLS['1'];
+// Warna inti sebuah gaya UI (latar, teks, aksen) — dipakai transisi logo (logo-transition.ts) supaya warna animasi menyatu dengan gaya lama & gaya baru.
+// Default = Ink Rose / Mono Graphite (nilai sama dengan --bg di styles.css, aksen pink Ink Rose); Flat = FLAT_COLS menurut Style 1 / 2.
+export interface Swatch { bg: string; text: string; accent: string; }
+export const themeSwatch = (style: 'soft' | 'flat', flat: string = '1', ink: UiTheme = uiTheme()): Swatch => {
+  if (style === 'flat') { const c = FLAT_COLS[flat] || FLAT_COLS['1']; return { bg: c.bg, text: c.text, accent: c.accent }; }
+  return { bg: ink === 'mono' ? '#101012' : '#16161c', text: '#e8e8f0', accent: '#ff5c9e' };
+};
 // '#RRGGBB' -> [r,g,b]; 'r,g,b'; rgba(...) dengan alpha
 export const rgbArr = (hex: string): [number, number, number] => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 export const rgbTriplet = (hex: string): string => { const n = parseInt(hex.slice(1), 16); return ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255); };
